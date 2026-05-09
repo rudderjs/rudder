@@ -254,36 +254,56 @@ streaming: (chunk) => chunk.type === 'finish'
   : null
 ```
 
-### Suspend / resume — sub-agents that call client tools
+### Suspend / resume — sub-agents that pause on client tools or approval
 
-When a sub-agent's model emits a *client* tool call (one with no `execute` — handled by the browser), the inner loop has to halt and the parent loop has to surface the pending calls upward. Pass `suspendable: { runStore }` to opt into the propagation protocol:
+A sub-agent's loop pauses in two cases that the parent loop has to surface upward: when the model emits a *client* tool call (one with no `execute` — handled by the browser) and when a sub-agent's tool with `needsApproval: true` fires. Pass `suspendable: { runStore }` to opt into the propagation protocol — `asTool` handles both pauses symmetrically:
 
 ```ts
 import { CachedSubAgentRunStore } from '@rudderjs/ai'
 
 const research = new ResearchAgent().asTool({
   name:        'research',
-  description: 'Research with browser-side tools.',
+  description: 'Research with browser-side tools and approval-gated actions.',
   streaming:   true,
   suspendable: { runStore: new CachedSubAgentRunStore() },
 })
 ```
 
-When the sub-agent pauses, `asTool` snapshots its message history into the `runStore`, yields a `subagent_paused` update with a `subRunId`, and halts the parent loop with `pendingClientToolCalls` set. The host's continuation endpoint resumes via:
+When the sub-agent pauses, `asTool` snapshots its message history and yields a suspend update plus a control chunk that halts the parent loop. The snapshot's `pauseKind` discriminator tells the host which resume contract applies:
+
+| Inner `finishReason` | `SubAgentUpdate` emitted | Snapshot `pauseKind` | Parent halts with |
+|---|---|---|---|
+| `'client_tool_calls'` | `subagent_paused` | `'client_tool'` | `pendingClientToolCalls` |
+| `'tool_approval_required'` | `subagent_paused_approval` (and `agent_pending_approval` informationally during the inner stream) | `'approval'` | `pendingApprovalToolCall` |
+
+The host's continuation endpoint resumes via:
 
 ```ts
 import { Agent } from '@rudderjs/ai'
 
+// Client-tool pause — pass tool results from the browser
 const r = await Agent.resumeAsTool(subRunId, browserResults, {
   runStore,
   agent: rebuiltSubAgent,   // host rebuilds the sub-agent context per resume
 })
+
+// Approval pause — pass the user's decision
+const r2 = await Agent.resumeAsTool(subRunId, [], {
+  runStore,
+  agent: rebuiltSubAgent,
+  approvedToolCallIds: ['inner-call-id'],   // or rejectedToolCallIds
+})
+
 if (r.kind === 'completed') {
   // feed r.response.text back into the parent's run_agent tool result
 } else {
-  // r.kind === 'paused' — emit another pending_client_tools event with r.subRunId / r.pendingToolCallIds
+  // r.kind === 'paused' — r.pauseKind tells you which event to emit upstream
+  // ('client_tool' | 'approval'); r.toolCall + r.isClientTool are populated
+  // for approval pauses so renderers can show a fresh approval card.
 }
 ```
+
+A resume can pause again on a different kind than it started on — e.g. an approval that, once granted, leads the inner agent to emit a client tool call. The `pauseKind` field on `'paused'` returns lets the host route correctly without inspecting the snapshot.
 
 `InMemorySubAgentRunStore` works for tests / single-process dev; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process / cross-restart persistence. Suspend without streaming throws at builder time — silent suspend is a UX trap.
 

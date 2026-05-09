@@ -94,6 +94,86 @@ export function isPauseForClientToolsChunk(value: unknown): value is PauseForCli
 }
 
 /**
+ * Control chunk a server tool can `yield` to pause the enclosing agent
+ * loop on an APPROVAL gate inside a sub-agent — the sibling of
+ * {@link PauseForClientToolsChunk} for the
+ * `finishReason === 'tool_approval_required'` case.
+ *
+ * The agent loop iterating the execute generator recognizes the shape
+ * via the reserved `__rudderjs` discriminator, sets
+ * `loopCtx.pendingApprovalToolCall` from `toolCall`/`isClientTool`,
+ * flips `loopCtx.loopFinishReason = 'tool_approval_required'` and
+ * `loopCtx.stopForApproval = true`, and SKIPS the tool_result emission
+ * for the yielding tool call — the sub-agent's call stays orphaned in
+ * the parent message history until the approve/reject decision arrives
+ * via {@link Agent.resumeAsTool}.
+ *
+ * The optional `resumeHandle` (typically the `subRunId` the wrapper just
+ * persisted) is opaque to the framework — tool authors own the lookup.
+ *
+ * **Primary use case:** a sub-agent surfaced through
+ * {@link Agent.asTool} whose model invokes a `.requireApproval(true)`
+ * tool. The sub-agent loop emits `pending-approval`, the wrapping
+ * `asTool` generator persists a snapshot with `pauseKind: 'approval'`
+ * and yields this chunk so the parent loop halts the same way it does
+ * for client-tool pauses.
+ *
+ * Tool authors should construct this via {@link pauseForApproval}, not
+ * by hand, so future shape changes stay source-compatible.
+ */
+export interface PauseForApprovalChunk {
+  /** Reserved discriminator. Namespaced to avoid colliding with user data. */
+  readonly __rudderjs: 'pause_for_approval'
+  readonly toolCall:    ToolCall
+  /**
+   * `true` when the gated call is a client tool (no `execute` on the
+   * server side); `false` for a server tool the sub-agent would have
+   * run if approval had been granted.
+   */
+  readonly isClientTool: boolean
+  readonly resumeHandle?: string
+}
+
+/**
+ * Construct an approval-pause control chunk for `yield`ing from a server
+ * tool's async-generator execute.
+ *
+ * @example
+ * .server(async function* (input, ctx) {
+ *   const subRunId = await persistSubRunState(...)
+ *   yield pauseForApproval(innerToolCall, isClientTool, subRunId)
+ *   return undefined as never
+ * })
+ */
+export function pauseForApproval(
+  toolCall:     ToolCall,
+  isClientTool: boolean,
+  resumeHandle?: string,
+): PauseForApprovalChunk {
+  const chunk: PauseForApprovalChunk = resumeHandle !== undefined
+    ? { __rudderjs: 'pause_for_approval', toolCall, isClientTool, resumeHandle }
+    : { __rudderjs: 'pause_for_approval', toolCall, isClientTool }
+  return chunk
+}
+
+/**
+ * Structural typeguard for an approval-pause chunk. Mirrors
+ * {@link isPauseForClientToolsChunk} so the parent loop can recognize a
+ * pause without forcing tool authors to import any `@rudderjs/ai` symbol
+ * at the yield site.
+ */
+export function isPauseForApprovalChunk(value: unknown): value is PauseForApprovalChunk {
+  if (value === null || typeof value !== 'object') return false
+  const v = value as { __rudderjs?: unknown; toolCall?: unknown; isClientTool?: unknown }
+  return (
+    v.__rudderjs === 'pause_for_approval' &&
+    typeof v.toolCall === 'object' &&
+    v.toolCall !== null &&
+    typeof v.isClientTool === 'boolean'
+  )
+}
+
+/**
  * Builder returned by {@link toolDefinition}. The builder itself is a valid
  * `Tool` — call `.server(execute)` to attach a server-side handler, or use
  * the builder as-is to register a client tool (no `execute`).

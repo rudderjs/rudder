@@ -1,4 +1,17 @@
-import type { AiMessage } from './types.js'
+import type { AiMessage, ToolCall } from './types.js'
+
+/**
+ * Discriminator for the kind of pause a snapshot represents. Determines
+ * what payload `Agent.resumeAsTool` expects on continuation:
+ *
+ * - `'client_tool'` — resume must carry one tool-result per id in
+ *   `pendingToolCallIds`. This is the original v1.4 behaviour and the
+ *   default when the field is absent.
+ * - `'approval'` — resume must carry `approvedToolCallIds` and/or
+ *   `rejectedToolCallIds` covering the single id in `pendingToolCallIds`
+ *   (the inner approval-gated tool call).
+ */
+export type SubAgentPauseKind = 'client_tool' | 'approval'
 
 /**
  * Snapshot of a paused sub-agent run, persisted between an
@@ -7,17 +20,39 @@ import type { AiMessage } from './types.js'
  * The shape is intentionally simple — `messages` is the full inner
  * conversation up to the pause point (system prompt + user input +
  * every interleaved tool result), so resume only needs to append the
- * incoming client-tool results and re-enter the loop in `messages` mode.
+ * incoming client-tool results (or inject approval decisions) and
+ * re-enter the loop in `messages` mode.
  */
 export interface SubAgentRunSnapshot {
   /** Inner-agent message history at suspend time. */
   messages:           AiMessage[]
-  /** Client-tool call ids the sub-agent is waiting on. Resume must carry one result per id. */
+  /**
+   * Tool-call ids the sub-agent is waiting on.
+   *
+   * - `pauseKind === 'client_tool'` (default): one entry per client tool
+   *   the inner loop surfaced; resume appends one result per id.
+   * - `pauseKind === 'approval'`: a single entry for the approval-gated
+   *   tool call; resume injects the id into `approvedToolCallIds`
+   *   (or `rejectedToolCallIds`).
+   */
   pendingToolCallIds: string[]
   /** Total steps the inner agent has executed across all suspends so far. */
   stepsSoFar:         number
   /** Total prompt+completion tokens accumulated across all suspends. */
   tokensSoFar:        number
+  /**
+   * Discriminator for the resume contract. Defaults to `'client_tool'`
+   * when absent so older v1.4 snapshots remain readable on disk/redis
+   * after the host upgrades to a version that knows about approval pauses.
+   */
+  pauseKind?:         SubAgentPauseKind
+  /**
+   * Approval pauses only. The full pending tool-call payload (name + args
+   * + id) so a renderer can show "approve `delete_user(id=42)`?" without
+   * round-tripping back to the inner agent. Mirrors the structure of
+   * `AgentResponse.pendingApprovalToolCall`.
+   */
+  pendingApprovalToolCall?: { toolCall: ToolCall; isClientTool: boolean }
   /**
    * Opaque metadata the host can pass through. The framework treats
    * this as JSON and never reads it — useful for hosts that need to

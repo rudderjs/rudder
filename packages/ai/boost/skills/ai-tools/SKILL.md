@@ -181,27 +181,36 @@ const secretTool = toolDefinition({
 })
 ```
 
-### 9. Pause for client tools (from inside a server tool)
+### 9. Pause the parent loop from inside a server tool
 
 ```ts
-import { pauseForClientTools } from '@rudderjs/ai'
+import { pauseForClientTools, pauseForApproval } from '@rudderjs/ai'
 
 const runSubAgentTool = toolDefinition({
   name: 'run_sub_agent',
-  description: 'Run a sub-agent that may need browser tools',
+  description: 'Run a sub-agent that may need browser tools or approval',
   inputSchema: z.object({ task: z.string() }),
 }).server(async function* ({ task }, ctx) {
   const subResponse = await runSubAgent(task)
 
   if (subResponse.pendingClientToolCalls?.length) {
-    // Pause the parent loop -- surface client tool calls to the browser
+    // Client-tool pause -- surface inner client tool calls to the browser
     yield pauseForClientTools(subResponse.pendingClientToolCalls, subResponse.resumeId)
     return undefined as never  // unreachable after pause
+  }
+
+  if (subResponse.pendingApprovalToolCall) {
+    // Approval pause -- surface the gated tool call for the user to approve/reject
+    const { toolCall, isClientTool } = subResponse.pendingApprovalToolCall
+    yield pauseForApproval(toolCall, isClientTool, subResponse.resumeId)
+    return undefined as never
   }
 
   return subResponse.text
 })
 ```
+
+`Agent.asTool({ suspendable })` does this automatically — yield manually only for hand-rolled sub-agent runners or non-agent tools that need a browser/approval round-trip.
 
 ### 10. Using tools with an agent
 
@@ -238,7 +247,7 @@ Tools are typically defined in `app/Tools/` or co-located with the agent that us
 - **Zod schemas required**: Tool input schemas must be Zod objects. They are converted to JSON Schema for each provider automatically.
 - **Generator vs async function**: Use `async function*` only when you need streaming progress yields. For simple tools, use a regular `async` function.
 - **modelOutput is optional**: Only use `.modelOutput()` when the tool returns large structured data that would waste model context. The default behavior is `JSON.stringify` of the result.
-- **Approval flow is two-step**: When a tool needs approval, the loop stops. You must resume with `approvedToolCallIds` or `rejectedToolCallIds` in the next `prompt()` call's options.
+- **Approval flow is two-step**: When a tool needs approval, the loop stops. You must resume with `approvedToolCallIds` or `rejectedToolCallIds` in the next `prompt()` call's options. For approval-gated tools inside a sub-agent wrapped via `asTool({ suspendable })`, resume goes through `Agent.resumeAsTool(subRunId, [], { runStore, agent, approvedToolCallIds })` — the snapshot's `pauseKind: 'approval'` discriminator routes the resume contract.
 - **Client tool placeholder mode**: By default, client tools without `execute` get a placeholder result and the loop continues. Pass `toolCallStreamingMode: 'stop-on-client-tool'` to pause instead.
 - **exactOptionalPropertyTypes**: If your tsconfig has this enabled, do not pass `undefined` for optional tool parameters -- omit the key entirely.
 - **Tool name conventions**: Use `snake_case` for tool names (e.g. `get_weather`, `search_documents`). This matches what AI models expect.
