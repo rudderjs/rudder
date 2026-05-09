@@ -67,6 +67,7 @@ export type {
   FileUploadResult,
   FileListResult,
   FileContent,
+  SubAgentUpdate,
 } from './types.js'
 
 // Registry
