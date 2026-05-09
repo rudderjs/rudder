@@ -1,5 +1,41 @@
 # @rudderjs/ai
 
+## 1.3.0
+
+### Minor Changes
+
+- e4964b8: Prompt caching API + Anthropic implementation (A1, sub-PR 1 of 3):
+
+  - **`Agent.cacheable()`** declarative method returns `{ instructions?, tools?, messages? }`. The agent loop resolves it into `CacheableMarkers` on `ProviderRequestOptions.cache` so each provider adapter translates to its native primitive.
+  - **Per-call override** via `agent.prompt(input, { cache: false | {...} })`. `false` disables caching; an object replaces the agent default.
+  - **Anthropic adapter** translates markers to `cache_control: { type: 'ephemeral' }` on the last content block of each marked region (system, last tool, message at index N-1). String-form system and message content are converted to single text blocks so they can carry the marker.
+
+  OpenAI and Google adapters currently ignore the markers — sub-PR follow-ups will add `prompt_cache_key` (OpenAI) and `cachedContent` resource translation (Google). Adapters without caching support continue to run requests uncached.
+
+- 4dfca63: Prompt caching for Google / Gemini (A1, sub-PR 3 of 3):
+
+  The Google adapter now translates `Agent.cacheable()` markers into Google's stateful `cachedContent` API. Marked regions (system + tools + leading-N messages, scoped by model id) are uploaded once via `caches.create`, then subsequent requests reference the resulting `cachedContents/*` resource and send only the fresh tail — typical input-token savings of 75% for long stable prefixes.
+
+  A new `GoogleCacheRegistry` owns the `hash → resource-name` map, dedups concurrent same-key creates inside a worker, memoizes "below model minimum" failures for 5 minutes (so tight loops don't pound the create endpoint), and recreates transparently on stale-resource 404s. When `@rudderjs/cache` is installed and registered, the registry is auto-wired to the framework cache for cross-process / cross-restart persistence; otherwise it falls back to an in-process `Map` and warns once.
+
+  A new `ttl` field on `CacheableConfig` controls Google's per-resource TTL (default `'1h'`, accepts duration strings like `'30m'`, `'6h'`, `'1d'`). Anthropic and OpenAI ignore the field — their cache layers have no per-call TTL knob.
+
+  The shared cyrb53 hash helper is now exported from `packages/ai/src/util/hash.ts` and consumed by both the OpenAI and Google adapters.
+
+- a49c121: Prompt caching for OpenAI (A1, sub-PR 2 of 3):
+
+  The OpenAI adapter now translates `Agent.cacheable()` markers into a `prompt_cache_key` on each request. OpenAI caches prompts automatically once they exceed 1024 tokens; the key is a routing affinity hint so repeat requests with the same cacheable prefix land on the backend that already has the prefix cached, lifting cache hit rates.
+
+  The key is a stable cyrb53 hash of the marked regions:
+
+  - `instructions: true` → hashes the system message content
+  - `tools: true` → hashes the tool definitions
+  - `messages: N` → hashes the first N non-system messages
+
+  Regions outside the markers don't affect the key, so changes to later messages (the unstable tail of a conversation) don't fragment cache routing. The hash is pure JS — `@rudderjs/ai`'s main entry stays runtime-agnostic.
+
+  Per-call override via `agent.prompt(input, { cache: false | {...} })` continues to work. Google adapter translation (`cachedContent` resources) is the remaining sub-PR.
+
 ## 1.2.0
 
 ### Minor Changes
