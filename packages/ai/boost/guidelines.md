@@ -50,6 +50,17 @@ Provider auto-discovery (`defaultProviders()`) finds `AiProvider` automatically 
 
 Agents support failover: `failover() { return ['openai/gpt-4o'] }`. The same pattern is on the media generators: `ImageGenerator.of('...').model('openai/dall-e-3').failover('google/imagen-3').generate()` (also `AudioGenerator`, `Transcription`).
 
+**Prompt caching.** Mark stable parts of the prompt as cacheable — providers translate to native primitives (Anthropic `cache_control`, OpenAI `prompt_cache_key`, Google `cachedContent`).
+
+```ts
+class SupportAgent extends Agent {
+  cacheable() { return { instructions: true, tools: true, messages: 2 } }
+  //                                                       ^ cache first 2 messages
+}
+```
+
+Per-call override: `agent.prompt(input, { cache: false })` to disable; `{ cache: {...} }` to replace. Anthropic is wired up today; OpenAI and Google are sub-PR follow-ups (markers ignored, request still runs uncached).
+
 ### Tools
 
 Define tools with Zod schemas. Tools are either `server` (executed on backend) or `client` (forwarded to frontend):

@@ -24,6 +24,8 @@ import type {
   AgentStep,
   AgentStreamResponse,
   AnyTool,
+  CacheableConfig,
+  CacheableMarkers,
   ContentPart,
   ConversationStore,
   FinishReason,
@@ -111,6 +113,31 @@ export abstract class Agent {
 
   /** Max tokens for response */
   maxTokens(): number | undefined { return undefined }
+
+  /**
+   * Declarative prompt-cache configuration.
+   *
+   * Override on a subclass to mark stable parts of the prompt as cacheable
+   * — provider adapters translate to native primitives (Anthropic
+   * `cache_control`, OpenAI `prompt_cache_key`, Google `cachedContent`)
+   * so cache hits can save 50–90% on input tokens for long system prompts,
+   * tool definitions, or stable conversation context.
+   *
+   * Returning `undefined` (the default) means no caching. Per-call override
+   * via `agent.prompt(input, { cache: false })` disables caching for that
+   * call; passing a {@link CacheableConfig} for `cache` replaces the agent
+   * default for that call.
+   *
+   * @example
+   * class SupportAgent extends Agent {
+   *   instructions() { return LONG_SYSTEM_PROMPT }
+   *   tools()        { return [tool1, tool2, tool3] }
+   *   cacheable() {
+   *     return { instructions: true, tools: true }
+   *   }
+   * }
+   */
+  cacheable(): CacheableConfig | undefined { return undefined }
 
   /**
    * Default for `AgentPromptOptions.parallelTools`. When `true` (default),
@@ -523,6 +550,7 @@ async function runFailover<T>(
         temperature: loopCtx.agent.temperature(),
         maxTokens:   loopCtx.agent.maxTokens(),
         signal:      loopCtx.options?.signal,
+        cache:       resolveCacheMarkers(loopCtx.agent, loopCtx.options),
       }
       return await call(adapter, modelId, reqOptions)
     } catch (err) {
@@ -535,6 +563,33 @@ async function runFailover<T>(
     }
   }
   throw lastError ?? new Error('No provider available')
+}
+
+/**
+ * Merge agent-level `cacheable()` declaration with per-call override.
+ *
+ * - Per-call `cache: false` → returns `undefined` (caching disabled).
+ * - Per-call `cache: { ... }` → replaces the agent default.
+ * - Per-call omitted → uses `agent.cacheable()` unchanged.
+ *
+ * Returns `undefined` when no markers are set so the provider request
+ * carries no `cache` field at all.
+ */
+function resolveCacheMarkers(
+  agent: Agent,
+  options: AgentPromptOptions | undefined,
+): CacheableMarkers | undefined {
+  if (options && options.cache === false) return undefined
+  const perCall = options?.cache === false ? undefined : options?.cache
+  const config: CacheableConfig | undefined = perCall ?? agent.cacheable()
+  if (!config) return undefined
+  const markers: CacheableMarkers = {}
+  if (config.instructions) markers.instructions = true
+  if (config.tools)        markers.tools        = true
+  if (config.messages !== undefined && config.messages > 0) {
+    markers.messages = Math.floor(config.messages)
+  }
+  return Object.keys(markers).length > 0 ? markers : undefined
 }
 
 /** Emit the `agent.failed` observer event from the shared loop state. */

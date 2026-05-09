@@ -115,6 +115,63 @@ export interface ProviderRequestOptions {
   signal?: AbortSignal | undefined
   /** Provider-specific options */
   providerOptions?: Record<string, unknown> | undefined
+  /**
+   * Resolved prompt-caching markers — populated by the agent loop from
+   * `Agent.cacheable()` (and the per-call `cache` override). Provider
+   * adapters translate these to native cache primitives:
+   *
+   * - **Anthropic** — adds `cache_control: { type: 'ephemeral' }` to the
+   *   last content block of each marked region (system, tools, messages[N]).
+   * - **OpenAI** — caching is automatic above 1024 tokens; the adapter sets
+   *   `prompt_cache_key` from a hash of the cached regions for routing
+   *   affinity. (Implementation pending — sub-PR follow-up.)
+   * - **Google (Gemini)** — translates to `cachedContent` resources.
+   *   (Implementation pending — sub-PR follow-up.)
+   *
+   * Adapters that don't support caching ignore this field — the request
+   * still runs uncached.
+   */
+  cache?: CacheableMarkers | undefined
+}
+
+/**
+ * Declarative cache configuration on the {@link Agent} class. Each marked
+ * region is a hint that the *content there is stable across requests* and
+ * worth caching. The agent loop resolves this into {@link CacheableMarkers}
+ * for the provider.
+ *
+ * Example:
+ * ```ts
+ * class SupportAgent extends Agent {
+ *   cacheable() {
+ *     return { instructions: true, tools: true, messages: 2 }
+ *     //                                         ^ cache the first 2 messages
+ *   }
+ * }
+ * ```
+ */
+export interface CacheableConfig {
+  /** Cache the system instructions. */
+  instructions?: boolean
+  /** Cache the tool definitions. */
+  tools?:        boolean
+  /**
+   * Cache the first N messages (oldest). The cache breakpoint goes
+   * immediately after the Nth message. Useful for multi-turn conversations
+   * where the early context (history, examples) doesn't change.
+   */
+  messages?:     number
+}
+
+/**
+ * Resolved cache markers — the post-merge shape the agent loop hands to
+ * provider adapters. `messages` is normalized to a positive integer (the
+ * count of leading messages to cache); `0` or absent means "don't cache".
+ */
+export interface CacheableMarkers {
+  instructions?: boolean
+  tools?:        boolean
+  messages?:     number
 }
 
 export type ToolChoice = 'auto' | 'required' | 'none' | { name: string }
@@ -574,6 +631,14 @@ export interface AgentPromptOptions {
    * override.
    */
   parallelTools?: boolean
+  /**
+   * Per-call override for the agent's `cacheable()` declaration.
+   *
+   * - `false` — disable caching for this call (overrides any agent default).
+   * - {@link CacheableConfig} — replace the agent's declaration for this call.
+   * - omitted — use the agent's declaration unchanged.
+   */
+  cache?: false | CacheableConfig
 }
 
 /** An attachment (file or image) to include with a prompt */

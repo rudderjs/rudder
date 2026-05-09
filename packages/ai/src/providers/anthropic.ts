@@ -61,17 +61,21 @@ class AnthropicAdapter implements ProviderAdapter {
   async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
     const client = await this.getClient()
     const { system, messages } = splitSystemMessages(options.messages)
+    const cache = options.cache
 
     const params: Record<string, unknown> = {
       model: this.model,
-      messages: toAnthropicMessages(messages),
+      messages: applyCacheToMessages(toAnthropicMessages(messages), cache?.messages),
       max_tokens: options.maxTokens ?? 4096,
     }
-    if (system) params['system'] = system
+    const sys = applyCacheToSystem(system, cache?.instructions === true)
+    if (sys !== undefined) params['system'] = sys
     if (options.temperature !== undefined) params['temperature'] = options.temperature
     if (options.topP !== undefined) params['top_p'] = options.topP
     if (options.stop) params['stop_sequences'] = options.stop
-    if (options.tools?.length) params['tools'] = toAnthropicTools(options.tools)
+    if (options.tools?.length) {
+      params['tools'] = applyCacheToTools(toAnthropicTools(options.tools), cache?.tools === true)
+    }
     if (options.toolChoice) params['tool_choice'] = toAnthropicToolChoice(options.toolChoice)
 
     const response = await client.messages.create(params, options.signal ? { signal: options.signal } : undefined)
@@ -81,18 +85,22 @@ class AnthropicAdapter implements ProviderAdapter {
   async *stream(options: ProviderRequestOptions): AsyncIterable<StreamChunk> {
     const client = await this.getClient()
     const { system, messages } = splitSystemMessages(options.messages)
+    const cache = options.cache
 
     const params: Record<string, unknown> = {
       model: this.model,
-      messages: toAnthropicMessages(messages),
+      messages: applyCacheToMessages(toAnthropicMessages(messages), cache?.messages),
       max_tokens: options.maxTokens ?? 4096,
       stream: true,
     }
-    if (system) params['system'] = system
+    const sys = applyCacheToSystem(system, cache?.instructions === true)
+    if (sys !== undefined) params['system'] = sys
     if (options.temperature !== undefined) params['temperature'] = options.temperature
     if (options.topP !== undefined) params['top_p'] = options.topP
     if (options.stop) params['stop_sequences'] = options.stop
-    if (options.tools?.length) params['tools'] = toAnthropicTools(options.tools)
+    if (options.tools?.length) {
+      params['tools'] = applyCacheToTools(toAnthropicTools(options.tools), cache?.tools === true)
+    }
     if (options.toolChoice) params['tool_choice'] = toAnthropicToolChoice(options.toolChoice)
 
     const stream = await client.messages.stream(params, options.signal ? { signal: options.signal } : undefined)
@@ -204,6 +212,55 @@ function toAnthropicTools(tools: ToolDefinitionSchema[]): unknown[] {
     description: t.description,
     input_schema: t.parameters,
   }))
+}
+
+// ─── Prompt-cache markers ────────────────────────────────
+//
+// Anthropic exposes ephemeral prompt caching via `cache_control` on
+// individual content blocks. The marker goes on the *last* block of each
+// region you want to cache; everything up to (and including) that block is
+// cached. Up to 4 cache breakpoints per request — we currently emit at
+// most 3 (system, tools, messages[N]) so we stay well under the limit.
+//
+// Spec: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+
+const CACHE_CONTROL = { cache_control: { type: 'ephemeral' as const } }
+
+export function applyCacheToSystem(system: string | undefined, enabled: boolean): unknown {
+  if (!system) return undefined
+  if (!enabled) return system
+  // String-form system can't carry cache_control; convert to a single text block.
+  return [{ type: 'text', text: system, ...CACHE_CONTROL }]
+}
+
+export function applyCacheToTools(tools: unknown[], enabled: boolean): unknown[] {
+  if (!enabled || tools.length === 0) return tools
+  return tools.map((t, i) =>
+    i === tools.length - 1 ? { ...(t as object), ...CACHE_CONTROL } : t,
+  )
+}
+
+export function applyCacheToMessages(messages: unknown[], cacheCount: number | undefined): unknown[] {
+  if (!cacheCount || cacheCount <= 0 || messages.length === 0) return messages
+  // Cache the first N messages — mark cache_control on the last content block
+  // of message at index N-1 (or the last actual message if N exceeds length).
+  const idx = Math.min(cacheCount - 1, messages.length - 1)
+  return messages.map((m, i) => {
+    if (i !== idx) return m
+    const msg = m as { role: string; content: unknown }
+    if (typeof msg.content === 'string') {
+      // Convert string content to a single text block so we can attach cache_control.
+      return { ...msg, content: [{ type: 'text', text: msg.content, ...CACHE_CONTROL }] }
+    }
+    if (Array.isArray(msg.content) && msg.content.length > 0) {
+      const blocks = msg.content as object[]
+      const newBlocks = blocks.map((b, j) =>
+        j === blocks.length - 1 ? { ...b, ...CACHE_CONTROL } : b,
+      )
+      return { ...msg, content: newBlocks }
+    }
+    return m
+  })
 }
 
 function toAnthropicToolChoice(choice: ToolChoice): unknown {
