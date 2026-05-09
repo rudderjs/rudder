@@ -197,6 +197,97 @@ describe('Anthropic cache_control markers', () => {
   })
 })
 
+describe('OpenAI prompt_cache_key', () => {
+  const messages = [
+    { role: 'system', content: 'You are helpful' },
+    { role: 'user',   content: 'hello' },
+    { role: 'assistant', content: 'hi' },
+    { role: 'user',   content: 'second' },
+  ]
+  const tools = [
+    { type: 'function', function: { name: 'a', description: 'A', parameters: {} } },
+    { type: 'function', function: { name: 'b', description: 'B', parameters: {} } },
+  ]
+
+  it('returns undefined when no cache markers are set', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    assert.equal(buildPromptCacheKey(messages, tools, undefined), undefined)
+    assert.equal(buildPromptCacheKey(messages, tools, {}), undefined)
+  })
+
+  it('returns a stable key for identical inputs', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    const a = buildPromptCacheKey(messages, tools, { instructions: true, tools: true })
+    const b = buildPromptCacheKey(messages, tools, { instructions: true, tools: true })
+    assert.ok(a)
+    assert.equal(a, b)
+  })
+
+  it('changes when system content changes (instructions marked)', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    const a = buildPromptCacheKey(messages, tools, { instructions: true })
+    const b = buildPromptCacheKey(
+      [{ role: 'system', content: 'Different system' }, ...messages.slice(1)],
+      tools,
+      { instructions: true },
+    )
+    assert.notEqual(a, b)
+  })
+
+  it('does NOT change when only an unmarked region changes', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    // Mark only `instructions`. Tool list and conversation messages should
+    // not affect the key — they're outside the cached prefix.
+    const a = buildPromptCacheKey(messages, tools, { instructions: true })
+    const differentTools = [{ type: 'function', function: { name: 'z', description: 'Z', parameters: {} } }]
+    const b = buildPromptCacheKey(messages, differentTools, { instructions: true })
+    assert.equal(a, b)
+  })
+
+  it('changes when tools change (tools marked)', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    const a = buildPromptCacheKey(messages, tools, { tools: true })
+    const b = buildPromptCacheKey(messages, [tools[0]!], { tools: true })
+    assert.notEqual(a, b)
+  })
+
+  it('hashes only the first N non-system messages when messages: N is set', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    // Mark `messages: 2` — only the first 2 user/assistant messages count.
+    // Changing the 3rd should NOT change the key.
+    const base = buildPromptCacheKey(messages, tools, { messages: 2 })
+    const extra = buildPromptCacheKey(
+      [...messages, { role: 'user', content: 'third user msg' }],
+      tools,
+      { messages: 2 },
+    )
+    assert.equal(base, extra)
+
+    // But changing the 1st conversation message SHOULD change the key.
+    const changed = buildPromptCacheKey(
+      [messages[0]!, { role: 'user', content: 'changed' }, ...messages.slice(2)],
+      tools,
+      { messages: 2 },
+    )
+    assert.notEqual(base, changed)
+  })
+
+  it('returns undefined when markers are set but the corresponding regions are empty', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    // No system message, no tools, no messages — instructions+tools markers should produce nothing.
+    assert.equal(buildPromptCacheKey([], undefined, { instructions: true, tools: true }), undefined)
+    // messages: 5 but only a system message exists → no non-system messages to hash → undefined
+    assert.equal(buildPromptCacheKey([{ role: 'system', content: 's' }], undefined, { messages: 5 }), undefined)
+  })
+
+  it('produces a hex-formatted key', async () => {
+    const { buildPromptCacheKey } = await import('./providers/openai.js')
+    const key = buildPromptCacheKey(messages, tools, { instructions: true })
+    assert.ok(key)
+    assert.match(key!, /^[0-9a-f]+$/)
+  })
+})
+
 describe('OpenAIProvider', () => {
   it('has name "openai"', () => {
     const p = new OpenAIProvider({ apiKey: 'test-key' })

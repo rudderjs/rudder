@@ -123,8 +123,8 @@ export interface ProviderRequestOptions {
    * - **Anthropic** — adds `cache_control: { type: 'ephemeral' }` to the
    *   last content block of each marked region (system, tools, messages[N]).
    * - **OpenAI** — caching is automatic above 1024 tokens; the adapter sets
-   *   `prompt_cache_key` from a hash of the cached regions for routing
-   *   affinity. (Implementation pending — sub-PR follow-up.)
+   *   `prompt_cache_key` from a stable hash of the cached regions for routing
+   *   affinity (so repeat requests hit the same backend's cached prefix).
    * - **Google (Gemini)** — translates to `cachedContent` resources.
    *   (Implementation pending — sub-PR follow-up.)
    *
