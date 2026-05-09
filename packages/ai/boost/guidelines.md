@@ -135,6 +135,18 @@ const response = await myAgent.forUser('user-123').prompt('Hello')  // creates c
 const follow = await myAgent.continue(response.conversationId).prompt('Follow up')
 ```
 
+For chat agents that should always auto-persist for the active user, override `conversational()` on the class — `agent.prompt(input)` then auto-loads + auto-saves without each caller passing the user id:
+
+```ts
+class ChatAgent extends Agent {
+  conversational() { return { user: Auth.user()?.id } }   // null user → opt-out
+}
+await new ChatAgent().prompt('Hi')          // auto-loads thread
+await new ChatAgent().prompt('still you?')  // resumes per (user, class)
+```
+
+Returning `false` (default) keeps the agent stateless. Optional `historyLimit: N` caps loaded messages. Per-call `{ conversation: false }` opts out; `forUser`/`continue` always win.
+
 ### Streaming
 
 Use `.stream()` for real-time token delivery:

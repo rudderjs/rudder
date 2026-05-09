@@ -1,4 +1,4 @@
-import type { AiMessage, ConversationStore, ConversationStoreMeta } from './types.js'
+import type { AiMessage, ConversationStore, ConversationStoreListEntry, ConversationStoreMeta } from './types.js'
 
 function generateId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -46,13 +46,15 @@ export class MemoryConversationStore implements ConversationStore {
     conv.title = title
   }
 
-  async list(_userId?: string): Promise<{ id: string; title: string; createdAt: Date; updatedAt?: Date }[]> {
+  async list(userId?: string): Promise<ConversationStoreListEntry[]> {
     return Array.from(this.conversations.entries())
+      .filter(([, conv]) => userId == null || conv.meta?.userId === userId)
       .map(([id, conv]) => ({
         id,
         title: conv.title,
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt,
+        ...(conv.meta?.agent ? { agent: conv.meta.agent } : {}),
       }))
       .sort((a, b) => b.updatedAt!.getTime() - a.updatedAt!.getTime())
   }

@@ -653,6 +653,18 @@ export interface AgentPromptOptions {
    * - omitted — use the agent's declaration unchanged.
    */
   cache?: false | CacheableConfig
+  /**
+   * Per-call override for the agent's `conversational()` declaration.
+   *
+   * - `false` — disable auto-persist for this call (overrides any agent default).
+   * - {@link ConversationalSpec} — replace the agent's declaration for this call.
+   * - omitted — use the agent's declaration unchanged.
+   *
+   * Explicit `agent.forUser(id)` / `agent.continue(id)` chains shadow this
+   * override (and the class declaration) — see the docs for the precedence
+   * chain.
+   */
+  conversation?: ConversationalOverride
 }
 
 /** An attachment (file or image) to include with a prompt */
@@ -669,6 +681,22 @@ export interface ConversationStoreMeta {
   userId?: string
   resourceSlug?: string
   recordId?: string
+  /**
+   * Optional thread-segregation key — set by the auto-persist machinery so
+   * one user can talk to multiple agent classes without their threads
+   * cross-contaminating. Defaults to the agent class's name; overridable
+   * via the `agent` field returned by `Agent.conversational()`.
+   */
+  agent?: string
+}
+
+export interface ConversationStoreListEntry {
+  id: string
+  title: string
+  createdAt: Date
+  updatedAt?: Date
+  /** Mirrors {@link ConversationStoreMeta.agent} on the source row. */
+  agent?: string
 }
 
 export interface ConversationStore {
@@ -676,6 +704,45 @@ export interface ConversationStore {
   load(conversationId: string): Promise<AiMessage[]>
   append(conversationId: string, messages: AiMessage[]): Promise<void>
   setTitle(conversationId: string, title: string): Promise<void>
-  list(userId?: string): Promise<{ id: string; title: string; createdAt: Date; updatedAt?: Date }[]>
+  list(userId?: string): Promise<ConversationStoreListEntry[]>
   delete?(conversationId: string): Promise<void>
 }
+
+// ─── Conversational (auto-persist) ────────────────────────
+
+/**
+ * Return shape of {@link Agent.conversational} when an agent opts into the
+ * auto-persist behavior. Inspired by Laravel's `RemembersConversations` —
+ * declare once on the class, then `agent.prompt(input)` auto-loads the user's
+ * thread, runs, and appends without each caller threading a userId through.
+ */
+export interface ConversationalSpec {
+  /** Identity of the user owning the conversation thread. */
+  user: string
+  /**
+   * Specific thread id to resume. When omitted, the auto-persist machinery
+   * resumes the user's most-recent thread for this `agent` key, or creates
+   * a new one if none exists.
+   */
+  id?: string
+  /**
+   * Override the thread-segregation key. Defaults to the agent class's
+   * name. Set this when you rename the class but want existing threads to
+   * keep flowing into the same agent (`agent: 'chat-v2'`), or when two
+   * different classes should share threads (rare).
+   */
+  agent?: string
+  /**
+   * Cap loaded history to the last N messages. Default unbounded. Use this
+   * for chat agents whose threads can grow long; for token-aware trimming,
+   * write a middleware instead.
+   */
+  historyLimit?: number
+}
+
+/**
+ * Per-call override for `AgentPromptOptions.conversation`. `false` disables
+ * auto-persist for this call; a partial spec replaces the agent's
+ * declaration; omitted falls through to `Agent.conversational()`.
+ */
+export type ConversationalOverride = false | ConversationalSpec
