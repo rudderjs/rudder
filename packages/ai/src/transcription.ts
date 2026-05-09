@@ -1,4 +1,4 @@
-import { AiRegistry } from './registry.js'
+import { AiRegistry, tryWithFailover } from './registry.js'
 import type { SpeechToTextResult } from './types.js'
 
 /**
@@ -9,11 +9,18 @@ import type { SpeechToTextResult } from './types.js'
  *
  * For Node-only path-based loading, see `@rudderjs/ai/node`:
  *   const t = await transcribeFromPath('./audio.mp3')
+ *
+ * @example  Failover across providers
+ * const result = await Transcription.fromBytes(bytes)
+ *   .model('openai/whisper-1')
+ *   .failover('google/gemini-2.0-flash-exp')
+ *   .generate()
  */
 export class Transcription {
   private _model?: string
   private _language?: string
   private _prompt?: string
+  private _failover: string[] = []
 
   private constructor(private readonly _audio: Uint8Array) {}
 
@@ -33,6 +40,15 @@ export class Transcription {
     return this
   }
 
+  /**
+   * Provider/model strings to try if the primary fails.
+   * Tried in order; the first to succeed wins.
+   */
+  failover(...models: string[]): this {
+    this._failover = models
+    return this
+  }
+
   /** Set the language hint (ISO-639-1, e.g. 'en', 'es', 'fr') */
   language(l: string): this {
     this._language = l
@@ -47,23 +63,25 @@ export class Transcription {
 
   /** Run the transcription */
   async generate(): Promise<SpeechToTextResult> {
-    const modelString = this._model ?? AiRegistry.getDefault()
-    const [providerName, modelId] = AiRegistry.parseModelString(modelString)
-    const factory = AiRegistry.getFactory(providerName)
+    const primary = this._model ?? AiRegistry.getDefault()
+    return tryWithFailover(primary, this._failover, async (modelString) => {
+      const [providerName, modelId] = AiRegistry.parseModelString(modelString)
+      const factory = AiRegistry.getFactory(providerName)
 
-    if (!factory.createStt) {
-      throw new Error(
-        `[RudderJS AI] Provider "${providerName}" does not support speech-to-text. ` +
-        `Use a provider that implements createStt() (e.g. openai).`,
-      )
-    }
+      if (!factory.createStt) {
+        throw new Error(
+          `[RudderJS AI] Provider "${providerName}" does not support speech-to-text. ` +
+          `Use a provider that implements createStt() (e.g. openai).`,
+        )
+      }
 
-    const adapter = factory.createStt(modelId)
-    return adapter.transcribe({
-      audio: this._audio,
-      model: modelId,
-      language: this._language,
-      prompt: this._prompt,
+      const adapter = factory.createStt(modelId)
+      return adapter.transcribe({
+        audio: this._audio,
+        model: modelId,
+        language: this._language,
+        prompt: this._prompt,
+      })
     })
   }
 }

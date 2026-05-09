@@ -84,6 +84,7 @@ export class AiFake {
   private _response = 'fake response'
   private _sequence: AiFakeStep[] = []
   private readonly _failures = new Map<number, Error>()
+  private _preventStray = false
   private _imageResponse = 'ZmFrZS1pbWFnZQ=='  // base64 of 'fake-image'
   private _ttsResponse: Buffer = Buffer.from('fake-audio')
   private _sttResponse = 'fake transcription'
@@ -94,6 +95,32 @@ export class AiFake {
   /** Set the text response the fake will return */
   respondWith(text: string): void {
     this._response = text
+  }
+
+  /**
+   * Strict mode — throw when the agent makes a prompt the fake doesn't have a
+   * scripted response for.
+   *
+   * Without this, an unscripted prompt silently falls back to the ambient
+   * `respondWith` default (`'fake response'` if untouched). That behavior
+   * makes tests pass even when they accidentally trigger an extra prompt the
+   * test never asserted on.
+   *
+   * Under strict mode, only entries from {@link respondWithSequence} count
+   * as valid responses; the ambient `respondWith` default is **not used**.
+   * Force a single-step script via `respondWithSequence([{ text: '...' }])`
+   * if you need an exact-one-prompt test that still returns content.
+   *
+   * @example
+   * const fake = AiFake.fake().preventStrayPrompts()
+   * fake.respondWithSequence([{ text: 'expected reply' }])
+   *
+   * await new ChatAgent().prompt('hello')   // OK
+   * await new ChatAgent().prompt('again')   // throws — no second script entry
+   */
+  preventStrayPrompts(): this {
+    this._preventStray = true
+    return this
   }
 
   /**
@@ -162,6 +189,11 @@ export class AiFake {
   static fake(): AiFake {
     const fake = new AiFake()
 
+    const strayError = (stepIndex: number): Error => new Error(
+      `[RudderJS AI] Stray prompt: no scripted response at step ${stepIndex}. ` +
+      `Add an entry via respondWithSequence([...]) or remove preventStrayPrompts().`,
+    )
+
     const adapter: ProviderAdapter = {
       async generate(opts: ProviderRequestOptions): Promise<ProviderResponse> {
         const stepIndex = fake.calls.length
@@ -180,6 +212,7 @@ export class AiFake {
             finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
           }
         }
+        if (fake._preventStray) throw strayError(stepIndex)
         return {
           message: { role: 'assistant', content: fake._response },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
@@ -204,6 +237,7 @@ export class AiFake {
           }
           return
         }
+        if (fake._preventStray) throw strayError(stepIndex)
         yield { type: 'text-delta', text: fake._response }
         yield { type: 'finish', finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }
       },

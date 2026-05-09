@@ -355,6 +355,20 @@ const response = await new ResilientAgent().prompt('Hello')
 
 Works with both `prompt()` and `stream()`.
 
+The same pattern is available on the media generators (Image, Audio, Transcription) — pass extra provider/model strings to `.failover(...)`:
+
+```ts
+await ImageGenerator.of('A donut')
+  .model('openai/dall-e-3')
+  .failover('google/imagen-3', 'azure/dall-e-3')
+  .generate()
+
+await AudioGenerator.of('Hello').model('openai/tts-1-hd').failover('elevenlabs/eleven_multilingual_v2').generate()
+await Transcription.fromBytes(bytes).model('openai/whisper-1').failover('google/gemini-2.0-flash-exp').generate()
+```
+
+Tried in order. If the primary fails (provider error, capability missing, etc.), the next candidate runs. Only the last error surfaces if every candidate fails.
+
 ### Image Generation
 
 ```ts
@@ -604,6 +618,18 @@ fake.assertAudioGenerated()    fake.assertTranscribed()
 fake.assertEmbedded()          fake.assertReranked()
 fake.assertFileUploaded()
 ```
+
+**Strict mode (`preventStrayPrompts`).** Without it, an unscripted prompt silently falls back to the ambient `respondWith` default — which means a test that forgets to assert anything still passes. Strict mode flips that around: any prompt without a matching scripted response throws.
+
+```ts
+const fake = AiFake.fake().preventStrayPrompts()
+fake.respondWithSequence([{ text: 'expected reply' }])
+
+await new ChatAgent().prompt('hello')   // OK — consumes step 0
+await new ChatAgent().prompt('again')   // throws "Stray prompt: no scripted response at step 1"
+```
+
+Under strict mode, only `respondWithSequence` entries count as valid responses; ambient `respondWith` is ignored. Force a single-step script via `respondWithSequence([{ text: '...' }])` if you want exact-one-prompt tests with content.
 
 ## Providers
 
