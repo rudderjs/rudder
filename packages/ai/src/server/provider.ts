@@ -1,6 +1,7 @@
 import { ServiceProvider, config } from '@rudderjs/core'
 import { AiRegistry } from '../registry.js'
 import { setConversationStore } from '../agent.js'
+import { GoogleCacheRegistry, type CacheStoreLike } from '../providers/google-cache-registry.js'
 import type { AiConfig, ConversationStore } from '../types.js'
 
 /**
@@ -16,6 +17,8 @@ export class AiProvider extends ServiceProvider {
 
   async boot(): Promise<void> {
     const cfg = config<AiConfig>('ai')
+    const googleCacheRegistry = this.buildGoogleCacheRegistry()
+
     for (const [name, providerConfig] of Object.entries(cfg.providers)) {
         const driver = providerConfig.driver ?? name
 
@@ -36,7 +39,7 @@ export class AiProvider extends ServiceProvider {
           const { GoogleProvider } = await import('../providers/google.js')
           AiRegistry.register(new GoogleProvider({
             apiKey: providerConfig.apiKey!,
-          }))
+          }, googleCacheRegistry))
         } else if (driver === 'ollama') {
           const { OllamaProvider } = await import('../providers/ollama.js')
           AiRegistry.register(new OllamaProvider({
@@ -92,5 +95,20 @@ export class AiProvider extends ServiceProvider {
       const { makeAgentSpec } = await import('../commands/make-agent.js')
       registerMakeSpecs(makeAgentSpec)
     } catch { /* rudder not available */ }
+  }
+
+  /**
+   * Build a `GoogleCacheRegistry` for Gemini's `cachedContent` resources.
+   * When `@rudderjs/cache` is installed and booted, the registered cache
+   * adapter is plumbed in for cross-process / cross-restart persistence.
+   * Otherwise the registry uses an in-process `Map` and warns once on
+   * first use.
+   */
+  private buildGoogleCacheRegistry(): GoogleCacheRegistry {
+    if (this.app.container.has('cache')) {
+      const store = this.app.make<CacheStoreLike>('cache')
+      return new GoogleCacheRegistry({ store })
+    }
+    return new GoogleCacheRegistry()
   }
 }

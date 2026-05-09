@@ -18,6 +18,13 @@ import type {
   FileUploadResult,
   FileListResult,
 } from '../types.js'
+import {
+  GoogleCacheRegistry,
+  buildGoogleCacheKey,
+  splitContentsAtCache,
+  durationToGoogleTtl,
+  _internals as _registryInternals,
+} from './google-cache-registry.js'
 
 export interface GoogleConfig {
   apiKey: string
@@ -26,13 +33,15 @@ export interface GoogleConfig {
 export class GoogleProvider implements ProviderFactory {
   readonly name = 'google'
   private readonly config: GoogleConfig
+  private readonly cacheRegistry?: GoogleCacheRegistry
 
-  constructor(config: GoogleConfig) {
+  constructor(config: GoogleConfig, cacheRegistry?: GoogleCacheRegistry) {
     this.config = config
+    if (cacheRegistry) this.cacheRegistry = cacheRegistry
   }
 
   create(model: string): ProviderAdapter {
-    return new GoogleAdapter(this.config, model)
+    return new GoogleAdapter(this.config, model, this.cacheRegistry)
   }
 
   createEmbedding(model: string): EmbeddingAdapter {
@@ -50,12 +59,13 @@ export class GoogleProvider implements ProviderFactory {
 
 // ─── Adapter ──────────────────────────────────────────────
 
-class GoogleAdapter implements ProviderAdapter {
+export class GoogleAdapter implements ProviderAdapter {
   private client: any = null
 
   constructor(
     private readonly config: GoogleConfig,
     private readonly model: string,
+    private readonly cacheRegistry?: GoogleCacheRegistry | undefined,
   ) {}
 
   private async getClient(): Promise<any> {
@@ -66,49 +76,105 @@ class GoogleAdapter implements ProviderAdapter {
     return this.client
   }
 
-  async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
+  /**
+   * Build the request payload, consulting the cache registry if `options.cache`
+   * is set. Returns the payload for `generateContent` / `generateContentStream`
+   * plus the cache key (so the caller can `forget()` it on a 404 stale-cache
+   * retry).
+   */
+  private async buildPayload(
+    options: ProviderRequestOptions,
+  ): Promise<{ payload: Record<string, unknown>; cacheKey: string | undefined }> {
     const client = await this.getClient()
     const { system, contents } = toGeminiContents(options.messages)
+    const geminiTools = options.tools?.length ? toGeminiTools(options.tools) : undefined
 
     const config: Record<string, unknown> = {}
     if (options.maxTokens) config['maxOutputTokens'] = options.maxTokens
     if (options.temperature !== undefined) config['temperature'] = options.temperature
     if (options.topP !== undefined) config['topP'] = options.topP
     if (options.stop) config['stopSequences'] = options.stop
-    if (options.tools?.length) config['tools'] = [{ functionDeclarations: toGeminiTools(options.tools) }]
+    if (geminiTools) config['tools'] = [{ functionDeclarations: geminiTools }]
     if (options.toolChoice) config['toolConfig'] = toGeminiToolConfig(options.toolChoice)
     // The Gemini SDK reads abortSignal from the config block.
     if (options.signal) config['abortSignal'] = options.signal
 
-    const response = await client.models.generateContent({
-      model: this.model,
-      contents,
-      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      config,
-    })
+    let cacheName: string | null = null
+    let cacheKey: string | undefined
+    if (this.cacheRegistry && options.cache) {
+      cacheKey = buildGoogleCacheKey(this.model, options.cache, system, contents, geminiTools)
+      if (cacheKey) {
+        const { cached: cachedSlice } = splitContentsAtCache(contents, options.cache)
+        cacheName = await this.cacheRegistry.resolve({
+          client,
+          model:    this.model,
+          cacheKey,
+          ...(options.cache.instructions && system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+          ...(cachedSlice.length > 0 ? { contents: cachedSlice } : {}),
+          ...(options.cache.tools && geminiTools ? { tools: [{ functionDeclarations: geminiTools }] } : {}),
+          ...(options.cache.ttl ? { ttl: durationToGoogleTtl(options.cache.ttl) } : {}),
+        })
+      }
+    }
 
-    return fromGeminiResponse(response)
+    if (cacheName) {
+      // Drop tools / system from the request — they're inherited from the cache resource.
+      const { fresh } = splitContentsAtCache(contents, options.cache)
+      const configForCachedRequest: Record<string, unknown> = { ...config }
+      delete configForCachedRequest['tools']
+      configForCachedRequest['cachedContent'] = cacheName
+      return {
+        payload: { model: this.model, contents: fresh, config: configForCachedRequest },
+        cacheKey,
+      }
+    }
+
+    return {
+      payload: {
+        model: this.model,
+        contents,
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        config,
+      },
+      cacheKey,
+    }
+  }
+
+  async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
+    const { payload, cacheKey } = await this.buildPayload(options)
+    const client = await this.getClient()
+
+    try {
+      const response = await client.models.generateContent(payload)
+      return fromGeminiResponse(response)
+    } catch (err) {
+      if (cacheKey && this.cacheRegistry && _registryInternals.isNotFoundError(err)) {
+        // Stale `cachedContent` resource — drop and retry once with a fresh build.
+        await this.cacheRegistry.forget(cacheKey)
+        const { payload: retryPayload } = await this.buildPayload(options)
+        const response = await client.models.generateContent(retryPayload)
+        return fromGeminiResponse(response)
+      }
+      throw err
+    }
   }
 
   async *stream(options: ProviderRequestOptions): AsyncIterable<StreamChunk> {
+    let payloadAndKey = await this.buildPayload(options)
     const client = await this.getClient()
-    const { system, contents } = toGeminiContents(options.messages)
 
-    const config: Record<string, unknown> = {}
-    if (options.maxTokens) config['maxOutputTokens'] = options.maxTokens
-    if (options.temperature !== undefined) config['temperature'] = options.temperature
-    if (options.topP !== undefined) config['topP'] = options.topP
-    if (options.stop) config['stopSequences'] = options.stop
-    if (options.tools?.length) config['tools'] = [{ functionDeclarations: toGeminiTools(options.tools) }]
-    if (options.toolChoice) config['toolConfig'] = toGeminiToolConfig(options.toolChoice)
-    if (options.signal) config['abortSignal'] = options.signal
-
-    const response = await client.models.generateContentStream({
-      model: this.model,
-      contents,
-      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      config,
-    })
+    let response: AsyncIterable<any>
+    try {
+      response = await client.models.generateContentStream(payloadAndKey.payload)
+    } catch (err) {
+      if (payloadAndKey.cacheKey && this.cacheRegistry && _registryInternals.isNotFoundError(err)) {
+        await this.cacheRegistry.forget(payloadAndKey.cacheKey)
+        payloadAndKey = await this.buildPayload(options)
+        response = await client.models.generateContentStream(payloadAndKey.payload)
+      } else {
+        throw err
+      }
+    }
 
     for await (const chunk of response) {
       const candidate = chunk.candidates?.[0]

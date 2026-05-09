@@ -125,8 +125,9 @@ export interface ProviderRequestOptions {
    * - **OpenAI** — caching is automatic above 1024 tokens; the adapter sets
    *   `prompt_cache_key` from a stable hash of the cached regions for routing
    *   affinity (so repeat requests hit the same backend's cached prefix).
-   * - **Google (Gemini)** — translates to `cachedContent` resources.
-   *   (Implementation pending — sub-PR follow-up.)
+   * - **Google (Gemini)** — translates to `cachedContent` resources via a
+   *   pluggable registry that uses `@rudderjs/cache` when installed. TTL is
+   *   configurable via {@link CacheableConfig.ttl} (default `'1h'`).
    *
    * Adapters that don't support caching ignore this field — the request
    * still runs uncached.
@@ -161,6 +162,17 @@ export interface CacheableConfig {
    * where the early context (history, examples) doesn't change.
    */
   messages?:     number
+  /**
+   * How long the cache entry should live. Duration string accepted by
+   * `@rudderjs/support`'s parser — `'30m'`, `'2h'`, `'1d'`, etc. Default
+   * `'1h'` when omitted.
+   *
+   * **Google-only for now.** Anthropic's ephemeral cache and OpenAI's
+   * automatic prefix cache have no per-call TTL knob; their adapters ignore
+   * this field. Google's `cachedContent` is a stateful resource with a
+   * configurable TTL (max ~24h, model-dependent), and this controls it.
+   */
+  ttl?:          string
 }
 
 /**
@@ -172,6 +184,8 @@ export interface CacheableMarkers {
   instructions?: boolean
   tools?:        boolean
   messages?:     number
+  /** See {@link CacheableConfig.ttl}. */
+  ttl?:          string
 }
 
 export type ToolChoice = 'auto' | 'required' | 'none' | { name: string }
