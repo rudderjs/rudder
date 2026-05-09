@@ -62,6 +62,26 @@ const weatherTool = toolDefinition({
 }).server(async ({ location }) => ({ temp: 72, unit: 'F', location }))
 ```
 
+### Subagents (`agent.asTool()`)
+
+Wrap one agent as a tool another agent can call. Defaults: `inputSchema = { prompt: string }`, `modelOutput = response.text`. Pass `inputSchema` + `prompt` for a typed schema.
+
+```ts
+class Planner extends Agent implements HasTools {
+  instructions() { return 'You break work into steps. Use `research` for facts.' }
+  tools() {
+    return [
+      new ResearchAgent().asTool({
+        name:        'research',
+        description: 'Research a topic in depth.',
+      }),
+    ]
+  }
+}
+```
+
+The subagent runs via `prompt()` (non-streaming); for `tool-update` chunks from a streaming subagent, write the wrapping tool by hand.
+
 ### Middleware
 
 Middleware hooks into the agent loop lifecycle. Hooks: `onConfig`, `onStart`, `onIteration`, `onChunk`, `onBeforeToolCall`, `onAfterToolCall`, `onToolPhaseComplete`, `onUsage`, `onAbort`, `onError`, `onFinish`.

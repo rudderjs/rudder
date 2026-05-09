@@ -240,6 +240,7 @@ describe('toolDefinition', () => {
 // ─── Agent ────────────────────────────────────────────────
 
 import { Agent, agent, stepCountIs, hasToolCall } from './agent.js'
+import type { AgentResponse } from './types.js'
 
 describe('Agent', () => {
   beforeEach(() => {
@@ -473,6 +474,128 @@ describe('Agent', () => {
 
     const final = await response
     assert.strictEqual(final.text, 'mock response')
+  })
+})
+
+// ─── Agent.asTool (subagents) ─────────────────────────────
+
+describe('Agent.asTool', () => {
+  beforeEach(() => {
+    AiRegistry.reset()
+    AiRegistry.register(mockFactory)
+    AiRegistry.setDefault('mock/test-model')
+  })
+
+  it('zero-config: defaults schema to { prompt: string } and modelOutput to response.text', async () => {
+    class Researcher extends Agent {
+      instructions() { return 'You research things.' }
+    }
+    const tool = new Researcher().asTool({
+      name: 'research',
+      description: 'Research a topic in depth.',
+    })
+
+    assert.strictEqual(tool.definition.name, 'research')
+    assert.strictEqual(tool.definition.description, 'Research a topic in depth.')
+
+    const result = await tool.execute!({ prompt: 'tell me about cats' }) as AgentResponse
+    assert.strictEqual(result.text, 'mock response')
+
+    const summarized = await tool.toModelOutput!(result)
+    assert.strictEqual(summarized, 'mock response')
+  })
+
+  it('default schema requires { prompt: string }', () => {
+    class A extends Agent { instructions() { return '' } }
+    const tool = new A().asTool({ name: 'sub', description: 'sub' })
+    const schema = tool.definition.inputSchema as z.ZodType
+    assert.deepStrictEqual(schema.parse({ prompt: 'hi' }), { prompt: 'hi' })
+    assert.throws(() => schema.parse({}), /prompt/i)
+  })
+
+  it('custom inputSchema + prompt mapper drives the inner agent', async () => {
+    let captured = ''
+    class Captured extends Agent {
+      instructions() { return '' }
+      override async prompt(input: string) {
+        captured = input
+        return super.prompt(input)
+      }
+    }
+    const tool = new Captured().asTool({
+      name:        'research',
+      description: 'Research a topic.',
+      inputSchema: z.object({ topic: z.string(), depth: z.enum(['quick', 'deep']) }),
+      prompt:      ({ topic, depth }) => `Research ${topic} (${depth}).`,
+    })
+
+    await tool.execute!({ topic: 'birds', depth: 'deep' })
+    assert.strictEqual(captured, 'Research birds (deep).')
+  })
+
+  it('custom modelOutput summarizes the response for the parent model', async () => {
+    class A extends Agent { instructions() { return '' } }
+    const tool = new A().asTool({
+      name:        'sub',
+      description: 'sub',
+      modelOutput: (r) => `[summary: ${r.text.length} chars, ${r.steps.length} step(s)]`,
+    })
+
+    const result = await tool.execute!({ prompt: 'hi' }) as AgentResponse
+    const summarized = await tool.toModelOutput!(result)
+    assert.strictEqual(summarized, '[summary: 13 chars, 1 step(s)]')
+  })
+
+  it('parent agent invokes the subagent tool through the loop', async () => {
+    let parentCalls = 0
+    const parentAdapter: ProviderAdapter = {
+      async generate() {
+        parentCalls++
+        if (parentCalls === 1) {
+          return {
+            message: {
+              role: 'assistant',
+              content: '',
+              toolCalls: [{ id: 'tc1', name: 'research', arguments: { prompt: 'cats' } }],
+            },
+            usage:        { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+            finishReason: 'tool_calls',
+          }
+        }
+        return {
+          message:      { role: 'assistant', content: 'all done' },
+          usage:        { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+
+    AiRegistry.reset()
+    AiRegistry.register({ name: 'parent', create: () => parentAdapter })
+    AiRegistry.register(mockFactory)
+    AiRegistry.setDefault('mock/test-model')
+
+    class Researcher extends Agent {
+      instructions() { return 'subagent' }
+      override model() { return 'mock/test-model' }
+    }
+    const research = new Researcher().asTool({
+      name:        'research',
+      description: 'Research things',
+    })
+
+    class Planner extends Agent {
+      instructions() { return 'planner' }
+      override model() { return 'parent/v1' }
+      tools() { return [research] }
+    }
+
+    const response = await new Planner().prompt('plan a trip')
+    assert.strictEqual(response.text, 'all done')
+    assert.strictEqual(response.steps[0]!.toolResults[0]!.toolCallId, 'tc1')
+    const innerResult = response.steps[0]!.toolResults[0]!.result as { text: string }
+    assert.strictEqual(innerResult.text, 'mock response')
   })
 })
 

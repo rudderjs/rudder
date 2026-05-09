@@ -1,5 +1,7 @@
+import { z } from 'zod'
 import { AiRegistry } from './registry.js'
-import { isPauseForClientToolsChunk, toolToSchema } from './tool.js'
+import { isPauseForClientToolsChunk, toolDefinition, toolToSchema } from './tool.js'
+import type { ServerToolBuilder } from './tool.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
 import {
@@ -141,6 +143,66 @@ export abstract class Agent {
   /** Continue an existing conversation */
   continue(conversationId: string): ConversableAgent {
     return new ConversableAgent(this).continue(conversationId)
+  }
+
+  /**
+   * Wrap this agent as a tool another agent can call (the "subagents"
+   * pattern). The returned tool is fully-formed — pass it directly into the
+   * parent agent's `tools()` array. When the parent calls it, this agent
+   * runs its own loop end-to-end (its own model, tools, middleware) and
+   * returns a single result.
+   *
+   * Defaults are tuned for the zero-config case:
+   * - `inputSchema` defaults to `{ prompt: string }` and the agent is
+   *   invoked with `input.prompt`.
+   * - The parent model only sees `response.text` on its next step
+   *   (override with `modelOutput`); the UI still receives the full
+   *   `AgentResponse` via the `tool-result` chunk.
+   *
+   * @example  Zero-config
+   * const research = researchAgent.asTool({
+   *   name: 'research',
+   *   description: 'Research a topic in depth.',
+   * })
+   *
+   * @example  Custom schema + prompt mapper
+   * const research = researchAgent.asTool({
+   *   name: 'research',
+   *   description: 'Research a topic in depth.',
+   *   inputSchema: z.object({ topic: z.string(), depth: z.enum(['quick', 'deep']) }),
+   *   prompt:      ({ topic, depth }) => `Research ${topic} (${depth}).`,
+   * })
+   */
+  asTool<TInput extends z.ZodType>(options: {
+    name:         string
+    description:  string
+    inputSchema:  TInput
+    prompt:       (input: z.infer<TInput>) => string
+    modelOutput?: (response: AgentResponse) => string | Promise<string>
+  }): ServerToolBuilder<z.infer<TInput>, AgentResponse>
+  asTool(options: {
+    name:         string
+    description:  string
+    modelOutput?: (response: AgentResponse) => string | Promise<string>
+  }): ServerToolBuilder<{ prompt: string }, AgentResponse>
+  asTool(options: {
+    name:         string
+    description:  string
+    inputSchema?: z.ZodType
+    prompt?:      (input: unknown) => string
+    modelOutput?: (response: AgentResponse) => string | Promise<string>
+  }): ServerToolBuilder<unknown, AgentResponse> {
+    const schema      = options.inputSchema ?? z.object({ prompt: z.string() })
+    const promptOf    = options.prompt      ?? ((input: unknown) => (input as { prompt: string }).prompt)
+    const modelOutput = options.modelOutput ?? ((response: AgentResponse) => response.text)
+
+    return toolDefinition({
+      name:        options.name,
+      description: options.description,
+      inputSchema: schema,
+    })
+      .server((input: unknown): Promise<AgentResponse> => this.prompt(promptOf(input)))
+      .modelOutput(modelOutput)
   }
 }
 
