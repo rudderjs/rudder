@@ -5,6 +5,8 @@ import { z } from 'zod'
 import {
   Mcp, McpServer, McpTool, McpResource, McpPrompt, McpResponse,
   Name, Version, Instructions, Description, Handle,
+  IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld,
+  Audience, Priority, LastModified,
   McpTestClient,
   type McpToolProgress, type McpToolResult,
 } from './index.js'
@@ -556,6 +558,210 @@ describe('McpTestClient', () => {
     assert.throws(() => client.assertToolCount(99), /Expected 99/)
     assert.throws(() => client.assertResourceExists('missing://x'), /not found/)
     assert.throws(() => client.assertPromptExists('missing'), /not found/)
+  })
+})
+
+// ─── MCP protocol annotations (M1 + M2) ──────────────────
+
+describe('Tool annotations', () => {
+  @IsReadOnly()
+  @IsIdempotent()
+  class GetUserTool extends McpTool {
+    schema() { return z.object({ id: z.string() }) }
+    async handle() { return McpResponse.text('ok') }
+  }
+
+  @IsDestructive()
+  @IsOpenWorld()
+  class DeleteFileTool extends McpTool {
+    schema() { return z.object({ path: z.string() }) }
+    async handle() { return McpResponse.text('deleted') }
+  }
+
+  class PlainTool extends McpTool {
+    schema() { return z.object({}) }
+    async handle() { return McpResponse.text('plain') }
+  }
+
+  class TestServer extends McpServer {
+    protected tools = [GetUserTool, DeleteFileTool, PlainTool]
+  }
+
+  it('surfaces readOnlyHint + idempotentHint on a read tool', async () => {
+    const client = new McpTestClient(TestServer)
+    const list = await client.listTools()
+    const t = list.find((x) => x.name === 'get-user')!
+    assert.ok(t.annotations, 'expected annotations on get-user')
+    assert.equal(t.annotations.readOnlyHint, true)
+    assert.equal(t.annotations.idempotentHint, true)
+    assert.equal(t.annotations.destructiveHint, undefined)
+    assert.equal(t.annotations.openWorldHint, undefined)
+  })
+
+  it('surfaces destructiveHint + openWorldHint on a destructive tool', async () => {
+    const client = new McpTestClient(TestServer)
+    const list = await client.listTools()
+    const t = list.find((x) => x.name === 'delete-file')!
+    assert.ok(t.annotations)
+    assert.equal(t.annotations.destructiveHint, true)
+    assert.equal(t.annotations.openWorldHint, true)
+  })
+
+  it('omits annotations entirely when no hints are set', async () => {
+    const client = new McpTestClient(TestServer)
+    const list = await client.listTools()
+    const t = list.find((x) => x.name === 'plain')!
+    assert.equal(t.annotations, undefined)
+  })
+
+  it('explicit @IsReadOnly(false) emits false (not omitted)', async () => {
+    @IsReadOnly(false)
+    class WriterTool extends McpTool {
+      schema() { return z.object({}) }
+      async handle() { return McpResponse.text('w') }
+    }
+    class S extends McpServer { protected tools = [WriterTool] }
+    const list = await new McpTestClient(S).listTools()
+    assert.equal(list[0]!.annotations?.readOnlyHint, false)
+  })
+})
+
+describe('Resource annotations', () => {
+  @Audience('user')
+  @Priority(0.9)
+  class ReleaseNotes extends McpResource {
+    uri() { return 'file://release-notes' }
+    async handle() { return 'notes' }
+  }
+
+  @Audience('user', 'assistant')
+  @LastModified('2026-05-09T00:00:00Z')
+  class Manual extends McpResource {
+    uri() { return 'file://manual' }
+    async handle() { return 'manual' }
+  }
+
+  class PlainResource extends McpResource {
+    uri() { return 'file://plain' }
+    async handle() { return 'plain' }
+  }
+
+  class TestServer extends McpServer {
+    protected resources = [ReleaseNotes, Manual, PlainResource]
+  }
+
+  it('surfaces audience + priority', async () => {
+    const list = await new McpTestClient(TestServer).listResources()
+    const r = list.find((x) => x.uri === 'file://release-notes')!
+    assert.deepStrictEqual(r.annotations?.audience, ['user'])
+    assert.equal(r.annotations?.priority, 0.9)
+  })
+
+  it('surfaces multi-role audience and lastModified', async () => {
+    const list = await new McpTestClient(TestServer).listResources()
+    const r = list.find((x) => x.uri === 'file://manual')!
+    assert.deepStrictEqual(r.annotations?.audience, ['user', 'assistant'])
+    assert.equal(r.annotations?.lastModified, '2026-05-09T00:00:00Z')
+  })
+
+  it('omits annotations when none set', async () => {
+    const list = await new McpTestClient(TestServer).listResources()
+    const r = list.find((x) => x.uri === 'file://plain')!
+    assert.equal(r.annotations, undefined)
+  })
+
+  it('@Priority validates the 0..1 range', () => {
+    assert.throws(() => Priority(1.5), /between 0 and 1/)
+    assert.throws(() => Priority(-0.1), /between 0 and 1/)
+  })
+
+  it('@Audience requires at least one role', () => {
+    assert.throws(() => Audience(), /at least one role/)
+  })
+
+  it('@LastModified accepts a Date and serializes to ISO', async () => {
+    @LastModified(new Date('2026-01-01T00:00:00Z'))
+    class DatedResource extends McpResource {
+      uri() { return 'file://dated' }
+      async handle() { return 'd' }
+    }
+    class S extends McpServer { protected resources = [DatedResource] }
+    const list = await new McpTestClient(S).listResources()
+    assert.equal(list[0]!.annotations?.lastModified, '2026-01-01T00:00:00.000Z')
+  })
+})
+
+// ─── shouldRegister conditional registration (M3) ─────────
+
+describe('shouldRegister', () => {
+  it('hides a tool from listings when shouldRegister returns false', async () => {
+    let visible = true
+    class GatedTool extends McpTool {
+      schema() { return z.object({}) }
+      async handle() { return McpResponse.text('ok') }
+      shouldRegister() { return visible }
+    }
+    class AlwaysOnTool extends McpTool {
+      schema() { return z.object({}) }
+      async handle() { return McpResponse.text('ok') }
+    }
+    class S extends McpServer { protected tools = [GatedTool, AlwaysOnTool] }
+
+    visible = true
+    let list = await new McpTestClient(S).listTools()
+    assert.equal(list.length, 2)
+
+    visible = false
+    list = await new McpTestClient(S).listTools()
+    assert.equal(list.length, 1)
+    assert.equal(list[0]!.name, 'always-on')
+  })
+
+  it('rejected tool calls throw "not found" — preventing bypass', async () => {
+    class GatedTool extends McpTool {
+      schema() { return z.object({}) }
+      async handle() { return McpResponse.text('ok') }
+      shouldRegister() { return false }
+    }
+    class S extends McpServer { protected tools = [GatedTool] }
+    const client = new McpTestClient(S)
+    await assert.rejects(() => client.callTool('gated'), /not found/)
+  })
+
+  it('hides resources from listings and reads', async () => {
+    class GatedResource extends McpResource {
+      uri() { return 'file://gated' }
+      async handle() { return 'secret' }
+      shouldRegister() { return false }
+    }
+    class S extends McpServer { protected resources = [GatedResource] }
+    const client = new McpTestClient(S)
+    const list = await client.listResources()
+    assert.equal(list.length, 0)
+    await assert.rejects(() => client.readResource('file://gated'), /not found/)
+  })
+
+  it('hides prompts from listings and gets', async () => {
+    class GatedPrompt extends McpPrompt {
+      async handle() { return [{ role: 'user' as const, content: 'hi' }] }
+      shouldRegister() { return false }
+    }
+    class S extends McpServer { protected prompts = [GatedPrompt] }
+    const client = new McpTestClient(S)
+    const list = await client.listPrompts()
+    assert.equal(list.length, 0)
+    await assert.rejects(() => client.getPrompt('gated'), /not found/)
+  })
+
+  it('supports async shouldRegister', async () => {
+    class AsyncGatedTool extends McpTool {
+      schema() { return z.object({}) }
+      async handle() { return McpResponse.text('ok') }
+      async shouldRegister() { await new Promise((r) => setTimeout(r, 1)); return false }
+    }
+    class S extends McpServer { protected tools = [AsyncGatedTool] }
+    const list = await new McpTestClient(S).listTools()
+    assert.equal(list.length, 0)
   })
 })
 

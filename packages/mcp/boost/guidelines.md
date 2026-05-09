@@ -56,6 +56,19 @@ outputSchema() {
 async handle() { return McpResponse.json({ temperature: 22, conditions: 'sunny' }) }
 ```
 
+**Behavior annotations (MCP spec hints).** Apply as class decorators — clients use these to decide auto-approval / sandboxing / batching:
+
+```ts
+import { IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld } from '@rudderjs/mcp'
+
+@IsReadOnly() @IsIdempotent()  class GetUserTool extends McpTool { /* ... */ }
+@IsDestructive() @IsOpenWorld() class DeleteFileTool extends McpTool { /* ... */ }
+```
+
+Both `true` and `false` are meaningful (vs. omitted). `@IsReadOnly()` = true; `@IsReadOnly(false)` = explicit false.
+
+**Conditional registration.** Hide a tool/resource/prompt for static gating (env flags, feature toggles) — `shouldRegister(): boolean | Promise<boolean>`. Returning false hides from `tools/list` AND blocks `tools/call` (no bypass).
+
 ### Resources
 
 Two shapes — **static URIs** and **URI templates**:
@@ -79,6 +92,15 @@ export class CityWeatherResource extends McpResource {
 ```
 
 Templates are auto-registered via `ListResourceTemplates`. Params are extracted from the URI and passed to `handle()`.
+
+**Resource annotations (MCP spec).** Three class decorators — `@Audience('user' | 'assistant')`, `@Priority(0..1)`, `@LastModified(string | Date)`. They surface in `resources/list`/`resources/templates/list` to help clients rank.
+
+```ts
+@Audience('user') @Priority(0.9) @LastModified(new Date())
+class ReleaseNotesResource extends McpResource { /* ... */ }
+```
+
+Resources also accept the same `shouldRegister()` hook as tools.
 
 ### Prompts
 
@@ -266,6 +288,9 @@ import { McpResponse } from '@rudderjs/mcp'
 
 // Decorators
 import { Name, Version, Instructions, Description, Handle } from '@rudderjs/mcp'
+// MCP-spec annotations
+import { IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld } from '@rudderjs/mcp'  // tools
+import { Audience, Priority, LastModified } from '@rudderjs/mcp'                       // resources
 
 // Registration facade
 import { Mcp } from '@rudderjs/mcp'

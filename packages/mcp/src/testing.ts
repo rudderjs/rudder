@@ -2,7 +2,8 @@ import type { McpServer } from './McpServer.js'
 import type { McpTool, McpToolResult, McpToolProgress } from './McpTool.js'
 import type { McpResource } from './McpResource.js'
 import type { McpPrompt, McpPromptMessage } from './McpPrompt.js'
-import { resolveHandleDeps, consumeToolReturn } from './runtime.js'
+import { resolveHandleDeps, consumeToolReturn, isRegistered, filterRegistered } from './runtime.js'
+import { getToolAnnotations, getResourceAnnotations, type ToolAnnotations, type ResourceAnnotations } from './decorators.js'
 
 export class McpTestClient {
   private tools: McpTool[]
@@ -37,7 +38,7 @@ export class McpTestClient {
     onProgress?: (p: McpToolProgress) => void,
   ): Promise<McpToolResult> {
     const tool = this.tools.find((t) => t.name() === name)
-    if (!tool) throw new Error(`Tool "${name}" not found`)
+    if (!tool || !(await isRegistered(tool))) throw new Error(`Tool "${name}" not found`)
     const extras = resolveHandleDeps(tool, 'handle')
     const ret = tool.handle(input, ...extras as [])
     const extra = onProgress
@@ -54,27 +55,44 @@ export class McpTestClient {
     return consumeToolReturn(ret, extra, onProgress ? { progressToken: 'test' } : undefined)
   }
 
-  async listTools(): Promise<Array<{ name: string; description: string }>> {
-    return this.tools.map((t) => ({ name: t.name(), description: t.description() }))
+  async listTools(): Promise<Array<{ name: string; description: string; annotations?: ToolAnnotations }>> {
+    return (await filterRegistered(this.tools)).map((t) => {
+      const annotations = getToolAnnotations(t.constructor)
+      return {
+        name: t.name(),
+        description: t.description(),
+        ...(annotations ? { annotations } : {}),
+      }
+    })
   }
 
-  async listResources(): Promise<Array<{ uri: string; description: string }>> {
-    return this.resources.map((r) => ({ uri: r.uri(), description: r.description() }))
+  async listResources(): Promise<Array<{ uri: string; description: string; annotations?: ResourceAnnotations }>> {
+    return (await filterRegistered(this.resources)).map((r) => {
+      const annotations = getResourceAnnotations(r.constructor)
+      return {
+        uri: r.uri(),
+        description: r.description(),
+        ...(annotations ? { annotations } : {}),
+      }
+    })
   }
 
   async listPrompts(): Promise<Array<{ name: string; description: string }>> {
-    return this.prompts.map((p) => ({ name: p.name(), description: p.description() }))
+    return (await filterRegistered(this.prompts)).map((p) => ({
+      name: p.name(),
+      description: p.description(),
+    }))
   }
 
   async readResource(uri: string): Promise<string> {
     const resource = this.resources.find((r) => r.uri() === uri)
-    if (!resource) throw new Error(`Resource "${uri}" not found`)
+    if (!resource || !(await isRegistered(resource))) throw new Error(`Resource "${uri}" not found`)
     return resource.handle()
   }
 
   async getPrompt(name: string, args: Record<string, unknown> = {}): Promise<McpPromptMessage[]> {
     const prompt = this.prompts.find((p) => p.name() === name)
-    if (!prompt) throw new Error(`Prompt "${name}" not found`)
+    if (!prompt || !(await isRegistered(prompt))) throw new Error(`Prompt "${name}" not found`)
     return prompt.handle(args)
   }
 

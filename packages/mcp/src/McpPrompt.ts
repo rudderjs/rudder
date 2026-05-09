@@ -26,4 +26,12 @@ export abstract class McpPrompt {
    * from the DI container when the method is decorated with `@Handle()`.
    */
   abstract handle(args: Record<string, unknown>, ...deps: unknown[]): Promise<McpPromptMessage[]>
+
+  /**
+   * Optional hook controlling whether this prompt is exposed to clients.
+   *
+   * Returning `false` hides the prompt from `prompts/list` AND causes
+   * `prompts/get` to throw "Unknown prompt" — preventing bypass.
+   */
+  shouldRegister?(): boolean | Promise<boolean>
 }

@@ -8,8 +8,12 @@ export type { McpPromptMessage } from './McpPrompt.js'
 export { McpResponse } from './McpResponse.js'
 export { Mcp } from './Mcp.js'
 export type { McpWebEntry, McpWebBuilder } from './Mcp.js'
-export { Name, Version, Instructions, Description, Handle } from './decorators.js'
-export type { InjectToken } from './decorators.js'
+export {
+  Name, Version, Instructions, Description, Handle,
+  IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld,
+  Audience, Priority, LastModified,
+} from './decorators.js'
+export type { InjectToken, ToolAnnotations, ResourceAnnotations, AudienceRole } from './decorators.js'
 export { createSdkServer, startStdio, mountHttpTransport } from './runtime.js'
 export type { HttpTransportOptions } from './runtime.js'
 export { oauth2McpMiddleware, registerOAuth2Metadata } from './auth/oauth2.js'
