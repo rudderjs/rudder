@@ -6,6 +6,7 @@ AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Ru
 
 - `src/agent.ts` — `Agent` base class: `instructions()`, `model()`, `tools()`, `stopWhen()`, `prompt()`, `stream()`, `asTool()` (subagents)
 - `src/tool.ts` — `toolDefinition()`, `dynamicTool()`, `ToolBuilder`, pause control
+- `src/handoff.ts` — `handoff(AgentClass, opts?)` factory + `isHandoffTool` typeguard for control-transfer between agents
 - `src/types.ts` — `StreamChunk`, `FinishReason`, `ToolDefinition`, `AgentConfig`
 - `src/providers/` — provider adapters: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure, cohere, jina, openrouter, bedrock
 - `src/middleware.ts` — Hooks: `runOnConfig`, `runOnChunk`, `runOnBeforeToolCall`, `runOnAfterToolCall`, `runOnUsage`
@@ -39,6 +40,7 @@ Provider auto-discovery reads `rudderjs.providerSubpath` from `package.json` (`"
 - **Approval gates**: `needsApproval: true` stops the loop with `tool_approval_required` finish reason
 - **Zod schemas**: tool inputs defined with zod, converted to JSON Schema for each provider
 - **Subagents**: `agent.asTool({ name, description })` wraps an agent as a tool a parent agent can call. Defaults: `inputSchema = { prompt: string }`, `modelOutput = response.text` (full `AgentResponse` still surfaces in the `tool-result` chunk for the UI). Pass `inputSchema` + `prompt` for a typed schema. Default subagent runs via `prompt()`. **Streaming + suspend (1.4.0):** `streaming: true | (chunk) => SubAgentUpdate | null` surfaces inner progress as `tool-update` chunks (default projector emits `agent_start` / `tool_call` / `agent_done`); `suspendable: { runStore: SubAgentRunStore }` propagates inner client-tool calls upward through the parent loop, persists a snapshot, and yields `pauseForClientTools(pending, subRunId)`. Host's continuation calls static `Agent.resumeAsTool(subRunId, results, { runStore, agent })` which returns `{ kind: 'completed' | 'paused', ... }`. Suspend without streaming throws at builder time. Run-store impls live in `src/sub-agent-run-store.ts` (`InMemorySubAgentRunStore` for tests, `CachedSubAgentRunStore` lazily wraps `@rudderjs/cache`).
+- **Handoffs (1.5.0)**: `handoff(AgentClass, { when?, name?, description?, inputSchema? })` returns a control-transfer tool. Distinct from `asTool`: the parent's loop ends and the child agent owns the rest of the conversation. Default name `handoffTo${AgentClass.name}`, default schema `{ message: string }` (the model writes the transition prompt). Implementation lives in `src/handoff.ts`; the loop detects handoff tools by `Symbol.for('rudderjs.ai.handoff')` and short-circuits in `runToolPhaseSerial`. A `'handoff'` `StreamChunk` is emitted before control transfers; `AgentResponse.handoffPath` records the chain of class names traversed (e.g. `['Triage', 'Sales']`). Multi-hop is supported and bounded by `MAX_HANDOFFS = 5` — exceeding throws to surface cycles. Sibling tool calls in the same step as a handoff are skipped with a synthetic "skipped: handed off" tool result so the message log stays well-formed for replay. Handoffs always run in serial mode (force-overrides `parallelTools`).
 - **Failover**: agents declare via `failover()` (string array). Media generators (Image / Audio / Transcription) declare via fluent `.failover(...models)`. Both reuse `tryWithFailover()` from `registry.ts` — try in order, swallow individual errors, surface only the last. Non-agent path has no abort handling (single-shot calls).
 - **Prompt caching**: `Agent.cacheable() { return { instructions, tools, messages: N, ttl? } }`. The agent loop resolves into `CacheableMarkers` on `ProviderRequestOptions.cache`. Per-call override via `prompt(input, { cache: false | {...} })`. Anthropic adapter translates to `cache_control: { type: 'ephemeral' }` on the last block of each marked region. OpenAI adapter sets `prompt_cache_key` from a cyrb53 hash of the marked regions for routing affinity (caching itself is automatic above 1024 tokens). Google adapter manages `cachedContent` resources via `GoogleCacheRegistry` — auto-wired to `@rudderjs/cache` when bound, in-memory `Map` fallback otherwise; `ttl` field controls per-resource lifetime (default `'1h'`, Google-only). The shared cyrb53 helper lives at `src/util/hash.ts`.
 - **Strict-mode fakes**: `AiFake.fake().preventStrayPrompts()` makes any prompt without a matching `respondWithSequence` entry throw. Catches tests that silently fall back to the ambient `respondWith` default.
@@ -46,7 +48,7 @@ Provider auto-discovery reads `rudderjs.providerSubpath` from `package.json` (`"
 
 ## Stream Chunk Types
 
-`text-delta` | `tool-call` | `tool-result` | `tool-update` (progress) | `pending-client-tools` | `pending-approval`
+`text-delta` | `tool-call` | `tool-result` | `tool-update` (progress) | `pending-client-tools` | `pending-approval` | `handoff`
 
 ## Commands
 

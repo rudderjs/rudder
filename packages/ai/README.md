@@ -245,6 +245,58 @@ new Researcher().asTool({
 
 The wrapped subagent runs via `prompt()` (non-streaming) by default — to surface inner-agent progress as `tool-update` chunks in the parent stream, pass `streaming: true` (or a custom `(chunk) => SubAgentUpdate | null` projector). When the sub-agent's model emits a *client* tool call, opt into the suspend/resume protocol with `suspendable: { runStore }` — the parent loop halts with the inner agent's `pendingClientToolCalls`, the snapshot persists in the run store, and the host resumes via `Agent.resumeAsTool(subRunId, browserResults, { runStore, agent })`. See `docs/guide/ai.md` for the full flow. `InMemorySubAgentRunStore` works for tests; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process persistence. Suspend without streaming throws at builder time.
 
+### Handoffs — `handoff()`
+
+Sometimes a parent agent shouldn't *call* a specialist and incorporate its result — it should *step out* and let the specialist own the rest of the conversation. That's a handoff.
+
+```ts
+import { Agent, handoff } from '@rudderjs/ai'
+
+class SalesAgent extends Agent {
+  instructions() { return 'You handle pricing, plans, and upgrades.' }
+}
+class SupportAgent extends Agent {
+  instructions() { return 'You triage bugs and walk users through fixes.' }
+}
+
+class TriageAgent extends Agent {
+  instructions() { return 'Greet the user, then route them to the right specialist.' }
+  tools() {
+    return [
+      handoff(SalesAgent,   { when: 'pricing or sales questions' }),
+      handoff(SupportAgent, { when: 'bug reports or technical issues' }),
+    ]
+  }
+}
+
+const r = await new TriageAgent().prompt('What does the Pro plan cost?')
+console.log(r.text)         // "The Pro plan is $49/month..."  (from SalesAgent)
+console.log(r.handoffPath)  // ['TriageAgent', 'SalesAgent']
+```
+
+How it differs from `asTool`:
+
+|  | `asTool` (call-and-return) | `handoff` (control transfer) |
+|---|---|---|
+| Parent loop | continues after subagent finishes | ends |
+| Conversation owner | parent | child |
+| Final `text` | parent's | last child in the chain |
+| `r.steps` | parent steps + a single tool-result step for the subagent | parent steps + each agent's steps merged in order |
+| Use case | "look something up and use it" | "transfer to the right specialist" |
+
+Default: the model writes a transition message (`{ message: string }`) that becomes the child's first user message. The full prior conversation flows through to the child — but the child uses its own `instructions()` as the system message. Multi-hop is supported (Triage → Sales → Billing); cycles are bounded by `MAX_HANDOFFS = 5` and surface a clear error.
+
+```ts
+// Custom name + payload
+handoff(SalesAgent, {
+  name:        'pivotToSales',
+  description: 'Transfer the user to a sales specialist.',
+  inputSchema: z.object({ urgency: z.enum(['low', 'high']), context: z.string() }),
+})
+```
+
+In `agent.stream()`, a `'handoff'` `StreamChunk` is emitted right before control transfers, with `{ from, to, message? }` for UIs to render a transition indicator before the next agent's chunks arrive.
+
 ### Tool execution context
 
 Server-tool executes can optionally accept a second `ctx: ToolCallContext`

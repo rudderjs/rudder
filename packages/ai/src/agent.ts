@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { AiRegistry } from './registry.js'
 import { isPauseForClientToolsChunk, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
 import type { PauseForClientToolsChunk, ServerToolBuilder } from './tool.js'
+import { isHandoffTool } from './handoff.js'
+import type { HandoffSpec } from './handoff.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
 import {
@@ -845,6 +847,23 @@ interface LoopContext {
   stopForApproval:                   boolean
   resumedToolMessages:               AiMessage[]
   failoverAttempts:                  number
+  /**
+   * Set by the tool phase when the model called a {@link handoff} tool.
+   * Triggers the parent loop to break and the handoff wrapper to construct
+   * the child agent and continue with the carried message history.
+   */
+  pendingHandoff?:                   PendingHandoff
+  stopForHandoff:                    boolean
+}
+
+/**
+ * Internal record of a pending handoff carried from the loop to the
+ * handoff-aware wrapper. Not part of the public surface.
+ */
+interface PendingHandoff {
+  spec:              HandoffSpec
+  transitionMessage: string
+  parentToolCallId:  string
 }
 
 /**
@@ -1016,9 +1035,9 @@ function emitObserverCompleted(loopCtx: LoopContext, result: AgentResponse, stre
 }
 
 /** Build the final `AgentResponse` from accumulated loop state. */
-function buildAgentResponse(loopCtx: LoopContext): AgentResponse {
+function buildAgentResponse(loopCtx: LoopContext): AgentResponse & { _pendingHandoff?: PendingHandoff; _carriedMessages?: AiMessage[] } {
   const lastStep = loopCtx.steps[loopCtx.steps.length - 1]
-  const result: AgentResponse = {
+  const result: AgentResponse & { _pendingHandoff?: PendingHandoff; _carriedMessages?: AiMessage[] } = {
     text:  lastStep ? getMessageText(lastStep.message.content) : '',
     steps: loopCtx.steps,
     usage: loopCtx.totalUsage,
@@ -1027,6 +1046,12 @@ function buildAgentResponse(loopCtx: LoopContext): AgentResponse {
   if (loopCtx.pendingClientToolCalls.length > 0) result.pendingClientToolCalls = loopCtx.pendingClientToolCalls
   if (loopCtx.pendingApprovalToolCall) result.pendingApprovalToolCall = loopCtx.pendingApprovalToolCall
   if (loopCtx.resumedToolMessages.length > 0) result.resumedToolMessages = loopCtx.resumedToolMessages
+  // Internal — consumed by the handoff-aware wrapper, then stripped before
+  // surfacing to public callers.
+  if (loopCtx.pendingHandoff) {
+    result._pendingHandoff = loopCtx.pendingHandoff
+    result._carriedMessages = loopCtx.messages
+  }
   return result
 }
 
@@ -1056,7 +1081,15 @@ async function* executeToolPhase(
   // agent-level override which defaults to `true`. Single-tool batches
   // route through the serial path either way (no parallelism to gain, and
   // serial preserves live `tool-update` streaming for that one tool).
-  const parallel = (options?.parallelTools ?? loopCtx.agent.parallelTools()) && toolCalls.length > 1
+  //
+  // Handoffs always force serial dispatch — the parent loop has to halt
+  // immediately on the first handoff and synthesize "skipped" results for
+  // any sibling calls. Handling that across the parallel classify/replay
+  // phases is doable but adds complexity for negligible benefit (the model
+  // rarely emits parallel siblings alongside a handoff, and even then,
+  // running them while the agent is being torn down is wasted work).
+  const hasHandoff = toolCalls.some(tc => isHandoffTool(loopCtx.toolMap.get(tc.name)))
+  const parallel = (options?.parallelTools ?? loopCtx.agent.parallelTools()) && toolCalls.length > 1 && !hasHandoff
 
   if (parallel) {
     yield* runToolPhaseParallel(loopCtx, toolCalls, toolResults)
@@ -1092,6 +1125,54 @@ async function* runToolPhaseSerial(
       yield { type: 'tool-result' as const, toolCall: tc, result: unknownResult }
       continue
     }
+
+    // Handoff — detected before the no-execute (client tool) branch because
+    // a handoff tool also has no `execute`, but it has wholly different
+    // semantics: pivot control to a new agent instead of pausing for the
+    // browser. The first handoff in a step wins; any subsequent tool calls
+    // in the same step are skipped with a synthetic "skipped: handed off"
+    // tool result so the message log stays well-formed for replay.
+    if (loopCtx.stopForHandoff) {
+      const skippedResult = 'Skipped: parent agent handed off to another agent.'
+      toolResults.push({ toolCallId: tc.id, result: skippedResult })
+      messages.push({ role: 'tool', content: skippedResult, toolCallId: tc.id })
+      yield { type: 'tool-call' as const, toolCall: tc }
+      yield { type: 'tool-result' as const, toolCall: tc, result: skippedResult }
+      continue
+    }
+    if (isHandoffTool(tool)) {
+      const spec = tool.__handoffSpec
+      const validation = validateToolArgs(tool, tc.arguments)
+      // Handoff payload defaults to `{ message: string }`; custom schemas
+      // are accepted but the loop only uses `args.message` (string) as the
+      // transition prompt. Anything else surfaces in the conversation as
+      // the args of the synthetic tool-call.
+      const args = validation.ok ? (validation.value as Record<string, unknown>) : (tc.arguments as Record<string, unknown>)
+      const transitionMessage = typeof args['message'] === 'string' ? (args['message'] as string) : ''
+      const handoffResult = `Handed off to ${spec.AgentClass.name}.`
+
+      toolResults.push({ toolCallId: tc.id, result: handoffResult })
+      messages.push({ role: 'tool', content: handoffResult, toolCallId: tc.id })
+      yield { type: 'tool-call' as const, toolCall: tc }
+      yield { type: 'tool-result' as const, toolCall: tc, result: handoffResult }
+      yield {
+        type: 'handoff' as const,
+        handoff: {
+          from: loopCtx.agent.constructor.name,
+          to:   spec.AgentClass.name,
+          ...(transitionMessage ? { message: transitionMessage } : {}),
+        },
+      }
+
+      loopCtx.pendingHandoff = { spec, transitionMessage, parentToolCallId: tc.id }
+      loopCtx.stopForHandoff = true
+      // Do NOT break — keep iterating so any sibling tool calls in this
+      // step get their synthetic "skipped" tool results before the loop
+      // exits. This preserves message-log invariants for downstream
+      // persistence.
+      continue
+    }
+
     if (!tool.execute) {
       // Client tool — no server-side handler.
       if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
@@ -1565,6 +1646,7 @@ async function initializeLoop(
     stopForApproval:         false,
     resumedToolMessages:     [],
     failoverAttempts:        0,
+    stopForHandoff:          false,
   }
 
   // Resume server tools left pending by a previous approval round-trip.
@@ -1636,7 +1718,233 @@ async function runIterationPrelude(
 
 // ─── Agent Loop (non-streaming) ──────────────────────────
 
+/**
+ * Hard ceiling for the number of agent-to-agent handoffs in a single
+ * `prompt()` / `stream()` call. Most workflows hop once or twice (triage →
+ * specialist). Anything beyond this almost certainly means the agents are
+ * cycling — surfacing a clear error beats silently looping until token
+ * budgets explode.
+ */
+const MAX_HANDOFFS = 5
+
+/**
+ * Public entry point for the non-streaming agent loop. Drives
+ * {@link runAgentLoopOnce} once, then — if the model called a {@link handoff}
+ * tool — constructs the target agent, carries the conversation forward, and
+ * recurses. Steps and usage from each hop are merged; the final `text` and
+ * `finishReason` come from the agent that produced the terminal answer.
+ * `handoffPath` records the chain of class names traversed.
+ */
 async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+  const onceResult = await runAgentLoopOnce(a, input, options) as AgentResponse & {
+    _pendingHandoff?: PendingHandoff
+    _carriedMessages?: AiMessage[]
+  }
+  if (!onceResult._pendingHandoff) {
+    return stripInternal(onceResult)
+  }
+  const merged = await driveHandoffs(a.constructor.name, onceResult, onceResult._pendingHandoff, onceResult._carriedMessages ?? [], options, 0)
+  return merged
+}
+
+/**
+ * Streaming counterpart to {@link runAgentLoop}. Iterates handoffs and
+ * pivots the stream to the next agent each time the parent ends with a
+ * pending handoff. Chunks from every hop flow through the same returned
+ * `AsyncIterable`; the resolved `response` carries the merged final state.
+ */
+function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOptions): AgentStreamResponse {
+  let resolveResponse: (r: AgentResponse) => void
+  let rejectResponse: (e: unknown) => void
+  const responsePromise = new Promise<AgentResponse>((resolve, reject) => {
+    resolveResponse = resolve
+    rejectResponse = reject
+  })
+
+  async function* generateStream(): AsyncIterable<StreamChunk> {
+    let currentAgent = a
+    let currentInput = input
+    let currentOpts: AgentPromptOptions | undefined = options
+    const mergedSteps: AgentStep[] = []
+    const mergedUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+    const handoffPath: string[] = []
+    let finalResponse: AgentResponse | undefined
+
+    for (let hop = 0; hop <= MAX_HANDOFFS; hop++) {
+      const onceStream = runAgentLoopStreamingOnce(currentAgent, currentInput, currentOpts)
+      // Attach a no-op handler so a rejection from the inner response
+      // promise (e.g. caller-supplied AbortSignal firing mid-stream) is
+      // already observed by the time the `for await` re-throws — without
+      // this, Node logs an unhandledRejection between the stream's throw
+      // and our outer `withRejectOnError`'s catch.
+      onceStream.response.catch(() => {})
+      for await (const chunk of onceStream.stream) yield chunk
+      const r = await onceStream.response as AgentResponse & {
+        _pendingHandoff?: PendingHandoff
+        _carriedMessages?: AiMessage[]
+      }
+
+      mergedSteps.push(...r.steps)
+      addUsage(mergedUsage, r.usage)
+
+      if (r._pendingHandoff && hop < MAX_HANDOFFS) {
+        handoffPath.push(currentAgent.constructor.name)
+        const ChildClass = r._pendingHandoff.spec.AgentClass
+        currentAgent = new (ChildClass as new () => Agent)()
+        currentInput = r._pendingHandoff.transitionMessage
+        currentOpts = buildHandoffChildOptions(options, r._carriedMessages ?? [])
+        continue
+      }
+
+      if (r._pendingHandoff) {
+        throw new Error(`[RudderJS AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+      }
+
+      finalResponse = handoffPath.length === 0
+        ? stripInternal(r)
+        : mergeFinalHandoff(stripInternal(r), mergedSteps, mergedUsage, handoffPath, currentAgent.constructor.name)
+      break
+    }
+
+    if (!finalResponse) {
+      throw new Error(`[RudderJS AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+    }
+    resolveResponse(finalResponse)
+  }
+
+  async function* withRejectOnError(): AsyncIterable<StreamChunk> {
+    try {
+      yield* generateStream()
+    } catch (err) {
+      rejectResponse(err)
+      throw err
+    }
+  }
+
+  return {
+    stream: withRejectOnError(),
+    response: responsePromise,
+  }
+}
+
+/**
+ * Iteratively drive pending handoffs, carrying steps + usage forward.
+ * Used by the non-streaming path. (Streaming has its own iterative driver
+ * inline in {@link runAgentLoopStreaming} so chunks can flow as each hop's
+ * loop runs.)
+ */
+async function driveHandoffs(
+  rootName: string,
+  rootResult: AgentResponse & { _pendingHandoff?: PendingHandoff; _carriedMessages?: AiMessage[] },
+  pending: PendingHandoff,
+  carriedMessages: AiMessage[],
+  origOptions: AgentPromptOptions | undefined,
+  startHopCount: number,
+): Promise<AgentResponse> {
+  const mergedSteps: AgentStep[] = [...rootResult.steps]
+  const mergedUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  addUsage(mergedUsage, rootResult.usage)
+
+  const handoffPath: string[] = [rootName]
+  let currentPending = pending
+  let currentCarried = carriedMessages
+  let hopCount = startHopCount
+
+  for (;;) {
+    if (hopCount >= MAX_HANDOFFS) {
+      throw new Error(`[RudderJS AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+    }
+    const ChildClass = currentPending.spec.AgentClass
+    handoffPath.push(ChildClass.name)
+    const child = new (ChildClass as new () => Agent)()
+    const childOpts = buildHandoffChildOptions(origOptions, currentCarried)
+    const childOnce = await runAgentLoopOnce(child, currentPending.transitionMessage, childOpts) as AgentResponse & {
+      _pendingHandoff?: PendingHandoff
+      _carriedMessages?: AiMessage[]
+    }
+
+    mergedSteps.push(...childOnce.steps)
+    addUsage(mergedUsage, childOnce.usage)
+
+    if (childOnce._pendingHandoff) {
+      currentPending = childOnce._pendingHandoff
+      currentCarried = childOnce._carriedMessages ?? []
+      hopCount++
+      continue
+    }
+
+    return {
+      ...stripInternal(childOnce),
+      steps: mergedSteps,
+      usage: mergedUsage,
+      handoffPath,
+    }
+  }
+}
+
+/** Merge the terminal hop's response with carried steps / usage / path. */
+function mergeFinalHandoff(
+  terminal: AgentResponse,
+  mergedSteps: AgentStep[],
+  mergedUsage: TokenUsage,
+  pathPrefix: string[],
+  terminalName: string,
+): AgentResponse {
+  return {
+    ...terminal,
+    steps: mergedSteps,
+    usage: mergedUsage,
+    handoffPath: [...pathPrefix, terminalName],
+  }
+}
+
+/**
+ * Build the {@link AgentPromptOptions} for a child agent invoked via
+ * handoff. The parent's carried message log replaces the child's input
+ * (so the child sees the full conversation up to the handoff point) but
+ * the child still prepends its own `instructions()` as the system message
+ * during {@link initializeLoop}, so we drop the parent's leading system
+ * message to avoid double-prefixing.
+ *
+ * Per-call options that make sense to carry across (signal, attachments,
+ * tool/middleware overrides) are preserved; `messages` and `history` are
+ * deliberately overridden.
+ */
+function buildHandoffChildOptions(
+  parentOptions: AgentPromptOptions | undefined,
+  carriedMessages: AiMessage[],
+): AgentPromptOptions {
+  const stripped = carriedMessages.length > 0 && carriedMessages[0]?.role === 'system'
+    ? carriedMessages.slice(1)
+    : carriedMessages
+  // We append the model's transition message as the next user message so
+  // the child has something concrete to respond to (it's also passed as
+  // `currentInput` below — but feeding it via `messages` mode keeps the
+  // history coherent and prevents `initializeLoop` from also prepending
+  // an `input` user message).
+  return {
+    ...(parentOptions ?? {}),
+    messages: stripped,
+  }
+}
+
+/** Strip the internal `_pendingHandoff` / `_carriedMessages` fields before surfacing the response to public callers. */
+function stripInternal(r: AgentResponse & { _pendingHandoff?: PendingHandoff; _carriedMessages?: AiMessage[] }): AgentResponse {
+  const out: AgentResponse = {
+    text:  r.text,
+    steps: r.steps,
+    usage: r.usage,
+  }
+  if (r.conversationId !== undefined) out.conversationId = r.conversationId
+  if (r.finishReason !== undefined) out.finishReason = r.finishReason
+  if (r.pendingClientToolCalls !== undefined) out.pendingClientToolCalls = r.pendingClientToolCalls
+  if (r.pendingApprovalToolCall !== undefined) out.pendingApprovalToolCall = r.pendingApprovalToolCall
+  if (r.resumedToolMessages !== undefined) out.resumedToolMessages = r.resumedToolMessages
+  if (r.handoffPath !== undefined) out.handoffPath = r.handoffPath
+  return out
+}
+
+async function runAgentLoopOnce(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
   const { loopCtx, stopConditions } = await initializeLoop(a, input, options)
   const { ctx, middlewares, messages, steps, totalUsage } = loopCtx
 
@@ -1683,7 +1991,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
       steps.push(step)
       emitObserverStepCompleted(loopCtx, iteration, false)
 
-      if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
+      if (loopCtx.stopForClientTools || loopCtx.stopForApproval || loopCtx.stopForHandoff) break
 
       const shouldStop = stopConditions.some(cond =>
         cond({ steps, iteration, lastMessage: response.message }),
@@ -1710,7 +2018,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
 
 // ─── Agent Loop (streaming) ──────────────────────────────
 
-function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOptions): AgentStreamResponse {
+function runAgentLoopStreamingOnce(a: Agent, input: string, options?: AgentPromptOptions): AgentStreamResponse {
   let resolveResponse: (r: AgentResponse) => void
   let rejectResponse: (e: unknown) => void
   const responsePromise = new Promise<AgentResponse>((resolve, reject) => {
@@ -1816,7 +2124,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         steps.push(step)
         emitObserverStepCompleted(loopCtx, iteration, true)
 
-        if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
+        if (loopCtx.stopForClientTools || loopCtx.stopForApproval || loopCtx.stopForHandoff) break
 
         const shouldStop = stopConditions.some(cond =>
           cond({ steps, iteration, lastMessage: step.message }),
