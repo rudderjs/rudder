@@ -1,6 +1,6 @@
 # B8 — Hosted vector stores + `fileSearch` provider tool
 
-**Status:** Phase 1 in flight on `feat-b8-vector-stores`. Phase 2 / 2.x / 3 not started.
+**Status:** Phase 1 ✓ shipped (#379). Phase 2 in flight on `feat-b8-file-search`. Phase 2.x / 3 not started.
 **Date:** 2026-05-11
 **Roadmap item:** B8 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 3 PR-sized phases + 1 sidecar.
@@ -10,8 +10,8 @@
 
 | Phase | What ships | PR | State |
 |---|---|---|---|
-| 1   | `VectorStores` facade + `VectorStore` wrapper — CRUD over OpenAI's hosted vector stores. New `VectorStoreAdapter` contract on `ProviderFactory.createVectorStores?()`. OpenAI adapter wraps `client.vectorStores.*` + `client.vectorStores.files.*`; lazy SDK load; file upload pipeline reuses the Files API; default `wait: true` polls `vectorStores.files.retrieve` until `'completed'` / `'failed'` / `'cancelled'` (configurable interval + timeout). Searchable `attributes` map directly to OpenAI's per-file metadata. | — | in flight |
-| 2   | `fileSearch({ stores, where? })` provider-tool factory + OpenAI adapter native-block emission via `providerHint`. Closes the agent loop end-to-end on OpenAI. | — | not started |
+| 1   | `VectorStores` facade + `VectorStore` wrapper — CRUD over OpenAI's hosted vector stores. New `VectorStoreAdapter` contract on `ProviderFactory.createVectorStores?()`. OpenAI adapter wraps `client.vectorStores.*` + `client.vectorStores.files.*`; lazy SDK load; file upload pipeline reuses the Files API; default `wait: true` polls `vectorStores.files.retrieve` until `'completed'` / `'failed'` / `'cancelled'` (configurable interval + timeout). Searchable `attributes` map directly to OpenAI's per-file metadata. | #379 | ✓ shipped |
+| 2   | `fileSearch({ stores, where?, maxResults?, name?, description? })` agent-tool factory + OpenAI adapter native-block emission via `providerHint`. Bundled latent bug fix: `toolToSchema` now propagates `definition.providerHint` so the agent loop's tool serialization wires hints through to adapters (fixes computer-use's hint too — it lived only on the instance `toSchema()` method, never reached `toAnthropicTools` through agent runs). Closes the agent loop end-to-end on OpenAI's `chat.completions`. | — | in flight |
 | 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. OpenAI adapter emits native `{ type: 'web_search' }`; Gemini adapter emits `{ google_search: {} }`. DuckDuckGo HTML scrape stays as the no-config fallback for providers without native support. ~half-day. | — | not started |
 | 3   | Local pgvector fallback bridge (when no hosted provider configured, `fileSearch` routes through B7's `similaritySearch`). Closes B8. | — | not started |
 | B8.5 | Gemini parity for `VectorStores` + `fileSearch` (Gemini's RAG surface uses `cachedContent`, not vector stores; spec drift means it deserves its own design pass). Deferred — locked decision. | — | future |
@@ -118,12 +118,23 @@ These force a rewrite if punted:
 
 ### Phase 2 — `fileSearch` provider tool + OpenAI native block
 
-- `packages/ai/src/file-search.ts` exports `fileSearch({ stores, where?, maxResults?, name?, description? })`. Returns a tool object (NOT a `ServerToolBuilder` — provider-tool with no execute on the hosted path) tagged with `providerHint: { type: 'file-search', vector_store_ids: stores, filters: normalizeWhere(where), max_num_results: maxResults }`.
-- The hint-tagged tool definition still has a placeholder `inputSchema` (`z.object({ query: z.string() })`) for non-OpenAI providers — they'll see it as a regular function-call tool and either error politely or run a fallback execute.
-- `packages/ai/src/providers/openai.ts` — `toOpenAITools` recognizes `providerHint?.type === 'file-search'` and emits `{ type: 'file_search', vector_store_ids: [...], filters: {...}, max_num_results: N }` instead of the function-call shape. Mirrors A7 Phase 2's Anthropic-side change.
-- Tool result shape: provider returns the file_search results as a tool-result block; the agent loop forwards as-is. No execute on our side. AiFake gets `respondWithFileSearchResults(...)` for tests.
-- Tests: `AiFake` returns canned hits; assert the OpenAI adapter emits the native block; assert the agent loop completes with the search results in the message log.
-- Docs: extend `docs/guide/vector-stores.md` with the agent-tool section.
+**Shipped surface (in flight on `feat-b8-file-search`):**
+
+- `packages/ai/src/file-search.ts` exports `fileSearch({ stores, where?, maxResults?, name?, description? })`. Returns a `FileSearchTool` — plain object tagged with `Symbol.for('rudderjs.ai.file-search')` (mirrors `COMPUTER_USE_MARKER`); `isFileSearchTool(t)` typeguard. No `execute` on the hosted path. Default tool name `file_search` (OpenAI's trained identifier). Placeholder `inputSchema = z.object({ query: z.string() })` so non-OpenAI providers see a regular function-call tool.
+- Provider hint lives on `definition.providerHint` — `{ type: 'file-search', vector_store_ids, filters?, max_num_results? }`. The agent loop's `toolToSchema()` propagates it onto `ToolDefinitionSchema` and the OpenAI adapter recognizes the hint.
+- `where` accepts the sugar `{ key: value }` form (lowered to an `and` of `eq` filters) or the typed `FileSearchFilter` shape directly. `normalizeWhere(where)` is exported for advanced use; single-key sugar short-circuits to a bare `eq` (no `and` wrapper) matching OpenAI's recommended shape.
+- `packages/ai/src/providers/openai.ts` — `toOpenAITools` (now exported) recognizes `providerHint?.type === 'file-search'` and emits `{ type: 'file_search', vector_store_ids, filters?, max_num_results? }`. Mirrors A7 Phase 2's Anthropic-side change.
+- `AiFake.respondWithFileSearchResults({ text? | hits?, usage? })` — convenience helper. The hosted path produces the answer directly, so the fake stubs a single-step assistant reply (synthesized from hits or supplied verbatim).
+
+**Latent bug fix bundled in:** `toolToSchema()` did NOT propagate `providerHint` — so computer-use's hint lived on the instance `toSchema()` method but never reached `toAnthropicTools` through real agent runs. Phase 2 adds `providerHint?: ProviderHint` to `ToolDefinitionOptions`, propagates it in `toolToSchema`, and moves computer-use's hint onto its `definition`. Both code paths now go through one channel.
+
+**Tests:** new `packages/ai/src/file-search.test.ts` — factory shape (providerHint, marker, schema), validation (empty stores/where), `normalizeWhere` cases, `toOpenAITools` native-block emission, end-to-end through `toolToSchema → toOpenAITools`, `AiFake.respondWithFileSearchResults` agent-loop integration, and the `definition.providerHint` propagation contract.
+
+**Verification:** `pnpm typecheck` ✓ root (93/93), `pnpm build` ✓ (51/51), `pnpm --filter @rudderjs/ai test` 703/703 ✓ (38 new), lint ✓ (only pre-existing warnings).
+
+**Plan doc + changeset:** Phase 2 table row marked in flight + this body section + `.changeset/ai-b8-phase2-file-search.md` (minor).
+
+**Docs:** new `docs/guide/vector-stores.md` covers both Phase 1 (CRUD) + Phase 2 (agent tool). Added under the AI sidebar between "AI" and "MCP".
 
 ### Phase 3 — Gemini parity + local pgvector fallback
 

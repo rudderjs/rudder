@@ -237,11 +237,32 @@ function toOpenAIMessages(messages: AiMessage[]): unknown[] {
   })
 }
 
-function toOpenAITools(tools: ToolDefinitionSchema[]): unknown[] {
-  return tools.map(t => ({
-    type: 'function',
-    function: { name: t.name, description: t.description, parameters: t.parameters },
-  }))
+export function toOpenAITools(tools: ToolDefinitionSchema[]): unknown[] {
+  return tools.map(t => {
+    // Provider-native tool blocks: when a tool carries a recognized
+    // `providerHint`, emit OpenAI's native shape instead of the standard
+    // function-call schema. Currently:
+    //   - 'file-search' → { type: 'file_search', vector_store_ids, filters?,
+    //                       max_num_results? }. The model is trained on the
+    //                       native tool — quality is dramatically better
+    //                       than wrapping it as a function call, and the
+    //                       provider runs the search server-side so no
+    //                       client-side execute is needed.
+    if (t.providerHint?.type === 'file-search') {
+      const vectorStoreIds = t.providerHint['vector_store_ids'] as string[] | undefined ?? []
+      const block: Record<string, unknown> = {
+        type:             'file_search',
+        vector_store_ids: vectorStoreIds,
+      }
+      if (t.providerHint['filters']        !== undefined) block['filters']         = t.providerHint['filters']
+      if (t.providerHint['max_num_results'] !== undefined) block['max_num_results'] = t.providerHint['max_num_results']
+      return block
+    }
+    return {
+      type: 'function',
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }
+  })
 }
 
 function toOpenAIToolChoice(choice: ToolChoice): unknown {

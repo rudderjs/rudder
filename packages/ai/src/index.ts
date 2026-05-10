@@ -177,6 +177,10 @@ export type {
   VectorStoreFileList,
 } from './types.js'
 
+// File Search agent tool (#B8 Phase 2 — provider-native RAG)
+export { fileSearch, isFileSearchTool, FILE_SEARCH_MARKER, FILE_SEARCH_TOOL_NAME, normalizeWhere } from './file-search.js'
+export type { FileSearchOptions, FileSearchTool, FileSearchFilter, FileSearchWhereSugar } from './file-search.js'
+
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'
 

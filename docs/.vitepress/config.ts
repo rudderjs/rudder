@@ -112,9 +112,10 @@ export default defineConfig({
         {
           text: 'AI',
           items: [
-            { text: 'AI',    link: '/guide/ai' },
-            { text: 'MCP',   link: '/guide/mcp' },
-            { text: 'Boost', link: '/packages/boost' },
+            { text: 'AI',             link: '/guide/ai' },
+            { text: 'Vector Stores',  link: '/guide/vector-stores' },
+            { text: 'MCP',            link: '/guide/mcp' },
+            { text: 'Boost',          link: '/packages/boost' },
           ],
         },
         {

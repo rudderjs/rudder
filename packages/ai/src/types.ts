@@ -555,6 +555,15 @@ export interface ToolDefinitionOptions<
    * placeholder) for runtime parsing in the agent loop.
    */
   jsonSchema?: Record<string, unknown> | undefined
+  /**
+   * Provider-specific hint. Adapters that recognize the `providerHint.type`
+   * substitute their native tool serialization (e.g. Anthropic's
+   * `computer_20250124` block for `'computer-use'`, OpenAI's `file_search`
+   * block for `'file-search'`); others ignore it and emit the standard
+   * function-call shape. Propagated onto {@link ToolDefinitionSchema} by
+   * `toolToSchema`.
+   */
+  providerHint?: ProviderHint | undefined
 }
 
 /**
