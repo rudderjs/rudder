@@ -859,7 +859,34 @@ Then run `pnpm exec prisma db push` (dev) or `pnpm exec prisma migrate dev` (pro
 
 `OrmUserMemory.recall()` uses **OR-of-LIKE token overlap** on the `fact` column — same semantic as `MemoryUserMemory`. Tag-array filtering happens JS-side after fetch (pushing tags into the WHERE is adapter-specific; that lands in a follow-up).
 
-**Phase 1 + 2 + 3 + 4 status:** interface, in-process backend, per-call/class declaration, auto-inject, auto-extract, and ORM-backed `OrmUserMemory` ship today. Embedding-backed `EmbeddingUserMemory` with cosine recall + GDPR cascade (Phase 5) lands in the next release.
+#### Embedding backend — `EmbeddingUserMemory` (Phase 5)
+
+For semantic recall ("Where do I deploy?" matching "Project Foo lives at fly.io"), wrap `OrmUserMemory` with `EmbeddingUserMemory` from `@rudderjs/ai/memory-embedding`:
+
+```ts
+import { OrmUserMemory } from '@rudderjs/ai/memory-orm'
+import { EmbeddingUserMemory } from '@rudderjs/ai/memory-embedding'
+
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: { /* ... */ },
+  memory: new EmbeddingUserMemory({
+    inner: new OrmUserMemory(),
+    model: 'openai/text-embedding-3-small',
+    threshold: 0.5,                    // cosine floor; matches below get dropped
+  }),
+} satisfies AiConfig
+```
+
+`remember()` embeds the fact via `AI.embed()` and writes the Float32-packed vector into the row's `embedding` column. `recall()` embeds the query and ranks all of the user's facts by **pure-JS cosine similarity** (acceptable up to a few thousand facts/user; for larger workloads, B7 lands a pgvector-backed variant).
+
+**GDPR right-to-be-forgotten cascades automatically** — the embedding lives in the same row as the fact, so `forget()` / `forgetAll()` delete both. No second store to keep in sync.
+
+**Backward compat with Phase 4:** rows persisted before `EmbeddingUserMemory` was wired in have `embedding === null`. The default `nullEmbeddingFallback: 'token-overlap'` falls back to the same token-overlap matching `MemoryUserMemory` uses, so upgrading from `OrmUserMemory` doesn't lose recall on existing rows. New `remember()` calls populate the embedding column going forward. Set `nullEmbeddingFallback: 'skip'` to drop pre-embedding rows entirely.
+
+`embed()` failures (network down, missing peer SDK) are swallowed: `remember()` still persists the entry with `embedding === null`, and `recall()` falls back to token-overlap. The parent prompt never breaks because of memory work.
+
+**A4 status (all phases shipped):** interface, in-process backend, per-call/class declaration, auto-inject, auto-extract, ORM-backed `OrmUserMemory`, and embedding-backed `EmbeddingUserMemory` all ship today. The roadmap item is complete.
 
 ### Model Selection
 
