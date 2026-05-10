@@ -294,6 +294,8 @@ export interface ProviderFactory {
   createReranking?(model: string): RerankingAdapter
   /** Create a file management adapter (optional) */
   createFiles?(): FileAdapter
+  /** Create a vector-store adapter (optional — #B8) */
+  createVectorStores?(): VectorStoreAdapter
 }
 
 // ─── File Management ─────────────────────────────────────
@@ -324,6 +326,104 @@ export interface FileAdapter {
   list(): Promise<FileListResult>
   delete(fileId: string): Promise<void>
   retrieve?(fileId: string): Promise<FileContent>
+}
+
+// ─── Vector Stores (#B8) ─────────────────────────────────
+
+export interface VectorStoreCreateOptions {
+  name: string
+  /** Free-form key/value metadata. OpenAI caps values at 512 chars. */
+  metadata?: Record<string, string>
+  /**
+   * Auto-expire policy. OpenAI charges for storage so most apps want
+   * an idle-expiry on transient stores.
+   */
+  expiresAfter?: { anchor: 'last_active_at'; days: number }
+  /** Provider override (defaults to the registered AI default). */
+  provider?: string
+}
+
+export interface VectorStoreInfo {
+  id:        string
+  name:      string
+  createdAt: number
+  /** Number of files attached. Provider-reported, may include in-progress. */
+  fileCount: number
+  bytesUsed?: number
+  metadata?: Record<string, string>
+}
+
+export interface VectorStoreFileInfo {
+  id:            string
+  vectorStoreId: string
+  status:        'in_progress' | 'completed' | 'failed' | 'cancelled'
+  createdAt:     number
+  bytes?:        number
+  /**
+   * Per-file searchable metadata exposed by OpenAI's `attributes` field.
+   * `fileSearch({ where: ... })` (B8 Phase 2) filters on these.
+   */
+  attributes?:   Record<string, string | number | boolean>
+  /** When status === 'failed', the provider's error message. */
+  lastError?:    string
+}
+
+export interface VectorStoreAddOptions {
+  /** Either an existing provider file id or a local path/Buffer to upload. */
+  fileId?:   string
+  filePath?: string
+  fileBuffer?: { data: Uint8Array; filename: string }
+
+  /** Searchable metadata stored alongside the file in the vector store. */
+  attributes?: Record<string, string | number | boolean>
+
+  /**
+   * Pass through to the provider's chunking config. Opaque on our side
+   * — apps that want to tune chunk size / overlap pass the provider's
+   * native shape. OpenAI: `{ type: 'static', static: { max_chunk_size_tokens, chunk_overlap_tokens } }`.
+   */
+  chunkingStrategy?: unknown
+
+  /**
+   * Wait for the file to finish ingesting + embedding before resolving.
+   * Default `true`. Set `false` for fire-and-forget — useful when
+   * batching many files.
+   */
+  wait?: boolean
+
+  /** Polling interval in ms. Default 1000. */
+  pollInterval?: number
+
+  /** Total polling timeout in ms. Default 120_000 (2 min). */
+  pollTimeout?: number
+}
+
+export interface VectorStoreListOptions {
+  limit?:  number
+  after?:  string
+  before?: string
+}
+
+export interface VectorStoreList     { stores: VectorStoreInfo[] }
+export interface VectorStoreFileList { files:  VectorStoreFileInfo[] }
+
+export interface VectorStoreAdapter {
+  create(opts:  VectorStoreCreateOptions): Promise<VectorStoreInfo>
+  list(opts?:   VectorStoreListOptions):   Promise<VectorStoreList>
+  get(id:       string):                   Promise<VectorStoreInfo>
+  delete(id:    string):                   Promise<void>
+
+  /**
+   * Attach a file to the store. The file is either an already-uploaded
+   * provider file (`fileId`) or a local source the adapter will upload
+   * first (`filePath` / `fileBuffer`). Defaults to waiting until the
+   * file is fully indexed.
+   */
+  addFile(storeId: string, opts: VectorStoreAddOptions): Promise<VectorStoreFileInfo>
+
+  removeFile(storeId: string, fileId: string): Promise<void>
+
+  listFiles(storeId: string, opts?: VectorStoreListOptions): Promise<VectorStoreFileList>
 }
 
 // ─── Reranking ───────────────────────────────────────────

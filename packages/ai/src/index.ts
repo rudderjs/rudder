@@ -164,6 +164,19 @@ export { Reranker } from './rerank.js'
 // File Management
 export { FileManager } from './files.js'
 
+// Hosted Vector Stores (#B8 Phase 1)
+export { VectorStores, VectorStore } from './vector-stores/index.js'
+export type {
+  VectorStoreAdapter,
+  VectorStoreCreateOptions,
+  VectorStoreInfo,
+  VectorStoreFileInfo,
+  VectorStoreAddOptions,
+  VectorStoreListOptions,
+  VectorStoreList,
+  VectorStoreFileList,
+} from './types.js'
+
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'
 
