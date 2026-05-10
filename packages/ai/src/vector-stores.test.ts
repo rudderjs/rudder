@@ -122,7 +122,10 @@ function registerFakeProvider(client: unknown): void {
     async generate(_opts: ProviderRequestOptions): Promise<ProviderResponse> {
       throw new Error('fake provider does not support generate in vector-stores tests')
     },
+    // The throw runs unconditionally so the function body is unreachable past it,
+    // but eslint's `require-yield` insists on at least one `yield` syntactically.
     async *stream(_opts: ProviderRequestOptions): AsyncIterable<StreamChunk> {
+      if (false as boolean) yield {} as StreamChunk
       throw new Error('fake provider does not support stream in vector-stores tests')
     },
   }
