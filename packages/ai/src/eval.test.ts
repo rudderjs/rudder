@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { Agent } from './agent.js'
 import { AiFake } from './fake.js'
+import { aiObservers, type AiEvent } from './observers.js'
 import { z } from 'zod'
 import {
   evalSuite,
@@ -457,6 +458,84 @@ describe('runSuite', () => {
     // observable EXTRA_USAGE_KEY symbol on the response.
     const symbols = Object.getOwnPropertySymbols(report.cases[0]!)
     assert.equal(symbols.length, 0)
+  })
+})
+
+// ─── observer events ─────────────────────────────────────
+
+describe('aiObservers — agent.eval.completed', () => {
+  let fake: AiFake
+  const events: AiEvent[] = []
+  let unsub: () => void
+
+  beforeEach(() => {
+    fake = AiFake.fake()
+    events.length = 0
+    unsub = aiObservers.subscribe((e) => { events.push(e) })
+  })
+  afterEach(() => {
+    unsub()
+    fake.restore()
+  })
+
+  it('emits one event per case with the right shape', async () => {
+    fake.respondWithSequence([{ text: 'hi' }, { text: 'wrong' }])
+    const suite = evalSuite('S', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'pass', input: 'a', assert: exactMatch('hi')      },
+        { name: 'fail', input: 'b', assert: exactMatch('expected') },
+      ],
+    })
+    await runSuite(suite)
+    const evalEvents = events.filter(e => e.kind === 'agent.eval.completed')
+    assert.equal(evalEvents.length, 2)
+    const [first, second] = evalEvents as Extract<AiEvent, { kind: 'agent.eval.completed' }>[]
+    assert.equal(first!.suite,  'S')
+    assert.equal(first!.case,   'pass')
+    assert.equal(first!.status, 'passed')
+    assert.equal(first!.pass,   true)
+    assert.equal(first!.score,  1)
+    assert.equal(typeof first!.duration, 'number')
+    assert.equal(typeof first!.tokens,   'number')
+    assert.equal(typeof first!.cost,     'number')
+
+    assert.equal(second!.status, 'failed')
+    assert.equal(second!.pass,   false)
+    assert.match(second!.reason!, /expected/)
+  })
+
+  it('emits for skipped cases too (so dashboards show coverage gaps)', async () => {
+    const suite = evalSuite('S', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'soft', input: 'x', assert: exactMatch('x'), skip: true },
+        { name: 'hard', input: 'y', assert: exactMatch('y'), skip: 'CI-only' },
+      ],
+    })
+    await runSuite(suite)
+    const evalEvents = events.filter(e => e.kind === 'agent.eval.completed') as Extract<AiEvent, { kind: 'agent.eval.completed' }>[]
+    assert.equal(evalEvents.length, 2)
+    assert.equal(evalEvents[0]!.status, 'skipped')
+    assert.equal(evalEvents[0]!.pass,   false)
+    // the runner records the skip reason; for `skip: true` it's the literal 'skipped'
+    assert.equal(evalEvents[0]!.reason, 'skipped')
+    assert.equal(evalEvents[1]!.reason, 'CI-only')
+  })
+
+  it('observer errors do not break runSuite', async () => {
+    fake.respondWith('hi')
+    const noisy = aiObservers.subscribe(() => { throw new Error('observer crash') })
+    try {
+      const suite = evalSuite('S', {
+        agent: () => new StubAgent(),
+        cases: [{ input: 'a', assert: exactMatch('hi') }],
+      })
+      const report = await runSuite(suite)
+      assert.equal(report.passed, 1)
+    } finally {
+      noisy()
+    }
   })
 })
 

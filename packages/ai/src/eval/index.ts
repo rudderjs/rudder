@@ -36,10 +36,13 @@ import type { Agent } from '../agent.js'
 import type { AgentResponse } from '../types.js'
 import { Output } from '../output.js'
 import { AI } from '../facade.js'
+import { aiObservers } from '../observers.js'
 import { z } from 'zod'
 
 export { reportJson } from './json-reporter.js'
 export type { SuiteJson, SuiteJsonCase } from './json-reporter.js'
+export { stepsFromResponse } from './fixtures.js'
+export type { EvalFixture } from './fixtures.js'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -439,22 +442,25 @@ export async function runSuite(suite: EvalSuite): Promise<SuiteReport> {
     const name = c.name ?? `case-${i}`
 
     if (c.skip) {
-      cases.push({
+      const skipResult: CaseResult = {
         name,
         status:   'skipped',
         reason:   typeof c.skip === 'string' ? c.skip : 'skipped',
         duration: 0,
         tokens:   0,
         cost:     0,
-      })
+      }
+      cases.push(skipResult)
+      emitEvalCompleted(suite.name, skipResult)
       skipped++
       continue
     }
 
-    cases.push(await runCase(suite, c, name))
-    const last = cases[cases.length - 1]!
-    if (last.status === 'passed') passed++
-    else if (last.status === 'failed') failed++
+    const result = await runCase(suite, c, name)
+    cases.push(result)
+    emitEvalCompleted(suite.name, result)
+    if (result.status === 'passed') passed++
+    else if (result.status === 'failed') failed++
   }
 
   const duration = performance.now() - start
@@ -469,6 +475,23 @@ export async function runSuite(suite: EvalSuite): Promise<SuiteReport> {
     cost:   cases.reduce((sum, c) => sum + c.cost,   0),
     tokens: cases.reduce((sum, c) => sum + c.tokens, 0),
   }
+}
+
+function emitEvalCompleted(suiteName: string, result: CaseResult): void {
+  const event: Parameters<typeof aiObservers.emit>[0] = {
+    kind:     'agent.eval.completed',
+    suite:    suiteName,
+    case:     result.name,
+    status:   result.status,
+    pass:     result.status === 'passed',
+    tokens:   result.tokens,
+    cost:     result.cost,
+    duration: result.duration,
+  }
+  if (result.metric?.score !== undefined) event.score = result.metric.score
+  const reason = result.status === 'skipped' ? result.reason : result.metric?.reason
+  if (reason) event.reason = reason
+  aiObservers.emit(event)
 }
 
 async function runCase(suite: EvalSuite, c: EvalCase, name: string): Promise<CaseResult> {
