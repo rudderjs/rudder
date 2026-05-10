@@ -65,3 +65,23 @@ export {
   SCROLL_PIXELS_PER_CLICK,
   MOUSE_MOVE_STEPS,
 } from './playwright.js'
+
+// ─── Tool factory + errors (Phase 2) ──────────────────────
+
+export type {
+  ComputerUseTool,
+  ComputerUseToolOptions,
+} from './tool.js'
+
+export {
+  computerUseTool,
+  isComputerUseTool,
+  COMPUTER_USE_MARKER,
+  COMPUTER_USE_TOOL_NAME,
+} from './tool.js'
+
+export {
+  ComputerUseLimitError,
+  ComputerUseProviderError,
+  isAnthropicLikeModel,
+} from './errors.js'
