@@ -28,6 +28,12 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/billing',
     packages:    ['@rudderjs/cashier-paddle'],
   },
+  {
+    title:       'Computer-use browser',
+    description: 'Anthropic Claude drives a real headless Chromium via computerUseTool({ page }). Type a URL + question, watch the agent take screenshots, click, and answer.',
+    href:        '/demos/browser',
+    packages:    ['@rudderjs/ai/computer-use', 'playwright'],
+  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]
