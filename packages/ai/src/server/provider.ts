@@ -1,8 +1,8 @@
 import { ServiceProvider, config } from '@rudderjs/core'
 import { AiRegistry } from '../registry.js'
-import { setConversationStore } from '../agent.js'
+import { setConversationStore, setUserMemory } from '../agent.js'
 import { GoogleCacheRegistry, type CacheStoreLike } from '../providers/google-cache-registry.js'
-import type { AiConfig, ConversationStore } from '../types.js'
+import type { AiConfig, ConversationStore, UserMemory } from '../types.js'
 
 /**
  * AI ServiceProvider — reads config from `config('ai')`.
@@ -104,6 +104,13 @@ export class AiProvider extends ServiceProvider {
       const store = (cfg as AiConfig & { conversations?: ConversationStore }).conversations!
       setConversationStore(store)
       this.app.instance('ai.conversations', store)
+    }
+
+    // Register user-memory store if provided in config (#A4)
+    if ((cfg as AiConfig & { memory?: UserMemory }).memory) {
+      const memory = (cfg as AiConfig & { memory?: UserMemory }).memory!
+      setUserMemory(memory)
+      this.app.instance('ai.memory', memory)
     }
 
     // Register make:agent scaffolder
