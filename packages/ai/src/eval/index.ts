@@ -43,6 +43,8 @@ export { reportJson } from './json-reporter.js'
 export type { SuiteJson, SuiteJsonCase } from './json-reporter.js'
 export { stepsFromResponse } from './fixtures.js'
 export type { EvalFixture } from './fixtures.js'
+export { reportHtml } from './html-reporter.js'
+export type { HtmlReportOptions } from './html-reporter.js'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -107,6 +109,20 @@ export interface EvalSuiteSpec {
    * overrides. Throws cause `pass: false` with the timeout message.
    */
   timeout?: number
+  /**
+   * Optional ownership / context surfaced in the HTML report (#A5
+   * Phase 5). Well-known keys (`owner`, `lastReviewed`, `ticket`)
+   * get formatted headings; any extra string keys render as a
+   * generic key/value row so teams can attach their own metadata.
+   */
+  metadata?: EvalMetadata
+}
+
+export interface EvalMetadata {
+  owner?:        string
+  lastReviewed?: string
+  ticket?:       string
+  [key: string]: string | undefined
 }
 
 export interface EvalSuite {
@@ -132,6 +148,19 @@ export interface CaseResult {
   tokens:  number
   /** USD estimate (see {@link estimateCost}; zero on skip). */
   cost:    number
+  /**
+   * The case's input string, copied through from `EvalCase.input`
+   * for reporters that want to render the prompt alongside the
+   * response (#A5 Phase 5 HTML report). Always present — runners
+   * always know the input.
+   */
+  input:   string
+  /**
+   * The agent's final assistant text. Absent when the case skipped
+   * or the agent threw before producing a response. The HTML
+   * reporter renders `<no response>` in that case.
+   */
+  responseText?: string
 }
 
 /** Full report returned by {@link runSuite}. */
@@ -144,6 +173,8 @@ export interface SuiteReport {
   duration: number
   cost:     number
   tokens:   number
+  /** Suite-level metadata (#A5 Phase 5), copied through from the spec. */
+  metadata?: EvalMetadata
 }
 
 // ─── Suite definition ─────────────────────────────────────
@@ -449,6 +480,7 @@ export async function runSuite(suite: EvalSuite): Promise<SuiteReport> {
         duration: 0,
         tokens:   0,
         cost:     0,
+        input:    c.input,
       }
       cases.push(skipResult)
       emitEvalCompleted(suite.name, skipResult)
@@ -465,7 +497,7 @@ export async function runSuite(suite: EvalSuite): Promise<SuiteReport> {
 
   const duration = performance.now() - start
 
-  return {
+  const report: SuiteReport = {
     suite: suite.name,
     cases,
     passed,
@@ -475,6 +507,8 @@ export async function runSuite(suite: EvalSuite): Promise<SuiteReport> {
     cost:   cases.reduce((sum, c) => sum + c.cost,   0),
     tokens: cases.reduce((sum, c) => sum + c.tokens, 0),
   }
+  if (suite.spec.metadata) report.metadata = suite.spec.metadata
+  return report
 }
 
 function emitEvalCompleted(suiteName: string, result: CaseResult): void {
@@ -511,6 +545,7 @@ async function runCase(suite: EvalSuite, c: EvalCase, name: string): Promise<Cas
       duration: performance.now() - start,
       tokens:   0,
       cost:     0,
+      input:    c.input,
     }
   }
 
@@ -526,12 +561,14 @@ async function runCase(suite: EvalSuite, c: EvalCase, name: string): Promise<Cas
 
   return {
     name,
-    status:   metric.pass ? 'passed' : 'failed',
+    status:       metric.pass ? 'passed' : 'failed',
     metric,
-    duration: performance.now() - start,
-    tokens:   totalTokens,
-    cost:     estimateCost(modelStringFor(ag), response.usage.promptTokens, response.usage.completionTokens)
-            + estimateCost(modelStringFor(ag), 0, extraTokens),  // judge/embed cost approximated as completion-side
+    duration:     performance.now() - start,
+    tokens:       totalTokens,
+    cost:         estimateCost(modelStringFor(ag), response.usage.promptTokens, response.usage.completionTokens)
+                + estimateCost(modelStringFor(ag), 0, extraTokens),  // judge/embed cost approximated as completion-side
+    input:        c.input,
+    responseText: response.text,
   }
 }
 

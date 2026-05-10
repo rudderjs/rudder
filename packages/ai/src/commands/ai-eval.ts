@@ -13,9 +13,10 @@ import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runSuite, reportConsole, evalSuite, stepsFromResponse } from '../eval/index.js'
-import type { EvalSuite, EvalCase, Metric } from '../eval/index.js'
+import type { EvalSuite, EvalCase, Metric, SuiteReport } from '../eval/index.js'
 import { reportJson } from '../eval/json-reporter.js'
 import type { SuiteJson } from '../eval/json-reporter.js'
+import { reportHtml } from '../eval/html-reporter.js'
 import { defaultFixturesDir, readFixture, writeFixture } from '../eval/fixtures.js'
 import { AiFake } from '../fake.js'
 import type { AiFakeStep } from '../fake.js'
@@ -51,6 +52,12 @@ export interface AiEvalOptions {
    * through to a normal run with a stderr warning. Default `false`.
    */
   replay?: boolean
+  /**
+   * Path for a self-contained HTML report (#A5 Phase 5). Pasteable
+   * into PR comments / Slack threads. Coexists with `--json` (JSON
+   * still goes to stdout, HTML goes to disk).
+   */
+  html?: string
 }
 
 /**
@@ -80,21 +87,48 @@ export function registerAiEvalCommand(rudder: Rudder): void {
     const code = await runEvalCli(parseArgs(rawArgs))
     if (code !== 0) process.exit(code)
   }).description(
-    'Run eval suites — pnpm rudder ai:eval [name-pattern] [--bail] [--json] [--record|--replay]',
+    'Run eval suites — pnpm rudder ai:eval [name-pattern] [--bail] [--json] [--record|--replay] [--html <path>]',
   )
 }
 
 // ─── Args parser ─────────────────────────────────────────
 
+const VALUE_FLAGS = new Set(['--html'])
+
+/**
+ * Parse the rest-of-line. Recognizes:
+ *  - boolean flags: `--bail`, `--json`, `--record`, `--replay`
+ *  - value flags  : `--html <path>` or `--html=<path>`
+ *  - one positional name filter (anything not consumed above)
+ */
 export function parseArgs(args: string[]): AiEvalOptions {
-  const positional = args.filter(a => !a.startsWith('--'))
-  const flags      = new Set(args.filter(a => a.startsWith('--')))
-  const opts: AiEvalOptions = {
-    bail: flags.has('--bail'),
-    json: flags.has('--json'),
+  const positional: string[] = []
+  const opts: AiEvalOptions = { bail: false, json: false }
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (!a.startsWith('--')) { positional.push(a); continue }
+
+    // `--flag=value` form
+    const eq = a.indexOf('=')
+    const name  = eq >= 0 ? a.slice(0, eq) : a
+    const inline = eq >= 0 ? a.slice(eq + 1) : undefined
+
+    if (name === '--bail')   { opts.bail = true; continue }
+    if (name === '--json')   { opts.json = true; continue }
+    if (name === '--record') { opts.record = true; continue }
+    if (name === '--replay') { opts.replay = true; continue }
+    if (VALUE_FLAGS.has(name)) {
+      const value = inline ?? args[i + 1]
+      if (!inline) i++   // consumed the next arg
+      if (!value) throw new Error(`[RudderJS AI] ${name} requires a value`)
+      if (name === '--html') opts.html = value
+      continue
+    }
+    // unknown flag — surface as positional so the user sees the typo
+    positional.push(a)
   }
-  if (flags.has('--record')) opts.record = true
-  if (flags.has('--replay')) opts.replay = true
+
   if (positional[0]) opts.filter = positional[0]
   return opts
 }
@@ -129,6 +163,7 @@ export async function runEvalCli(opts: AiEvalOptions, deps: AiEvalDeps = {}): Pr
   const loader      = deps.loadSuite ?? defaultSuiteLoader
   const fixturesDir = deps.fixturesDir ?? defaultFixturesDir(cwd)
   const reports: SuiteJson[] = []
+  const fullReports: SuiteReport[] = []
   let exitCode = 0
 
   // `--replay` swaps the global runtime once, restored when we're done.
@@ -157,6 +192,7 @@ export async function runEvalCli(opts: AiEvalOptions, deps: AiEvalDeps = {}): Pr
 
       const decorated = await decorateForMode(suite, opts, { fixturesDir, stderr, fake })
       const report = await runSuite(decorated)
+      fullReports.push(report)
       if (opts.json) {
         reports.push(reportJson(report))
       } else {
@@ -173,7 +209,25 @@ export async function runEvalCli(opts: AiEvalOptions, deps: AiEvalDeps = {}): Pr
   }
 
   if (opts.json) emitJson(stdout, reports)
+  if (opts.html) await writeHtmlReport(opts.html, fullReports, cwd, stderr)
   return exitCode
+}
+
+async function writeHtmlReport(
+  htmlPath:    string,
+  reports:     SuiteReport[],
+  cwd:         string,
+  stderr:      { write(s: string): boolean | void },
+): Promise<void> {
+  const { writeFile, mkdir } = await import('node:fs/promises')
+  const abs = path.isAbsolute(htmlPath) ? htmlPath : path.resolve(cwd, htmlPath)
+  try {
+    await mkdir(path.dirname(abs), { recursive: true })
+    await writeFile(abs, reportHtml(reports))
+    stderr.write(`[ai:eval] wrote HTML report → ${path.relative(cwd, abs)}\n`)
+  } catch (err) {
+    stderr.write(`[ai:eval] failed to write HTML report ${abs}: ${formatError(err)}\n`)
+  }
 }
 
 function emitJson(stdout: { write(s: string): boolean | void }, suites: SuiteJson[]): 0 {

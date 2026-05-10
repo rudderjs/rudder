@@ -779,6 +779,7 @@ pnpm rudder ai:eval --bail             # stop on first failing suite
 pnpm rudder ai:eval --json             # CI-friendly envelope to stdout
 pnpm rudder ai:eval --record support   # run live, save fixtures
 pnpm rudder ai:eval --replay support   # zero API calls, deterministic
+pnpm rudder ai:eval --html report.html # self-contained HTML report
 ```
 
 Exits 0 when every case passes, 1 on any failure. `--json` emits `{ suites: [{ suite, passed, failed, cases: [{ name, status, pass, score?, reason?, tokens, cost, duration }] }] }` for CI gates. Override the discovery pattern via `config('ai').eval.pattern` (default `'evals/**/*.eval.ts'`).
@@ -797,6 +798,8 @@ User metrics implement `(response, ctx) => MetricResult`. See `@rudderjs/ai/eval
 **Record + replay:** `--record` runs each case against the real provider and writes assistant turns (text + tool calls) to `evals/__fixtures__/<suite>/<case>.json`. Commit those alongside the suite so model-output diffs show up in code review. `--replay` swaps the runtime with `AiFake` and feeds each case its recorded fixture — same agent code path, deterministic responses, zero API cost. Cases without a fixture fall through to a normal run with a stderr warning.
 
 Telescope subscribes to the `agent.eval.completed` observer event (emitted by `runSuite` after every case, including skipped ones) and aggregates pass-rate per `(suite, case)` over time.
+
+**HTML report:** `--html <path>` writes a self-contained HTML document — inline CSS + minimal vanilla JS for case-row expand, no external assets — pasteable into PR comments, openable offline. Coexists with `--json` (JSON to stdout, HTML to disk). Annotate suites with optional metadata (`{ owner?, lastReviewed?, ticket? }` plus any custom keys) to surface ownership in the report header.
 
 ## Pitfalls
 

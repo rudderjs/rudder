@@ -1064,7 +1064,27 @@ pnpm rudder ai:eval --replay support     # zero API calls, deterministic
 
 **Telescope hook:** `aiObservers` emits an `agent.eval.completed` event after every case (passing, failing, skipped). Telescope's AI collector aggregates pass-rate per `(suite, case)` over time.
 
-**Roadmap:** Phase 5 adds an HTML report.
+**HTML report:**
+
+```bash
+pnpm rudder ai:eval --html report.html      # write a self-contained HTML report
+```
+
+Self-contained HTML (inline CSS + vanilla JS, no external assets), pasteable into PR comments / Slack threads, openable offline. Coexists with `--json` (JSON to stdout, HTML to disk). Click any case row to expand the prompt + response.
+
+Annotate suites with optional metadata:
+
+```ts
+export default evalSuite('SupportAgent', {
+  agent: () => new SupportAgent(),
+  cases: [/* … */],
+  metadata: {
+    owner:        '@billing-team',
+    lastReviewed: '2026-05-01',
+    ticket:       'AI-42',
+  },
+})
+```
 
 ### MCP integration
 
