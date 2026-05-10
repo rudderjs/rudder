@@ -37,6 +37,7 @@ import type { AgentResponse } from '../types.js'
 import { Output } from '../output.js'
 import { AI } from '../facade.js'
 import { aiObservers } from '../observers.js'
+import { estimateCost } from '../budget/pricing.js'
 import { z } from 'zod'
 
 export { reportJson } from './json-reporter.js'
@@ -593,42 +594,14 @@ async function runWithTimeout<T>(fn: () => Promise<T>, ms: number | undefined): 
   })
 }
 
-// ─── Pricing (minimal hardcoded subset; A6 expands) ───────
+// ─── Pricing ──────────────────────────────────────────────
 
-/**
- * Map of `<provider>/<model>` → `{ inputPer1k, outputPer1k }` in USD.
- *
- * Phase 1 ships a hardcoded subset for the most common models so the
- * cost column in reports is meaningful out of the box. A6 (cost /
- * budget enforcement) ships the full catalog with version-tracked
- * updates per provider price changes.
- *
- * Unknown models score `cost: 0` rather than throwing — eval
- * usefulness shouldn't depend on the catalog being complete.
- */
-const PRICING: Record<string, { inputPer1k: number; outputPer1k: number }> = {
-  // Anthropic (2025-Q4 list pricing, USD per 1k tokens)
-  'anthropic/claude-opus-4-7':       { inputPer1k: 0.015,    outputPer1k: 0.075   },
-  'anthropic/claude-sonnet-4-6':     { inputPer1k: 0.003,    outputPer1k: 0.015   },
-  'anthropic/claude-sonnet-4-5':     { inputPer1k: 0.003,    outputPer1k: 0.015   },
-  'anthropic/claude-haiku-4-5':      { inputPer1k: 0.0008,   outputPer1k: 0.004   },
-  // OpenAI
-  'openai/gpt-4o':                   { inputPer1k: 0.0025,   outputPer1k: 0.01    },
-  'openai/gpt-4o-mini':              { inputPer1k: 0.00015,  outputPer1k: 0.0006  },
-  // Google
-  'google/gemini-2.5-pro':           { inputPer1k: 0.00125,  outputPer1k: 0.005   },
-  'google/gemini-2.5-flash':         { inputPer1k: 0.000075, outputPer1k: 0.0003  },
-}
-
-/**
- * Compute USD cost for a single agent call. Returns 0 when the
- * model id isn't in the catalog — see {@link PRICING}.
- */
-export function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
-  const rate = PRICING[model]
-  if (!rate) return 0
-  return (promptTokens * rate.inputPer1k + completionTokens * rate.outputPer1k) / 1000
-}
+// Pricing catalog + estimator live in `../budget/pricing.ts` and are
+// re-exported here so `import { estimateCost } from '@rudderjs/ai/eval'`
+// continues to work. (Note: estimateCost is also imported at the top
+// of this file for use by `runSuite`.)
+export { estimateCost, ModelPricing } from '../budget/pricing.js'
+export type { ModelPriceEntry } from '../budget/pricing.js'
 
 // ─── Console reporter ─────────────────────────────────────
 
