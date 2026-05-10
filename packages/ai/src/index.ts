@@ -129,6 +129,8 @@ export { MemoryUserMemory, resolveRemembersSpec } from './memory.js'
 export type { UserMemoryLookup } from './memory.js'
 export { withMemoryInject } from './memory-inject.js'
 export type { MemoryInjectOptions } from './memory-inject.js'
+export { withMemoryExtract } from './memory-extract.js'
+export type { MemoryExtractOptions } from './memory-extract.js'
 
 // Sub-agent run store (asTool streaming + suspend)
 export {
