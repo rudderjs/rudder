@@ -18,6 +18,7 @@ import type {
   PaginatedResult,
   RelationExistencePredicate,
 } from '@rudderjs/contracts'
+import { resolveOptionalPeer } from '@rudderjs/support'
 
 // ─── Minimal Drizzle DB interface ──────────────────────────
 
@@ -39,6 +40,10 @@ type DrizzleDb = {
   insert(table: unknown): { values(data: unknown): DrizzleQB }
   update(table: unknown): { set(data: unknown): DrizzleQB }
   delete(table: unknown): DrizzleQB
+  /** Optional — present on Postgres / libsql Drizzle drivers. Vector
+   *  queries route through `execute(sql)` because pgvector ops can't
+   *  be expressed via the fluent select API. */
+  execute?(query: SQL): Promise<unknown>
   $client?: { end?: () => Promise<void> }
 }
 
@@ -65,6 +70,56 @@ function _andSql(exprs: SQL[]): SQL {
   return and(...exprs) as SQL
 }
 
+/**
+ * Serialize a `number[]` into pgvector's text literal format —
+ * `'[0.1,0.2,0.3]'` (without surrounding quotes; caller wraps the
+ * result in `${vec}::vector` so Drizzle binds it as a string parameter
+ * and the cast happens server-side). Mirrors `vectorLiteral` in
+ * `@rudderjs/orm-prisma`.
+ */
+function vectorLiteral(vec: readonly number[]): string {
+  return `[${vec.join(',')}]`
+}
+
+/**
+ * Resolve the deferred auto-embed for `whereVectorSimilarTo('col',
+ * '<text>', { embedWith })` (#B7 Phase 3). Pulls `@rudderjs/ai`
+ * lazily via `resolveOptionalPeer` so the orm-drizzle adapter never
+ * hard-deps on the AI package — apps that don't do RAG don't load it.
+ * Mirrors `resolveAutoEmbed` in `@rudderjs/orm-prisma`.
+ */
+async function resolveAutoEmbed(pending: { text: string; embedWith: string } | undefined): Promise<number[]> {
+  if (!pending) {
+    throw new Error(
+      '[RudderJS ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
+      'This is a bug — please report it.',
+    )
+  }
+
+  type AiModule = { AI: { embed(input: string, opts: { model: string }): Promise<{ embeddings: number[][] }> } }
+  let ai: AiModule
+  try {
+    ai = await resolveOptionalPeer<AiModule>('@rudderjs/ai')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      '[RudderJS ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
+      'Run `pnpm add @rudderjs/ai`, or pre-embed via your own embedder and pass number[] instead. ' +
+      `Original: ${msg}`,
+      { cause: err },
+    )
+  }
+
+  const result = await ai.AI.embed(pending.text, { model: pending.embedWith })
+  const vec = result.embeddings[0]
+  if (!vec || vec.length === 0) {
+    throw new Error(
+      `[RudderJS ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
+    )
+  }
+  return vec
+}
+
 // ─── Drizzle Query Builder ─────────────────────────────────
 
 class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
@@ -88,6 +143,21 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _aggregates: AggregateRequest[] = []
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
+
+  /** pgvector similarity clause (#B7 Phase 3 — Postgres + pgvector only).
+   *  When set, terminal methods switch to `db.execute(sql\`SELECT ... ORDER BY
+   *  col <op> vec\`)` which bypasses the fluent select API (no native pgvector
+   *  ops there). Mirrors the orm-prisma adapter's `_vectorClause`. */
+  private _vectorClause: {
+    column:        string
+    query:         number[] | null
+    pendingEmbed?: { text: string; embedWith: string }
+    minSimilarity?: number
+    metric:        'cosine' | 'l2' | 'inner-product'
+  } | null = null
+
+  /** Optional projected distance column added to vector-query result rows. */
+  private _selectVectorDist: { column: string; query: number[]; alias: string } | null = null
 
   constructor(
     private readonly db:         DrizzleDb,
@@ -211,25 +281,35 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   whereVectorSimilarTo(
     column: string,
-    _query: number[] | string,
-    _opts?: { minSimilarity?: number; metric?: 'cosine' | 'l2' | 'inner-product'; embedWith?: string },
+    query:  number[] | string,
+    opts?:  { minSimilarity?: number; metric?: 'cosine' | 'l2' | 'inner-product'; embedWith?: string },
   ): this {
-    // Drizzle pgvector support lands in B7 Phase 3 alongside the
-    // migration helper. Phase 1 ships the Prisma path; Drizzle throws
-    // `VectorStorageUnsupportedError` so callers get a clean message
-    // instead of a TypeError on a missing method.
-    throw new VectorStorageUnsupportedError(
-      'drizzle',
-      `Vector queries on column "${column}" land in B7 Phase 3 for the Drizzle adapter. ` +
-      'Use the Prisma adapter for now, or pre-fetch via raw SQL.',
-    )
+    if (typeof query === 'string') {
+      // Phase 3: defer auto-embed to terminal time so the chain stays sync.
+      // `embedWith` is required — fail loud rather than route through whichever
+      // provider happens to be the AI default. Mirrors orm-prisma's behavior.
+      if (!opts?.embedWith) throw new MissingEmbedderError(column)
+      this._vectorClause = {
+        column,
+        query: null,
+        pendingEmbed: { text: query, embedWith: opts.embedWith },
+        metric: opts?.metric ?? 'cosine',
+        ...(opts?.minSimilarity !== undefined ? { minSimilarity: opts.minSimilarity } : {}),
+      }
+      return this
+    }
+    this._vectorClause = {
+      column,
+      query,
+      metric: opts?.metric ?? 'cosine',
+      ...(opts?.minSimilarity !== undefined ? { minSimilarity: opts.minSimilarity } : {}),
+    }
+    return this
   }
 
-  selectVectorDistance(_column: string, _query: number[], _alias: string): this {
-    throw new VectorStorageUnsupportedError(
-      'drizzle',
-      'selectVectorDistance lands in B7 Phase 3 for the Drizzle adapter.',
-    )
+  selectVectorDistance(column: string, query: number[], alias: string): this {
+    this._selectVectorDist = { column, query, alias }
+    return this
   }
 
   whereRelationExists(p: RelationExistencePredicate): this {
@@ -489,6 +569,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async first(): Promise<T | null> {
     this._assertNotSubBuilder()
+    if (this._vectorClause !== null) {
+      const prevLimit = this._limitN
+      this._limitN = 1
+      try {
+        const rows = await this._getViaVector()
+        return (rows[0] as T | undefined) ?? null
+      } finally {
+        this._limitN = prevLimit
+      }
+    }
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
     const fields  = this.buildAggregateSelectFields()
@@ -519,6 +609,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
+    if (this._vectorClause !== null) return this._getViaVector() as Promise<T[]>
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
     const fields  = this.buildAggregateSelectFields()
@@ -538,6 +629,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async count(): Promise<number> {
     this._assertNotSubBuilder()
+    if (this._vectorClause !== null) {
+      throw new Error(
+        '[RudderJS ORM] count() with .whereVectorSimilarTo() is not supported in B7 — ' +
+        'vector queries route through raw SQL with an implicit ORDER BY similarity.',
+      )
+    }
     const cond = this.buildConditions()
 
     let q = this.db.select({ value: sqlCount() }).from(this.table)
@@ -545,6 +642,133 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     const result: Array<{ value: number | string | bigint }> = await (q as unknown as Promise<Array<{ value: number | string | bigint }>>)
     return Number(result[0]?.value ?? 0)
+  }
+
+  /**
+   * Vector-query terminal path (#B7 Phase 3 for Drizzle). Mirrors
+   * `_getViaVector` in `@rudderjs/orm-prisma`: routes through
+   * `db.execute(sql\`SELECT ... ORDER BY <col> <op> <vec>::vector\`)`
+   * because Drizzle's fluent select API can't express pgvector
+   * operators (`<=>`, `<->`, `<#>`).
+   *
+   * Phase 2.5-equivalent chain composition: flat `.where()` /
+   * `.orWhere()` clauses compose into the SQL via the existing
+   * `buildConditions()`. Soft-delete scoping flows through the same
+   * path. Polymorphic / pivot relations handled by the existing
+   * `whereRelationExists` `EXISTS` subqueries — they sit in
+   * `_extraExprs` and `buildConditions()` already AND-merges them.
+   *
+   * Still throws (out of scope):
+   * - Aggregates — would mix raw SQL with subselect projection.
+   * - `orderBy` — redundant; vector queries order by similarity.
+   *
+   * Errors:
+   * - pgvector extension or column missing → wraps as
+   *   {@link VectorStorageUnsupportedError}.
+   * - `db.execute()` not on the driver → same error class with hint.
+   */
+  private async _getViaVector(): Promise<Array<Record<string, unknown>>> {
+    if (this._vectorClause === null) return []  // unreachable: get() guards
+
+    if (this._aggregates.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
+      )
+    }
+    if (this._orders.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
+      )
+    }
+
+    const { column, query, pendingEmbed, minSimilarity, metric } = this._vectorClause
+    const opStr =
+      metric === 'l2'             ? '<->' :
+      metric === 'inner-product'  ? '<#>' :
+                                    '<=>'   // cosine
+    const op = sql.raw(opStr)
+
+    // Resolve the deferred auto-embed if we kept the string at sync-chain
+    // time. Pulls @rudderjs/ai via resolveOptionalPeer so orm-drizzle stays
+    // independent of the AI runtime — apps that don't do RAG never load it.
+    const resolvedQuery = query ?? await resolveAutoEmbed(pendingEmbed)
+    const vecLit = vectorLiteral(resolvedQuery)
+
+    const colExpr = this.col(column) as Column | undefined
+    if (!colExpr) {
+      throw new VectorStorageUnsupportedError(
+        'drizzle',
+        `Column "${column}" not found on the registered Drizzle table — make sure the column is declared in your pgTable schema.`,
+      )
+    }
+
+    // SELECT list — start with `*` from the table; add the optional
+    // distance projection if the user opted in via selectVectorDistance.
+    let distSelect: SQL = sql``
+    if (this._selectVectorDist) {
+      const dCol = this.col(this._selectVectorDist.column) as Column | undefined
+      if (!dCol) {
+        throw new VectorStorageUnsupportedError(
+          'drizzle',
+          `selectVectorDistance: column "${this._selectVectorDist.column}" not found on the registered Drizzle table.`,
+        )
+      }
+      const dVecLit = vectorLiteral(this._selectVectorDist.query)
+      const aliasIdent = sql.identifier(this._selectVectorDist.alias)
+      distSelect = sql`, (${dCol} ${op} ${dVecLit}::vector) AS ${aliasIdent}`
+    }
+
+    // WHERE composition: vector min-similarity (if set) AND chained user
+    // wheres (flat .where()/.orWhere(), soft-delete, EXISTS subqueries).
+    const whereExprs: SQL[] = []
+    if (minSimilarity !== undefined) {
+      whereExprs.push(sql`1 - (${colExpr} ${op} ${vecLit}::vector) >= ${minSimilarity}` as SQL)
+    }
+    const userCond = this.buildConditions()
+    if (userCond) whereExprs.push(userCond)
+
+    const whereSql = whereExprs.length > 0
+      ? sql` WHERE ${_andSql(whereExprs)}`
+      : sql``
+
+    const limitN = this._limitN ?? 100
+
+    const fullSql = sql`SELECT *${distSelect} FROM ${this.table as Column}${whereSql} ORDER BY ${colExpr} ${op} ${vecLit}::vector LIMIT ${limitN}`
+
+    const exec = this.db.execute
+    if (typeof exec !== 'function') {
+      throw new VectorStorageUnsupportedError(
+        'drizzle',
+        'db.execute() is not available on this Drizzle driver — vector queries require a Postgres driver (postgres-js, pg, or neon-serverless).',
+      )
+    }
+
+    try {
+      const result = await exec.call(this.db, fullSql)
+      // Normalize across driver result shapes:
+      //   - postgres-js: { rows: [...] } (the rows array IS the result iterable)
+      //   - pg / neon: { rows: [...] }
+      //   - libsql: { rows: [...] }
+      //   - some test fakes return rows directly as an array.
+      if (Array.isArray(result)) return result as Array<Record<string, unknown>>
+      if (result && typeof result === 'object' && 'rows' in result) {
+        const rows = (result as { rows: unknown }).rows
+        return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : []
+      }
+      return []
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // pgvector missing — wrap with a friendly error.
+      if (/operator does not exist|type "vector" does not exist|extension "vector"|column .* does not exist/i.test(msg)) {
+        throw new VectorStorageUnsupportedError(
+          'drizzle',
+          `pgvector or the column "${column}" is not available on this connection. ` +
+          'Run `CREATE EXTENSION IF NOT EXISTS vector;` and `ALTER TABLE ... ADD COLUMN ' +
+          `${column} vector(N);\` in a migration. Original: ${msg}`,
+        )
+      }
+      throw err
+    }
   }
 
   async create(data: Partial<T>): Promise<T> {
@@ -786,7 +1010,11 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
 // ─── DatabaseProvider ──────────────────────────────────────
 
 import { ServiceProvider, config as appConfig } from '@rudderjs/core'
-import { ModelRegistry, VectorStorageUnsupportedError } from '@rudderjs/orm'
+import {
+  ModelRegistry,
+  MissingEmbedderError,
+  VectorStorageUnsupportedError,
+} from '@rudderjs/orm'
 
 export interface DatabaseConnectionConfig {
   driver: 'sqlite' | 'postgresql' | 'libsql'

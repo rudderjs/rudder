@@ -1,6 +1,6 @@
 # B7 — Vector storage in `@rudderjs/orm` + `similaritySearch` tool
 
-**Status:** Phase 1 ✓ (#374), Phase 2 ✓ (#375); Phase 2.5 in flight on `feat-b7-scope-and-chain`.
+**Status:** Phase 1 ✓ (#374), Phase 2 ✓ (#375), Phase 2.5 ✓ (#376); Phase 3 in flight on `feat-b7-drizzle-and-migration`.
 **Date:** 2026-05-10
 **Roadmap item:** B7 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 4 PR-sized phases (3 → 4 after Phase 2/2.5 split).
@@ -11,10 +11,10 @@
 |---|---|---|---|
 | 1   | `vector()` cast + `whereVectorSimilarTo()` / `selectVectorDistance()` query builder helpers — **Prisma + pgvector only** | #374 | ✓ shipped |
 | 2   | `similaritySearch({ model, column, embedWith, ... })` agent tool factory in `@rudderjs/ai`; auto-embed in `whereVectorSimilarTo` (string `query` + `embedWith`) lifted in `@rudderjs/orm-prisma` via lazy `@rudderjs/ai` optional peer | #375 | ✓ shipped |
-| 2.5 | Lift the standalone-query restriction on `whereVectorSimilarTo` — flat `.where()` / `.orWhere()` chains compose into the vector SQL with positional params; `scope: (q) => q` callback added to `similaritySearch` | — | in flight |
-| 3   | Drizzle adapter impl + `pnpm rudder make:migration --vector <table> <column> <dim>` helper | — | not started |
+| 2.5 | Lift the standalone-query restriction on `whereVectorSimilarTo` — flat `.where()` / `.orWhere()` chains compose into the vector SQL with positional params; `scope: (q) => q` callback added to `similaritySearch` | #376 | ✓ shipped |
+| 3   | Drizzle pgvector adapter (mirrors orm-prisma's surface incl. Phase 2.5 chain composition); `make:migration --vector <table> <column> <dim>` helper extends the existing `make:migration` command | — | in flight |
 
-After phase 3, B7 is complete. Next Track B parity item is **B8 (hosted vector stores + `FileSearch` provider tool)** — wraps OpenAI/Gemini hosted stores. B7 must land first because B8's local-fallback path will reuse B7's primitives.
+After Phase 3, B7 is **complete**. Next Track B parity item is **B8 (hosted vector stores + `FileSearch` provider tool)** — wraps OpenAI/Gemini hosted stores. B7 must land first because B8's local-fallback path will reuse B7's primitives.
 
 ### Phase 2 / 2.5 split — why
 
@@ -201,14 +201,25 @@ Surface:
 
 ### Phase 3 — Drizzle adapter + migration helper
 
-- `packages/orm-drizzle/src/index.ts` implements `whereVectorSimilarTo` + `selectVectorDistance` against pgvector. Uses Drizzle's `sql\`...\`` template literal for the raw clause. Same error contracts as Prisma adapter.
-- `packages/orm/src/commands/make-migration.ts` (new subpath: `@rudderjs/orm/commands/make-migration`) registers `pnpm rudder make:migration --vector <table> <column> <dim>` that scaffolds:
-  - `CREATE EXTENSION IF NOT EXISTS vector;` (idempotent)
-  - `ALTER TABLE <table> ADD COLUMN <column> vector(<dim>);`
-  - `CREATE INDEX <table>_<column>_hnsw ON <table> USING hnsw (<column> vector_cosine_ops);`
-  - For Prisma users: a separate snippet showing how to add `Unsupported("vector(<dim>)")` + `@@index([col(ops: VectorCosineOps)], type: Hnsw)` to schema.prisma.
-- Wire the new command into `packages/cli/src/index.ts`'s `loadPackageCommands()` (per the "package commands don't register in CLI" pitfall).
-- **Tests:** Drizzle adapter parity test against Prisma's fixture — same query, same results. Migration helper writes to a temp dir, asserts the SQL content; tests don't run the migration (fixture only).
+`@rudderjs/orm-drizzle`:
+
+- `whereVectorSimilarTo` + `selectVectorDistance` mirror the orm-prisma surface: stash on `_vectorClause` / `_selectVectorDist`, defer string-query auto-embed via `pendingEmbed`. `MissingEmbedderError` still fires when a string `query` is passed without `embedWith`.
+- `_getViaVector` terminal path routes through Drizzle's `db.execute()` with a tagged-template SQL literal (`SELECT ... ORDER BY col op vec::vector`), because Drizzle's fluent select API can't express pgvector ops. Composes the WHERE chain by reusing the existing `buildConditions()` so flat `.where()` / `.orWhere()` / soft-delete / `whereRelationExists`-EXISTS subqueries (Phase 2.5 parity) all flow into the SQL alongside the vector clause.
+- Vector literal serialized to pgvector text (`'[0.1,0.2,...]'`) and bound through Drizzle's `sql` template — Drizzle handles parameter binding so user values (where-chain RHS, `minSimilarity`, `limit`, the vector itself) never get string-interpolated. Operators come from a closed allow-list and use `sql.raw` safely. Defense-in-depth SQL-injection test asserts a payload like `'; DROP TABLE documents; --` travels through bind params, not through the SQL string.
+- `db.execute()` missing on the driver → `VectorStorageUnsupportedError` with hint to use a Postgres driver. Unknown column on the registered table → same error class with the column name. pgvector extension/operator missing → wrapped with the `CREATE EXTENSION` guidance message (matches orm-prisma).
+- `@rudderjs/support` added as a regular dep, `@rudderjs/ai` as an optional peer (mirrors orm-prisma's wiring). The `resolveAutoEmbed` helper is a near-copy of orm-prisma's.
+
+`@rudderjs/orm`:
+
+- Extends the existing `make:migration` command with a `--vector <table> <column> <dim>` short-circuit (no new subpath needed — the helpers live in `commands/migrate.ts`). Conservative SQL identifier check on table + column rejects anything with non-alphanumeric chars; dimensions must be a positive integer.
+- Generates an ORM-detected migration file: Prisma → `prisma/migrations/<ts>_add_<col>_vector_to_<table>/migration.sql`; Drizzle → `drizzle/<ts>_add_<col>_vector_to_<table>.sql`. SQL contains `CREATE EXTENSION IF NOT EXISTS vector;`, `ALTER TABLE ... ADD COLUMN ... vector(N);`, and a `CREATE INDEX ... USING hnsw (... vector_cosine_ops)` (or `vector_l2_ops` / `vector_ip_ops` if `--metric` overrides).
+- Prisma projects also get a printed schema snippet showing the `Unsupported("vector(N)")` column + `@@index([col(ops: VectorCosineOps)], type: Hnsw)` declaration to add to `schema.prisma`, plus a reminder to enable the `postgresqlExtensions` preview feature.
+- Exports `buildVectorMigrationSql`, `buildPrismaSchemaSnippet`, `parseVectorFlag`, `writeVectorMigration` for testing and for apps that want to compose the SQL into a hand-rolled migration.
+
+**Tests:**
+
+- `packages/orm-drizzle/src/vector.test.ts` — 21 tests mirroring orm-prisma's vector test suite: SQL shape (cosine default, l2/inner-product op variants, default LIMIT 100), `selectVectorDistance` projection, `first()` unwrap + null, chained `.where()` composition (single + multi-operator + IN), defense-in-depth SQL injection check, still-unsupported throws (`.orderBy()`, `.count()`), auto-embed defer (sync chain accepts string + `embedWith`), terminal AI-mention error, `pgvector missing` → `VectorStorageUnsupportedError`, unknown column → same, driver without `db.execute` → same. Uses real `pgTable` + `PgDialect.sqlToQuery` to render the captured SQL for assertion.
+- `packages/orm/src/commands/migrate.test.ts` — 22 new tests covering `buildVectorMigrationSql` (cosine/l2/inner-product, identifier/dimension validation), `buildPrismaSchemaSnippet`, `parseVectorFlag` (positional args + `--metric`, missing args, invalid types), and `writeVectorMigration` (Prisma vs Drizzle layout, fallback when no ORM detected, Prisma-only schema snippet, explicit `opts.orm` override).
 
 ## Out of scope (file as future plans if picked up)
 

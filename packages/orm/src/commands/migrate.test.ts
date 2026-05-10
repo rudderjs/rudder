@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import os from 'node:os'
-import { detectORM, buildArgs, findSeederFile, hasPrismaSeedConfig, runSeeder } from './migrate.js'
+import {
+  detectORM, buildArgs, findSeederFile, hasPrismaSeedConfig, runSeeder,
+  buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
+  writeVectorMigration,
+} from './migrate.js'
 
 describe('migrate — detectORM()', () => {
   let tmpDir: string
@@ -235,5 +239,158 @@ export default class DatabaseSeeder {
     const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.mjs')
     await fs.writeFile(path, 'export default { not: "callable" }\n')
     await assert.rejects(() => runSeeder(tmpDir), /must be a Seeder class or function/)
+  })
+})
+
+// ─── #B7 Phase 3 — make:migration --vector helper ─────────
+
+describe('migrate — buildVectorMigrationSql()', () => {
+  it('emits CREATE EXTENSION + ALTER TABLE + HNSW INDEX in cosine mode (default)', () => {
+    const sql = buildVectorMigrationSql({ table: 'documents', column: 'embedding', dimensions: 1536 })
+    assert.match(sql, /CREATE EXTENSION IF NOT EXISTS vector;/)
+    assert.match(sql, /ALTER TABLE "documents" ADD COLUMN "embedding" vector\(1536\);/)
+    assert.match(sql, /CREATE INDEX "documents_embedding_hnsw_idx" ON "documents" USING hnsw \("embedding" vector_cosine_ops\);/)
+  })
+
+  it('switches the index ops class for metric: l2', () => {
+    const sql = buildVectorMigrationSql({ table: 'docs', column: 'emb', dimensions: 8, metric: 'l2' })
+    assert.match(sql, /vector_l2_ops/)
+    assert.doesNotMatch(sql, /vector_cosine_ops/)
+  })
+
+  it('switches the index ops class for metric: inner-product', () => {
+    const sql = buildVectorMigrationSql({ table: 'docs', column: 'emb', dimensions: 8, metric: 'inner-product' })
+    assert.match(sql, /vector_ip_ops/)
+  })
+
+  it('rejects invalid table identifiers (defense against arg injection)', () => {
+    assert.throws(
+      () => buildVectorMigrationSql({ table: 'docs"; DROP TABLE x; --', column: 'embedding', dimensions: 1 }),
+      /invalid table name/i,
+    )
+  })
+
+  it('rejects invalid column identifiers', () => {
+    assert.throws(
+      () => buildVectorMigrationSql({ table: 'docs', column: '1bad', dimensions: 1 }),
+      /invalid column name/i,
+    )
+  })
+
+  it('rejects non-positive or non-integer dimensions', () => {
+    assert.throws(() => buildVectorMigrationSql({ table: 'd', column: 'e', dimensions: 0 }),    /positive integer/)
+    assert.throws(() => buildVectorMigrationSql({ table: 'd', column: 'e', dimensions: -1 }),   /positive integer/)
+    assert.throws(() => buildVectorMigrationSql({ table: 'd', column: 'e', dimensions: 1.5 }),  /positive integer/)
+  })
+})
+
+describe('migrate — buildPrismaSchemaSnippet()', () => {
+  it('includes the Unsupported(...) column declaration', () => {
+    const snippet = buildPrismaSchemaSnippet({ table: 'documents', column: 'embedding', dimensions: 1536 })
+    assert.match(snippet, /embedding\s+Unsupported\("vector\(1536\)"\)\?/)
+  })
+
+  it('uses VectorCosineOps in cosine mode (default)', () => {
+    const snippet = buildPrismaSchemaSnippet({ table: 'documents', column: 'embedding', dimensions: 1536 })
+    assert.match(snippet, /VectorCosineOps/)
+  })
+
+  it('uses VectorL2Ops for metric: l2', () => {
+    const snippet = buildPrismaSchemaSnippet({ table: 'd', column: 'e', dimensions: 8, metric: 'l2' })
+    assert.match(snippet, /VectorL2Ops/)
+  })
+})
+
+describe('migrate — parseVectorFlag()', () => {
+  it('returns null when --vector is absent', () => {
+    assert.equal(parseVectorFlag(['add_users_table']),         null)
+    assert.equal(parseVectorFlag([]),                          null)
+  })
+
+  it('parses positional <table> <column> <dimensions>', () => {
+    const r = parseVectorFlag(['--vector', 'documents', 'embedding', '1536'])
+    assert.deepEqual(r, { table: 'documents', column: 'embedding', dimensions: 1536 })
+  })
+
+  it('also picks up an optional --metric flag', () => {
+    const r = parseVectorFlag(['--vector', 'd', 'e', '8', '--metric', 'l2'])
+    assert.deepEqual(r, { table: 'd', column: 'e', dimensions: 8, metric: 'l2' })
+  })
+
+  it('throws when positional args are missing', () => {
+    assert.throws(() => parseVectorFlag(['--vector', 'docs']),                       /requires/)
+    assert.throws(() => parseVectorFlag(['--vector', 'docs', 'embedding']),          /requires/)
+  })
+
+  it('throws on non-integer dimensions', () => {
+    assert.throws(() => parseVectorFlag(['--vector', 'd', 'e', 'oops']),             /positive integer/)
+    assert.throws(() => parseVectorFlag(['--vector', 'd', 'e', '0']),                /positive integer/)
+  })
+
+  it('throws on unknown --metric value', () => {
+    assert.throws(() => parseVectorFlag(['--vector', 'd', 'e', '8', '--metric', 'cosmos']), /cosine\|l2\|inner-product/)
+  })
+})
+
+describe('migrate — writeVectorMigration()', () => {
+  let tmpDir: string
+  const fixedNow = new Date('2026-05-11T12:34:56Z')
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-vec-migrate-'))
+  })
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes a Prisma migration to prisma/migrations/<ts>_<slug>/migration.sql when ORM is prisma', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: { '@rudderjs/orm-prisma': 'latest' },
+    }))
+    const result = await writeVectorMigration({ table: 'documents', column: 'embedding', dimensions: 1536 }, tmpDir, fixedNow)
+
+    assert.match(result.filePath, /prisma\/migrations\/20260511123456_add_embedding_vector_to_documents\/migration\.sql$/)
+    const written = await fs.readFile(result.filePath, 'utf8')
+    assert.match(written, /CREATE EXTENSION IF NOT EXISTS vector;/)
+    assert.match(written, /vector_cosine_ops/)
+  })
+
+  it('writes a Drizzle migration to drizzle/<ts>_<slug>.sql when ORM is drizzle', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: { '@rudderjs/orm-drizzle': 'latest' },
+    }))
+    const result = await writeVectorMigration({ table: 'documents', column: 'embedding', dimensions: 768 }, tmpDir, fixedNow)
+
+    assert.match(result.filePath, /drizzle\/20260511123456_add_embedding_vector_to_documents\.sql$/)
+  })
+
+  it('falls back to drizzle layout when no ORM is detected', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({}))
+    const result = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8 }, tmpDir, fixedNow)
+    assert.match(result.filePath, /drizzle\//)
+  })
+
+  it('returns the Prisma schema snippet only for Prisma projects', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: { '@rudderjs/orm-prisma': 'latest' },
+    }))
+    const r1 = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8 }, tmpDir, fixedNow)
+    assert.ok(r1.prismaSchemaSnippet)
+    assert.match(r1.prismaSchemaSnippet!, /Unsupported\("vector\(8\)"\)/)
+
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: { '@rudderjs/orm-drizzle': 'latest' },
+    }))
+    const r2 = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8 }, tmpDir, fixedNow)
+    assert.equal(r2.prismaSchemaSnippet, undefined)
+  })
+
+  it('honors explicit opts.orm even when package.json suggests something else', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: { '@rudderjs/orm-drizzle': 'latest' },
+    }))
+    const result = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8, orm: 'prisma' }, tmpDir, fixedNow)
+    assert.match(result.filePath, /prisma\/migrations\//)
+    assert.ok(result.prismaSchemaSnippet)
   })
 })

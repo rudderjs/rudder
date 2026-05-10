@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 
@@ -100,6 +101,181 @@ export function buildArgs(
   }
 }
 
+// ─── Vector migration (#B7 Phase 3) ──────────────────────
+
+/** Conservative SQL identifier check — letters, digits, underscores; must
+ *  start with a letter or underscore. Defends against the `--vector` CLI
+ *  flag receiving anything that would compose into surprising SQL. */
+function isValidIdentifier(s: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s)
+}
+
+export interface VectorMigrationOptions {
+  table:      string
+  column:     string
+  dimensions: number
+  /** ORM target — affects the migration filename layout. Auto-detected from
+   *  package.json when omitted; falls back to 'drizzle' if no ORM is detected. */
+  orm?: 'prisma' | 'drizzle'
+  /** Distance metric the HNSW index will be optimized for. Default `'cosine'`. */
+  metric?: 'cosine' | 'l2' | 'inner-product'
+}
+
+export interface VectorMigrationResult {
+  filePath: string
+  sql:      string
+  /** Schema.prisma snippet apps using Prisma should add to their model. */
+  prismaSchemaSnippet?: string
+}
+
+/**
+ * Build the raw SQL for adding a pgvector column + HNSW index. Pure;
+ * no I/O. Exported for testing and so apps can compose the snippet
+ * into a hand-rolled migration if their layout differs from the
+ * convention {@link writeVectorMigration} uses.
+ */
+export function buildVectorMigrationSql(opts: VectorMigrationOptions): string {
+  const { table, column, dimensions, metric = 'cosine' } = opts
+  if (!isValidIdentifier(table)) {
+    throw new Error(`[RudderJS ORM] make:migration --vector: invalid table name "${table}".`)
+  }
+  if (!isValidIdentifier(column)) {
+    throw new Error(`[RudderJS ORM] make:migration --vector: invalid column name "${column}".`)
+  }
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    throw new Error(`[RudderJS ORM] make:migration --vector: dimensions must be a positive integer; got ${String(dimensions)}.`)
+  }
+  const opsClass =
+    metric === 'l2'            ? 'vector_l2_ops' :
+    metric === 'inner-product' ? 'vector_ip_ops' :
+                                 'vector_cosine_ops'
+
+  return [
+    `-- Add ${dimensions}-dim pgvector column "${column}" to "${table}" (metric: ${metric})`,
+    '',
+    'CREATE EXTENSION IF NOT EXISTS vector;',
+    '',
+    `ALTER TABLE "${table}" ADD COLUMN "${column}" vector(${dimensions});`,
+    '',
+    `CREATE INDEX "${table}_${column}_hnsw_idx" ON "${table}" USING hnsw ("${column}" ${opsClass});`,
+    '',
+  ].join('\n')
+}
+
+/**
+ * Build the Prisma `schema.prisma` snippet that mirrors the SQL
+ * column. Prisma can't natively type pgvector columns; users declare
+ * `Unsupported("vector(N)")` and the cosine HNSW index alongside.
+ */
+export function buildPrismaSchemaSnippet(opts: VectorMigrationOptions): string {
+  const { column, dimensions, metric = 'cosine' } = opts
+  const opsClass =
+    metric === 'l2'            ? 'VectorL2Ops' :
+    metric === 'inner-product' ? 'VectorIpOps' :
+                                 'VectorCosineOps'
+  return [
+    '// Prisma users — add to your model:',
+    '//',
+    `//   ${column}  Unsupported("vector(${dimensions})")?`,
+    `//   @@index([${column}(ops: ${opsClass})], type: Hnsw)`,
+    '',
+    '// Prisma 5.10+ supports the Hnsw index type via the postgresqlExtensions',
+    '// preview feature — enable it in your generator block if you haven\'t:',
+    '//',
+    '//   generator client {',
+    '//     previewFeatures = ["postgresqlExtensions"]',
+    '//   }',
+    '//',
+    '//   datasource db { extensions = [vector] }',
+  ].join('\n')
+}
+
+/**
+ * UTC timestamp suitable for the migration filename prefix. Format
+ * `YYYYMMDDHHmmss` — sortable, matches Prisma's convention out of the
+ * box and works fine as a Drizzle migration tag.
+ */
+function migrationTimestamp(now: Date = new Date()): string {
+  const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
+  return (
+    now.getUTCFullYear().toString() +
+    pad(now.getUTCMonth() + 1) +
+    pad(now.getUTCDate()) +
+    pad(now.getUTCHours()) +
+    pad(now.getUTCMinutes()) +
+    pad(now.getUTCSeconds())
+  )
+}
+
+/**
+ * Write a pgvector migration file to a sensible default location for
+ * the detected ORM. Prisma migrations land under
+ * `prisma/migrations/<ts>_add_<col>_vector_to_<table>/migration.sql`
+ * (Prisma's standard layout). Drizzle migrations land under
+ * `drizzle/<ts>_add_<col>_vector_to_<table>.sql`.
+ *
+ * If the layout differs from the default, use {@link buildVectorMigrationSql}
+ * directly and write the SQL wherever your migration tooling expects.
+ */
+export async function writeVectorMigration(
+  opts: VectorMigrationOptions,
+  cwd: string = process.cwd(),
+  now: Date = new Date(),
+): Promise<VectorMigrationResult> {
+  const sql      = buildVectorMigrationSql(opts)
+  const orm      = opts.orm ?? detectORM(cwd) ?? 'drizzle'
+  const ts       = migrationTimestamp(now)
+  const slug     = `add_${opts.column}_vector_to_${opts.table}`
+  const filename = orm === 'prisma'
+    ? join('prisma', 'migrations', `${ts}_${slug}`, 'migration.sql')
+    : join('drizzle', `${ts}_${slug}.sql`)
+
+  const filePath = join(cwd, filename)
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, sql, 'utf8')
+
+  const result: VectorMigrationResult = { filePath, sql }
+  if (orm === 'prisma') {
+    result.prismaSchemaSnippet = buildPrismaSchemaSnippet(opts)
+  }
+  return result
+}
+
+/**
+ * Parse `--vector <table> <column> <dimensions>` (with optional
+ * `--metric <cosine|l2|inner-product>`) out of the `make:migration`
+ * CLI args. Returns `null` if `--vector` isn't present so the standard
+ * delegation to prisma/drizzle-kit can run.
+ *
+ * Exported for testing.
+ */
+export function parseVectorFlag(args: readonly string[]): { table: string; column: string; dimensions: number; metric?: 'cosine' | 'l2' | 'inner-product' } | null {
+  const i = args.indexOf('--vector')
+  if (i === -1) return null
+  const table  = args[i + 1]
+  const column = args[i + 2]
+  const dimStr = args[i + 3]
+  if (!table || !column || !dimStr) {
+    throw new Error('[RudderJS ORM] make:migration --vector requires <table> <column> <dimensions>; e.g. `--vector documents embedding 1536`.')
+  }
+  const dimensions = Number(dimStr)
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    throw new Error(`[RudderJS ORM] make:migration --vector: dimensions must be a positive integer; got "${dimStr}".`)
+  }
+
+  const mIdx = args.indexOf('--metric')
+  let metric: 'cosine' | 'l2' | 'inner-product' | undefined
+  if (mIdx !== -1) {
+    const v = args[mIdx + 1]
+    if (v !== 'cosine' && v !== 'l2' && v !== 'inner-product') {
+      throw new Error(`[RudderJS ORM] make:migration --metric must be one of cosine|l2|inner-product; got "${v ?? ''}".`)
+    }
+    metric = v
+  }
+
+  return metric ? { table, column, dimensions, metric } : { table, column, dimensions }
+}
+
 // ─── Command Registration ─────────────────────────────────
 
 /**
@@ -159,12 +335,28 @@ export function registerMigrateCommands(
 
   // ── make:migration ────────────────────────────────────
   rudder.command('make:migration', async (args: string[]) => {
+    // --vector <table> <column> <dimensions> [--metric cosine|l2|inner-product]
+    // short-circuits the standard prisma/drizzle-kit delegation: writes the
+    // pgvector SQL directly so apps don't have to hand-edit the file the
+    // upstream tool produces. Detected ORM picks the directory layout.
+    const vector = parseVectorFlag(args)
+    if (vector) {
+      const orm = detectORM(cwd) ?? 'drizzle'
+      const result = await writeVectorMigration({ ...vector, orm }, cwd)
+      console.log(`  Wrote ${result.filePath.replace(cwd + '/', '')}`)
+      if (result.prismaSchemaSnippet) {
+        console.log()
+        console.log(result.prismaSchemaSnippet)
+      }
+      return
+    }
+
     const name = args[0] ?? 'migration'
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'make:migration', { name })
     console.log(`  Migration "${name}" created.`)
-  }).description('Create a new migration file — pnpm rudder make:migration <name>')
+  }).description('Create a new migration file — pnpm rudder make:migration <name> | make:migration --vector <table> <column> <dim>')
 
   // ── db:push ───────────────────────────────────────────
   rudder.command('db:push', async () => {
