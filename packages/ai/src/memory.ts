@@ -16,10 +16,14 @@ function generateId(): string {
  * for tests and dev; production apps configure an ORM- or
  * embedding-backed store via `AiConfig.memory`.
  *
- * `recall()` uses case-insensitive substring matching against `fact +
- * tags`. Matches return in insertion order with no scoring (a binary
- * yes/no). Tag filters apply before the substring match — they intersect
- * with the entry's own tags.
+ * `recall()` uses case-insensitive **token-overlap** matching against
+ * `fact + tags`: the query is tokenized on non-alphanumeric boundaries
+ * and any fact sharing at least one token (≥3 chars) is returned. This
+ * lets natural-language queries like "what is my project?" pull facts
+ * containing "project" without forcing the caller to extract keywords.
+ * Matches return in insertion order with no scoring (binary yes/no).
+ * Tag filters apply before the token check — they intersect with the
+ * entry's own tags.
  */
 export class MemoryUserMemory implements UserMemory {
   private readonly entries = new Map<string, MemoryEntry>()
@@ -46,13 +50,15 @@ export class MemoryUserMemory implements UserMemory {
     query:  string,
     opts?:  { limit?: number; tags?: string[] },
   ): Promise<MemoryEntry[]> {
-    const needle  = query.toLowerCase()
-    const wanted  = opts?.tags
-    const matches = this.allForUser(userId)
+    const queryTokens = tokenize(query)
+    const wanted      = opts?.tags
+    const matches     = this.allForUser(userId)
       .filter(e => matchesTags(e, wanted))
       .filter(e => {
-        const haystack = `${e.fact} ${(e.tags ?? []).join(' ')}`.toLowerCase()
-        return haystack.includes(needle)
+        if (queryTokens.size === 0) return true
+        const factTokens = tokenize(`${e.fact} ${(e.tags ?? []).join(' ')}`)
+        for (const t of factTokens) if (queryTokens.has(t)) return true
+        return false
       })
     return capLimit(matches, opts?.limit)
   }
@@ -84,6 +90,24 @@ export class MemoryUserMemory implements UserMemory {
     }
     return out
   }
+}
+
+/**
+ * Lowercase + split on non-alphanumeric, drop tokens shorter than 3
+ * characters. Returns a Set so callers can do O(1) lookups when
+ * intersecting query tokens against fact tokens.
+ *
+ * Stopword filtering deliberately omitted — the 3-char floor already
+ * removes "is", "a", "to", "the", "we", etc. and a real stopword list
+ * is locale-dependent. The token-overlap recall is meant as a
+ * "smarter than substring" baseline, not a search engine.
+ */
+function tokenize(s: string): Set<string> {
+  const out = new Set<string>()
+  for (const tok of s.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (tok.length >= 3) out.add(tok)
+  }
+  return out
 }
 
 function matchesTags(entry: MemoryEntry, wanted: string[] | undefined): boolean {
