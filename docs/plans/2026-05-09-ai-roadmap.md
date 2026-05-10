@@ -22,7 +22,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | A3 | MCP ↔ Agent bridge ✓ | S (~3–4 d) | Closes the loop between our two AI packages. Small surface. *Shipped 2026-05-10.* |
 | A4 | User memory (Mem0-style) ✓ | M (~2 wk) | Personalized agents — clear customer ask once A1–A3 land. *Shipped 2026-05-10 (5 phases: in-memory → auto-inject → auto-extract → ORM backend → embedding backend).* |
 | A5 | Eval framework ✓ | L (~2–3 wk) | Most valuable long-term, but needs real surface area to test. *Shipped 2026-05-10 (5 phases: framework → CLI/JSON → metrics → record/replay → HTML report).* |
-| A6 | Cost / budget enforcement | M (~1 wk) | Production-only need; defer until customers are in prod. |
+| A6 | Cost / budget enforcement ✓ | M (~1 wk) | Production-only need; defer until customers are in prod. *Shipped 2026-05-10 (4 phases: pricing catalog → `BudgetStorage` interface → `withBudget` middleware → `ormBudgetStorage`).* |
 | A7 | Computer-use abstraction | L (~2 wk) | Narrowest use case + heaviest infra; last. |
 
 ### Track B — Laravel parity gaps
@@ -213,7 +213,7 @@ CLI: `pnpm rudder ai:eval [pattern]` — runs suites, writes report.
 
 ---
 
-## A6. Cost / budget enforcement
+## A6. Cost / budget enforcement — ✓ shipped 2026-05-10
 
 **Problem.** Production apps need per-user cost caps. Today users do this manually with `onUsage` middleware + a database row. Should be built in.
 
