@@ -237,6 +237,54 @@ export interface QueryBuilder<T> {
   withConstrained?(relation: string, constraintWheres: WhereClause[]): this
 
   /**
+   * pgvector similarity filter (#B7 Phase 1 — Postgres + pgvector only).
+   *
+   * Adds an `ORDER BY <column> <op> $vec` clause to the query, optionally
+   * gated by `minSimilarity` (cosine in `[-1, 1]`, higher = closer). The
+   * default operator is cosine distance (`<=>`); `'l2'` and
+   * `'inner-product'` map to `<->` and `<#>`.
+   *
+   * `query` accepts either a literal embedding (`number[]`) or a string
+   * for auto-embed via `AI.embed()` — the string form requires
+   * `opts.embedWith` (a `<provider>/<model>` id) and only works once
+   * B7 Phase 2 lands the auto-embed runtime. Phase 1 throws
+   * `MissingEmbedderError` for the string form.
+   *
+   * v1 limitation: vector queries are **standalone** — chaining with
+   * other `.where()` clauses throws. Mixed predicates land in B7
+   * Phase 2 alongside the `similaritySearch()` agent tool.
+   *
+   * Adapters that don't support pgvector (Drizzle today; Prisma against
+   * a non-Postgres connection or one without the extension) throw
+   * `VectorStorageUnsupportedError`.
+   */
+  whereVectorSimilarTo?(
+    column: string,
+    query: number[] | string,
+    opts?: {
+      minSimilarity?: number
+      metric?: 'cosine' | 'l2' | 'inner-product'
+      embedWith?: string
+    },
+  ): this
+
+  /**
+   * Project the **distance** (not similarity) between `column` and
+   * `query` as `alias` on each returned row. Adapters translate to a
+   * `SELECT <op>(...) AS alias` fragment.
+   *
+   * Lets apps render the score next to the row in their UI. Note this
+   * is *distance* — `0` means identical, `>=2` means opposite for
+   * cosine. `1 - alias` gives back similarity.
+   *
+   * Optional on the contract — adapters not implementing pgvector
+   * (today: Drizzle) can omit. Adapters that opt-in implement and
+   * throw `VectorStorageUnsupportedError` if the connection isn't a
+   * Postgres + pgvector setup.
+   */
+  selectVectorDistance?(column: string, query: number[], alias: string): this
+
+  /**
    * Append one or more aggregate eager-load requests. Adapters translate to
    * their native shape (Prisma → `_count` selector for count/exists +
    * `groupBy` second-batch for sum/min/max/avg; Drizzle → correlated subselect

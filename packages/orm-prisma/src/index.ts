@@ -38,6 +38,10 @@ import type {
   PaginatedResult,
   RelationExistencePredicate,
 } from '@rudderjs/contracts'
+import {
+  MissingEmbedderError,
+  VectorStorageUnsupportedError,
+} from '@rudderjs/orm'
 
 // ─── Prisma Query Builder ──────────────────────────────────
 
@@ -71,6 +75,19 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _orGroups: Record<string, unknown>[] = []
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
+
+  /** pgvector similarity clause (#B7 Phase 1). When set, terminal methods
+   *  switch to a `$queryRawUnsafe` path that bypasses the standard
+   *  fluent-API `findMany`. v1 disallows mixing with other where clauses. */
+  private _vectorClause: {
+    column:        string
+    query:         number[]
+    minSimilarity?: number
+    metric:        'cosine' | 'l2' | 'inner-product'
+  } | null = null
+
+  /** Optional projected distance column added to vector-query result rows. */
+  private _selectVectorDist: { column: string; query: number[]; alias: string } | null = null
 
   constructor(
     private prisma: PrismaClient,
@@ -169,6 +186,39 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
+  whereVectorSimilarTo(
+    column: string,
+    query:  number[] | string,
+    opts?:  {
+      minSimilarity?: number
+      metric?:        'cosine' | 'l2' | 'inner-product'
+      embedWith?:     string
+    },
+  ): this {
+    if (typeof query === 'string') {
+      // Auto-embed lands in B7 Phase 2; phase 1 throws either MissingEmbedderError
+      // (when embedWith is unset — guides users to add it) or a "not yet" error
+      // (when embedWith IS set — guides users to phase 2 / pre-embed for now).
+      if (!opts?.embedWith) throw new MissingEmbedderError(column)
+      throw new Error(
+        '[RudderJS ORM] Auto-embed (string query) lands in B7 Phase 2 alongside the similaritySearch() agent tool. ' +
+        'Pre-embed via AI.embed() and pass the number[] result for now.',
+      )
+    }
+    this._vectorClause = {
+      column,
+      query,
+      metric: opts?.metric ?? 'cosine',
+      ...(opts?.minSimilarity !== undefined ? { minSimilarity: opts.minSimilarity } : {}),
+    }
+    return this
+  }
+
+  selectVectorDistance(column: string, query: number[], alias: string): this {
+    this._selectVectorDist = { column, query, alias }
+    return this
+  }
+
   withConstrained(relation: string, constraintWheres: WhereClause[]): this {
     this._withConstrained.push({
       relation,
@@ -206,6 +256,104 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   /** @internal — translate a flat WhereClause[] into a single Prisma
    *  `where` filter object. Mirrors clauseToFilter(); same caveat —
    *  multiple clauses on the same column override (last-wins). */
+  /**
+   * Vector-query terminal path (#B7 Phase 1). Switches from Prisma's
+   * fluent `findMany` to `$queryRawUnsafe` because the standard API
+   * has no way to express pgvector ops (`<=>`, `<->`, `<#>`).
+   *
+   * v1 limitations (deliberate, documented):
+   * - No chaining with other `.where()` clauses — throws if any are set.
+   * - No `with()` (eager load) — throws if any are set.
+   * - No aggregates — throws if any are set.
+   * - No `orderBy` other than the implicit similarity ordering.
+   *
+   * Phase 2 lifts these alongside the `similaritySearch()` tool.
+   *
+   * Errors:
+   * - pgvector extension missing on the connection → surfaces as
+   *   {@link VectorStorageUnsupportedError} with the underlying msg.
+   * - Non-Postgres adapter (e.g. SQLite) → same error class, different hint.
+   */
+  private async _getViaVector(): Promise<Array<Record<string, unknown>>> {
+    if (this._vectorClause === null) return []  // unreachable: get() guards
+
+    if (this._wheres.length > 0 || this._orWheres.length > 0 ||
+        this._andGroups.length > 0 || this._orGroups.length > 0 ||
+        this._relationFilters.length > 0 || this._deferredPredicates.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] Chaining .where() with .whereVectorSimilarTo() lands in B7 Phase 2; ' +
+        'in v1 vector queries must be standalone (limit() + selectVectorDistance() are allowed).',
+      )
+    }
+    if (this._withs.length > 0 || this._withConstrained.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] Eager loading via .with() alongside .whereVectorSimilarTo() lands in B7 Phase 2.',
+      )
+    }
+    if (this._aggregates.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() lands in B7 Phase 2.',
+      )
+    }
+    if (this._orders.length > 0) {
+      throw new Error(
+        '[RudderJS ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
+      )
+    }
+
+    const { column, query, minSimilarity, metric } = this._vectorClause
+    const op =
+      metric === 'l2'             ? '<->' :
+      metric === 'inner-product'  ? '<#>' :
+                                    '<=>'   // cosine
+
+    const vec = vectorLiteral(query)
+    const id  = quoteIdent
+    const limit = this._limitN ?? 100
+
+    // Optional minSimilarity filter — pgvector returns DISTANCE on the
+    // operator (`<=>` is `1 - cosine_similarity`). Convert: similarity
+    // = 1 - distance; filter `(1 - distance) >= minSimilarity`.
+    const minSimWhere = minSimilarity !== undefined
+      ? `WHERE 1 - (${id(column)} ${op} '${vec}'::vector) >= ${Number(minSimilarity)}`
+      : ''
+
+    // Optional projected distance column.
+    const distSelect = this._selectVectorDist
+      ? `, (${id(this._selectVectorDist.column)} ${op} '${vectorLiteral(this._selectVectorDist.query)}'::vector) AS ${id(this._selectVectorDist.alias)}`
+      : ''
+
+    const sql =
+      `SELECT *${distSelect} FROM ${id(this.table)} ${minSimWhere} ` +
+      `ORDER BY ${id(column)} ${op} '${vec}'::vector LIMIT ${Number(limit)}`
+
+    type RawClient = { $queryRawUnsafe?: (sql: string) => Promise<unknown> }
+    const raw = this.prisma as unknown as RawClient
+    if (typeof raw.$queryRawUnsafe !== 'function') {
+      throw new VectorStorageUnsupportedError(
+        'prisma',
+        'PrismaClient is missing $queryRawUnsafe — ensure you are using @prisma/client (not a fake without raw-query support).',
+      )
+    }
+
+    try {
+      const rows = await raw.$queryRawUnsafe(sql) as Array<Record<string, unknown>>
+      return rows
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // pgvector missing — wrap with a friendly error.
+      if (/operator does not exist|type "vector" does not exist|extension "vector"|column .* does not exist/i.test(msg)) {
+        throw new VectorStorageUnsupportedError(
+          'prisma',
+          `pgvector or the column "${column}" is not available on this connection. ` +
+          'Run `CREATE EXTENSION IF NOT EXISTS vector;` and `ALTER TABLE ... ADD COLUMN ' +
+          `${column} vector(N);\` in a migration. Original: ${msg}`,
+        )
+      }
+      throw err
+    }
+  }
+
   private _wheresToPrismaFilter(clauses: WhereClause[]): Record<string, unknown> {
     if (clauses.length === 0) return {}
     return Object.assign({}, ...clauses.map(c => this.clauseToFilter(c))) as Record<string, unknown>
@@ -569,6 +717,17 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async first(): Promise<T | null> {
     this._assertNotSubBuilder()
+    if (this._vectorClause) {
+      // Vector first(): cap limit to 1, run the vector path, unwrap.
+      const prevLimit = this._limitN
+      this._limitN = 1
+      try {
+        const rows = await this._getViaVector()
+        return (rows[0] as T) ?? null
+      } finally {
+        this._limitN = prevLimit
+      }
+    }
     await this._resolveDeferred()
     const row = await this.delegate.findFirst({
       where:   this.buildWhere(),
@@ -591,6 +750,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
+    if (this._vectorClause) return this._getViaVector() as Promise<T[]>
     await this._resolveDeferred()
     const rows = await this.delegate.findMany({
       where:   this.buildWhere(),
@@ -619,6 +779,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async count(): Promise<number> {
     this._assertNotSubBuilder()
+    if (this._vectorClause) {
+      throw new Error(
+        '[RudderJS ORM] count() with .whereVectorSimilarTo() is not supported in B7 Phase 1 — ' +
+        'similarity-bounded counts add complexity for marginal value. Call get() and check .length.',
+      )
+    }
     await this._resolveDeferred()
     return this.delegate.count({ where: this.buildWhere() })
   }
@@ -895,4 +1061,35 @@ export class DatabaseProvider extends ServiceProvider {
     this.app.instance('db', adapter)
     this.app.instance('prisma', adapter.prisma)
   }
+}
+
+// ─── Vector-query SQL helpers (#B7 Phase 1) ────────────────
+
+/**
+ * Quote a SQL identifier as a double-quoted Postgres identifier. Used
+ * by the vector-query path which builds `$queryRawUnsafe` strings.
+ *
+ * pgvector accepts both `"snake_case"` and `"camelCase"` table names —
+ * Prisma typically maps Model names to camelCase delegates over
+ * snake_case `@@map`'d tables, so we accept either as a passthrough.
+ *
+ * Escapes embedded double quotes by doubling them — Postgres's SQL
+ * quoting rule. Even though `table` + `column` come from typed Model
+ * definitions in practice, defensive quoting keeps the path robust if
+ * the future migration helper passes through user input.
+ */
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`
+}
+
+/**
+ * Serialize a `number[]` into pgvector's text literal format —
+ * `'[0.1,0.2,0.3]'` — without the surrounding quotes (caller wraps
+ * in `'...'::vector`). Numbers go through `.toString()` which yields
+ * the shortest unambiguous form for finite floats. Caller is
+ * responsible for ensuring finiteness (the cast does this on write;
+ * vector queries trust the caller).
+ */
+function vectorLiteral(vec: readonly number[]): string {
+  return `[${vec.join(',')}]`
 }

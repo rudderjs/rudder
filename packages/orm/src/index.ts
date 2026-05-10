@@ -16,6 +16,12 @@ import {
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
+export { vector }                                  from './cast.js'
+export {
+  VectorDimensionMismatchError,
+  VectorStorageUnsupportedError,
+  MissingEmbedderError,
+}                                                  from './vector-errors.js'
 export { Attribute }                               from './attribute.js'
 export { JsonResource, ResourceCollection }        from './resource.js'
 export { ModelCollection }                         from './collection.js'

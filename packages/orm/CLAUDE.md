@@ -5,7 +5,8 @@ Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, f
 ## Key Files
 
 - `src/index.ts` — `Model` base class (query, CRUD, scopes, observers, serialization), decorators, `ModelRegistry`, `ModelNotFoundError`
-- `src/cast.ts` — Built-in casts (string, integer, float, boolean, date, json, encrypted) + custom `CastUsing`
+- `src/cast.ts` — Built-in casts (string, integer, float, boolean, date, json, encrypted) + custom `CastUsing` + `vector({ dimensions })` factory (#B7 Phase 1) — returns a `CastUsing` class that serializes `number[]` ⇄ pgvector text format with write-time dimension/finiteness validation
+- `src/vector-errors.ts` — `VectorDimensionMismatchError`, `VectorStorageUnsupportedError`, `MissingEmbedderError` (all carry stable `code` fields for app `instanceof` + `.code` dispatch)
 - `src/attribute.ts` — `Attribute.make({ get, set })` for computed accessors/mutators
 - `src/collection.ts` — `ModelCollection` typed array wrapper with ORM operations
 - `src/factory.ts` — `ModelFactory` for testing with states and sequences

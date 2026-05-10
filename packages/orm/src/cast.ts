@@ -1,3 +1,5 @@
+import { VectorDimensionMismatchError } from './vector-errors.js'
+
 // ─── Cast Types ────────────────────────────────────────────
 
 export type BuiltInCast =
@@ -23,6 +25,103 @@ export interface CastUsing {
 }
 
 export type CastDefinition = BuiltInCast | (new () => CastUsing)
+
+// ─── Vector cast (#B7 Phase 1) ──────────────────────────────
+
+/**
+ * Build a cast for a pgvector column. The returned class implements
+ * {@link CastUsing}: on write, validates dimension count + element
+ * finiteness and serializes `number[]` → pgvector text format
+ * (`'[0.1,0.2,...]'`); on read, parses the text format back to
+ * `number[]`.
+ *
+ * @example
+ * ```ts
+ * import { Model, vector, type CastDefinition } from '@rudderjs/orm'
+ *
+ * class Document extends Model {
+ *   static casts = {
+ *     embedding: vector({ dimensions: 1536 }),
+ *   } as const satisfies Record<string, CastDefinition>
+ *
+ *   embedding!: number[]
+ * }
+ * ```
+ *
+ * # Why a factory + class (not a string-keyed built-in cast)
+ *
+ * The built-in cast string union (`'integer'`, `'json'`, …) can't
+ * carry parameters. `vector` needs `dimensions` for write-time
+ * validation. A class with the dim baked into its closure is the
+ * cleanest fit for the existing `CastDefinition` shape.
+ *
+ * # Postgres-only
+ *
+ * The serialization format (`'[1,2,3]'`) is pgvector's. SQLite +
+ * MySQL don't have an equivalent; storing the same string in a TEXT
+ * column would compile but no vector ops would work. The cast
+ * doesn't enforce the adapter — that check lives at query time
+ * ({@link VectorStorageUnsupportedError}, raised by the adapter when
+ * pgvector isn't installed).
+ */
+export function vector(opts: { dimensions: number }): new () => CastUsing {
+  const dimensions = opts.dimensions
+  if (!Number.isInteger(dimensions) || dimensions < 1) {
+    throw new Error(
+      `[RudderJS ORM] vector({ dimensions }) requires a positive integer; got ${String(dimensions)}`,
+    )
+  }
+
+  return class VectorCast implements CastUsing {
+    get(_key: string, value: unknown): unknown {
+      if (value === null || value === undefined) return value
+      // Already an array (e.g. roundtrip from cache) — passthrough.
+      if (Array.isArray(value)) return value
+      // pgvector text format: '[0.1,0.2,0.3]'. JSON.parse handles it
+      // since pgvector emits numbers without quotes — same shape as JSON.
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value) as unknown
+          if (!Array.isArray(parsed)) {
+            throw new Error(`expected array, got ${typeof parsed}`)
+          }
+          return parsed as number[]
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          throw new Error(
+            `[RudderJS ORM] Vector cast failed to parse value (${msg}): ${value.slice(0, 80)}`,
+            { cause: err },
+          )
+        }
+      }
+      return value
+    }
+
+    set(key: string, value: unknown): unknown {
+      if (value === null || value === undefined) return value
+      if (!Array.isArray(value)) {
+        throw new Error(`[RudderJS ORM] Vector column "${key}" expected number[], got ${typeof value}`)
+      }
+      if (value.length !== dimensions) {
+        throw new VectorDimensionMismatchError(key, dimensions, value.length)
+      }
+      // pgvector rejects NaN / ±Infinity — pre-validate so the throw
+      // surfaces the column name + element index instead of a Prisma
+      // error 1000 layers deep.
+      for (let i = 0; i < value.length; i++) {
+        const n = value[i]
+        if (typeof n !== 'number' || !Number.isFinite(n)) {
+          throw new Error(
+            `[RudderJS ORM] Vector column "${key}" element ${i} must be a finite number, got ${String(n)}`,
+          )
+        }
+      }
+      // pgvector accepts the same syntax JSON arrays use — comma-separated
+      // numbers in square brackets.
+      return `[${value.join(',')}]`
+    }
+  }
+}
 
 // ─── Built-in cast helpers ──────────────────────────────────
 

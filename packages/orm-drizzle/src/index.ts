@@ -209,6 +209,29 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
+  whereVectorSimilarTo(
+    column: string,
+    _query: number[] | string,
+    _opts?: { minSimilarity?: number; metric?: 'cosine' | 'l2' | 'inner-product'; embedWith?: string },
+  ): this {
+    // Drizzle pgvector support lands in B7 Phase 3 alongside the
+    // migration helper. Phase 1 ships the Prisma path; Drizzle throws
+    // `VectorStorageUnsupportedError` so callers get a clean message
+    // instead of a TypeError on a missing method.
+    throw new VectorStorageUnsupportedError(
+      'drizzle',
+      `Vector queries on column "${column}" land in B7 Phase 3 for the Drizzle adapter. ` +
+      'Use the Prisma adapter for now, or pre-fetch via raw SQL.',
+    )
+  }
+
+  selectVectorDistance(_column: string, _query: number[], _alias: string): this {
+    throw new VectorStorageUnsupportedError(
+      'drizzle',
+      'selectVectorDistance lands in B7 Phase 3 for the Drizzle adapter.',
+    )
+  }
+
   whereRelationExists(p: RelationExistencePredicate): this {
     const Related = this.resolveTable(p.relatedTable)
     if (!Related) {
@@ -763,7 +786,7 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
 // ─── DatabaseProvider ──────────────────────────────────────
 
 import { ServiceProvider, config as appConfig } from '@rudderjs/core'
-import { ModelRegistry } from '@rudderjs/orm'
+import { ModelRegistry, VectorStorageUnsupportedError } from '@rudderjs/orm'
 
 export interface DatabaseConnectionConfig {
   driver: 'sqlite' | 'postgresql' | 'libsql'
