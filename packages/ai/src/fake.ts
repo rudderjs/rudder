@@ -26,6 +26,7 @@ import type {
   FileContent,
   ToolCall,
   FinishReason,
+  TokenUsage,
 } from './types.js'
 
 /**
@@ -46,6 +47,12 @@ export interface AiFakeStep {
   text?: string
   toolCalls?: ToolCall[]
   finishReason?: FinishReason
+  /**
+   * Token usage to surface on the `'usage'` / `'finish'` chunks. Defaults
+   * to all zeros — fine for most tests, but middlewares that depend on
+   * realistic usage (e.g. budget enforcement) need this set.
+   */
+  usage?: TokenUsage
 }
 
 /**
@@ -208,7 +215,7 @@ export class AiFake {
               content: next.text ?? '',
               ...(next.toolCalls ? { toolCalls: next.toolCalls } : {}),
             },
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            usage: next.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
           }
         }
@@ -233,7 +240,7 @@ export class AiFake {
           yield {
             type: 'finish',
             finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            usage: next.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           }
           return
         }
