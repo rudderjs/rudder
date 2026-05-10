@@ -20,3 +20,26 @@ model UserMemory {
 
   @@index([userId])
 }
+
+// `@rudderjs/ai/budget-orm` — BudgetStorage backend (#A6 Phase 4)
+//
+// Per-user spend counters for `withBudget(...)` middleware. The
+// `@@unique([userId, period, periodKey])` constraint is required —
+// without it, the find-or-create path can race and produce duplicate
+// rows, breaking cap accounting.
+
+model BudgetUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  /// 'daily' | 'monthly'
+  period    String
+  /// YYYY-MM-DD (daily) or YYYY-MM (monthly), in the configured timezone
+  periodKey String
+  /// Cumulative USD spend in this period
+  spent     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, period, periodKey])
+  @@index([userId])
+}
