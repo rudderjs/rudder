@@ -321,6 +321,115 @@ const research = toolDefinition({
 })
 ```
 
+## MCP integration
+
+`@rudderjs/ai/mcp` bridges agents and Model Context Protocol servers in both directions. Optional peer: `@modelcontextprotocol/sdk`.
+
+```ts
+import { mcpClientTools, mcpServerFromAgent } from '@rudderjs/ai/mcp'
+```
+
+### Consume MCP tools in an agent — `mcpClientTools(transport, opts?)`
+
+Connect to a remote MCP server and surface its tools to an agent. Three transport shapes:
+
+```ts
+// HTTP transport
+const tools = await mcpClientTools('https://api.example.com/mcp')
+
+// Local subprocess (stdio)
+const tools = await mcpClientTools({ command: 'npx', args: ['some-mcp-server'] })
+
+// Already-connected SDK Client (caller owns lifecycle)
+const tools = await mcpClientTools(myClient)
+
+class ResearchAgent extends Agent {
+  instructions() { return 'You can call remote MCP tools.' }
+  tools() { return tools }
+}
+```
+
+The remote server's JSON Schema flows directly to providers via the `jsonSchema` passthrough on `ToolDefinitionOptions` — no zod round-trip in either direction. When this connector owns the underlying client (URL or stdio transport), the returned array carries a non-enumerable `close()` for shutdown:
+
+```ts
+const tools = await mcpClientTools('https://api.example.com/mcp')
+// ... use tools in agent ...
+await tools.close?.()
+```
+
+Options: `filter` (drop tools by name), `namePrefix` (avoid collisions across multiple servers), `streaming` (forward MCP `notifications/progress` as `tool-update` chunks; default `true`).
+
+### Expose an Agent as an MCP server — `mcpServerFromAgent(AgentClass, opts?)`
+
+Wrap an `Agent` so external MCP clients (Claude Desktop, Cursor, etc.) can call it. Returns an `McpServer` from `@modelcontextprotocol/sdk` — connect with any SDK transport.
+
+```ts
+import { mcpServerFromAgent } from '@rudderjs/ai/mcp'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+
+const server = await mcpServerFromAgent(ResearchAgent)
+await server.connect(new StdioServerTransport())
+```
+
+Three exposure modes via `opts.expose`:
+
+- `'tools'` *(default)* — one MCP tool per `agent.tools()` entry; the wrapping agent isn't called, individual tools execute directly
+- `'agent'` — one MCP tool that runs the whole agent (`prompt(text) → response.text`); ship one agent, callable from any MCP-aware client
+- `'both'` — individual tools and the agent prompt-tool side by side
+
+Other options: `name`, `version`, `instructions` (defaults to `agent.instructions()`), `agentToolName` (renames the prompt-tool when `expose: 'agent' | 'both'`).
+
+Approval gates (`needsApproval: true`) are dropped on the MCP side — there's no MCP-protocol way to forward "this tool needs human approval" to a remote client. The gate fires only inside the wrapping agent, not for external MCP callers.
+
+## Queued prompts
+
+Push the agent run onto the queue for background execution. Returns a builder so you can configure the queue, attach success/failure callbacks, and (optionally) stream progress to a broadcast channel as it runs.
+
+Requires `@rudderjs/queue` (and `@rudderjs/broadcast` if you call `.broadcast()`).
+
+```ts
+// Fire-and-forget background run
+await new SupportAgent()
+  .queue('Help with refund request')
+  .onQueue('ai')
+  .send()
+
+// With success/failure callbacks
+await new ResearchAgent()
+  .queue('Research GPT-5 architecture')
+  .then(response => console.log('Done:', response.text))
+  .catch(error  => console.error('Failed:', error))
+  .send()
+```
+
+### Stream progress to a broadcast channel — `.broadcast(channel)`
+
+Background AI work + live UI without polling. Each stream chunk is broadcast to the channel as the job runs; the final response is broadcast as a `done` event.
+
+```ts
+await new SupportAgent()
+  .queue('Help with refund request')
+  .broadcast(`user.${userId}.support`)
+  .send()
+```
+
+Subscribers on `user.${userId}.support` receive:
+
+- `{ event: 'chunk', data: <StreamChunk> }` — one per stream chunk (text-delta, tool-call, tool-result, ...)
+- `{ event: 'done',  data: <AgentResponse> }` — final result, after the agent loop ends
+- `{ event: 'error', data: { message } }` — on failure
+
+The chunk shape matches the framework's normal `StreamChunk` types — the same `text-delta` / `tool-call` / `tool-result` shapes you'd iterate from `agent.stream()`. Frontends can subscribe to the channel and reuse their existing chunk-handling code.
+
+Pass `eventPrefix` to namespace events when the channel carries other unrelated messages:
+
+```ts
+.broadcast('shared-channel', { eventPrefix: 'agent.' })
+// emits 'agent.chunk', 'agent.done', 'agent.error'
+```
+
+**Process model.** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical RudderJS dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
+
 ## Prompt caching
 
 Mark stable parts of the prompt as cacheable. Provider adapters translate the markers to native cache primitives — Anthropic adds `cache_control: { type: 'ephemeral' }` to the last content block of each marked region, OpenAI uses `prompt_cache_key` for routing affinity, and Google translates to `cachedContent` resources via a pluggable registry. Cache hits typically save 50–90% on input tokens.

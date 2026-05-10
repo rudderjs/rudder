@@ -59,6 +59,44 @@ shadcn/ui is offered only when React and Tailwind are both selected.
 | Tailwind only | `src/index.css` with `@import "tailwindcss"` |
 | Neither | No `src/index.css`; pages use semantic CSS classes |
 
+### Non-interactive (CI / AI agents)
+
+When `create-rudder-app` runs inside an AI coding agent — Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, or Windsurf — it auto-detects via env vars and switches from interactive prompts to a flag-driven flow with structured JSON output to stdout. Agents get a parseable success/failure result instead of garbled TTY redraws.
+
+```bash
+CLAUDECODE=1 npx create-rudder-app my-app \
+  --orm=prisma --db=sqlite \
+  --packages=auth,queue,mail \
+  --frameworks=react --tailwind=true --shadcn=true \
+  --demos=contact --install=true
+```
+
+```jsonc
+// success — single line of JSON to stdout
+{ "success": true, "name": "my-app", "directory": "/abs/path/my-app", "files": 42, "agent": "claude-code", "installed": true, "providersDiscovered": true }
+
+// missing flags (exit 1)
+{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--orm", "--db"], "agent": "claude-code" }
+```
+
+Every prompt has a corresponding flag. Each flag also works in interactive mode — pass `--orm=prisma` to skip just that question, useful for CI templates.
+
+| Flag | Values |
+|---|---|
+| `--orm` | `prisma`, `drizzle`, `none` |
+| `--db` | `sqlite`, `postgresql`, `mysql` *(omit when `--orm=none`)* |
+| `--packages` | comma-separated package names; `*` = all defaults; empty string = none |
+| `--frameworks` | comma-separated: `react`, `vue`, `solid` |
+| `--primary-framework` | `react`, `vue`, `solid` *(only when >1 framework)* |
+| `--tailwind` | `true`, `false` |
+| `--shadcn` | `true`, `false` *(only when react + tailwind=true)* |
+| `--demos` | comma-separated demo ids; `*` = all gated-available; empty = none |
+| `--install` | `true`, `false` |
+| `--json` | force JSON output regardless of detection |
+| `--interactive` | force the prompt UI even inside an agent |
+
+Set `RUDDER_NONINTERACTIVE=1` in the environment to opt into JSON mode without an agent (e.g. CI scripts).
+
 ## Manual installation
 
 For an existing Vite project, install the foundation packages and wire them up by hand.
