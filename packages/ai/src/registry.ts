@@ -1,4 +1,4 @@
-import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter, FileAdapter } from './types.js'
+import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter, FileAdapter, VectorStoreAdapter } from './types.js'
 
 /**
  * Try a list of provider/model strings in order until one succeeds.
@@ -100,6 +100,19 @@ export class AiRegistry {
       )
     }
     return factory.createFiles()
+  }
+
+  /** Resolve a vector-store adapter for a provider name (#B8) */
+  static resolveVectorStores(providerName: string): VectorStoreAdapter {
+    const factory = this.getFactory(providerName)
+    if (!factory.createVectorStores) {
+      throw new Error(
+        `[RudderJS AI] Provider "${providerName}" does not support hosted vector stores. ` +
+        `Use a provider that implements createVectorStores() (e.g. openai). ` +
+        `For self-hosted RAG, use similaritySearch() against an @rudderjs/orm Model with a pgvector column.`,
+      )
+    }
+    return factory.createVectorStores()
   }
 
   /** Set available models for user selection */
