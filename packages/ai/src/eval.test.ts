@@ -3,11 +3,16 @@ import assert from 'node:assert/strict'
 
 import { Agent } from './agent.js'
 import { AiFake } from './fake.js'
+import { z } from 'zod'
 import {
   evalSuite,
   exactMatch,
   regex,
   llmJudge,
+  jsonShape,
+  semanticMatch,
+  tokenCost,
+  compose,
   runSuite,
   reportConsole,
   estimateCost,
@@ -123,6 +128,152 @@ describe('llmJudge', () => {
     const r = await m(stubResponse('whatever'), ctx())
     assert.equal(r.pass, false)
     assert.match(r.reason!, /judge failed/)
+  })
+})
+
+// ─── jsonShape ───────────────────────────────────────────
+
+describe('jsonShape', () => {
+  const Schema = z.object({ status: z.literal('ok'), code: z.number() })
+
+  it('passes when text is valid JSON matching the schema', async () => {
+    const r = await jsonShape(Schema)(stubResponse('{"status":"ok","code":200}'), ctx())
+    assert.equal(r.pass, true)
+    assert.equal(r.score, 1)
+  })
+
+  it('strips ```json fences before parsing', async () => {
+    const fenced = '```json\n{"status":"ok","code":200}\n```'
+    const r = await jsonShape(Schema)(stubResponse(fenced), ctx())
+    assert.equal(r.pass, true)
+  })
+
+  it('strips bare ``` fences too', async () => {
+    const fenced = '```\n{"status":"ok","code":200}\n```'
+    const r = await jsonShape(Schema)(stubResponse(fenced), ctx())
+    assert.equal(r.pass, true)
+  })
+
+  it('fails with parse-error reason when text is not JSON', async () => {
+    const r = await jsonShape(Schema)(stubResponse('not json at all'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /not JSON/)
+  })
+
+  it('fails with schema path + message on shape mismatch', async () => {
+    const r = await jsonShape(Schema)(stubResponse('{"status":"bad","code":"oops"}'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /schema mismatch at status/)
+  })
+})
+
+// ─── semanticMatch ───────────────────────────────────────
+
+describe('semanticMatch', () => {
+  let fake: AiFake
+  beforeEach(() => { fake = AiFake.fake() })
+  afterEach(() => fake.restore())
+
+  it('passes when reference + response embeddings are identical', async () => {
+    fake.respondWithEmbedding([
+      [1, 0, 0],   // reference
+      [1, 0, 0],   // response
+    ])
+    const r = await semanticMatch('hello')(stubResponse('hello'), ctx())
+    assert.equal(r.pass, true)
+    assert.ok((r.score ?? 0) >= 0.99)
+    assert.match(r.reason!, /cosine/)
+  })
+
+  it('fails when cosine is below threshold', async () => {
+    // 90 degrees apart = cosine 0
+    fake.respondWithEmbedding([
+      [1, 0, 0],
+      [0, 1, 0],
+    ])
+    const r = await semanticMatch('hello', { threshold: 0.5 })(stubResponse('completely unrelated'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /cosine 0\.000 < 0\.5/)
+  })
+
+  it('honors a custom threshold', async () => {
+    // Identical pair → cosine 1.0; threshold 0.999 still passes.
+    fake.respondWithEmbedding([[1, 1, 1], [1, 1, 1]])
+    const r = await semanticMatch('x', { threshold: 0.999 })(stubResponse('x'), ctx())
+    assert.equal(r.pass, true)
+  })
+
+  it('rolls embed token usage into the response side-channel', async () => {
+    fake.respondWithEmbedding([[1, 0], [1, 0]])
+    const response = stubResponse('hi')
+    await semanticMatch('hi')(response, ctx())
+    // The runner consumes via consumeExtraUsage(); we exercise the
+    // attach side-effect by checking the symbol slot is set.
+    const symbols = Object.getOwnPropertySymbols(response)
+    assert.equal(symbols.length, 1, 'extra-usage symbol should be attached')
+  })
+
+  it('fails (rather than throws) when no embedding provider is registered', async () => {
+    fake.restore()    // remove the fake — registry now has no embed-capable provider
+    const r = await semanticMatch('hi')(stubResponse('there'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /embed failed/)
+  })
+})
+
+// ─── tokenCost ───────────────────────────────────────────
+
+describe('tokenCost', () => {
+  it('passes when total tokens <= threshold', async () => {
+    const r = await tokenCost(1000)(stubResponse('hi', 487), ctx())
+    assert.equal(r.pass, true)
+    assert.match(r.reason!, /487 tokens <= 1000/)
+  })
+
+  it('fails when total tokens > threshold', async () => {
+    const r = await tokenCost(100)(stubResponse('hi', 487), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /487 tokens > 100/)
+  })
+})
+
+// ─── compose ─────────────────────────────────────────────
+
+describe('compose', () => {
+  it('passes when every metric passes', async () => {
+    const r = await compose(
+      exactMatch('hi'),
+      regex(/^h/),
+    )(stubResponse('hi'), ctx())
+    assert.equal(r.pass, true)
+    assert.equal(r.score, 1)
+  })
+
+  it('short-circuits on the first failure and surfaces its reason', async () => {
+    let secondCalled = false
+    const second: Metric = (): Awaited<ReturnType<Metric>> => {
+      secondCalled = true
+      return { pass: true, score: 1 }
+    }
+    const r = await compose(
+      exactMatch('hi'),                   // fails
+      second,
+    )(stubResponse('bye'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /expected "hi", got "bye"/)
+    assert.equal(secondCalled, false, 'second metric must not run after first failure')
+  })
+
+  it('awaits async metrics in order', async () => {
+    const order: string[] = []
+    const m = (label: string, pass: boolean): Metric => async () => {
+      await new Promise(r => setTimeout(r, 1))
+      order.push(label)
+      return { pass, score: pass ? 1 : 0 }
+    }
+    const r = await compose(m('a', true), m('b', true), m('c', false))(stubResponse('x'), ctx())
+    assert.equal(r.pass, false)
+    assert.deepEqual(order, ['a', 'b', 'c'])
   })
 })
 
@@ -303,7 +454,7 @@ describe('runSuite', () => {
     // without leaking it into the response object.
     assert.equal(report.cases[0]!.status, 'passed')
     // Side-channel should have been consumed (and deleted) — no
-    // observable JUDGE_USAGE_KEY symbol on the response.
+    // observable EXTRA_USAGE_KEY symbol on the response.
     const symbols = Object.getOwnPropertySymbols(report.cases[0]!)
     assert.equal(symbols.length, 0)
   })
@@ -380,11 +531,11 @@ describe('reportConsole', () => {
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function stubResponse(text: string) {
+function stubResponse(text: string, totalTokens = 0) {
   return {
     text,
     steps: [],
-    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    usage: { promptTokens: 0, completionTokens: totalTokens, totalTokens },
   } as unknown as Parameters<Metric>[0]
 }
 

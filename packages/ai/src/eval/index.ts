@@ -25,15 +25,17 @@
  * Run programmatically via `runSuite(suite)` from this entry, or via
  * `pnpm rudder ai:eval` once Phase 2 lands.
  *
- * Phase 1 ships three metrics: `exactMatch`, `regex`, `llmJudge`.
- * Phase 3 adds `jsonShape`, `semanticMatch`, `tokenCost`. User-defined
- * metrics work today — any `(response, ctx) => MetricResult` qualifies.
+ * Built-in metrics: `exactMatch`, `regex`, `llmJudge`, `jsonShape`,
+ * `semanticMatch`, `tokenCost`. Compose multiple via `compose(...)`.
+ * User-defined metrics work today — any `(response, ctx) =>
+ * MetricResult` qualifies.
  */
 
 import { agent } from '../agent.js'
 import type { Agent } from '../agent.js'
 import type { AgentResponse } from '../types.js'
 import { Output } from '../output.js'
+import { AI } from '../facade.js'
 import { z } from 'zod'
 
 export { reportJson } from './json-reporter.js'
@@ -236,7 +238,7 @@ export function llmJudge(criterion: string, opts: { model?: string } = {}): Metr
       // Tag the judge's token usage onto the response so the runner
       // can include it in the cost rollup. This is a side-channel
       // since the metric signature doesn't surface usage natively.
-      attachJudgeUsage(response, judgeResponse.usage.totalTokens)
+      attachExtraUsage(response, judgeResponse.usage.totalTokens)
 
       return {
         pass:   parsed.pass,
@@ -258,6 +260,161 @@ const JUDGE_INSTRUCTIONS = [
   'Be precise: only return pass=true if the criterion is plainly met.',
   'Provide a short reason for your decision (1-2 sentences) so the developer can debug failures.',
 ].join(' ')
+
+/**
+ * Strict structural assertion: parse `response.text` as JSON
+ * (stripping ```json fences) and run it through a zod schema.
+ *
+ * Pairs naturally with `Output.object({ schema })` on the agent —
+ * if the agent declares the same schema, this metric verifies the
+ * output actually conforms. Failures surface the zod issue path
+ * (e.g. `customer.email`) so debugging doesn't require a separate
+ * console log.
+ */
+export function jsonShape<T>(schema: z.ZodType<T>): Metric {
+  return (response): MetricResult => {
+    const stripped = stripCodeFences(response.text)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(stripped)
+    } catch (err) {
+      return {
+        pass:   false,
+        score:  0,
+        reason: `not JSON: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+    const result = schema.safeParse(parsed)
+    if (result.success) return { pass: true, score: 1 }
+    const first = result.error.issues[0]
+    const path  = first?.path.join('.') || '<root>'
+    return {
+      pass:   false,
+      score:  0,
+      reason: `schema mismatch at ${path}: ${first?.message ?? 'unknown error'}`,
+    }
+  }
+}
+
+/**
+ * Embedding-based fuzzy match. Embeds both `reference` and
+ * `response.text` via `AI.embed()`, computes cosine similarity,
+ * passes when >= `threshold` (default `0.85` — tighter than
+ * `EmbeddingUserMemory`'s 0.5 retrieval-rank floor since this is
+ * an assertion, not a ranking).
+ *
+ * Uses ≤ 2 embedding calls per case; embed tokens roll into the
+ * case's cost rollup via the same side-channel `llmJudge` uses.
+ *
+ * Pitfall: requires a provider that implements `createEmbedding()`
+ * (openai / google / mistral / cohere / jina). Failures (no
+ * provider, network, etc.) surface as `pass: false` with the
+ * error in `reason` — a broken embed is not a passing case.
+ */
+export function semanticMatch(
+  reference: string,
+  opts: { threshold?: number; model?: string } = {},
+): Metric {
+  const threshold = opts.threshold ?? 0.85
+  return async (response): Promise<MetricResult> => {
+    try {
+      const inputs = [reference, response.text]
+      const embedOpts: { model?: string } = {}
+      if (opts.model) embedOpts.model = opts.model
+      const result = await AI.embed(inputs, embedOpts)
+      const [refVec, respVec] = result.embeddings
+      if (!refVec || !respVec) {
+        return { pass: false, score: 0, reason: 'embed returned no vectors' }
+      }
+      attachExtraUsage(response, result.usage.totalTokens)
+
+      const score = cosineSimilarity(refVec, respVec)
+      const pass  = score >= threshold
+      return {
+        pass,
+        score,
+        reason: pass
+          ? `cosine ${score.toFixed(3)} >= ${threshold}`
+          : `cosine ${score.toFixed(3)} < ${threshold} (reference: ${JSON.stringify(reference.slice(0, 80))}${reference.length > 80 ? '…' : ''})`,
+      }
+    } catch (err) {
+      return {
+        pass:   false,
+        score:  0,
+        reason: `embed failed: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+  }
+}
+
+/**
+ * Token budget guard. Passes when `response.usage.totalTokens
+ * <= threshold`. Pair with cost-conscious agents to detect prompt-
+ * size regressions before they show up as a billing surprise.
+ *
+ * `response.usage` is the multi-step rollup, so it's meaningful
+ * even when the agent runs tools across several provider calls.
+ */
+export function tokenCost(threshold: number): Metric {
+  return (response): MetricResult => {
+    const used = response.usage.totalTokens
+    const pass = used <= threshold
+    return {
+      pass,
+      score:  pass ? 1 : 0,
+      reason: pass
+        ? `${used} tokens <= ${threshold}`
+        : `${used} tokens > ${threshold}`,
+    }
+  }
+}
+
+/**
+ * Compose multiple metrics into one assertion. Runs them in order
+ * and short-circuits on the first failure — failure `reason` is
+ * surfaced; success returns `{ pass: true, score: 1 }`.
+ *
+ * @example
+ *   { input: '…',
+ *     assert: compose(
+ *       jsonShape(SummarySchema),
+ *       tokenCost(800),
+ *     ),
+ *   }
+ */
+export function compose(...metrics: Metric[]): Metric {
+  return async (response, ctx): Promise<MetricResult> => {
+    for (const m of metrics) {
+      const result = await m(response, ctx)
+      if (!result.pass) return result
+    }
+    return { pass: true, score: 1 }
+  }
+}
+
+/** Local cosine — kept inline so `eval/` doesn't pull in `memory-embedding` (which depends on `@rudderjs/orm`). */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0
+  let dot  = 0
+  let magA = 0
+  let magB = 0
+  for (let i = 0; i < a.length; i++) {
+    const ai = a[i]!
+    const bi = b[i]!
+    dot  += ai * bi
+    magA += ai * ai
+    magB += bi * bi
+  }
+  if (magA === 0 || magB === 0) return 0
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB))
+}
+
+function stripCodeFences(text: string): string {
+  return text
+    .replace(/^```(?:json)?\s*\n?/m, '')
+    .replace(/\n?```\s*$/m, '')
+    .trim()
+}
 
 // ─── Runner ───────────────────────────────────────────────
 
@@ -341,8 +498,8 @@ async function runCase(suite: EvalSuite, c: EvalCase, name: string): Promise<Cas
     metric = { pass: false, reason: `assert threw: ${err instanceof Error ? err.message : String(err)}` }
   }
 
-  const judgeTokens = consumeJudgeUsage(response)
-  const totalTokens = response.usage.totalTokens + judgeTokens
+  const extraTokens = consumeExtraUsage(response)
+  const totalTokens = response.usage.totalTokens + extraTokens
 
   return {
     name,
@@ -351,7 +508,7 @@ async function runCase(suite: EvalSuite, c: EvalCase, name: string): Promise<Cas
     duration: performance.now() - start,
     tokens:   totalTokens,
     cost:     estimateCost(modelStringFor(ag), response.usage.promptTokens, response.usage.completionTokens)
-            + estimateCost(modelStringFor(ag), 0, judgeTokens),  // judge cost approximated as completion-side
+            + estimateCost(modelStringFor(ag), 0, extraTokens),  // judge/embed cost approximated as completion-side
   }
 }
 
@@ -465,28 +622,29 @@ function formatCost(cents: number): string {
   return `$${cents.toFixed(3)}`
 }
 
-// ─── Internal: judge usage side-channel ───────────────────
+// ─── Internal: extra-usage side-channel ───────────────────
 //
 // `Metric` doesn't surface token usage in its return type — the
-// signature is `(response, ctx) => MetricResult`. To roll the judge
-// model's tokens into the case's cost report, llmJudge stamps the
-// usage onto a Symbol-keyed slot on the response object and the
-// runner consumes it. Internal-only; never exported.
+// signature is `(response, ctx) => MetricResult`. To roll auxiliary
+// token costs (llmJudge's judge model, semanticMatch's embeddings)
+// into the case's cost report, the metrics stamp usage onto a
+// Symbol-keyed slot on the response object and the runner consumes
+// it. Internal-only; never exported.
 
-const JUDGE_USAGE_KEY = Symbol.for('rudderjs.ai.eval.judgeUsage')
+const EXTRA_USAGE_KEY = Symbol.for('rudderjs.ai.eval.extraUsage')
 
-interface JudgeUsageCarrier {
-  [JUDGE_USAGE_KEY]?: number
+interface ExtraUsageCarrier {
+  [EXTRA_USAGE_KEY]?: number
 }
 
-function attachJudgeUsage(response: AgentResponse, tokens: number): void {
-  const carrier = response as AgentResponse & JudgeUsageCarrier
-  carrier[JUDGE_USAGE_KEY] = (carrier[JUDGE_USAGE_KEY] ?? 0) + tokens
+function attachExtraUsage(response: AgentResponse, tokens: number): void {
+  const carrier = response as AgentResponse & ExtraUsageCarrier
+  carrier[EXTRA_USAGE_KEY] = (carrier[EXTRA_USAGE_KEY] ?? 0) + tokens
 }
 
-function consumeJudgeUsage(response: AgentResponse): number {
-  const carrier = response as AgentResponse & JudgeUsageCarrier
-  const tokens  = carrier[JUDGE_USAGE_KEY] ?? 0
-  delete carrier[JUDGE_USAGE_KEY]
+function consumeExtraUsage(response: AgentResponse): number {
+  const carrier = response as AgentResponse & ExtraUsageCarrier
+  const tokens  = carrier[EXTRA_USAGE_KEY] ?? 0
+  delete carrier[EXTRA_USAGE_KEY]
   return tokens
 }
