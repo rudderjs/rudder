@@ -88,7 +88,10 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
           return parsed as number[]
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          throw new Error(`[RudderJS ORM] Vector cast failed to parse value (${msg}): ${value.slice(0, 80)}`)
+          throw new Error(
+            `[RudderJS ORM] Vector cast failed to parse value (${msg}): ${value.slice(0, 80)}`,
+            { cause: err },
+          )
         }
       }
       return value
