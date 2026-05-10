@@ -53,6 +53,10 @@
       "import": "./dist/memory-orm/index.js",
       "types": "./dist/memory-orm/index.d.ts"
     },
+    "./budget-orm": {
+      "import": "./dist/budget-orm/index.js",
+      "types": "./dist/budget-orm/index.d.ts"
+    },
     "./memory-embedding": {
       "import": "./dist/memory-embedding/index.js",
       "types": "./dist/memory-embedding/index.d.ts"
