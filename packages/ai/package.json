@@ -64,6 +64,10 @@
     "./eval": {
       "import": "./dist/eval/index.js",
       "types": "./dist/eval/index.d.ts"
+    },
+    "./computer-use": {
+      "import": "./dist/computer-use/index.js",
+      "types": "./dist/computer-use/index.d.ts"
     }
   },
   "scripts": {
