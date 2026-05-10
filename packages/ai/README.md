@@ -764,21 +764,35 @@ const facts = await memory.recall('user_123', 'project')
 //=> [{ fact: 'Project name is Foo', tags: ['project'], ... }]
 ```
 
-Or declare on an agent class — the auto-inject runtime lands in the next phase, but the per-user spec is wired today:
+Or declare on an agent class to opt into auto-inject — relevant facts get prepended to the system prompt before each turn, with no plumbing on the caller's side:
 
 ```ts
 class SupportAgent extends Agent {
   remembers() {
     return {
-      user:   ctx.user.id,
-      inject: 'auto',                  // (Phase 2) prepend recalled facts to the system message
-      tags:   ['support'],
+      user:               ctx.user.id,
+      inject:            'auto',          // recall + prepend matching facts before each model call
+      tags:              ['support'],     // recall scope
+      injectLimit:       5,               // cap facts per turn
+      injectTokenBudget: 400,             // hard token cap; lowest-score facts drop first
     }
   }
 }
+
+await new SupportAgent().prompt('Where is my project deployed?')
+// system prompt sent to the model:
+//   "You are a support agent.\n\n
+//    <user-memory>\n
+//    - Project Foo deploys to fly.io us-east\n
+//    - …\n
+//    </user-memory>"
 ```
 
-**Phase 1 status:** the `UserMemory` interface, `MemoryUserMemory`, the `Agent.remembers()` declaration, the `AgentPromptOptions.memory` per-call override, and the `AiConfig.memory` config key all ship today. The auto-inject middleware (Phase 2), auto-extract middleware (Phase 3), ORM-backed `OrmUserMemory` (Phase 4), and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
+The auto-cascade runs in `Agent.prompt` / `Agent.stream`, before conversation persistence. `withMemoryInject(spec)` is also exported so you can drop it into `agent.middleware()` manually if you want full control.
+
+**Continuation note:** when you pass `options.messages` (e.g. resuming after a client-tool round-trip), auto-inject is skipped — the system prompt was already augmented on the original turn, re-injecting would duplicate the block.
+
+**Phase 1 + 2 status:** interface, in-process backend, per-call/class declaration, and auto-inject runtime ship today. Auto-extract middleware (Phase 3), ORM-backed `OrmUserMemory` (Phase 4), and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
 
 ### Model Selection
 

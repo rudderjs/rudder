@@ -11,6 +11,8 @@ import {
   runWithPersistence,
   runWithPersistenceStreaming,
 } from './conversation-persistence.js'
+import { resolveRemembersSpec } from './memory.js'
+import { withMemoryInject } from './memory-inject.js'
 import type { SubAgentPauseKind, SubAgentRunSnapshot, SubAgentRunStore } from './sub-agent-run-store.js'
 import {
   runOnConfig,
@@ -221,18 +223,24 @@ export abstract class Agent {
 
   /** Run the agent with a prompt (non-streaming) */
   async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
-    const spec = await resolveAutoPersistSpec(() => this.conversational(), options?.conversation)
+    // Memory auto-cascade — augments `options` with the memory-inject
+    // middleware (if any). Does so BEFORE conversation persistence so
+    // the persisted history flows in unchanged and the system message
+    // is the only thing that grows.
+    const effOptions = await prepareOptionsWithMemoryAutoInject(this, options)
+
+    const spec = await resolveAutoPersistSpec(() => this.conversational(), effOptions?.conversation)
     if (spec) {
       return runWithPersistence(
         spec,
         this.constructor.name,
         resolveConversationStore,
         input,
-        options,
-        (effOptions) => runAgentLoop(this, input, effOptions),
+        effOptions,
+        (innerOptions) => runAgentLoop(this, input, innerOptions),
       )
     }
-    return runAgentLoop(this, input, options)
+    return runAgentLoop(this, input, effOptions)
   }
 
   /** Run the agent with a prompt (streaming) */
@@ -836,34 +844,42 @@ function runStreamWithMaybeAutoPersist(
   input:   string,
   options: AgentPromptOptions | undefined,
 ): AgentStreamResponse {
-  // Synchronous fast path — most agents don't override `conversational()`,
-  // so we'd pay an extra microtask boundary on every streaming call. Bail
-  // out cheaply when we can prove the call is stateless.
-  const declared = a.conversational()
+  // Synchronous fast path — most agents override neither `conversational()`
+  // nor `remembers()`. Skip the async outer entirely when we can prove
+  // both are no-ops, sparing a microtask boundary per streaming call.
+  const declaredConv = a.conversational()
+  const declaredMem  = a.remembers()
   const isFast = (
-    options?.conversation === false ||
-    (declared === false && (options?.conversation === undefined))
+    (options?.conversation === false ||
+      (declaredConv === false && options?.conversation === undefined))
+    && (options?.memory === false ||
+      (declaredMem === false && options?.memory === undefined) ||
+      options?.messages !== undefined)
   )
   if (isFast) {
     return runAgentLoopStreaming(a, input, options)
   }
 
-  // Async path — resolve the spec, then dispatch to the persisted or plain stream.
+  // Async path — resolve memory + conversation specs, then dispatch.
   let resolveResp: (r: AgentResponse) => void
   let rejectResp:  (e: unknown) => void
   const responsePromise = new Promise<AgentResponse>((res, rej) => { resolveResp = res; rejectResp = rej })
 
   async function* outer(): AsyncIterable<StreamChunk> {
+    let effOptions: AgentPromptOptions | undefined
     let spec: ConversationalSpec | null
     try {
-      spec = await resolveAutoPersistSpec(() => a.conversational(), options?.conversation)
+      // Memory auto-cascade BEFORE conversation persistence — same
+      // ordering as the non-streaming `Agent.prompt` path.
+      effOptions = await prepareOptionsWithMemoryAutoInject(a, options)
+      spec = await resolveAutoPersistSpec(() => a.conversational(), effOptions?.conversation)
     } catch (err) {
       rejectResp!(err)
       throw err
     }
 
     if (!spec) {
-      const inner = runAgentLoopStreaming(a, input, options)
+      const inner = runAgentLoopStreaming(a, input, effOptions)
       try {
         for await (const chunk of inner.stream) yield chunk
       } catch (err) {
@@ -885,8 +901,8 @@ function runStreamWithMaybeAutoPersist(
       a.constructor.name,
       resolveConversationStore,
       input,
-      options,
-      (effOptions) => runAgentLoopStreaming(a, input, effOptions),
+      effOptions,
+      (innerOptions) => runAgentLoopStreaming(a, input, innerOptions),
     )
 
     try {
@@ -915,10 +931,54 @@ function getTools(a: Agent): AnyTool[] {
     : []
 }
 
-function getMiddleware(a: Agent): AiMiddleware[] {
-  return 'middleware' in a && typeof (a as any).middleware === 'function'
+/**
+ * Internal symbol used to plumb auto-installed middlewares (today:
+ * memory-inject; future: budget-tracker, etc.) through the public
+ * `AgentPromptOptions` without polluting its surface. Resolution
+ * happens at the `Agent.prompt` / `Agent.stream` boundary; the loop
+ * just appends them to the user's `agent.middleware()` array.
+ */
+const EXTRA_MIDDLEWARES = Symbol.for('rudderjs.ai.extraMiddlewares')
+
+interface ExtraMiddlewareOptions {
+  [EXTRA_MIDDLEWARES]?: AiMiddleware[]
+}
+
+function getMiddleware(a: Agent, options?: AgentPromptOptions): AiMiddleware[] {
+  const own = 'middleware' in a && typeof (a as any).middleware === 'function'
     ? (a as unknown as HasMiddleware).middleware()
     : []
+  const extras = (options as (AgentPromptOptions & ExtraMiddlewareOptions) | undefined)?.[EXTRA_MIDDLEWARES] ?? []
+  return extras.length > 0 ? [...own, ...extras] : own
+}
+
+/**
+ * Resolve the effective `remembers()` spec and, when `inject: 'auto'`,
+ * append a {@link withMemoryInject} middleware to the options' hidden
+ * extras list. Skips:
+ * - continuation calls (`options.messages` set) — the system message
+ *   was already augmented on the original `prompt()`, re-injecting
+ *   would duplicate the block on every tool round-trip.
+ * - any spec where `inject` is not `'auto'`.
+ *
+ * Returns options unchanged when no auto-inject is needed so the
+ * downstream conversational/loop path sees the original reference.
+ */
+async function prepareOptionsWithMemoryAutoInject(
+  a:        Agent,
+  options?: AgentPromptOptions,
+): Promise<AgentPromptOptions | undefined> {
+  if (options?.messages) return options
+
+  const spec = await resolveRemembersSpec(() => a.remembers(), options?.memory)
+  if (!spec || spec.inject !== 'auto') return options
+
+  const mw      = withMemoryInject(spec)
+  const current = (options as (AgentPromptOptions & ExtraMiddlewareOptions) | undefined)?.[EXTRA_MIDDLEWARES] ?? []
+  return {
+    ...options,
+    [EXTRA_MIDDLEWARES]: [...current, mw],
+  } as AgentPromptOptions
 }
 
 function createMiddlewareContext(
@@ -1791,7 +1851,7 @@ async function initializeLoop(
   const modelString = a.model() ?? AiRegistry.getDefault()
   const [providerName] = AiRegistry.parseModelString(modelString)
   const tools = getTools(a)
-  const middlewares = getMiddleware(a)
+  const middlewares = getMiddleware(a, options)
   const toolSchemas = buildToolSchemas(tools)
   const toolMap = buildToolMap(tools)
 

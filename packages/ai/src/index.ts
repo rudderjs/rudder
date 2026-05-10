@@ -127,6 +127,8 @@ export { MemoryConversationStore } from './conversation.js'
 // User Memory (#A4)
 export { MemoryUserMemory, resolveRemembersSpec } from './memory.js'
 export type { UserMemoryLookup } from './memory.js'
+export { withMemoryInject } from './memory-inject.js'
+export type { MemoryInjectOptions } from './memory-inject.js'
 
 // Sub-agent run store (asTool streaming + suspend)
 export {
