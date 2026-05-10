@@ -159,7 +159,7 @@ Surface:
   1. `query` → `AI.embed(query, { model: embedWith })` → vector
   2. `model.query().whereVectorSimilarTo(column, vector, { metric, minSimilarity }).selectVectorDistance(column, vector, '<internal alias>').limit(limit).get()`
   3. Read distance from each row at the internal alias; map to `{ row, similarity: 1 - distance }` shape (cosine convention; documented for non-cosine metrics).
-- `toModelOutput`: default `results => results.map(({ row, similarity }) => \`(${similarity.toFixed(2)}) ${JSON.stringify(row.toJSON())}\`).join('\n')`. Empty-state returns `"No similar <Model> records found."`. Override via `projectResult`.
+- `toModelOutput`: default formatter renders `(0.85) {json}` per hit, newline-joined (the JS shape is `results.map(({ row, similarity }) => format(similarity, row.toJSON())).join('\n')`). Empty-state returns `"No similar <ModelName> records found."`. Override via `projectResult`.
 
 `@rudderjs/orm-prisma` changes:
 
@@ -184,8 +184,8 @@ Surface:
 
 `@rudderjs/ai`:
 
-- `similaritySearch({ ..., scope })` accepts an optional `(q: SimilaritySearchQueryBuilder&lt;T&gt;) => SimilaritySearchQueryBuilder&lt;T&gt;` callback. `scope(model.query())` runs before `whereVectorSimilarTo` attaches.
-- `SimilaritySearchQueryBuilder&lt;T&gt;` widened with `where(col, op?, val)` / `orWhere(...)` / `withTrashed?()` / `onlyTrashed?()` overloads so the scope callback gets autocomplete on the methods that actually compose. Mirrors `@rudderjs/contracts`'s `QueryBuilder&lt;T&gt;` subset; main entry stays free of contracts runtime dep.
+- `similaritySearch({ ..., scope })` accepts an optional `(q: SimilaritySearchQueryBuilder<T>) => SimilaritySearchQueryBuilder<T>` callback. `scope(model.query())` runs before `whereVectorSimilarTo` attaches.
+- `SimilaritySearchQueryBuilder<T>` widened with `where(col, op?, val)` / `orWhere(...)` / `withTrashed?()` / `onlyTrashed?()` overloads so the scope callback gets autocomplete on the methods that actually compose. Mirrors `@rudderjs/contracts`'s `QueryBuilder<T>` subset; main entry stays free of contracts runtime dep.
 - New exported alias `SimilaritySearchWhereOperator` mirrors contracts' `WhereOperator` for typing scope arguments without importing `@rudderjs/contracts`.
 
 `@rudderjs/contracts`:
