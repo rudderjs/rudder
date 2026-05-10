@@ -245,14 +245,15 @@ export interface QueryBuilder<T> {
    * `'inner-product'` map to `<->` and `<#>`.
    *
    * `query` accepts either a literal embedding (`number[]`) or a string
-   * for auto-embed via `AI.embed()` — the string form requires
-   * `opts.embedWith` (a `<provider>/<model>` id) and only works once
-   * B7 Phase 2 lands the auto-embed runtime. Phase 1 throws
-   * `MissingEmbedderError` for the string form.
+   * for auto-embed via `AI.embed()` (#B7 Phase 2). The string form
+   * requires `opts.embedWith` (a `<provider>/<model>` id); omitting it
+   * throws `MissingEmbedderError`. Auto-embed resolves at terminal time
+   * via the optional `@rudderjs/ai` peer.
    *
-   * v1 limitation: vector queries are **standalone** — chaining with
-   * other `.where()` clauses throws. Mixed predicates land in B7
-   * Phase 2 alongside the `similaritySearch()` agent tool.
+   * Chained `.where()` / `.orWhere()` clauses compose into the SQL
+   * (#B7 Phase 2.5) — flat predicates work; `whereGroup` and direct
+   * `whereHas` still throw. Polymorphic / pivot relations route through
+   * pre-resolved `IN` clauses and work transparently.
    *
    * Adapters that don't support pgvector (Drizzle today; Prisma against
    * a non-Postgres connection or one without the extension) throw

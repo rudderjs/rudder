@@ -1,6 +1,6 @@
 # B7 — Vector storage in `@rudderjs/orm` + `similaritySearch` tool
 
-**Status:** Phase 1 ✓ shipped (#374); Phase 2 in flight on `feat-ai-similarity-search`.
+**Status:** Phase 1 ✓ (#374), Phase 2 ✓ (#375); Phase 2.5 in flight on `feat-b7-scope-and-chain`.
 **Date:** 2026-05-10
 **Roadmap item:** B7 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 4 PR-sized phases (3 → 4 after Phase 2/2.5 split).
@@ -10,8 +10,8 @@
 | Phase | What ships | PR | State |
 |---|---|---|---|
 | 1   | `vector()` cast + `whereVectorSimilarTo()` / `selectVectorDistance()` query builder helpers — **Prisma + pgvector only** | #374 | ✓ shipped |
-| 2   | `similaritySearch({ model, column, embedWith, ... })` agent tool factory in `@rudderjs/ai`; auto-embed in `whereVectorSimilarTo` (string `query` + `embedWith`) lifted in `@rudderjs/orm-prisma` via lazy `@rudderjs/ai` optional peer | — | in flight |
-| 2.5 | Lift the standalone-query restriction on `whereVectorSimilarTo` — compose chained `.where()` clauses with the vector clause as SQL fragments; add `scope: (q) => q` to `similaritySearch` | — | not started |
+| 2   | `similaritySearch({ model, column, embedWith, ... })` agent tool factory in `@rudderjs/ai`; auto-embed in `whereVectorSimilarTo` (string `query` + `embedWith`) lifted in `@rudderjs/orm-prisma` via lazy `@rudderjs/ai` optional peer | #375 | ✓ shipped |
+| 2.5 | Lift the standalone-query restriction on `whereVectorSimilarTo` — flat `.where()` / `.orWhere()` chains compose into the vector SQL with positional params; `scope: (q) => q` callback added to `similaritySearch` | — | in flight |
 | 3   | Drizzle adapter impl + `pnpm rudder make:migration --vector <table> <column> <dim>` helper | — | not started |
 
 After phase 3, B7 is complete. Next Track B parity item is **B8 (hosted vector stores + `FileSearch` provider tool)** — wraps OpenAI/Gemini hosted stores. B7 must land first because B8's local-fallback path will reuse B7's primitives.
@@ -174,11 +174,30 @@ Surface:
 
 ### Phase 2.5 — Lift the standalone-query restriction + `scope` callback
 
-Today, `whereVectorSimilarTo` throws if mixed with `.where()`, `.with()`, `.orderBy()`, `withCount`, etc. Phase 2.5 lifts the `.where()` chaining lock and adds a `scope` parameter to `similaritySearch`. Other restrictions (`.with()`, aggregates, redundant `.orderBy()`) stay — eager loading + raw SQL is its own design problem and not load-bearing for RAG.
+`@rudderjs/orm-prisma`:
 
-- `packages/orm-prisma/src/index.ts` — extend `_getViaVector` to compose chained where-clauses as SQL fragments. Each `WhereClause` (column, operator, value) becomes `"col" op $param` with parameter binding. Reuse `clauseToFilter` semantics where possible; for shapes Prisma can express but raw SQL can't easily mirror (nested AND/OR groups, `whereGroup`), document the gap and consider a CTE wrapper.
-- `packages/ai/src/similarity-search.ts` — add `scope?: (q: QueryBuilder<TInstance>) => QueryBuilder<TInstance>` to options. The tool calls `scope(model.query())` instead of `model.query()` before attaching the vector clause. Type the QB through the `SimilaritySearchQueryBuilder` structural type widened with `where()` / `whereIn()` etc. — or import the real `QueryBuilder` from `@rudderjs/contracts`.
-- **Tests:** `whereVectorSimilarTo` chained with `.where(col, op, val)` yields a SELECT with both predicates; nested AND/OR groups behave the same as the standard fluent path; tenant-scoped `similaritySearch` returns only matching rows. Recall is preserved (the chain pre-filters in SQL — no over-fetching).
+- `_getViaVector` composes chained `_wheres` / `_orWheres` into the vector SQL via a new `clauseToSql(clause, params[])` helper that emits `"col" op $N` fragments and binds values positionally to `$queryRawUnsafe(sql, ...params)`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`. `null` values on `=`/`!=` translate to `IS NULL` / `IS NOT NULL`. Empty `IN` short-circuits to `FALSE`; empty `NOT IN` to `TRUE`.
+- `_resolveDeferred()` runs first so polymorphic / pivot relation predicates flow through as flat `IN` / `NOT IN` clauses on `_wheres` — they compose transparently.
+- Soft-delete scoping (`withTrashed` / `onlyTrashed`) flows into the SQL alongside user wheres.
+- Vector min-similarity stays inlined (numeric, safe). User-supplied values bind positionally — defense-in-depth test asserts `'; DROP TABLE documents; --` payload never appears in the SQL string.
+- **Still throws (out of scope for 2.5):** `.with()` (eager load), `whereGroup` / `orWhereGroup` (sub-builders pre-flatten to Prisma filter objects so the original `WhereClause[]` is lost), direct `whereHas` / `whereDoesntHave` (Prisma `some`/`none` filters don't have a flat SQL form), aggregates, redundant `.orderBy()`. Documented in the throw messages.
+
+`@rudderjs/ai`:
+
+- `similaritySearch({ ..., scope })` accepts an optional `(q: SimilaritySearchQueryBuilder&lt;T&gt;) => SimilaritySearchQueryBuilder&lt;T&gt;` callback. `scope(model.query())` runs before `whereVectorSimilarTo` attaches.
+- `SimilaritySearchQueryBuilder&lt;T&gt;` widened with `where(col, op?, val)` / `orWhere(...)` / `withTrashed?()` / `onlyTrashed?()` overloads so the scope callback gets autocomplete on the methods that actually compose. Mirrors `@rudderjs/contracts`'s `QueryBuilder&lt;T&gt;` subset; main entry stays free of contracts runtime dep.
+- New exported alias `SimilaritySearchWhereOperator` mirrors contracts' `WhereOperator` for typing scope arguments without importing `@rudderjs/contracts`.
+
+`@rudderjs/contracts`:
+
+- JSDoc on `whereVectorSimilarTo` updated: "Chained `.where()` / `.orWhere()` clauses compose into the SQL (Phase 2.5) — flat predicates work; `whereGroup` and direct `whereHas` still throw."
+
+**Tests:**
+
+- `packages/orm-prisma/src/vector.test.ts` — replaced the v1-restriction throw assertion for `.where()` chains with 11 new tests covering: single `.where()`, minSim + where AND-joined, all six comparison operators in one chain, `IS NULL` / `IS NOT NULL` (no binding), `IN` with positional params, empty `IN` → `FALSE`, empty `NOT IN` → `TRUE`, `LIKE`, `.orWhere()` parenthesized OR block, defense-in-depth SQL injection check. The remaining throws (`.with()`, `.orderBy()`, `whereGroup`, `count()`) keep their existing tests.
+- `packages/ai/src/similarity-search.test.ts` — 5 new tests under `'similaritySearch — scope callback'`: scope applies before vector clause, WhereOperator overload forwards through scope, `.orWhere()` works, no-scope keeps Phase 2 behavior, identity scope `(q) => q` works.
+
+**Recall preserved.** Because the chain pre-filters in SQL, there's no over-fetching trick — `LIMIT N` returns the top-K rows that match BOTH the vector neighbourhood and the scope predicate.
 
 ### Phase 3 — Drizzle adapter + migration helper
 

@@ -60,10 +60,33 @@ export interface SimilaritySearchModel<TInstance> {
 }
 
 /**
+ * WhereOperator strings the `scope` callback may pass to `.where()`.
+ * Mirrors `@rudderjs/contracts`'s `WhereOperator`. Duplicated here so the
+ * main entry has no compile-time `@rudderjs/contracts` dep.
+ */
+export type SimilaritySearchWhereOperator =
+  | '=' | '!=' | '>' | '>=' | '<' | '<='
+  | 'LIKE' | 'NOT LIKE'
+  | 'IN' | 'NOT IN'
+
+/**
  * Structural type for the QueryBuilder methods similaritySearch needs.
- * Mirrors a subset of `@rudderjs/contracts`'s `QueryBuilder<T>`.
+ * Mirrors a subset of `@rudderjs/contracts`'s `QueryBuilder<T>` so apps
+ * writing a `scope` callback get autocomplete on the methods that actually
+ * compose with `whereVectorSimilarTo` (#B7 Phase 2.5):
+ *
+ * - `.where()` / `.orWhere()` chains compose into the SQL with positional
+ *   parameter binding.
+ * - `.with()` / `.orderBy()` / `.whereGroup()` / `.whereHas()` still throw
+ *   when paired with a vector clause — out of scope for `scope`.
  */
 export interface SimilaritySearchQueryBuilder<TInstance> {
+  where(column: string, value: unknown): SimilaritySearchQueryBuilder<TInstance>
+  where(column: string, operator: SimilaritySearchWhereOperator, value: unknown): SimilaritySearchQueryBuilder<TInstance>
+  orWhere(column: string, value: unknown): SimilaritySearchQueryBuilder<TInstance>
+  orWhere(column: string, operator: SimilaritySearchWhereOperator, value: unknown): SimilaritySearchQueryBuilder<TInstance>
+  withTrashed?(): SimilaritySearchQueryBuilder<TInstance>
+  onlyTrashed?(): SimilaritySearchQueryBuilder<TInstance>
   whereVectorSimilarTo?(
     column: string,
     query:  number[] | string,
@@ -112,6 +135,29 @@ export interface SimilaritySearchOptions<TInstance> {
   limit?: number
 
   /**
+   * Pre-filter the query before the vector clause attaches. Receives a
+   * fresh `model.query()` builder; return the chained builder. Use for
+   * tenancy (`.where('tenantId', userId)`), publication state
+   * (`.where('published', true)`), or any flat predicate that should
+   * narrow the search corpus.
+   *
+   * **Phase 2.5 limits:** flat `.where()` / `.orWhere()` chains compose
+   * into the SQL. `whereGroup` / `whereHas` / `with()` still throw at
+   * terminal time — keep the scope flat.
+   *
+   * @example
+   * ```ts
+   * similaritySearch({
+   *   model:     KnowledgeArticle,
+   *   column:    'embedding',
+   *   embedWith: 'openai/text-embedding-3-small',
+   *   scope:     q => q.where('tenantId', currentTenant).where('published', true),
+   * })
+   * ```
+   */
+  scope?: (q: SimilaritySearchQueryBuilder<TInstance>) => SimilaritySearchQueryBuilder<TInstance>
+
+  /**
    * Override the tool name. Default
    * `similarity_search_<model_name_lowercase>`.
    */
@@ -149,6 +195,7 @@ export function similaritySearch<TInstance>(
     name,
     description,
     projectResult,
+    scope,
   } = opts
 
   if (!embedWith || typeof embedWith !== 'string') {
@@ -186,9 +233,10 @@ export function similaritySearch<TInstance>(
         )
       }
 
-      const qb = model.query()
-      const whereVec = qb.whereVectorSimilarTo
-      const selectDist = qb.selectVectorDistance
+      const baseQb = model.query()
+      const scopedQb = scope ? scope(baseQb) : baseQb
+      const whereVec = scopedQb.whereVectorSimilarTo
+      const selectDist = scopedQb.selectVectorDistance
       if (typeof whereVec !== 'function' || typeof selectDist !== 'function') {
         throw new Error(
           `[RudderJS AI] similaritySearch: ${model.name}'s ORM adapter does not implement vector queries. ` +
@@ -199,7 +247,7 @@ export function similaritySearch<TInstance>(
       const vectorOpts: { metric: 'cosine' | 'l2' | 'inner-product'; minSimilarity?: number } = { metric }
       if (minSimilarity !== undefined) vectorOpts.minSimilarity = minSimilarity
 
-      const filtered = whereVec.call(qb, column, vector, vectorOpts)
+      const filtered = whereVec.call(scopedQb, column, vector, vectorOpts)
       const projected = selectDist.call(filtered, column, vector, SIMILARITY_DISTANCE_ALIAS)
       const rows = await projected.limit(limit).get()
 

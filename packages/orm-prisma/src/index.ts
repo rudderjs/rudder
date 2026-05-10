@@ -268,17 +268,25 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
    *  `where` filter object. Mirrors clauseToFilter(); same caveat —
    *  multiple clauses on the same column override (last-wins). */
   /**
-   * Vector-query terminal path (#B7 Phase 1). Switches from Prisma's
-   * fluent `findMany` to `$queryRawUnsafe` because the standard API
-   * has no way to express pgvector ops (`<=>`, `<->`, `<#>`).
+   * Vector-query terminal path (#B7 Phase 1, lifted in Phase 2.5).
+   * Switches from Prisma's fluent `findMany` to `$queryRawUnsafe` because
+   * the standard API has no way to express pgvector ops (`<=>`, `<->`,
+   * `<#>`).
    *
-   * v1 limitations (deliberate, documented):
-   * - No chaining with other `.where()` clauses — throws if any are set.
-   * - No `with()` (eager load) — throws if any are set.
-   * - No aggregates — throws if any are set.
-   * - No `orderBy` other than the implicit similarity ordering.
+   * Phase 2.5 lifts the standalone-only restriction on flat
+   * `.where()` / `.orWhere()` chains — those compose into the SQL via
+   * {@link clauseToSql} with positional `$N` parameters. Soft-delete
+   * scoping (`withTrashed` / `onlyTrashed`) flows in too. Polymorphic /
+   * pivot relations resolve through {@link _resolveDeferred} into flat
+   * `IN` / `NOT IN` clauses ahead of SQL composition.
    *
-   * Phase 2 lifts these alongside the `similaritySearch()` tool.
+   * Still unsupported (throws):
+   * - `whereGroup` / `orWhereGroup` — sub-builders pre-flatten to Prisma
+   *   filter objects; the original `WhereClause[]` is lost.
+   * - `whereHas` / `whereDoesntHave` (direct relations) — translate to
+   *   Prisma `some` / `none` filters that don't have a flat SQL form.
+   * - `with()` (eager load), aggregates, `orderBy()` — same reasons as
+   *   Phase 1.
    *
    * Errors:
    * - pgvector extension missing on the connection → surfaces as
@@ -288,22 +296,27 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private async _getViaVector(): Promise<Array<Record<string, unknown>>> {
     if (this._vectorClause === null) return []  // unreachable: get() guards
 
-    if (this._wheres.length > 0 || this._orWheres.length > 0 ||
-        this._andGroups.length > 0 || this._orGroups.length > 0 ||
-        this._relationFilters.length > 0 || this._deferredPredicates.length > 0) {
+    // Resolve polymorphic / pivot predicates first — they translate to
+    // flat `IN` / `NOT IN` clauses pushed onto `_wheres`, which the SQL
+    // composer below picks up like any other where.
+    await this._resolveDeferred()
+
+    if (this._andGroups.length > 0 || this._orGroups.length > 0 ||
+        this._relationFilters.length > 0) {
       throw new Error(
-        '[RudderJS ORM] Chaining .where() with .whereVectorSimilarTo() lands in B7 Phase 2; ' +
-        'in v1 vector queries must be standalone (limit() + selectVectorDistance() are allowed).',
+        '[RudderJS ORM] whereGroup() / orWhereGroup() / direct whereHas() with .whereVectorSimilarTo() ' +
+        'is not yet supported — use flat .where(col, op, val) / .orWhere() chains for now. ' +
+        'Polymorphic / pivot relations route through whereHas internally and DO work since they pre-resolve to IN clauses.',
       )
     }
     if (this._withs.length > 0 || this._withConstrained.length > 0) {
       throw new Error(
-        '[RudderJS ORM] Eager loading via .with() alongside .whereVectorSimilarTo() lands in B7 Phase 2.',
+        '[RudderJS ORM] Eager loading via .with() alongside .whereVectorSimilarTo() is not yet supported.',
       )
     }
     if (this._aggregates.length > 0) {
       throw new Error(
-        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() lands in B7 Phase 2.',
+        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
       )
     }
     if (this._orders.length > 0) {
@@ -326,12 +339,32 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     const id  = quoteIdent
     const limit = this._limitN ?? 100
 
-    // Optional minSimilarity filter — pgvector returns DISTANCE on the
-    // operator (`<=>` is `1 - cosine_similarity`). Convert: similarity
-    // = 1 - distance; filter `(1 - distance) >= minSimilarity`.
-    const minSimWhere = minSimilarity !== undefined
-      ? `WHERE 1 - (${id(column)} ${op} '${vec}'::vector) >= ${Number(minSimilarity)}`
-      : ''
+    // Compose the WHERE chain. Vector min-similarity is inlined (numeric,
+    // safe). User-supplied where values bind through positional `$N`
+    // placeholders so $queryRawUnsafe doesn't string-interpolate them.
+    const params: unknown[] = []
+    const whereParts: string[] = []
+
+    if (minSimilarity !== undefined) {
+      whereParts.push(
+        `1 - (${id(column)} ${op} '${vec}'::vector) >= ${Number(minSimilarity)}`,
+      )
+    }
+
+    const andClauses: string[] = this._wheres.map(c => this.clauseToSql(c, params))
+    if (this._softDeletes && !this._withTrashed) {
+      andClauses.push(this._onlyTrashed
+        ? `${id('deletedAt')} IS NOT NULL`
+        : `${id('deletedAt')} IS NULL`)
+    }
+    if (andClauses.length > 0) whereParts.push(andClauses.join(' AND '))
+
+    if (this._orWheres.length > 0) {
+      const orClauses = this._orWheres.map(c => this.clauseToSql(c, params))
+      whereParts.push(`(${orClauses.join(' OR ')})`)
+    }
+
+    const whereSql = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''
 
     // Optional projected distance column.
     const distSelect = this._selectVectorDist
@@ -339,10 +372,10 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       : ''
 
     const sql =
-      `SELECT *${distSelect} FROM ${id(this.table)} ${minSimWhere} ` +
+      `SELECT *${distSelect} FROM ${id(this.table)} ${whereSql} ` +
       `ORDER BY ${id(column)} ${op} '${vec}'::vector LIMIT ${Number(limit)}`
 
-    type RawClient = { $queryRawUnsafe?: (sql: string) => Promise<unknown> }
+    type RawClient = { $queryRawUnsafe?: (sql: string, ...args: unknown[]) => Promise<unknown> }
     const raw = this.prisma as unknown as RawClient
     if (typeof raw.$queryRawUnsafe !== 'function') {
       throw new VectorStorageUnsupportedError(
@@ -352,7 +385,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     }
 
     try {
-      const rows = await raw.$queryRawUnsafe(sql) as Array<Record<string, unknown>>
+      const rows = await raw.$queryRawUnsafe(sql, ...params) as Array<Record<string, unknown>>
       return rows
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -432,6 +465,53 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       `Did you run "prisma generate" after adding the model to your schema?`,
     )
     return d as PrismaModelDelegate
+  }
+
+  /**
+   * Translate a single {@link WhereClause} to a parameterised SQL fragment
+   * for the vector terminal path (#B7 Phase 2.5). Values bind through
+   * positional `$N` placeholders that the caller passes to
+   * `$queryRawUnsafe(sql, ...params)`.
+   *
+   * `null` values on `=` / `!=` map to `IS NULL` / `IS NOT NULL`.
+   * Empty `IN` arrays short-circuit to `FALSE`; empty `NOT IN` arrays to
+   * `TRUE` — Postgres rejects empty IN-lists with a syntax error otherwise.
+   */
+  private clauseToSql(clause: WhereClause, params: unknown[]): string {
+    const col = quoteIdent(clause.column)
+    const bind = (v: unknown): string => {
+      params.push(v)
+      return `$${params.length}`
+    }
+    switch (clause.operator) {
+      case '=':
+        if (clause.value === null) return `${col} IS NULL`
+        return `${col} = ${bind(clause.value)}`
+      case '!=':
+        if (clause.value === null) return `${col} IS NOT NULL`
+        return `${col} != ${bind(clause.value)}`
+      case '>':
+      case '>=':
+      case '<':
+      case '<=':
+        return `${col} ${clause.operator} ${bind(clause.value)}`
+      case 'LIKE':
+        return `${col} LIKE ${bind(String(clause.value))}`
+      case 'NOT LIKE':
+        return `${col} NOT LIKE ${bind(String(clause.value))}`
+      case 'IN': {
+        const arr = Array.isArray(clause.value) ? clause.value : []
+        if (arr.length === 0) return 'FALSE'
+        return `${col} IN (${arr.map(v => bind(v)).join(', ')})`
+      }
+      case 'NOT IN': {
+        const arr = Array.isArray(clause.value) ? clause.value : []
+        if (arr.length === 0) return 'TRUE'
+        return `${col} NOT IN (${arr.map(v => bind(v)).join(', ')})`
+      }
+      default:
+        return `${col} = ${bind(clause.value)}`
+    }
   }
 
   private clauseToFilter(clause: WhereClause): Record<string, unknown> {
