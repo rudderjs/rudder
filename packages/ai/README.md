@@ -1053,7 +1053,18 @@ User-defined metrics implement `(response, ctx) => MetricResult` — no inherita
 
 **Failure semantics:** the runner never throws upward. Agent errors AND assertion throws become `failed` rows with the message in `reason`. Per-case `timeout` (ms) caps long runs. Per-case `agent` factory overrides the suite default — useful for stress-testing one case against a different model.
 
-**Roadmap:** Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
+**Record + replay:**
+
+```bash
+pnpm rudder ai:eval --record support     # run live, save fixtures
+pnpm rudder ai:eval --replay support     # zero API calls, deterministic
+```
+
+`--record` runs each matching case against the real provider and writes assistant turns (text + tool calls) to `evals/__fixtures__/<suite>/<case>.json` (commit these alongside the suite for diffable regression history). `--replay` swaps the runtime with `AiFake` and feeds each case its recorded fixture — same agent code path, scripted responses. Cases without a fixture fall through to a normal run with a stderr warning. The two modes are mutually exclusive.
+
+**Telescope hook:** `aiObservers` emits an `agent.eval.completed` event after every case (passing, failing, skipped). Telescope's AI collector aggregates pass-rate per `(suite, case)` over time.
+
+**Roadmap:** Phase 5 adds an HTML report.
 
 ### MCP integration
 

@@ -12,10 +12,15 @@
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runSuite, reportConsole } from '../eval/index.js'
-import type { EvalSuite } from '../eval/index.js'
+import { runSuite, reportConsole, evalSuite, stepsFromResponse } from '../eval/index.js'
+import type { EvalSuite, EvalCase, Metric } from '../eval/index.js'
 import { reportJson } from '../eval/json-reporter.js'
 import type { SuiteJson } from '../eval/json-reporter.js'
+import { defaultFixturesDir, readFixture, writeFixture } from '../eval/fixtures.js'
+import { AiFake } from '../fake.js'
+import type { AiFakeStep } from '../fake.js'
+import type { Agent } from '../agent.js'
+import type { AgentResponse } from '../types.js'
 
 type Rudder = {
   command(
@@ -32,6 +37,20 @@ export interface AiEvalOptions {
   bail:    boolean
   /** Emit `{ suites: [...] }` JSON to stdout. */
   json:    boolean
+  /**
+   * Run against the real provider, capture each case's assistant
+   * turns to `evals/__fixtures__/<suite>/<case>.json`. Existing
+   * fixtures are overwritten — diff in your VCS to see what changed.
+   * Default `false`.
+   */
+  record?: boolean
+  /**
+   * Swap the runtime with `AiFake.fake()` and feed each case its
+   * recorded fixture via `respondWithSequence`. Zero API calls,
+   * deterministic regression tests. Cases without a fixture fall
+   * through to a normal run with a stderr warning. Default `false`.
+   */
+  replay?: boolean
 }
 
 /**
@@ -48,6 +67,11 @@ export interface AiEvalDeps {
   loadSuite?:  (absPath: string) => Promise<EvalSuite | null>
   /** Override config lookup (test harness skips `@rudderjs/core`). */
   configPattern?: () => string | null | Promise<string | null>
+  /**
+   * Override fixtures directory (defaults to `<cwd>/evals/__fixtures__`).
+   * Tests point to a tmpdir to keep round-trips off the source tree.
+   */
+  fixturesDir?: string
 }
 
 /** Register the `ai:eval` command on the rudder runner. */
@@ -56,7 +80,7 @@ export function registerAiEvalCommand(rudder: Rudder): void {
     const code = await runEvalCli(parseArgs(rawArgs))
     if (code !== 0) process.exit(code)
   }).description(
-    'Run eval suites — pnpm rudder ai:eval [name-pattern] [--bail] [--json]',
+    'Run eval suites — pnpm rudder ai:eval [name-pattern] [--bail] [--json] [--record|--replay]',
   )
 }
 
@@ -69,6 +93,8 @@ export function parseArgs(args: string[]): AiEvalOptions {
     bail: flags.has('--bail'),
     json: flags.has('--json'),
   }
+  if (flags.has('--record')) opts.record = true
+  if (flags.has('--replay')) opts.replay = true
   if (positional[0]) opts.filter = positional[0]
   return opts
 }
@@ -86,6 +112,11 @@ export async function runEvalCli(opts: AiEvalOptions, deps: AiEvalDeps = {}): Pr
   const stdout = deps.stdout ?? process.stdout
   const stderr = deps.stderr ?? process.stderr
 
+  if (opts.record && opts.replay) {
+    stderr.write('[ai:eval] --record and --replay are mutually exclusive\n')
+    return 1
+  }
+
   const pattern = await Promise.resolve((deps.configPattern ?? loadConfigPattern)()) ?? 'evals/**/*.eval.ts'
   const discover = deps.discover ?? discoverSuiteFiles
   const files    = await discover(cwd, pattern)
@@ -95,38 +126,50 @@ export async function runEvalCli(opts: AiEvalOptions, deps: AiEvalDeps = {}): Pr
     return opts.json ? emitJson(stdout, []) : 1
   }
 
-  const loader = deps.loadSuite ?? defaultSuiteLoader
+  const loader      = deps.loadSuite ?? defaultSuiteLoader
+  const fixturesDir = deps.fixturesDir ?? defaultFixturesDir(cwd)
   const reports: SuiteJson[] = []
   let exitCode = 0
 
-  for (const file of files) {
-    let suite: EvalSuite | null
-    try {
-      suite = await loader(file)
-    } catch (err) {
-      stderr.write(`[ai:eval] failed to load ${path.relative(cwd, file)}: ${formatError(err)}\n`)
-      exitCode = 1
-      if (opts.bail) break
-      continue
-    }
-    if (!suite) {
-      stderr.write(`[ai:eval] ${path.relative(cwd, file)} has no default eval suite — skipping\n`)
-      continue
-    }
+  // `--replay` swaps the global runtime once, restored when we're done.
+  // The per-case fixture is set on the AiFake instance inside the
+  // wrapped agent factory just before each case's `agent.prompt()`.
+  let fake: AiFake | null = null
+  if (opts.replay) fake = AiFake.fake()
 
-    if (opts.filter && !suite.name.toLowerCase().includes(opts.filter.toLowerCase())) continue
+  try {
+    for (const file of files) {
+      let suite: EvalSuite | null
+      try {
+        suite = await loader(file)
+      } catch (err) {
+        stderr.write(`[ai:eval] failed to load ${path.relative(cwd, file)}: ${formatError(err)}\n`)
+        exitCode = 1
+        if (opts.bail) break
+        continue
+      }
+      if (!suite) {
+        stderr.write(`[ai:eval] ${path.relative(cwd, file)} has no default eval suite — skipping\n`)
+        continue
+      }
 
-    const report = await runSuite(suite)
-    if (opts.json) {
-      reports.push(reportJson(report))
-    } else {
-      reportConsole(report, { log: (s) => stdout.write(`${s}\n`) })
-    }
+      if (opts.filter && !suite.name.toLowerCase().includes(opts.filter.toLowerCase())) continue
 
-    if (report.failed > 0) {
-      exitCode = 1
-      if (opts.bail) break
+      const decorated = await decorateForMode(suite, opts, { fixturesDir, stderr, fake })
+      const report = await runSuite(decorated)
+      if (opts.json) {
+        reports.push(reportJson(report))
+      } else {
+        reportConsole(report, { log: (s) => stdout.write(`${s}\n`) })
+      }
+
+      if (report.failed > 0) {
+        exitCode = 1
+        if (opts.bail) break
+      }
     }
+  } finally {
+    if (fake) fake.restore()
   }
 
   if (opts.json) emitJson(stdout, reports)
@@ -140,6 +183,132 @@ function emitJson(stdout: { write(s: string): boolean | void }, suites: SuiteJso
 
 function formatError(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// ─── Record / replay decoration ───────────────────────────
+
+interface DecorateContext {
+  fixturesDir: string
+  stderr:      { write(s: string): boolean | void }
+  fake:        AiFake | null
+}
+
+/**
+ * Wrap a suite so each case captures the response (`--record`) or
+ * pre-loads the fake's sequence (`--replay`) before running. A
+ * normal run returns the suite untouched.
+ *
+ * Implemented as a per-case `agent` / `assert` decoration so the
+ * runner stays unchanged — `runSuite` doesn't need to know about
+ * the fixture format. The original `agent`/`assert` for each case
+ * are still called; we just slip work in around them.
+ *
+ * For replay, fixtures load up-front (sync factory contract) so the
+ * AiFake is primed before each `agent.prompt()` runs.
+ */
+async function decorateForMode(
+  suite: EvalSuite,
+  opts:  AiEvalOptions,
+  ctx:   DecorateContext,
+): Promise<EvalSuite> {
+  if (!opts.record && !opts.replay) return suite
+
+  // Pre-load every fixture for replay so the per-case factory can
+  // call `respondWithSequence` synchronously.
+  const replaySteps = new Map<string, AiFakeStep[]>()
+  if (opts.replay) {
+    for (let i = 0; i < suite.spec.cases.length; i++) {
+      const c = suite.spec.cases[i]!
+      const caseName = c.name ?? `case-${i}`
+      try {
+        const fixture = await readFixture(ctx.fixturesDir, suite.name, caseName)
+        if (fixture) replaySteps.set(caseName, fixture.steps)
+        else ctx.stderr.write(
+          `[ai:eval] no fixture for ${suite.name}/${caseName} — running against live provider\n`,
+        )
+      } catch (err) {
+        ctx.stderr.write(`[ai:eval] fixture load error for ${suite.name}/${caseName}: ${formatError(err)}\n`)
+      }
+    }
+  }
+
+  const wrapped = suite.spec.cases.map((c, i): EvalCase => {
+    const caseName    = c.name ?? `case-${i}`
+    const baseFactory = c.agent ?? suite.spec.agent
+    const baseAssert  = c.assert
+
+    const factory = opts.replay
+      ? wrapReplayFactory(baseFactory, replaySteps.get(caseName), ctx.fake)
+      : baseFactory
+
+    const assert: Metric = opts.record
+      ? wrapRecordAssert(baseAssert, suite.name, caseName, c.input, ctx)
+      : baseAssert
+
+    const out: EvalCase = {
+      input:  c.input,
+      assert,
+      agent:  factory,
+    }
+    if (c.name)               out.name    = c.name
+    if (c.timeout !== undefined) out.timeout = c.timeout
+    if (c.skip   !== undefined) out.skip    = c.skip
+    return out
+  })
+
+  const newSpec: typeof suite.spec = {
+    agent: suite.spec.agent,
+    cases: wrapped,
+  }
+  if (suite.spec.timeout !== undefined) newSpec.timeout = suite.spec.timeout
+  return evalSuite(suite.name, newSpec)
+}
+
+/**
+ * Replay path: before each case runs, prime the shared `AiFake`
+ * with the case's recorded steps. When the fixture is missing the
+ * factory still returns the agent — it'll hit whatever the AiFake
+ * is currently scripted to return (typically falling back to the
+ * default ambient response, which surfaces as an obvious diff in
+ * the case's assertion).
+ */
+function wrapReplayFactory(
+  base:  () => Agent,
+  steps: AiFakeStep[] | undefined,
+  fake:  AiFake | null,
+): () => Agent {
+  return () => {
+    if (fake && steps) fake.respondWithSequence(steps)
+    return base()
+  }
+}
+
+/**
+ * Record path: after each case's assertion runs, capture the
+ * agent response's assistant turns to the fixture file. Wrapping
+ * the assert is the cleanest hook — the runner already passes
+ * `response` into it, and the wrapped fn still returns the
+ * original assertion's result.
+ */
+function wrapRecordAssert(
+  base:     Metric,
+  suite:    string,
+  caseName: string,
+  input:    string,
+  ctx:      DecorateContext,
+): Metric {
+  return async (response: AgentResponse, mctx) => {
+    try {
+      const file = await writeFixture(ctx.fixturesDir, suite, caseName, {
+        input,
+        steps: stepsFromResponse(response),
+      })
+      ctx.stderr.write(`[ai:eval] recorded ${path.relative(process.cwd(), file)}\n`)
+    } catch (err) {
+      ctx.stderr.write(`[ai:eval] failed to record ${suite}/${caseName}: ${formatError(err)}\n`)
+    }
+    return base(response, mctx)
+  }
 }
 
 // ─── File discovery ──────────────────────────────────────

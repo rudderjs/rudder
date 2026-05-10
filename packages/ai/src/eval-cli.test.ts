@@ -272,3 +272,130 @@ describe('runEvalCli', () => {
     assert.match(stderr.read(), /no suites found/)
   })
 })
+
+// ─── --record / --replay round-trip (#A5 Phase 4) ─────────
+
+describe('runEvalCli — --record / --replay', () => {
+  let fake: AiFake
+  let fixturesDir: string
+
+  beforeEach(async () => {
+    fake = AiFake.fake()
+    fixturesDir = await mkdtemp(path.join(os.tmpdir(), 'ai-eval-rec-'))
+  })
+  afterEach(async () => {
+    fake.restore()
+    await rm(fixturesDir, { recursive: true, force: true })
+  })
+
+  it('rejects --record + --replay together', async () => {
+    const stderr = capture()
+    const code = await runEvalCli(
+      { bail: false, json: false, record: true, replay: true },
+      { cwd: '/v', stdout: capture(), stderr, configPattern: () => null, discover: async () => [] },
+    )
+    assert.equal(code, 1)
+    assert.match(stderr.read(), /mutually exclusive/)
+  })
+
+  it('--record writes one JSON fixture per case under fixturesDir/<suite>/<case>.json', async () => {
+    fake.respondWithSequence([{ text: 'A reply' }, { text: 'B reply' }])
+    const suite: EvalSuite = evalSuite('Sample', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'first',  input: 'a', assert: exactMatch('A reply') },
+        { name: 'second', input: 'b', assert: exactMatch('B reply') },
+      ],
+    })
+    await runEvalCli(
+      { bail: false, json: true, record: true },
+      {
+        cwd:           '/virtual',
+        stdout:        capture(),
+        stderr:        capture(),
+        configPattern: () => null,
+        discover:      async () => ['/virtual/evals/sample.eval.ts'],
+        loadSuite:     async () => suite,
+        fixturesDir,
+      },
+    )
+    const fs = await import('node:fs/promises')
+    const firstPath  = path.join(fixturesDir, 'Sample', 'first.json')
+    const secondPath = path.join(fixturesDir, 'Sample', 'second.json')
+    const first  = JSON.parse(await fs.readFile(firstPath,  'utf8')) as { steps: { text: string }[]; suite: string; case: string }
+    const second = JSON.parse(await fs.readFile(secondPath, 'utf8')) as { steps: { text: string }[]; case: string }
+    assert.equal(first.suite, 'Sample')
+    assert.equal(first.case,  'first')
+    assert.equal(first.steps[0]!.text,  'A reply')
+    assert.equal(second.case, 'second')
+    assert.equal(second.steps[0]!.text, 'B reply')
+  })
+
+  it('--replay primes AiFake per-case from fixtures (zero stray prompts)', async () => {
+    // Write a fixture by hand so replay has something to load.
+    const fs = await import('node:fs/promises')
+    await fs.mkdir(path.join(fixturesDir, 'Sample'), { recursive: true })
+    await fs.writeFile(
+      path.join(fixturesDir, 'Sample', 'replayed.json'),
+      JSON.stringify({
+        version:    1,
+        suite:      'Sample',
+        case:       'replayed',
+        input:      'a',
+        recordedAt: '2026-05-10T00:00:00.000Z',
+        steps:      [{ text: 'fixture-text', finishReason: 'stop' }],
+      }),
+    )
+
+    // The CLI handler creates its OWN AiFake via `AiFake.fake()`, replacing
+    // the one we set up in beforeEach. We don't pre-script anything; the
+    // handler's per-case `respondWithSequence` is what we're testing.
+    fake.preventStrayPrompts()   // guard: any unscripted prompt would throw
+
+    const suite: EvalSuite = evalSuite('Sample', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'replayed', input: 'a', assert: exactMatch('fixture-text') },
+      ],
+    })
+    const stdout = capture()
+    const code = await runEvalCli(
+      { bail: false, json: true, replay: true },
+      {
+        cwd:           '/virtual',
+        stdout,
+        stderr:        capture(),
+        configPattern: () => null,
+        discover:      async () => ['/virtual/evals/sample.eval.ts'],
+        loadSuite:     async () => suite,
+        fixturesDir,
+      },
+    )
+    assert.equal(code, 0)
+    const parsed = JSON.parse(stdout.read()) as { suites: Array<{ passed: number; failed: number }> }
+    assert.equal(parsed.suites[0]!.passed, 1)
+    assert.equal(parsed.suites[0]!.failed, 0)
+  })
+
+  it('--replay warns on stderr when a fixture is missing', async () => {
+    const suite: EvalSuite = evalSuite('Sample', {
+      agent: () => new StubAgent(),
+      cases: [{ name: 'no-fixture', input: 'x', assert: exactMatch('anything') }],
+    })
+    const stderr = capture()
+    fake.respondWith('whatever')   // fallback so the case can still run
+    await runEvalCli(
+      { bail: false, json: true, replay: true },
+      {
+        cwd:           '/virtual',
+        stdout:        capture(),
+        stderr,
+        configPattern: () => null,
+        discover:      async () => ['/virtual/evals/sample.eval.ts'],
+        loadSuite:     async () => suite,
+        fixturesDir,
+      },
+    )
+    assert.match(stderr.read(), /no fixture for Sample\/no-fixture/)
+  })
+})

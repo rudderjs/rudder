@@ -82,6 +82,29 @@ export type AiEvent =
       streaming:      boolean
       conversationId: string | null
     }
+  | {
+      /**
+       * Emitted by the eval framework runner (`@rudderjs/ai/eval`) after
+       * each case completes — passing, failing, or skipped. Telescope's
+       * AI collector aggregates pass-rate over time per `(suite, case)`
+       * pair (#A5 Phase 4).
+       *
+       * Skipped cases still emit so the dashboard shows coverage gaps.
+       * `score` is present for graded metrics (semanticMatch, llmJudge);
+       * absent for binary metrics (exactMatch, regex). `reason` is the
+       * failure / skip explanation when present.
+       */
+      kind:     'agent.eval.completed'
+      suite:    string
+      case:     string
+      status:   'passed' | 'failed' | 'skipped'
+      pass:     boolean
+      score?:   number
+      reason?:  string
+      tokens:   number
+      cost:     number
+      duration: number
+    }
 
 export type AiObserver = (event: AiEvent) => void
 
