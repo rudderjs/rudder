@@ -416,6 +416,150 @@ Per-call override and explicit-form precedence (high → low):
 
 `MemoryConversationStore` works out of the box; Prisma / Redis stores plug in by implementing `ConversationStore`. Stores that surface the `agent` meta in `list()` results get the per-class thread separation; stores that ignore it fall back to "always create a new thread", which is the conservative behavior.
 
+## User memory
+
+Conversation persistence remembers messages. **User memory** persists *facts* — things about a user that should travel across conversations, separate from any single thread. Useful when the agent needs to remember "Alice's project is named Foo" in a brand-new session without replaying the prior history.
+
+Three backends ship today, all behind the same `UserMemory` interface:
+
+| Backend | Subpath | When to use |
+|---|---|---|
+| `MemoryUserMemory` | `@rudderjs/ai` (main) | Tests, dev, ephemeral state |
+| `OrmUserMemory` | `@rudderjs/ai/memory-orm` | Production with `@rudderjs/orm` registered (Prisma/Drizzle) |
+| `EmbeddingUserMemory` | `@rudderjs/ai/memory-embedding` | Production + semantic recall via cosine similarity |
+
+Wire one in `config/ai.ts`:
+
+```ts
+// config/ai.ts
+import type { AiConfig } from '@rudderjs/ai'
+import { OrmUserMemory } from '@rudderjs/ai/memory-orm'
+import { EmbeddingUserMemory } from '@rudderjs/ai/memory-embedding'
+
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: { /* ... */ },
+  memory: new EmbeddingUserMemory({
+    inner: new OrmUserMemory(),
+    model: 'openai/text-embedding-3-small',
+    threshold: 0.5,
+  }),
+} satisfies AiConfig
+```
+
+`AiProvider` binds the configured store to the `ai.memory` DI key and a process-wide `setUserMemory()` registry that the auto-inject and auto-extract middleware look up.
+
+### The `UserMemory` interface
+
+```ts
+interface UserMemory {
+  remember(userId: string, fact: string,  opts?: { tags?: string[]; score?: number }): Promise<MemoryEntry>
+  recall  (userId: string, query: string, opts?: { limit?: number;  tags?: string[] }): Promise<MemoryEntry[]>
+  forget  (userId: string, factId: string                                            ): Promise<void>
+  list    (userId: string,                opts?: { tags?: string[]; limit?: number  }): Promise<MemoryEntry[]>
+  forgetAll?(userId: string): Promise<void>           // optional GDPR cascade
+}
+```
+
+Manual API — drop-in for any agent flow:
+
+```ts
+const mem = app().make<UserMemory>('ai.memory')
+await mem.remember('user_123', 'Project name is Foo', { tags: ['project'] })
+const facts = await mem.recall('user_123', 'project')
+//=> [{ fact: 'Project name is Foo', tags: ['project'], score: 0.95, ... }]
+```
+
+### Auto-inject + auto-extract via `Agent.remembers()`
+
+For the common case — chat agent that should both pull relevant facts into its system prompt AND distill new facts from each turn — declare `remembers()` on the class. The framework installs the right middleware automatically:
+
+```ts
+class SupportAgent extends Agent {
+  remembers() {
+    return {
+      user:               ctx.user.id,
+      inject:             'auto',                       // recall + prepend per turn
+      extract:            'auto',                       // distill new facts per turn
+      extractWith:        'anthropic/claude-haiku-4-5', // small model for distillation
+      tags:               ['support'],                  // recall + extract scope
+      injectLimit:        5,                            // cap injected facts
+      injectTokenBudget:  400,                          // hard token cap; lowest-score drops first
+    }
+  }
+}
+```
+
+**Auto-inject** prepends matching facts as a fenced `<user-memory>` block to the system message:
+
+```text
+You are a support agent.
+
+<user-memory>
+- Project Foo deploys to fly.io us-east
+- prefers TypeScript strict mode
+</user-memory>
+```
+
+The block is built by querying `mem.recall(spec.user, latestUserText, { limit, tags })` once per turn (the `onStart` middleware), then trimming by `injectTokenBudget` if set. Token budget drops the lowest-score facts first.
+
+**Auto-extract** runs after each successful turn — the `onFinish` middleware pulls the latest `[user, assistant]` pair from `ctx.messages`, calls a small model (`extractWith`) with a JSON-mode prompt asking for `{ facts: [{ fact, score, tags? }] }`, filters by confidence threshold (default 0.7), and writes the survivors via `mem.remember()`.
+
+Per-call escape hatches and precedence (high → low):
+
+1. `agent.prompt(input, { memory: false })` — disable for this call.
+2. `agent.prompt(input, { memory: { user, inject?, extract?, ... } })` — override the spec for this call.
+3. `agent.remembers()` — class declaration.
+
+Failures inside auto-extract (network, JSON parse, schema mismatch, store write) are routed through `MemoryExtractOptions.onError` and otherwise swallowed — the parent prompt never breaks because of memory work.
+
+**Continuation calls** (when `options.messages` is set, e.g. resuming after a client-tool round-trip) skip both inject and extract so the system prompt isn't double-augmented and facts aren't double-written.
+
+### Cosine-recall mode (`EmbeddingUserMemory`)
+
+`EmbeddingUserMemory` composes any `UserMemory` (typically `OrmUserMemory`) with the registered embedding provider:
+
+- `remember()` embeds the fact via `AI.embed(spec.model)` and writes the Float32-packed vector into the row's `embedding` column (added to the schema in Phase 4 as nullable).
+- `recall()` embeds the query and ranks all of the user's facts by cosine similarity.
+
+For semantically-similar but lexically-distinct queries — "Where do I deploy?" matching "Project Foo lives at fly.io" — this is the right backend.
+
+**v1 is pure-JS cosine over the user's full set** (acceptable up to a few thousand facts/user). Larger workloads will land a pgvector-backed variant under B7.
+
+**GDPR right-to-be-forgotten cascades automatically** — the embedding lives in the same row as the fact, so `forget()` / `forgetAll()` delete both. No second store to keep in sync.
+
+**Backward compat:** rows whose `embedding` is null fall back to token-overlap on `fact` (`nullEmbeddingFallback: 'token-overlap'` is the default). Upgrading from `OrmUserMemory` to `EmbeddingUserMemory` doesn't lose recall on existing rows; new `remember()` calls populate the column going forward. Override to `'skip'` if you want strict embedding-only semantics.
+
+### Schema reference (`OrmUserMemory` / `EmbeddingUserMemory`)
+
+Add to your Prisma schema (or import the reference string `userMemoryPrismaSchema` from `@rudderjs/ai/memory-orm`):
+
+```prisma
+model UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  fact      String
+  /// JSON-encoded `string[]` of tags, or null
+  tags      String?
+  /// Confidence score in [0, 1] — extract sets this from the model's self-rating
+  score     Float?
+  /// Float32-packed vector (Phase 5); null when stored without the embedding composer
+  embedding Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+```
+
+Tags persist as a JSON-encoded `String?` column (rather than native `String[]`) so the same schema works on both Postgres and SQLite. Tag-array filtering happens JS-side after fetch; pushing tag arrays into the WHERE is adapter-specific and lands in a follow-up.
+
+### Pitfalls
+
+- **Memory poisoning.** Auto-extract trusts the user's own conversation as input — a malicious user can plant adversarial "facts." The default 0.7 confidence threshold is the v1 defense; tighten for high-risk domains. Pair with `MemoryExtractOptions.onExtracted(entries)` for an audit log when shipping to production.
+- **Embedding model drift.** `EmbeddingUserMemory` writes vectors using `spec.model`; changing models without re-embedding leaves the existing rows ranked under the old vector space. Either re-embed all rows in a maintenance window or use `nullEmbeddingFallback: 'skip'` and migrate gradually.
+- **GDPR cascade only covers the in-row embedding.** If you wire your own external vector store (Pinecone, Weaviate), `forget()` only deletes the SQL row — you must implement the cascade to your second store yourself. The bundled `EmbeddingUserMemory` is trivially compliant because the vector is in the same row.
+
 ## Middleware
 
 Middleware is an `AiMiddleware` interface — implement only the lifecycle hooks you care about. Hooks: `onConfig`, `onStart`, `onIteration`, `onChunk`, `onBeforeToolCall`, `onAfterToolCall`, `onToolPhaseComplete`, `onUsage`, `onFinish`, `onAbort`, `onError`.
