@@ -1,0 +1,397 @@
+import { describe, it, beforeEach, afterEach } from 'node:test'
+import assert from 'node:assert/strict'
+
+import { Agent } from './agent.js'
+import { AiFake } from './fake.js'
+import {
+  evalSuite,
+  exactMatch,
+  regex,
+  llmJudge,
+  runSuite,
+  reportConsole,
+  estimateCost,
+  type CaseResult,
+  type Metric,
+  type SuiteReport,
+} from './eval/index.js'
+
+class StubAgent extends Agent {
+  instructions() { return 'You are a stub agent.' }
+}
+
+class TypedModelAgent extends Agent {
+  instructions() { return 'priced.' }
+  model() { return 'anthropic/claude-haiku-4-5' }
+}
+
+// ─── evalSuite() ─────────────────────────────────────────
+
+describe('evalSuite()', () => {
+  it('returns a frozen suite with name + spec', () => {
+    const s = evalSuite('S', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'hi', assert: exactMatch('hi') }],
+    })
+    assert.equal(s.name, 'S')
+    assert.equal(typeof s.spec.agent, 'function')
+    assert.equal(s.spec.cases.length, 1)
+    assert.throws(() => { (s as { name: string }).name = 'X' }, /TypeError|read.only/i)
+  })
+
+  it('throws when name is missing', () => {
+    assert.throws(() => evalSuite('', { agent: () => new StubAgent(), cases: [{ input: 'x', assert: exactMatch('x') }] }), /name/)
+  })
+
+  it('throws when agent factory is missing', () => {
+    assert.throws(
+      () => evalSuite('S', { cases: [{ input: 'x', assert: exactMatch('x') }] } as unknown as Parameters<typeof evalSuite>[1]),
+      /agent: \(\) => Agent/,
+    )
+  })
+
+  it('throws when cases is empty', () => {
+    assert.throws(() => evalSuite('S', { agent: () => new StubAgent(), cases: [] }), /at least one case/)
+  })
+})
+
+// ─── Built-in metrics ────────────────────────────────────
+
+describe('exactMatch', () => {
+  it('passes when text matches exactly', async () => {
+    const r = await exactMatch('hello')(stubResponse('hello'), ctx())
+    assert.equal(r.pass, true)
+    assert.equal(r.score, 1)
+  })
+
+  it('fails with reason when text differs', async () => {
+    const r = await exactMatch('hello')(stubResponse('world'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /expected "hello", got "world"/)
+  })
+})
+
+describe('regex', () => {
+  it('passes when pattern matches', async () => {
+    const r = await regex(/hel+o/)(stubResponse('say hello there'), ctx())
+    assert.equal(r.pass, true)
+  })
+
+  it('fails with truncated reason for long text', async () => {
+    const long = 'x'.repeat(500)
+    const r = await regex(/never/)(stubResponse(long), ctx())
+    assert.equal(r.pass, false)
+    assert.ok(r.reason!.includes('…'), 'reason includes ellipsis for long text')
+  })
+})
+
+// ─── llmJudge ────────────────────────────────────────────
+
+describe('llmJudge', () => {
+  let fake: AiFake
+  beforeEach(() => { fake = AiFake.fake() })
+  afterEach(() => fake.restore())
+
+  it('passes when the judge says pass=true', async () => {
+    fake.respondWithSequence([{ text: '{"pass": true, "reason": "mentions reset link"}' }])
+    const m = llmJudge('mentions a password reset link', { model: '__fake__/judge' })
+    const r = await m(stubResponse('Reset your password at /reset'), ctx('How do I reset?'))
+    assert.equal(r.pass, true)
+    assert.match(r.reason!, /mentions reset link/)
+  })
+
+  it('fails when the judge says pass=false', async () => {
+    fake.respondWithSequence([{ text: '{"pass": false, "reason": "no link mentioned"}' }])
+    const m = llmJudge('mentions a password reset link', { model: '__fake__/judge' })
+    const r = await m(stubResponse('I cannot help with that.'), ctx('How do I reset?'))
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /no link mentioned/)
+  })
+
+  it('fails (rather than throws) when the judge response is unparseable', async () => {
+    fake.respondWithSequence([{ text: 'not json at all' }])
+    const m = llmJudge('anything', { model: '__fake__/judge' })
+    const r = await m(stubResponse('whatever'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /judge failed/)
+  })
+
+  it('fails (rather than throws) when the judge model is missing', async () => {
+    // No model registered for `made-up` provider — registry throws
+    // inside agent.prompt, llmJudge catches.
+    const m = llmJudge('anything', { model: 'made-up/no-such-model' })
+    const r = await m(stubResponse('whatever'), ctx())
+    assert.equal(r.pass, false)
+    assert.match(r.reason!, /judge failed/)
+  })
+})
+
+// ─── runSuite ────────────────────────────────────────────
+
+describe('runSuite', () => {
+  let fake: AiFake
+  beforeEach(() => { fake = AiFake.fake() })
+  afterEach(() => fake.restore())
+
+  it('reports all-pass for matching cases', async () => {
+    fake.respondWithSequence([
+      { text: 'A reply' },
+      { text: 'B reply' },
+    ])
+    const suite = evalSuite('AllPass', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'first',  input: 'a', assert: exactMatch('A reply') },
+        { name: 'second', input: 'b', assert: exactMatch('B reply') },
+      ],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.passed, 2)
+    assert.equal(report.failed, 0)
+    assert.equal(report.skipped, 0)
+    assert.equal(report.cases.length, 2)
+    assert.deepStrictEqual(report.cases.map(c => c.status), ['passed', 'passed'])
+  })
+
+  it('reports failures with metric reason', async () => {
+    fake.respondWithSequence([
+      { text: 'wrong answer' },
+    ])
+    const suite = evalSuite('OneFail', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'q', assert: exactMatch('right answer') }],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.failed, 1)
+    assert.equal(report.cases[0]!.status, 'failed')
+    assert.match(report.cases[0]!.metric!.reason!, /right answer/)
+  })
+
+  it('runs cases in declaration order', async () => {
+    fake.respondWithSequence([
+      { text: 'first'  },
+      { text: 'second' },
+      { text: 'third'  },
+    ])
+    const suite = evalSuite('Order', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: '1', input: 'a', assert: exactMatch('first')  },
+        { name: '2', input: 'b', assert: exactMatch('second') },
+        { name: '3', input: 'c', assert: exactMatch('third')  },
+      ],
+    })
+    const report = await runSuite(suite)
+    assert.deepStrictEqual(report.cases.map(c => c.name), ['1', '2', '3'])
+  })
+
+  it('supplies default case names when omitted', async () => {
+    fake.respondWith('ok')
+    const suite = evalSuite('Defaults', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'a', assert: exactMatch('ok') }],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.cases[0]!.name, 'case-0')
+  })
+
+  it('skips cases when skip is truthy and never calls agent', async () => {
+    fake.respondWith('ok')
+    const suite = evalSuite('Skip', {
+      agent: () => new StubAgent(),
+      cases: [
+        { name: 'run',  input: 'a', assert: exactMatch('ok') },
+        { name: 'gate', input: 'b', assert: exactMatch('ok'), skip: 'expensive' },
+      ],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.passed, 1)
+    assert.equal(report.skipped, 1)
+    assert.equal(report.cases[1]!.status, 'skipped')
+    assert.equal(report.cases[1]!.reason, 'expensive')
+    assert.equal(fake.getCalls().length, 1, 'skipped case did not call agent')
+  })
+
+  it('treats agent failures as failed cases (not exceptions)', async () => {
+    fake.failOnStep(0, new Error('provider down'))
+    const suite = evalSuite('Boom', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'q', assert: exactMatch('whatever') }],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.failed, 1)
+    assert.match(report.cases[0]!.metric!.reason!, /provider down/)
+  })
+
+  it('treats assertion throws as failed cases (not exceptions)', async () => {
+    fake.respondWith('ok')
+    const throwingMetric: Metric = () => { throw new Error('boom') }
+    const suite = evalSuite('AssertBoom', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'q', assert: throwingMetric }],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.failed, 1)
+    assert.match(report.cases[0]!.metric!.reason!, /assert threw: boom/)
+  })
+
+  it('honors per-case timeout', async () => {
+    // The fake responds instantly, so to exercise the timeout we
+    // wrap an agent whose prompt sleeps.
+    class SlowAgent extends Agent {
+      instructions() { return '' }
+      override async prompt(): Promise<never> {
+        await new Promise(res => setTimeout(res, 50))
+        throw new Error('should never reach here under a timeout')
+      }
+    }
+    const suite = evalSuite('Slow', {
+      agent: () => new SlowAgent(),
+      cases: [{ input: 'q', assert: exactMatch('x'), timeout: 5 }],
+    })
+    const report = await runSuite(suite)
+    assert.equal(report.failed, 1)
+    assert.match(report.cases[0]!.metric!.reason!, /timeout after 5ms/)
+  })
+
+  it('per-case agent override replaces the suite factory', async () => {
+    fake.respondWithSequence([
+      { text: 'from override' },
+    ])
+    let suiteCalls = 0
+    let overrideCalls = 0
+    const suite = evalSuite('Override', {
+      agent: () => { suiteCalls++; return new StubAgent() },
+      cases: [{
+        input:  'q',
+        assert: exactMatch('from override'),
+        agent:  () => { overrideCalls++; return new StubAgent() },
+      }],
+    })
+    await runSuite(suite)
+    assert.equal(suiteCalls,    0)
+    assert.equal(overrideCalls, 1)
+  })
+
+  it('aggregates tokens across cases', async () => {
+    fake.respondWithSequence([{ text: 'a' }, { text: 'b' }])
+    const suite = evalSuite('Tokens', {
+      agent: () => new StubAgent(),
+      cases: [
+        { input: '1', assert: exactMatch('a') },
+        { input: '2', assert: exactMatch('b') },
+      ],
+    })
+    const report = await runSuite(suite)
+    // AiFake reports zero tokens by default; tokens still aggregate as 0+0=0.
+    assert.equal(report.tokens, 0)
+    assert.equal(report.cases.every(c => c.tokens === 0), true)
+  })
+
+  it('rolls llmJudge tokens into the case cost row', async () => {
+    fake.respondWithSequence([
+      { text: 'agent reply' },
+      { text: '{"pass": true, "reason": "ok"}' },
+    ])
+    const suite = evalSuite('JudgeRollup', {
+      agent: () => new StubAgent(),
+      cases: [{ input: 'q', assert: llmJudge('says ok', { model: '__fake__/judge' }) }],
+    })
+    const report = await runSuite(suite)
+    // Both calls go through the fake which reports 0 tokens, but the
+    // mechanism is exercised — the runner consumed the side-channel
+    // without leaking it into the response object.
+    assert.equal(report.cases[0]!.status, 'passed')
+    // Side-channel should have been consumed (and deleted) — no
+    // observable JUDGE_USAGE_KEY symbol on the response.
+    const symbols = Object.getOwnPropertySymbols(report.cases[0]!)
+    assert.equal(symbols.length, 0)
+  })
+})
+
+// ─── estimateCost ────────────────────────────────────────
+
+describe('estimateCost', () => {
+  it('returns 0 for unknown models (graceful)', () => {
+    assert.equal(estimateCost('made-up/no-model', 1000, 500), 0)
+  })
+
+  it('computes Anthropic Haiku correctly', () => {
+    // input  $0.0008/1k * 1000 = $0.0008
+    // output $0.004/1k  * 500  = $0.002
+    // total                    = $0.0028
+    const cost = estimateCost('anthropic/claude-haiku-4-5', 1000, 500)
+    assert.ok(Math.abs(cost - 0.0028) < 1e-9, `expected ~0.0028, got ${cost}`)
+  })
+
+  it('computes OpenAI gpt-4o-mini correctly', () => {
+    // input  $0.00015/1k * 2000 = $0.0003
+    // output $0.0006/1k  * 1000 = $0.0006
+    // total                     = $0.0009
+    const cost = estimateCost('openai/gpt-4o-mini', 2000, 1000)
+    assert.ok(Math.abs(cost - 0.0009) < 1e-9, `expected ~0.0009, got ${cost}`)
+  })
+})
+
+// ─── reportConsole ───────────────────────────────────────
+
+describe('reportConsole', () => {
+  it('emits the suite summary, per-case glyphs, and totals', async () => {
+    const fake = AiFake.fake()
+    fake.respondWithSequence([{ text: 'right' }, { text: 'wrong' }])
+    try {
+      const suite = evalSuite('Demo', {
+        agent: () => new StubAgent(),
+        cases: [
+          { name: 'good', input: 'a', assert: exactMatch('right') },
+          { name: 'bad',  input: 'b', assert: exactMatch('right') },
+        ],
+      })
+      const lines: string[] = []
+      const report = reportConsole(await runSuite(suite), { log: s => lines.push(s) })
+
+      const out = lines.join('\n')
+      assert.match(out, /^Demo \(2 cases/)
+      assert.match(out, /✓ good/)
+      assert.match(out, /✗ bad/)
+      assert.match(out, /1 passed, 1 failed/)
+      assert.match(out, /total: \$/)
+      // Reporter returns the report unchanged for chaining.
+      assert.equal(report.passed, 1)
+      assert.equal(report.failed, 1)
+    } finally { fake.restore() }
+  })
+
+  it('shows skip reason for skipped cases', async () => {
+    const fake = AiFake.fake()
+    try {
+      const suite = evalSuite('Skipped', {
+        agent: () => new StubAgent(),
+        cases: [{ name: 'expensive', input: 'a', assert: exactMatch('x'), skip: 'CI: too expensive' }],
+      })
+      const lines: string[] = []
+      reportConsole(await runSuite(suite), { log: s => lines.push(s) })
+      const out = lines.join('\n')
+      assert.match(out, /○ expensive/)
+      assert.match(out, /CI: too expensive/)
+    } finally { fake.restore() }
+  })
+})
+
+// ─── Helpers ─────────────────────────────────────────────
+
+function stubResponse(text: string) {
+  return {
+    text,
+    steps: [],
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  } as unknown as Parameters<Metric>[0]
+}
+
+function ctx(input = 'q', name = 'case-0'): { input: string; caseName: string } {
+  return { input, caseName: name }
+}
+
+// suppress "unused" — types are exercised implicitly via the runtime
+// shape but the imports keep the public surface visible.
+type _U = CaseResult | SuiteReport

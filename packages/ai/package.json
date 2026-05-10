@@ -52,6 +52,10 @@
     "./memory-embedding": {
       "import": "./dist/memory-embedding/index.js",
       "types": "./dist/memory-embedding/index.d.ts"
+    },
+    "./eval": {
+      "import": "./dist/eval/index.js",
+      "types": "./dist/eval/index.d.ts"
     }
   },
   "scripts": {
