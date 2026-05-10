@@ -664,6 +664,54 @@ for await (const chunk of stream) {
 const final = await response // full AgentResponse when stream completes
 ```
 
+### Queued prompts (`agent.queue()`)
+
+Push the agent run onto the queue for background execution. Returns a builder so you can configure the queue, attach success/failure callbacks, and (optionally) stream progress to a broadcast channel as it runs.
+
+Requires `@rudderjs/queue` (and `@rudderjs/broadcast` if you call `.broadcast()`).
+
+```ts
+// Fire-and-forget background run
+await new SupportAgent()
+  .queue('Help with refund request')
+  .onQueue('ai')
+  .send()
+
+// With success/failure callbacks
+await new ResearchAgent()
+  .queue('Research GPT-5 architecture')
+  .then(response => console.log('Done:', response.text))
+  .catch(error  => console.error('Failed:', error))
+  .send()
+```
+
+#### Stream progress to a broadcast channel — `.broadcast(channel)`
+
+Background AI work + live UI without polling. Each stream chunk is broadcast to the channel as the job runs; the final response is broadcast as a `done` event:
+
+```ts
+await new SupportAgent()
+  .queue('Help with refund request')
+  .broadcast(`user.${userId}.support`)
+  .send()
+
+// Subscribers on `user.${userId}.support` receive:
+//   { event: 'chunk', data: <StreamChunk> }   // one per stream chunk (text-delta, tool-call, ...)
+//   { event: 'done',  data: <AgentResponse> } // final result, after the loop ends
+//   { event: 'error', data: { message } }     // on failure
+```
+
+The wire shape matches the framework's normal `StreamChunk` types — the same `text-delta` / `tool-call` / `tool-result` shapes you'd iterate from `agent.stream()`. Frontends can subscribe to the channel and reuse their existing chunk-handling code.
+
+Pass `eventPrefix` to namespace events when the channel carries other unrelated messages:
+
+```ts
+.broadcast('shared-channel', { eventPrefix: 'agent.' })
+// emits 'agent.chunk', 'agent.done', 'agent.error'
+```
+
+**Process model:** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical RudderJS dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
+
 ### Conversation History
 
 Pass message history to maintain context across turns:
