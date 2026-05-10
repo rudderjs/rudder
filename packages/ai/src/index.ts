@@ -167,8 +167,8 @@ export { FileManager } from './files.js'
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'
 
-// Budget / pricing (A6 phase 1 — full catalog used by eval cost column
-// and the upcoming `withBudget(...)` middleware in phase 3)
+// Budget / pricing (A6 phases 1+2 — full catalog used by eval cost column,
+// plus the `BudgetStorage` contract `withBudget(...)` will use in phase 3)
 export {
   ModelPricing,
   estimateCost,
@@ -177,6 +177,16 @@ export {
   BudgetExceededError,
 } from './budget/pricing.js'
 export type { ModelPriceEntry } from './budget/pricing.js'
+export {
+  memoryBudgetStorage,
+  periodKey,
+} from './budget/storage.js'
+export type {
+  BudgetStorage,
+  BudgetPeriod,
+  BudgetCheckOptions,
+  BudgetCheckResult,
+} from './budget/storage.js'
 
 // Testing
 export { AiFake } from './fake.js'
