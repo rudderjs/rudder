@@ -36,6 +36,9 @@ import type { AgentResponse } from '../types.js'
 import { Output } from '../output.js'
 import { z } from 'zod'
 
+export { reportJson } from './json-reporter.js'
+export type { SuiteJson, SuiteJsonCase } from './json-reporter.js'
+
 // ─── Types ────────────────────────────────────────────────
 
 /**

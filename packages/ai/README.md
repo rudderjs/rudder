@@ -997,21 +997,38 @@ export default evalSuite('SupportAgent', {
 })
 ```
 
-Run programmatically today (Phase 1):
+Run via the CLI (Phase 2):
+
+```bash
+pnpm rudder ai:eval                    # all suites under evals/**/*.eval.ts
+pnpm rudder ai:eval support            # only suites whose name includes "support"
+pnpm rudder ai:eval --bail             # stop on first failing suite
+pnpm rudder ai:eval --json             # machine-readable envelope to stdout
+```
+
+```text
+SupportAgent (3 cases, 2.3s, $0.014)
+  ✓ password reset             1.2s   $0.003   tokens: 487
+  ✓ price                      0.8s   $0.002   tokens: 312
+  ✗ support email              1.1s   $0.002   tokens: 425
+      pattern /support@example\.com/ did not match "Reach us at hello@…"
+
+  2 passed, 1 failed
+  total: $0.007  •  cumulative tokens: 1,224
+```
+
+Exits 0 when every case passes, 1 on any failure. `--json` emits `{ suites: [{ suite, passed, failed, cases: [{ name, status, pass, score?, reason?, tokens, cost, duration }] }] }` to stdout — pipe directly into `jq` for CI gates.
+
+Override the discovery pattern via `config('ai').eval.pattern` (`'evals/**/*.eval.ts'` by default; supports `<dir>/**/*<suffix>` and `*<suffix>` shapes).
+
+Or run programmatically:
 
 ```ts
-import { runSuite, reportConsole } from '@rudderjs/ai/eval'
+import { runSuite, reportConsole, reportJson } from '@rudderjs/ai/eval'
 import suite from './evals/support-agent.eval.ts'
 
 reportConsole(await runSuite(suite))
-//=> SupportAgent (3 cases, 2.3s, $0.014)
-//     ✓ password reset             1.2s   $0.003   tokens: 487
-//     ✓ price                      0.8s   $0.002   tokens: 312
-//     ✗ support email              1.1s   $0.002   tokens: 425
-//         pattern /support@example\.com/ did not match "Reach us at hello@…"
-//
-//     2 passed, 1 failed
-//     total: $0.007  •  cumulative tokens: 1,224
+// reportJson(await runSuite(suite))   // structured envelope for CI scripts
 ```
 
 **Built-in metrics (Phase 1):**
@@ -1026,7 +1043,7 @@ User-defined metrics implement `(response, ctx) => MetricResult` — no inherita
 
 **Failure semantics:** the runner never throws upward. Agent errors AND assertion throws become `failed` rows with the message in `reason`. Per-case `timeout` (ms) caps long runs. Per-case `agent` factory overrides the suite default — useful for stress-testing one case against a different model.
 
-**Roadmap:** Phase 2 adds `pnpm rudder ai:eval` (CLI + glob discovery + JSON output for CI). Phase 3 adds `jsonShape` / `semanticMatch` / `tokenCost`. Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
+**Roadmap:** Phase 3 adds `jsonShape` / `semanticMatch` / `tokenCost`. Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
 
 ### MCP integration
 

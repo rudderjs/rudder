@@ -620,6 +620,15 @@ export interface AiConfig {
   conversations?: ConversationStore
   /** User memory store for persisting per-user facts beyond conversation history (#A4) */
   memory?: UserMemory
+  /** Eval framework knobs (#A5). Optional; the CLI applies sensible defaults. */
+  eval?: {
+    /**
+     * Glob-like pattern for `pnpm rudder ai:eval` discovery. Default
+     * `'evals/**\/*.eval.ts'`. Supports `<dir>/**\/*<suffix>` and
+     * `*<suffix>` shapes; richer patterns belong in a userland script.
+     */
+    pattern?: string
+  }
 }
 
 // ─── Agent Options ─────────────���──────────────────────────

@@ -37,6 +37,10 @@
       "import": "./dist/commands/make-agent.js",
       "types": "./dist/commands/make-agent.d.ts"
     },
+    "./commands/ai-eval": {
+      "import": "./dist/commands/ai-eval.js",
+      "types": "./dist/commands/ai-eval.d.ts"
+    },
     "./observers": {
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
