@@ -16,12 +16,12 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 
 | # | Item | Scope | Why this slot |
 |---|---|---|---|
-| A1 | Prompt caching | S (~1 wk) | Pays for itself day one. Smallest scope, biggest immediate $ ROI. |
+| A1 | Prompt caching ✓ | S (~1 wk) | Pays for itself day one. Smallest scope, biggest immediate $ ROI. *Shipped 2026-05-09 (Anthropic / OpenAI / Google in 3 sub-PRs).* |
 | A2 | Handoffs ✓ | S (~3–5 d) | Small, complements `asTool`. Closes the multi-agent picture. *Shipped 2026-05-10.* |
 | A2.5 | `asTool()` streaming + sub-agent suspend/resume | S (~2.5 d) | Richer call-and-return shape; absorbs ~700 LOC of bespoke plumbing from `@pilotiq-pro/ai`. See `2026-05-09-asTool-streaming-and-suspend.md`. |
-| A3 | MCP ↔ Agent bridge | S (~3–4 d) | Closes the loop between our two AI packages. Small surface. |
-| A4 | User memory (Mem0-style) | M (~2 wk) | Personalized agents — clear customer ask once A1–A3 land. |
-| A5 | Eval framework | L (~2–3 wk) | Most valuable long-term, but needs real surface area to test. |
+| A3 | MCP ↔ Agent bridge ✓ | S (~3–4 d) | Closes the loop between our two AI packages. Small surface. *Shipped 2026-05-10.* |
+| A4 | User memory (Mem0-style) ✓ | M (~2 wk) | Personalized agents — clear customer ask once A1–A3 land. *Shipped 2026-05-10 (5 phases: in-memory → auto-inject → auto-extract → ORM backend → embedding backend).* |
+| A5 | Eval framework ✓ | L (~2–3 wk) | Most valuable long-term, but needs real surface area to test. *Shipped 2026-05-10 (5 phases: framework → CLI/JSON → metrics → record/replay → HTML report).* |
 | A6 | Cost / budget enforcement | M (~1 wk) | Production-only need; defer until customers are in prod. |
 | A7 | Computer-use abstraction | L (~2 wk) | Narrowest use case + heaviest infra; last. |
 
@@ -52,7 +52,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 
 ## Track A — Forward-looking additions
 
-## A1. Prompt caching as a first-class API
+## A1. Prompt caching as a first-class API — ✓ shipped 2026-05-09
 
 **Problem.** Anthropic, OpenAI, and Google all offer 50–90% discounts for cached prompts (system messages, tool definitions, few-shot examples, large context). The SDK-level ergonomics today are awful — every provider exposes it differently:
 - **Anthropic:** explicit `cache_control: { type: 'ephemeral' }` on content blocks.
@@ -105,7 +105,7 @@ A `'handoff'` `StreamChunk` is emitted right before control transfers. `AgentRes
 
 ---
 
-## A3. MCP ↔ Agent bridge
+## A3. MCP ↔ Agent bridge — ✓ shipped 2026-05-10
 
 **Problem.** `@rudderjs/mcp` exists. `@rudderjs/ai` exists. Two obvious connectors are missing:
 
@@ -125,7 +125,7 @@ server.listen({ port: 3001 })
 
 ---
 
-## A4. User memory beyond conversation history
+## A4. User memory beyond conversation history — ✓ shipped 2026-05-10
 
 **Problem.** `forUser(userId)` persists message history. It does **not** persist *facts*. If Alice tells the bot her project is named "Foo" in conversation #1, the bot won't know that in conversation #2 unless the entire history is replayed (expensive, lossy, sometimes prohibited by retention policies).
 
@@ -165,7 +165,7 @@ withMemory({
 
 ---
 
-## A5. Built-in eval framework
+## A5. Built-in eval framework — ✓ shipped 2026-05-10
 
 **Problem.** Testing AI is the #1 unsolved production problem. Right now apps have `AiFake` for unit tests but no story for "does the agent actually do the right thing on real models?" Vercel ships `evalite`; Anthropic ships `claude-evals`; OpenAI has `evals`. None are framework-integrated. We can do better.
 
