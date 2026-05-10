@@ -35,13 +35,18 @@
   "dependencies": {
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
-    "@rudderjs/contracts": "workspace:^"
+    "@rudderjs/contracts": "workspace:^",
+    "@rudderjs/support": "workspace:^"
   },
   "peerDependencies": {
-    "@prisma/client": "^7.0.0"
+    "@prisma/client": "^7.0.0",
+    "@rudderjs/ai": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@prisma/client": {
+      "optional": true
+    },
+    "@rudderjs/ai": {
       "optional": true
     }
   },
