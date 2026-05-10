@@ -701,6 +701,100 @@ Route.post('/api/ai/stream', async (req) => {
   })
 })
 
+// ── Computer-use browser agent (#A7) ─────────────────────
+//
+// POST /api/browser/run  body: { url: string, query: string }
+// → { ok, text, steps[], usage } | { ok: false, error, errorHint? }
+//
+// Launches headless Chromium, navigates to `url`, hands the Page to a
+// BrowserAgent (Anthropic Claude + computerUseTool), runs the agent
+// against `query`, returns the final answer + step list.
+//
+// Requirements: ANTHROPIC_API_KEY in env + `npx playwright install
+// chromium` once. Both checked at runtime with friendly errors.
+Route.post('/api/browser/run', async (req, res) => {
+  const { url, query } = (req.body ?? {}) as { url?: string; query?: string }
+  if (!url || !query) {
+    return res.status(422).json({
+      ok: false,
+      error: 'url and query are required.',
+    })
+  }
+  if (!process.env['ANTHROPIC_API_KEY']) {
+    return res.status(500).json({
+      ok: false,
+      error: 'ANTHROPIC_API_KEY is not set.',
+      errorHint: 'Add ANTHROPIC_API_KEY=sk-ant-... to playground/.env and restart `pnpm dev`.',
+    })
+  }
+
+  // Lazy-load Playwright server-side only — Vite externalizes it; no
+  // browser bundle impact.
+  let browser: { close(): Promise<void> } | null = null
+  try {
+    const { chromium } = await import('playwright')
+    browser = await chromium.launch()
+    const page = await (browser as unknown as { newPage(): Promise<unknown> }).newPage() as {
+      setViewportSize(s: { width: number; height: number }): Promise<void>
+      goto(u: string, o?: { timeout?: number }): Promise<unknown>
+    }
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto(url, { timeout: 15_000 })
+
+    const { BrowserAgent } = await import('../app/Agents/BrowserAgent.js')
+    const agent = new BrowserAgent(page as never)
+    const response = await agent.prompt(query)
+
+    const steps = (response.steps ?? []).flatMap((step) =>
+      (step.toolCalls ?? []).map((call, i) => {
+        const args = (call.arguments ?? {}) as Record<string, unknown>
+        const result = step.toolResults?.[i]?.result
+        const resultStr = result === undefined
+          ? '(no result)'
+          : typeof result === 'string'
+            ? result
+            : Array.isArray(result) && (result[0] as { type?: string })?.type === 'image'
+              ? '[image]'
+              : JSON.stringify(result).slice(0, 200)
+        const action = String(args['action'] ?? call.name)
+        const detail = args['coordinate'] ? ` ${JSON.stringify(args['coordinate'])}` : args['text'] ? ` ${JSON.stringify(args['text'])}` : ''
+        // Heuristic: result strings that contain "error" or look like an
+        // Error.message — flag for the UI. Not a hard contract.
+        const isError = typeof result === 'string' && /^(error|boom|exception)/i.test(result)
+        return {
+          action: `${action}${detail}`,
+          result: resultStr,
+          isError,
+        }
+      }),
+    )
+
+    return res.json({
+      ok:    true,
+      text:  response.text,
+      steps,
+      usage: {
+        inputTokens:  response.usage.promptTokens,
+        outputTokens: response.usage.completionTokens,
+        totalTokens:  response.usage.totalTokens,
+      },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // Friendly hint for the most common first-time setup miss.
+    if (/Executable doesn't exist|Failed to launch chromium|browserType\.launch/i.test(msg)) {
+      return res.status(500).json({
+        ok: false,
+        error: msg,
+        errorHint: 'Run `npx playwright install chromium` from playground/, then retry.',
+      })
+    }
+    return res.status(500).json({ ok: false, error: msg })
+  } finally {
+    if (browser) await browser.close().catch(() => undefined)
+  }
+}, [RateLimit.perMinute(5)])
+
 // ── Passport OAuth 2 routes ──────────────────────────────
 //
 // Registers the **api half** of Passport — POST /oauth/token,
