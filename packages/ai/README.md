@@ -819,7 +819,47 @@ Failures (network, JSON parse, schema mismatch, store write) route through `Memo
 
 **Poisoning mitigation** — auto-extraction trusts the user's own conversation as input. The default 0.7 confidence threshold is the v1 defense against adversarial "facts." Pair with `MemoryExtractOptions.onExtracted` for an audit log when shipping to production, and tighten the threshold for high-risk domains.
 
-**Phase 1 + 2 + 3 status:** interface, in-process backend, per-call/class declaration, auto-inject, and auto-extract runtimes ship today. ORM-backed `OrmUserMemory` (Phase 4) and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
+#### Production backend — `OrmUserMemory`
+
+For production, swap `MemoryUserMemory` for `OrmUserMemory` (subpath `@rudderjs/ai/memory-orm`) — persists rows via your registered `@rudderjs/orm` adapter (Prisma today; Drizzle once you wire the tables):
+
+```ts
+// config/ai.ts
+import type { AiConfig } from '@rudderjs/ai'
+import { OrmUserMemory } from '@rudderjs/ai/memory-orm'
+
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: { /* ... */ },
+  memory: new OrmUserMemory(),
+} satisfies AiConfig
+```
+
+Add the schema to your Prisma file (or import the reference string `userMemoryPrismaSchema` from `@rudderjs/ai/memory-orm`):
+
+```prisma
+model UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  fact      String
+  /// JSON-encoded `string[]` of tags, or null
+  tags      String?
+  /// Confidence score in [0, 1] — extract sets this from the model's self-rating
+  score     Float?
+  /// Phase 5 — vector embedding for cosine recall (nullable so Phase 4 ignores it)
+  embedding Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+```
+
+Then run `pnpm exec prisma db push` (dev) or `pnpm exec prisma migrate dev` (prod). The `embedding Bytes?` column is intentionally nullable — Phase 5's `EmbeddingUserMemory` populates it without forcing a follow-up migration.
+
+`OrmUserMemory.recall()` uses **OR-of-LIKE token overlap** on the `fact` column — same semantic as `MemoryUserMemory`. Tag-array filtering happens JS-side after fetch (pushing tags into the WHERE is adapter-specific; that lands in a follow-up).
+
+**Phase 1 + 2 + 3 + 4 status:** interface, in-process backend, per-call/class declaration, auto-inject, auto-extract, and ORM-backed `OrmUserMemory` ship today. Embedding-backed `EmbeddingUserMemory` with cosine recall + GDPR cascade (Phase 5) lands in the next release.
 
 ### Model Selection
 

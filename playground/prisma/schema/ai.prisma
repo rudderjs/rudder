@@ -1,0 +1,22 @@
+// `@rudderjs/ai/memory-orm` — UserMemory backend (#A4 Phase 4)
+//
+// Mirrors the schema exported as `userMemoryPrismaSchema` from the
+// package. The `embedding Bytes?` column is intentionally nullable so
+// Phase 5's `EmbeddingUserMemory` becomes additive (no schema
+// migration when you upgrade).
+
+model UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  fact      String
+  /// JSON-encoded `string[]` of tags, or null
+  tags      String?
+  /// Confidence score in [0, 1] — extract sets this from the model's self-rating
+  score     Float?
+  /// Phase 5 — vector embedding for cosine recall (nullable so Phase 4 ignores it)
+  embedding Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
