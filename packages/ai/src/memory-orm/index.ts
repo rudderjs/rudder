@@ -46,15 +46,17 @@ import type {
  * needing native array columns. The {@link UserMemory.recall} path
  * filters tags in JavaScript for the same reason.
  *
- * Phase 4 deliberately stores no `embedding` here — the column is in
- * the schema as nullable so Phase 5's `EmbeddingUserMemory` can
- * populate it without an additive migration. This Model class doesn't
- * declare it because Phase 4 never reads or writes it.
+ * The `embedding Bytes?` column is in the schema as of Phase 4
+ * (nullable) so `@rudderjs/ai/memory-embedding`'s `EmbeddingUserMemory`
+ * (Phase 5) writes the Float32-packed vector here on `remember()` and
+ * reads it for cosine recall. `OrmUserMemory` ignores it — the
+ * column stays `null` for any row stored without the embedding
+ * composer.
  */
 export class UserMemoryRecord extends Model {
   static override table = 'userMemory'
 
-  static override fillable = ['userId', 'fact', 'tags', 'score']
+  static override fillable = ['userId', 'fact', 'tags', 'score', 'embedding']
 
   declare id:        string
   declare userId:    string
@@ -62,6 +64,13 @@ export class UserMemoryRecord extends Model {
   /** JSON-encoded `string[]` or null. Use `getTags()` for the parsed shape. */
   declare tags:      string | null
   declare score:     number | null
+  /**
+   * Float32-packed vector serialized via
+   * `@rudderjs/ai/memory-embedding`'s `serializeVector` /
+   * `deserializeVector`. `null` when the row was stored without the
+   * embedding composer (Phase 4-only setups).
+   */
+  declare embedding: Uint8Array | null
   declare createdAt: Date
   declare updatedAt: Date | null
 

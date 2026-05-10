@@ -48,6 +48,10 @@
     "./memory-orm": {
       "import": "./dist/memory-orm/index.js",
       "types": "./dist/memory-orm/index.d.ts"
+    },
+    "./memory-embedding": {
+      "import": "./dist/memory-embedding/index.js",
+      "types": "./dist/memory-embedding/index.d.ts"
     }
   },
   "scripts": {
