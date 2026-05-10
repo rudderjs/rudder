@@ -176,7 +176,7 @@ describe('whereVectorSimilarTo — auto-embed', () => {
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
-assert.throws(
+    assert.throws(
       () => qb.whereVectorSimilarTo!('embedding', 'a natural-language query'),
       (err: unknown) => {
         if (!(err instanceof MissingEmbedderError)) return false
@@ -187,13 +187,34 @@ assert.throws(
     )
   })
 
-  it('throws "Phase 2" error when embedWith IS set (auto-embed lands in Phase 2)', async () => {
+  it('accepts string query + embedWith synchronously (resolution deferred to terminal)', async () => {
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
-assert.throws(
-      () => qb.whereVectorSimilarTo!('embedding', 'query', { embedWith: 'openai/text-embedding-3-small' }),
-      /Phase 2/i,
+    // Should NOT throw — auto-embed is deferred until .get() / .first().
+    assert.doesNotThrow(() =>
+      qb.whereVectorSimilarTo!('embedding', 'natural language query', { embedWith: 'openai/text-embedding-3-small' }),
+    )
+  })
+
+  it('terminal call surfaces a clear error when @rudderjs/ai is not resolvable', async () => {
+    // process.cwd() is the orm-prisma package dir during the test, where
+    // @rudderjs/ai may or may not be reachable depending on workspace
+    // hoisting. The error message must mention @rudderjs/ai either way so
+    // users get an actionable diagnostic, never an opaque resolver dump.
+    const { fakeClient } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    qb.whereVectorSimilarTo!('embedding', 'query', { embedWith: 'fake-provider/fake-model' })
+    await assert.rejects(
+      () => qb.get(),
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        // Either resolveOptionalPeer fails (peer missing) → guidance message,
+        // OR ai resolves and AiRegistry rejects the unknown provider →
+        // contains 'fake-provider' / provider-not-registered language.
+        return /@rudderjs\/ai|fake-provider|provider/i.test(msg)
+      },
     )
   })
 })

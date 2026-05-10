@@ -592,6 +592,9 @@ importers:
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@rudderjs/ai':
+        specifier: workspace:^
+        version: link:../ai
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -601,6 +604,9 @@ importers:
       '@rudderjs/orm':
         specifier: workspace:^
         version: link:../orm
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.0.0

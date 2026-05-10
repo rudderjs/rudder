@@ -167,6 +167,15 @@ export { FileManager } from './files.js'
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'
 
+// Similarity Search (#B7 Phase 2 — agent tool wrapping ORM vector primitives)
+export { similaritySearch } from './similarity-search.js'
+export type {
+  SimilaritySearchOptions,
+  SimilarityHit,
+  SimilaritySearchModel,
+  SimilaritySearchQueryBuilder,
+} from './similarity-search.js'
+
 // Budget / pricing (#A6 — full pricing catalog + per-user spend caps)
 export {
   ModelPricing,

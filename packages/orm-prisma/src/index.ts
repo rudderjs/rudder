@@ -42,6 +42,7 @@ import {
   MissingEmbedderError,
   VectorStorageUnsupportedError,
 } from '@rudderjs/orm'
+import { resolveOptionalPeer } from '@rudderjs/support'
 
 // ─── Prisma Query Builder ──────────────────────────────────
 
@@ -78,10 +79,16 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   /** pgvector similarity clause (#B7 Phase 1). When set, terminal methods
    *  switch to a `$queryRawUnsafe` path that bypasses the standard
-   *  fluent-API `findMany`. v1 disallows mixing with other where clauses. */
+   *  fluent-API `findMany`. v1 disallows mixing with other where clauses.
+   *
+   *  Phase 2 widens `query` to support deferred auto-embed: when the user
+   *  passes a string + `embedWith`, `query` stays `null` and `pendingEmbed`
+   *  carries the text + model id so `_getViaVector` can lazy-embed at
+   *  terminal time. */
   private _vectorClause: {
     column:        string
-    query:         number[]
+    query:         number[] | null
+    pendingEmbed?: { text: string; embedWith: string }
     minSimilarity?: number
     metric:        'cosine' | 'l2' | 'inner-product'
   } | null = null
@@ -196,14 +203,18 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     },
   ): this {
     if (typeof query === 'string') {
-      // Auto-embed lands in B7 Phase 2; phase 1 throws either MissingEmbedderError
-      // (when embedWith is unset — guides users to add it) or a "not yet" error
-      // (when embedWith IS set — guides users to phase 2 / pre-embed for now).
+      // Phase 2: defer auto-embed to terminal time so the chain stays sync.
+      // `embedWith` is still required — fail loud rather than route through
+      // whichever provider happens to be the AI default.
       if (!opts?.embedWith) throw new MissingEmbedderError(column)
-      throw new Error(
-        '[RudderJS ORM] Auto-embed (string query) lands in B7 Phase 2 alongside the similaritySearch() agent tool. ' +
-        'Pre-embed via AI.embed() and pass the number[] result for now.',
-      )
+      this._vectorClause = {
+        column,
+        query: null,
+        pendingEmbed: { text: query, embedWith: opts.embedWith },
+        metric: opts?.metric ?? 'cosine',
+        ...(opts?.minSimilarity !== undefined ? { minSimilarity: opts.minSimilarity } : {}),
+      }
+      return this
     }
     this._vectorClause = {
       column,
@@ -301,13 +312,17 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       )
     }
 
-    const { column, query, minSimilarity, metric } = this._vectorClause
+    const { column, query, pendingEmbed, minSimilarity, metric } = this._vectorClause
     const op =
       metric === 'l2'             ? '<->' :
       metric === 'inner-product'  ? '<#>' :
                                     '<=>'   // cosine
 
-    const vec = vectorLiteral(query)
+    // Resolve the deferred auto-embed if we kept the string at sync-chain
+    // time. Pulls @rudderjs/ai via resolveOptionalPeer so orm-prisma stays
+    // independent of the AI runtime — apps that don't do RAG never load it.
+    const resolvedQuery = query ?? await resolveAutoEmbed(pendingEmbed)
+    const vec = vectorLiteral(resolvedQuery)
     const id  = quoteIdent
     const limit = this._limitN ?? 100
 
@@ -1092,4 +1107,42 @@ function quoteIdent(name: string): string {
  */
 function vectorLiteral(vec: readonly number[]): string {
   return `[${vec.join(',')}]`
+}
+
+/**
+ * Resolve the deferred auto-embed for `whereVectorSimilarTo('col',
+ * '<text>', { embedWith })` (#B7 Phase 2). Pulls `@rudderjs/ai`
+ * lazily via `resolveOptionalPeer` so the orm-prisma adapter never
+ * hard-deps on the AI package — apps that don't do RAG don't load it.
+ */
+async function resolveAutoEmbed(pending: { text: string; embedWith: string } | undefined): Promise<number[]> {
+  if (!pending) {
+    throw new Error(
+      '[RudderJS ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
+      'This is a bug — please report it.',
+    )
+  }
+
+  type AiModule = { AI: { embed(input: string, opts: { model: string }): Promise<{ embeddings: number[][] }> } }
+  let ai: AiModule
+  try {
+    ai = await resolveOptionalPeer<AiModule>('@rudderjs/ai')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      '[RudderJS ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
+      'Run `pnpm add @rudderjs/ai`, or pre-embed via your own embedder and pass number[] instead. ' +
+      `Original: ${msg}`,
+      { cause: err },
+    )
+  }
+
+  const result = await ai.AI.embed(pending.text, { model: pending.embedWith })
+  const vec = result.embeddings[0]
+  if (!vec || vec.length === 0) {
+    throw new Error(
+      `[RudderJS ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
+    )
+  }
+  return vec
 }
