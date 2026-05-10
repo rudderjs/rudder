@@ -197,6 +197,30 @@ await server.connect(new StdioServerTransport())
 
 When mcpClientTools owns the underlying client (URL or stdio transport), the returned array exposes `close()` for shutdown — call it when the agent is done. With a caller-provided client, lifecycle stays with the caller.
 
+### Queued prompts + live broadcast (`agent.queue().broadcast()`)
+
+`agent.queue(input)` ships the run to the background queue (`@rudderjs/queue`). Add `.broadcast(channel)` to stream chunks to a `@rudderjs/broadcast` channel as the job runs — background AI work + live UI without polling.
+
+```ts
+import { agent } from '@rudderjs/ai'
+
+// Plain queued — no live updates
+await agent('You help with refunds.')
+  .queue('Process refund for order #1234')
+  .onQueue('ai')
+  .send()
+
+// Stream chunks to the user's channel as they arrive
+await new SupportAgent()
+  .queue('Help with refund request')
+  .broadcast(`user.${userId}.support`)
+  .send()
+```
+
+Subscribers on the channel receive `chunk` events (one per `StreamChunk`), then a `done` event with the final `AgentResponse`, or an `error` event on failure. Optional `eventPrefix` namespaces events: `.broadcast('chan', { eventPrefix: 'agent.' })` emits `agent.chunk` / `agent.done` / `agent.error`.
+
+`@rudderjs/broadcast`'s in-process WS state is process-local — same-process web + `queue:work` works out of the box; a separate worker process needs a future pub/sub bridge.
+
 ### Structured Output
 
 Use `Output` to constrain responses to typed schemas:
