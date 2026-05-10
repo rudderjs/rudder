@@ -1031,19 +1031,29 @@ reportConsole(await runSuite(suite))
 // reportJson(await runSuite(suite))   // structured envelope for CI scripts
 ```
 
-**Built-in metrics (Phase 1):**
+**Built-in metrics:**
 
 | Metric | Behavior |
 |---|---|
 | `exactMatch(string)` | `response.text === expected` |
 | `regex(RegExp)` | `pattern.test(response.text)` |
 | `llmJudge(criterion, opts?)` | Asks a small model whether the response satisfies a natural-language criterion. Returns the judge's reasoning in `reason` so failures are debuggable. |
+| `jsonShape(zodSchema)` | Strips ```` ``` ```` fences, parses, runs zod `safeParse`. Surfaces the zod issue path on failure. Pairs with `Output.object({ schema })` on the agent. |
+| `semanticMatch(reference, opts?)` | Embeds reference + response via `AI.embed()`, cosine similarity vs `opts.threshold` (default `0.85`). Embed cost rolls into the case's cost rollup. Requires a provider with `createEmbedding()` (openai/google/mistral/cohere/jina). |
+| `tokenCost(threshold)` | Passes when `response.usage.totalTokens <= threshold`. Detects prompt-size regressions before they show up as a billing surprise. |
 
-User-defined metrics implement `(response, ctx) => MetricResult` — no inheritance, no decorators. The metrics catalog is just a starting set.
+`compose(...metrics)` runs them in order, short-circuits on the first failure, surfaces its reason. Useful for "must be valid JSON AND under budget" assertions:
+
+```ts
+{ input: '…',
+  assert: compose(jsonShape(SummarySchema), tokenCost(800)) }
+```
+
+User-defined metrics implement `(response, ctx) => MetricResult` — no inheritance, no decorators. The catalog is just a starting set.
 
 **Failure semantics:** the runner never throws upward. Agent errors AND assertion throws become `failed` rows with the message in `reason`. Per-case `timeout` (ms) caps long runs. Per-case `agent` factory overrides the suite default — useful for stress-testing one case against a different model.
 
-**Roadmap:** Phase 3 adds `jsonShape` / `semanticMatch` / `tokenCost`. Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
+**Roadmap:** Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
 
 ### MCP integration
 

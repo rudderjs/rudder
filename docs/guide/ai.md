@@ -781,7 +781,16 @@ pnpm rudder ai:eval --json             # CI-friendly envelope to stdout
 
 Exits 0 when every case passes, 1 on any failure. `--json` emits `{ suites: [{ suite, passed, failed, cases: [{ name, status, pass, score?, reason?, tokens, cost, duration }] }] }` for CI gates. Override the discovery pattern via `config('ai').eval.pattern` (default `'evals/**/*.eval.ts'`).
 
-Built-in metrics (`exactMatch`, `regex`, `llmJudge`) cover the common cases; user metrics implement `(response, ctx) => MetricResult`. See `@rudderjs/ai/eval` for full surface — `evalSuite()`, `runSuite()`, `reportConsole()`, `reportJson()`.
+Built-in metrics:
+
+- `exactMatch(string)` / `regex(RegExp)` — surface checks on `response.text`.
+- `llmJudge(criterion, opts?)` — small-model judge for fuzzy "did the answer mention X?" assertions.
+- `jsonShape(zodSchema)` — strict structural assertion. Strips ` ``` ` fences and runs zod `safeParse`; failure surfaces the issue path.
+- `semanticMatch(reference, opts?)` — embeds reference + response, cosine vs `opts.threshold` (default `0.85`). Requires a provider with `createEmbedding()`.
+- `tokenCost(threshold)` — passes when `response.usage.totalTokens <= threshold`; detects prompt-size regressions.
+- `compose(...metrics)` — runs metrics in order with first-failure short-circuit. `compose(jsonShape(Schema), tokenCost(800))` enforces "valid JSON AND under budget."
+
+User metrics implement `(response, ctx) => MetricResult`. See `@rudderjs/ai/eval` for full surface — `evalSuite()`, `runSuite()`, `reportConsole()`, `reportJson()`.
 
 ## Pitfalls
 
