@@ -73,6 +73,9 @@ importers:
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
+      '@rudderjs/orm':
+        specifier: workspace:^
+        version: link:../orm
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
