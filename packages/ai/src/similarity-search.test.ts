@@ -20,9 +20,11 @@ interface DocumentRow {
 
 /** Records every QB call so tests can assert the SQL-builder shape. */
 interface QbTrace {
+  wheres?:               Array<{ column: string; operator: string; value: unknown }>
+  orWheres?:             Array<{ column: string; operator: string; value: unknown }>
   whereVectorSimilarTo?: { column: string; query: number[] | string; opts: unknown }
   selectVectorDistance?: { column: string; query: number[]; alias: string }
-  limit?: number
+  limit?:                number
 }
 
 function makeFakeModel(opts: {
@@ -30,23 +32,37 @@ function makeFakeModel(opts: {
   trace?: QbTrace
 } = { rows: [] }): SimilaritySearchModel<DocumentRow> {
   const trace = opts.trace ?? {}
+  trace.wheres   ??= []
+  trace.orWheres ??= []
 
   function makeQb(): SimilaritySearchQueryBuilder<DocumentRow> {
-    const qb: SimilaritySearchQueryBuilder<DocumentRow> = {
-      whereVectorSimilarTo(column, query, opts2) {
+    const qb = {
+      where(column: string, opOrVal: unknown, value?: unknown): SimilaritySearchQueryBuilder<DocumentRow> {
+        const operator = arguments.length === 3 ? String(opOrVal) : '='
+        const val      = arguments.length === 3 ? value : opOrVal
+        trace.wheres!.push({ column, operator, value: val })
+        return qb
+      },
+      orWhere(column: string, opOrVal: unknown, value?: unknown): SimilaritySearchQueryBuilder<DocumentRow> {
+        const operator = arguments.length === 3 ? String(opOrVal) : '='
+        const val      = arguments.length === 3 ? value : opOrVal
+        trace.orWheres!.push({ column, operator, value: val })
+        return qb
+      },
+      whereVectorSimilarTo(column: string, query: number[] | string, opts2?: unknown): SimilaritySearchQueryBuilder<DocumentRow> {
         trace.whereVectorSimilarTo = { column, query, opts: opts2 ?? null }
         return qb
       },
-      selectVectorDistance(column, query, alias) {
+      selectVectorDistance(column: string, query: number[], alias: string): SimilaritySearchQueryBuilder<DocumentRow> {
         trace.selectVectorDistance = { column, query, alias }
         return qb
       },
-      limit(n) {
+      limit(n: number): SimilaritySearchQueryBuilder<DocumentRow> {
         trace.limit = n
         return qb
       },
       get: async () => opts.rows,
-    }
+    } as unknown as SimilaritySearchQueryBuilder<DocumentRow>
     return qb
   }
 
@@ -376,5 +392,93 @@ describe('similaritySearch — modelOutput', () => {
     assert.match(output, /"id":1/)
     assert.match(output, /"content":"serialized"/)
     assert.doesNotMatch(output, /__rudderjs/)
+  })
+})
+
+// ─── scope callback (#B7 Phase 2.5) ──────────────────────
+
+describe('similaritySearch — scope callback', () => {
+  let fake: AiFake
+
+  beforeEach(() => { fake = AiFake.fake() })
+  afterEach(() => { fake.restore() })
+
+  it('calls scope before whereVectorSimilarTo and applies the .where() chain', async () => {
+    const trace: QbTrace = {}
+    const model = makeFakeModel({ rows: [], trace })
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = similaritySearch({
+      model, column: 'embedding', embedWith: '__fake__/embed',
+      scope: (q) => q.where('tenantId', 42).where('published', true),
+    })
+    await tool.execute({ query: 'q' })
+
+    assert.deepEqual(trace.wheres, [
+      { column: 'tenantId',  operator: '=', value: 42 },
+      { column: 'published', operator: '=', value: true },
+    ])
+    // Vector clause still attached after the scope chain.
+    assert.equal(trace.whereVectorSimilarTo?.column, 'embedding')
+  })
+
+  it('forwards the WhereOperator overload through scope', async () => {
+    const trace: QbTrace = {}
+    const model = makeFakeModel({ rows: [], trace })
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = similaritySearch({
+      model, column: 'embedding', embedWith: '__fake__/embed',
+      scope: (q) => q.where('priority', '>=', 5).where('id', 'IN', [1, 2, 3]),
+    })
+    await tool.execute({ query: 'q' })
+
+    assert.deepEqual(trace.wheres, [
+      { column: 'priority', operator: '>=', value: 5 },
+      { column: 'id',       operator: 'IN', value: [1, 2, 3] },
+    ])
+  })
+
+  it('honors scope returning .orWhere()', async () => {
+    const trace: QbTrace = {}
+    const model = makeFakeModel({ rows: [], trace })
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = similaritySearch({
+      model, column: 'embedding', embedWith: '__fake__/embed',
+      scope: (q) => q.where('tenantId', 1).orWhere('shared', true),
+    })
+    await tool.execute({ query: 'q' })
+
+    assert.equal(trace.wheres?.length, 1)
+    assert.equal(trace.orWheres?.length, 1)
+    assert.deepEqual(trace.orWheres?.[0], { column: 'shared', operator: '=', value: true })
+  })
+
+  it('no scope = no .where() calls (back-compat with Phase 2 omit-scope behavior)', async () => {
+    const trace: QbTrace = {}
+    const model = makeFakeModel({ rows: [], trace })
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = similaritySearch({ model, column: 'embedding', embedWith: '__fake__/embed' })
+    await tool.execute({ query: 'q' })
+
+    assert.equal(trace.wheres?.length, 0)
+    assert.equal(trace.orWheres?.length, 0)
+  })
+
+  it('scope receives a builder it can return verbatim', async () => {
+    const trace: QbTrace = {}
+    const model = makeFakeModel({ rows: [], trace })
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = similaritySearch({
+      model, column: 'embedding', embedWith: '__fake__/embed',
+      scope: (q) => q,   // identity
+    })
+    await tool.execute({ query: 'q' })
+
+    assert.equal(trace.whereVectorSimilarTo?.column, 'embedding')
+    assert.equal(trace.wheres?.length, 0)
   })
 })

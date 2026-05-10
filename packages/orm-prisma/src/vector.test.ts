@@ -8,6 +8,7 @@ import { MissingEmbedderError, VectorStorageUnsupportedError } from '@rudderjs/o
 
 function makeVectorClient(opts: { rows?: Array<Record<string, unknown>>; throwOnQuery?: string } = {}) {
   const captured: string[] = []
+  const capturedParams: unknown[][] = []
   const rows = opts.rows ?? []
   const delegate = {
     findMany:   async () => rows,
@@ -27,11 +28,16 @@ function makeVectorClient(opts: { rows?: Array<Record<string, unknown>>; throwOn
     $disconnect:  async () => {},
     $queryRawUnsafe: async (...args: unknown[]) => {
       captured.push(args[0] as string)
+      capturedParams.push(args.slice(1))
       if (opts.throwOnQuery) throw new Error(opts.throwOnQuery)
       return rows
     },
   }
-  return { fakeClient, getCaptured: () => captured }
+  return {
+    fakeClient,
+    getCaptured: () => captured,
+    getCapturedParams: () => capturedParams,
+  }
 }
 
 // ─── whereVectorSimilarTo — happy path ────────────────────
@@ -125,26 +131,16 @@ const row = await qb.whereVectorSimilarTo!('embedding', [1]).first()
   })
 })
 
-// ─── v1 restrictions ──────────────────────────────────────
+// ─── still-unsupported chains (subset, post-Phase-2.5) ────
 
-describe('whereVectorSimilarTo — v1 restrictions', () => {
-  it('throws when chained with .where() (B7 Phase 2)', async () => {
+describe('whereVectorSimilarTo — still-unsupported chains', () => {
+  it('throws when chained with .with() (eager load)', async () => {
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
-await assert.rejects(
-      () => qb.whereVectorSimilarTo!('embedding', [1]).where('published', true).get(),
-      /Phase 2/i,
-    )
-  })
-
-  it('throws when chained with .with() (eager load — B7 Phase 2)', async () => {
-    const { fakeClient } = makeVectorClient()
-    const adapter = await prisma({ client: fakeClient }).create()
-    const qb = adapter.query('documents')
-await assert.rejects(
+    await assert.rejects(
       () => qb.whereVectorSimilarTo!('embedding', [1]).with('author').get(),
-      /Phase 2/i,
+      /not yet supported/i,
     )
   })
 
@@ -152,9 +148,22 @@ await assert.rejects(
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
-await assert.rejects(
+    await assert.rejects(
       () => qb.whereVectorSimilarTo!('embedding', [1]).orderBy('createdAt').get(),
       /redundant/i,
+    )
+  })
+
+  it('throws when chained with whereGroup()', async () => {
+    const { fakeClient } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await assert.rejects(
+      () => qb
+        .whereVectorSimilarTo!('embedding', [1])
+        .whereGroup(g => g.where('published', true))
+        .get(),
+      /whereGroup/i,
     )
   })
 
@@ -162,10 +171,148 @@ await assert.rejects(
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
-await assert.rejects(
+    await assert.rejects(
       () => qb.whereVectorSimilarTo!('embedding', [1]).count(),
       /not supported.*Phase 1/i,
     )
+  })
+})
+
+// ─── chained .where() composition (#B7 Phase 2.5) ─────────
+
+describe('whereVectorSimilarTo — chained .where() (Phase 2.5)', () => {
+  it('chains a single .where() into the SQL with positional $1 binding', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [0.1, 0.2]).where('published', true).get()
+
+    const sql = getCaptured()[0]!
+    assert.match(sql, /WHERE "published" = \$1/)
+    assert.match(sql, /ORDER BY "embedding" <=>/)
+    assert.deepEqual(getCapturedParams()[0], [true])
+  })
+
+  it('combines minSimilarity + .where() — both clauses joined by AND', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb
+      .whereVectorSimilarTo!('embedding', [1, 2], { minSimilarity: 0.5 })
+      .where('tenantId', 42)
+      .limit(5)
+      .get()
+
+    const sql = getCaptured()[0]!
+    assert.match(sql, /WHERE 1 - \("embedding" <=> '\[1,2\]'::vector\) >= 0\.5 AND "tenantId" = \$1/)
+    assert.deepEqual(getCapturedParams()[0], [42])
+  })
+
+  it('honors all WhereOperator values (=, !=, >, >=, <, <=)', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb
+      .whereVectorSimilarTo!('embedding', [1])
+      .where('a', '=',  1)
+      .where('b', '!=', 2)
+      .where('c', '>',  3)
+      .where('d', '>=', 4)
+      .where('e', '<',  5)
+      .where('f', '<=', 6)
+      .get()
+
+    const sql = getCaptured()[0]!
+    assert.match(sql, /"a" = \$1 AND "b" != \$2 AND "c" > \$3 AND "d" >= \$4 AND "e" < \$5 AND "f" <= \$6/)
+    assert.deepEqual(getCapturedParams()[0], [1, 2, 3, 4, 5, 6])
+  })
+
+  it('translates `.where(col, "=", null)` to IS NULL (no parameter binding)', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('archivedAt', '=', null).get()
+
+    assert.match(getCaptured()[0]!, /"archivedAt" IS NULL/)
+    assert.deepEqual(getCapturedParams()[0], [])
+  })
+
+  it('translates `.where(col, "!=", null)` to IS NOT NULL', async () => {
+    const { fakeClient, getCaptured } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('archivedAt', '!=', null).get()
+
+    assert.match(getCaptured()[0]!, /"archivedAt" IS NOT NULL/)
+  })
+
+  it('expands IN with one positional placeholder per element', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('id', 'IN', [10, 20, 30]).get()
+
+    assert.match(getCaptured()[0]!, /"id" IN \(\$1, \$2, \$3\)/)
+    assert.deepEqual(getCapturedParams()[0], [10, 20, 30])
+  })
+
+  it('short-circuits empty IN to FALSE so Postgres does not syntax-error on empty lists', async () => {
+    const { fakeClient, getCaptured } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('id', 'IN', []).get()
+
+    assert.match(getCaptured()[0]!, /WHERE FALSE/)
+  })
+
+  it('short-circuits empty NOT IN to TRUE', async () => {
+    const { fakeClient, getCaptured } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('id', 'NOT IN', []).get()
+
+    assert.match(getCaptured()[0]!, /WHERE TRUE/)
+  })
+
+  it('LIKE / NOT LIKE pass user value through positional binding', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('title', 'LIKE', '%kafka%').get()
+
+    assert.match(getCaptured()[0]!, /"title" LIKE \$1/)
+    assert.deepEqual(getCapturedParams()[0], ['%kafka%'])
+  })
+
+  it('chains .orWhere() in a parenthesized OR block joined by AND with the AND chain', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb
+      .whereVectorSimilarTo!('embedding', [1])
+      .where('tenantId', 7)
+      .orWhere('priority', 'high')
+      .orWhere('starred', true)
+      .get()
+
+    const sql = getCaptured()[0]!
+    assert.match(sql, /"tenantId" = \$1 AND \("priority" = \$2 OR "starred" = \$3\)/)
+    assert.deepEqual(getCapturedParams()[0], [7, 'high', true])
+  })
+
+  it('user values are bound positionally — never string-interpolated into SQL', async () => {
+    // Defense-in-depth check: a `' OR 1=1 --` style payload should never
+    // appear in the SQL itself; it must travel through $N to $queryRawUnsafe.
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    const evil = "'; DROP TABLE documents; --"
+    await qb.whereVectorSimilarTo!('embedding', [1]).where('title', evil).get()
+
+    const sql = getCaptured()[0]!
+    assert.doesNotMatch(sql, /DROP TABLE/)
+    assert.match(sql, /"title" = \$1/)
+    assert.deepEqual(getCapturedParams()[0], [evil])
   })
 })
 
