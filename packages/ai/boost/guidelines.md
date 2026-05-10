@@ -162,6 +162,41 @@ for await (const chunk of stream) {
 const final = await response // full AgentResponse after stream ends
 ```
 
+### MCP integration (`@rudderjs/ai/mcp`)
+
+Bridge agents and Model Context Protocol servers in both directions. Optional peer: `@modelcontextprotocol/sdk`.
+
+**Consume MCP tools in an agent:**
+
+```ts
+import { mcpClientTools } from '@rudderjs/ai/mcp'
+
+const tools = await mcpClientTools('https://api.example.com/mcp')
+// or: await mcpClientTools({ command: 'npx', args: ['some-mcp-server'] })
+
+class ResearchAgent extends Agent {
+  instructions() { return 'You can call remote MCP tools.' }
+  tools() { return tools }
+}
+```
+
+**Expose an agent as an MCP server** (callable from Claude Desktop, Cursor, etc.):
+
+```ts
+import { mcpServerFromAgent } from '@rudderjs/ai/mcp'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+
+// Default: each agent.tools() entry becomes an MCP tool
+const server = await mcpServerFromAgent(MyAgent)
+
+// Or expose the whole agent as one prompt-tool
+const promptServer = await mcpServerFromAgent(MyAgent, { expose: 'agent' })
+
+await server.connect(new StdioServerTransport())
+```
+
+When mcpClientTools owns the underlying client (URL or stdio transport), the returned array exposes `close()` for shutdown — call it when the agent is done. With a caller-provided client, lifecycle stays with the caller.
+
 ### Structured Output
 
 Use `Output` to constrain responses to typed schemas:
@@ -195,6 +230,7 @@ import { Image, Document } from '@rudderjs/ai'             // attachments
 import { MemoryConversationStore, setConversationStore } from '@rudderjs/ai'
 import { Output } from '@rudderjs/ai'                      // structured output
 import { AiRegistry } from '@rudderjs/ai'                  // provider registry
+import { mcpClientTools, mcpServerFromAgent } from '@rudderjs/ai/mcp'  // MCP bridge (Node)
 import { stepCountIs, hasToolCall } from '@rudderjs/ai'    // stop conditions
 import type { AgentResponse, AiConfig, AiMiddleware, AnyTool, HasTools, HasMiddleware } from '@rudderjs/ai'
 ```

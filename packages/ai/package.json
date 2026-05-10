@@ -40,6 +40,10 @@
     "./observers": {
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
     }
   },
   "scripts": {
@@ -53,10 +57,14 @@
     "zod": "^4.0.0"
   },
   "peerDependencies": {
-    "@rudderjs/core": "workspace:^"
+    "@rudderjs/core": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.13.0"
   },
   "peerDependenciesMeta": {
     "@rudderjs/core": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
       "optional": true
     }
   },
@@ -70,6 +78,7 @@
   "devDependencies": {
     "@rudderjs/core": "workspace:^",
     "@rudderjs/console": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
