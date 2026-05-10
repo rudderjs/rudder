@@ -13,6 +13,7 @@ import {
 } from './conversation-persistence.js'
 import { resolveRemembersSpec } from './memory.js'
 import { withMemoryInject } from './memory-inject.js'
+import { withMemoryExtract } from './memory-extract.js'
 import type { SubAgentPauseKind, SubAgentRunSnapshot, SubAgentRunStore } from './sub-agent-run-store.js'
 import {
   runOnConfig,
@@ -223,11 +224,12 @@ export abstract class Agent {
 
   /** Run the agent with a prompt (non-streaming) */
   async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
-    // Memory auto-cascade — augments `options` with the memory-inject
-    // middleware (if any). Does so BEFORE conversation persistence so
-    // the persisted history flows in unchanged and the system message
-    // is the only thing that grows.
-    const effOptions = await prepareOptionsWithMemoryAutoInject(this, options)
+    // Memory auto-cascade — appends inject (Phase 2) + extract (Phase 3)
+    // middlewares when `Agent.remembers()` opts in. Runs BEFORE
+    // conversation persistence so the persisted history flows in
+    // unchanged: inject only grows the system message; extract only
+    // fires onFinish.
+    const effOptions = await prepareOptionsWithMemoryAutoCascade(this, options)
 
     const spec = await resolveAutoPersistSpec(() => this.conversational(), effOptions?.conversation)
     if (spec) {
@@ -871,7 +873,7 @@ function runStreamWithMaybeAutoPersist(
     try {
       // Memory auto-cascade BEFORE conversation persistence — same
       // ordering as the non-streaming `Agent.prompt` path.
-      effOptions = await prepareOptionsWithMemoryAutoInject(a, options)
+      effOptions = await prepareOptionsWithMemoryAutoCascade(a, options)
       spec = await resolveAutoPersistSpec(() => a.conversational(), effOptions?.conversation)
     } catch (err) {
       rejectResp!(err)
@@ -953,31 +955,37 @@ function getMiddleware(a: Agent, options?: AgentPromptOptions): AiMiddleware[] {
 }
 
 /**
- * Resolve the effective `remembers()` spec and, when `inject: 'auto'`,
- * append a {@link withMemoryInject} middleware to the options' hidden
- * extras list. Skips:
+ * Resolve the effective `remembers()` spec and append the appropriate
+ * memory middlewares (inject for Phase 2, extract for Phase 3) to the
+ * options' hidden extras list. Skips entirely on:
  * - continuation calls (`options.messages` set) — the system message
  *   was already augmented on the original `prompt()`, re-injecting
- *   would duplicate the block on every tool round-trip.
- * - any spec where `inject` is not `'auto'`.
+ *   would duplicate the block on every tool round-trip; re-extracting
+ *   would also double-write the same facts on every round-trip.
+ * - specs where neither `inject === 'auto'` nor `extract === 'auto'`
+ *   apply.
  *
- * Returns options unchanged when no auto-inject is needed so the
+ * Returns options unchanged when no auto-cascade is needed so the
  * downstream conversational/loop path sees the original reference.
  */
-async function prepareOptionsWithMemoryAutoInject(
+async function prepareOptionsWithMemoryAutoCascade(
   a:        Agent,
   options?: AgentPromptOptions,
 ): Promise<AgentPromptOptions | undefined> {
   if (options?.messages) return options
 
   const spec = await resolveRemembersSpec(() => a.remembers(), options?.memory)
-  if (!spec || spec.inject !== 'auto') return options
+  if (!spec) return options
 
-  const mw      = withMemoryInject(spec)
+  const installed: AiMiddleware[] = []
+  if (spec.inject === 'auto')                      installed.push(withMemoryInject(spec))
+  if (spec.extract === 'auto' && spec.extractWith) installed.push(withMemoryExtract(spec))
+  if (installed.length === 0) return options
+
   const current = (options as (AgentPromptOptions & ExtraMiddlewareOptions) | undefined)?.[EXTRA_MIDDLEWARES] ?? []
   return {
     ...options,
-    [EXTRA_MIDDLEWARES]: [...current, mw],
+    [EXTRA_MIDDLEWARES]: [...current, ...installed],
   } as AgentPromptOptions
 }
 

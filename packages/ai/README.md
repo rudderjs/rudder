@@ -790,9 +790,36 @@ await new SupportAgent().prompt('Where is my project deployed?')
 
 The auto-cascade runs in `Agent.prompt` / `Agent.stream`, before conversation persistence. `withMemoryInject(spec)` is also exported so you can drop it into `agent.middleware()` manually if you want full control.
 
-**Continuation note:** when you pass `options.messages` (e.g. resuming after a client-tool round-trip), auto-inject is skipped — the system prompt was already augmented on the original turn, re-injecting would duplicate the block.
+**Continuation note:** when you pass `options.messages` (e.g. resuming after a client-tool round-trip), both auto-inject and auto-extract are skipped — the system prompt was already augmented on the original turn, and re-extracting would write the same facts twice.
 
-**Phase 1 + 2 status:** interface, in-process backend, per-call/class declaration, and auto-inject runtime ship today. Auto-extract middleware (Phase 3), ORM-backed `OrmUserMemory` (Phase 4), and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
+#### Auto-extract — distill facts from each turn
+
+Set `extract: 'auto'` (and an `extractWith` model) and a small model is asked to pull durable facts from each successful turn:
+
+```ts
+class SupportAgent extends Agent {
+  remembers() {
+    return {
+      user:        ctx.user.id,
+      inject:      'auto',
+      extract:     'auto',
+      extractWith: 'anthropic/claude-haiku-4-5',     // small model for fact distillation
+      tags:        ['support'],
+    }
+  }
+}
+
+await new SupportAgent().prompt('hey, my project is named Foo and lives at /var/www/foo')
+// On success, the small model is asked to distill durable facts. Survivors above
+// the confidence threshold (default 0.7) get written via `mem.remember()`:
+//   - "Project name is Foo"  (score ~0.95, tags: ['support', 'project'])
+```
+
+Failures (network, JSON parse, schema mismatch, store write) route through `MemoryExtractOptions.onError` and never break the parent run. Failed parent runs do NOT trigger extract.
+
+**Poisoning mitigation** — auto-extraction trusts the user's own conversation as input. The default 0.7 confidence threshold is the v1 defense against adversarial "facts." Pair with `MemoryExtractOptions.onExtracted` for an audit log when shipping to production, and tighten the threshold for high-risk domains.
+
+**Phase 1 + 2 + 3 status:** interface, in-process backend, per-call/class declaration, auto-inject, and auto-extract runtimes ship today. ORM-backed `OrmUserMemory` (Phase 4) and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
 
 ### Model Selection
 
