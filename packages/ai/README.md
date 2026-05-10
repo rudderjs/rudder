@@ -972,6 +972,62 @@ await new ChatAgent().prompt('again')   // throws "Stray prompt: no scripted res
 
 Under strict mode, only `respondWithSequence` entries count as valid responses; ambient `respondWith` is ignored. Force a single-step script via `respondWithSequence([{ text: '...' }])` if you want exact-one-prompt tests with content.
 
+### Evals — `@rudderjs/ai/eval`
+
+`AiFake` proves the agent's wiring works; **evals** prove the agent does the right thing on real models. Define a suite of input cases + assertions, run them against any `Agent`, get a console report with pass/fail + cost + tokens:
+
+```ts
+// evals/support-agent.eval.ts
+import { evalSuite, llmJudge, exactMatch, regex } from '@rudderjs/ai/eval'
+import { SupportAgent } from '../app/Agents/SupportAgent.js'
+
+export default evalSuite('SupportAgent', {
+  agent: () => new SupportAgent(),
+  cases: [
+    { name: 'password reset',
+      input: 'How do I reset my password?',
+      assert: llmJudge('mentions a password reset link') },
+    { name: 'price',
+      input: 'How much does this cost?',
+      assert: exactMatch('$99/month') },
+    { name: 'support email',
+      input: 'How do I contact support?',
+      assert: regex(/support@example\.com/) },
+  ],
+})
+```
+
+Run programmatically today (Phase 1):
+
+```ts
+import { runSuite, reportConsole } from '@rudderjs/ai/eval'
+import suite from './evals/support-agent.eval.ts'
+
+reportConsole(await runSuite(suite))
+//=> SupportAgent (3 cases, 2.3s, $0.014)
+//     ✓ password reset             1.2s   $0.003   tokens: 487
+//     ✓ price                      0.8s   $0.002   tokens: 312
+//     ✗ support email              1.1s   $0.002   tokens: 425
+//         pattern /support@example\.com/ did not match "Reach us at hello@…"
+//
+//     2 passed, 1 failed
+//     total: $0.007  •  cumulative tokens: 1,224
+```
+
+**Built-in metrics (Phase 1):**
+
+| Metric | Behavior |
+|---|---|
+| `exactMatch(string)` | `response.text === expected` |
+| `regex(RegExp)` | `pattern.test(response.text)` |
+| `llmJudge(criterion, opts?)` | Asks a small model whether the response satisfies a natural-language criterion. Returns the judge's reasoning in `reason` so failures are debuggable. |
+
+User-defined metrics implement `(response, ctx) => MetricResult` — no inheritance, no decorators. The metrics catalog is just a starting set.
+
+**Failure semantics:** the runner never throws upward. Agent errors AND assertion throws become `failed` rows with the message in `reason`. Per-case `timeout` (ms) caps long runs. Per-case `agent` factory overrides the suite default — useful for stress-testing one case against a different model.
+
+**Roadmap:** Phase 2 adds `pnpm rudder ai:eval` (CLI + glob discovery + JSON output for CI). Phase 3 adds `jsonShape` / `semanticMatch` / `tokenCost`. Phase 4 adds `--record` / `--replay` (deterministic regression tests via `AiFake`) + telescope eval-pass-rate dashboards. Phase 5 adds an HTML report.
+
 ### MCP integration
 
 `@rudderjs/ai/mcp` bridges agents and Model Context Protocol servers in both directions. Optional peer: `@modelcontextprotocol/sdk`.
