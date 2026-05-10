@@ -198,6 +198,15 @@ export function computerUseTool(opts: ComputerUseToolOptions): ComputerUseTool {
     // that still tries to read the schema.
     inputSchema:   z.any(),
     needsApproval: needsApprovalForDefinition as ToolDefinitionOptions['needsApproval'],
+    // Carried through by `toolToSchema` → `toAnthropicTools` recognizes
+    // `providerHint.type === 'computer-use'` and emits the native
+    // `computer_20250124` block instead of a generic function-call shape.
+    providerHint: {
+      type:              'computer-use',
+      tool:              'computer_20250124',
+      display_width_px:  viewport.width,
+      display_height_px: viewport.height,
+    },
   }
 
   const tool: ComputerUseTool = {
@@ -218,12 +227,7 @@ export function computerUseTool(opts: ComputerUseToolOptions): ComputerUseTool {
         description: definition.description,
         // Empty object — see comment in `definition.inputSchema` above.
         parameters:  { type: 'object', properties: {}, additionalProperties: true },
-        providerHint: {
-          type:              'computer-use',
-          tool:              'computer_20250124',
-          display_width_px:  viewport.width,
-          display_height_px: viewport.height,
-        },
+        providerHint: definition.providerHint!,
       }
     },
   }

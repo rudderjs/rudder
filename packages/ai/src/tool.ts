@@ -227,11 +227,13 @@ export class ToolBuilder<
 
   /** Convert to provider-friendly JSON Schema format */
   toSchema(): ToolDefinitionSchema {
-    return {
+    const schema: ToolDefinitionSchema = {
       name: this.options.name,
       description: this.options.description,
       parameters: this.options.jsonSchema ?? zodToJsonSchema(this.options.inputSchema),
     }
+    if (this.options.providerHint) schema.providerHint = this.options.providerHint
+    return schema
   }
 }
 
@@ -322,9 +324,14 @@ export function dynamicTool(
 
 /** Convert any Tool to a ToolDefinitionSchema for provider consumption */
 export function toolToSchema(tool: { definition: ToolDefinitionOptions }): ToolDefinitionSchema {
-  return {
+  const schema: ToolDefinitionSchema = {
     name: tool.definition.name,
     description: tool.definition.description,
     parameters: tool.definition.jsonSchema ?? zodToJsonSchema(tool.definition.inputSchema),
   }
+  // Propagate provider-specific hints so adapters that recognize the
+  // `providerHint.type` can substitute their native tool block (see
+  // `toAnthropicTools` for computer-use, `toOpenAITools` for file-search).
+  if (tool.definition.providerHint) schema.providerHint = tool.definition.providerHint
+  return schema
 }

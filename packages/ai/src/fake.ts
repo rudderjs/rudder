@@ -192,6 +192,37 @@ export class AiFake {
     this._fileUploadResponse = result
   }
 
+  /**
+   * Stub a `fileSearch` interaction. The hosted-OpenAI path runs the
+   * search server-side and the result lands in the assistant message —
+   * no agent-loop tool round-trip — so the simplest fake is a single
+   * scripted response carrying the synthesized text.
+   *
+   * Pass `hits` to auto-format the text or pass `text` to control the
+   * exact assistant reply. `usage` flows through to budget middleware.
+   *
+   * @example
+   * fake.respondWithFileSearchResults({ text: 'The policy expires in 2027.' })
+   *
+   * @example
+   * fake.respondWithFileSearchResults({
+   *   hits: [
+   *     { text: 'Policies are reviewed annually.', source: 'policy.pdf', score: 0.92 },
+   *     { text: 'The renewal date is March 1st.',   source: 'renewal.pdf', score: 0.88 },
+   *   ],
+   * })
+   */
+  respondWithFileSearchResults(opts: {
+    text?:  string
+    hits?:  Array<{ text: string; source?: string; score?: number }>
+    usage?: TokenUsage
+  }): void {
+    const text = opts.text ?? formatFileSearchHits(opts.hits ?? [])
+    const step: AiFakeStep = { text }
+    if (opts.usage) step.usage = opts.usage
+    this.respondWithSequence([step])
+  }
+
   /** Install the fake — replaces all registered providers with a mock */
   static fake(): AiFake {
     const fake = new AiFake()
@@ -451,4 +482,24 @@ export class AiFake {
   restore(): void {
     AiRegistry.reset()
   }
+}
+
+/**
+ * Render canned file-search hits into a prose assistant reply for
+ * {@link AiFake.respondWithFileSearchResults}. Keeps tests readable
+ * without each app having to ad-hoc its own formatter.
+ */
+function formatFileSearchHits(
+  hits: Array<{ text: string; source?: string; score?: number }>,
+): string {
+  if (hits.length === 0) return 'No relevant documents found.'
+  return hits
+    .map(h => {
+      const parts: string[] = []
+      if (h.score !== undefined) parts.push(`(${h.score.toFixed(2)})`)
+      parts.push(h.text)
+      if (h.source) parts.push(`— ${h.source}`)
+      return parts.join(' ')
+    })
+    .join('\n')
 }
