@@ -133,6 +133,12 @@ async function loadPackageCommands(): Promise<void> {
       const mod = await tryImport('@rudderjs/ai', 'commands/make-agent')
       registerMakeSpecs(mod['makeAgentSpec'] as import('@rudderjs/console').MakeSpec)
     },
+    // @rudderjs/ai → ai:eval
+    async () => {
+      const mod = await tryImport('@rudderjs/ai', 'commands/ai-eval')
+      const register = mod['registerAiEvalCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
     // @rudderjs/mcp → make:mcp-*
     async () => {
       const [server, tool, resource, prompt] = await Promise.all([

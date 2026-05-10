@@ -750,6 +750,39 @@ fake.respondWithSequence([
 fake.failOnStep(0, new Error('Rate limited'))   // first call throws; second succeeds
 ```
 
+### Evals against real models
+
+`AiFake` proves your agent's wiring works; **evals** prove it does the right thing on real models. Define a suite of input cases + assertions and run with `pnpm rudder ai:eval`:
+
+```ts
+// evals/support-agent.eval.ts
+import { evalSuite, llmJudge, exactMatch, regex } from '@rudderjs/ai/eval'
+import { SupportAgent } from '../app/Agents/SupportAgent.js'
+
+export default evalSuite('SupportAgent', {
+  agent: () => new SupportAgent(),
+  cases: [
+    { name: 'password reset', input: 'How do I reset my password?',
+      assert: llmJudge('mentions a password reset link or email') },
+    { name: 'price', input: 'How much?',
+      assert: exactMatch('$99/month') },
+    { name: 'support email', input: 'Contact?',
+      assert: regex(/support@example\.com/) },
+  ],
+})
+```
+
+```bash
+pnpm rudder ai:eval                    # all suites under evals/**/*.eval.ts
+pnpm rudder ai:eval support            # name filter (case-insensitive substring)
+pnpm rudder ai:eval --bail             # stop on first failing suite
+pnpm rudder ai:eval --json             # CI-friendly envelope to stdout
+```
+
+Exits 0 when every case passes, 1 on any failure. `--json` emits `{ suites: [{ suite, passed, failed, cases: [{ name, status, pass, score?, reason?, tokens, cost, duration }] }] }` for CI gates. Override the discovery pattern via `config('ai').eval.pattern` (default `'evals/**/*.eval.ts'`).
+
+Built-in metrics (`exactMatch`, `regex`, `llmJudge`) cover the common cases; user metrics implement `(response, ctx) => MetricResult`. See `@rudderjs/ai/eval` for full surface — `evalSuite()`, `runSuite()`, `reportConsole()`, `reportJson()`.
+
 ## Pitfalls
 
 - **Bare model names.** `model: 'claude-sonnet-4-5'` throws — must be `provider/model`.
