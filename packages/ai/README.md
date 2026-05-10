@@ -778,6 +778,65 @@ await new ChatAgent().prompt('again')   // throws "Stray prompt: no scripted res
 
 Under strict mode, only `respondWithSequence` entries count as valid responses; ambient `respondWith` is ignored. Force a single-step script via `respondWithSequence([{ text: '...' }])` if you want exact-one-prompt tests with content.
 
+### MCP integration
+
+`@rudderjs/ai/mcp` bridges agents and Model Context Protocol servers in both directions. Optional peer: `@modelcontextprotocol/sdk`.
+
+```ts
+import { mcpClientTools, mcpServerFromAgent } from '@rudderjs/ai/mcp'
+```
+
+#### Consume MCP tools in an Agent — `mcpClientTools(transport, opts?)`
+
+Connect to a remote MCP server and surface its tools to an agent.
+
+```ts
+// HTTP transport
+const tools = await mcpClientTools('https://api.example.com/mcp')
+
+// Local subprocess (stdio)
+const tools = await mcpClientTools({ command: 'npx', args: ['some-mcp-server'] })
+
+// Already-connected SDK Client (caller owns lifecycle)
+const tools = await mcpClientTools(myClient)
+
+class ResearchAgent extends Agent {
+  instructions() { return 'You have access to remote tools via MCP.' }
+  tools() { return tools }
+}
+```
+
+The remote server's JSON Schema flows directly to providers via the `jsonSchema` passthrough field on `ToolDefinitionOptions` — no zod round-trip. When this connector owns the underlying client (URL or stdio transport), the returned array exposes a non-enumerable `close()` for shutdown:
+
+```ts
+const tools = await mcpClientTools('https://api.example.com/mcp')
+// ... use tools in agent ...
+await tools.close?.()
+```
+
+Options: `filter` (drop tools by name), `namePrefix` (avoid collisions across multiple servers), `streaming` (forward MCP `notifications/progress` as `tool-update` chunks; default `true`).
+
+#### Expose an Agent as an MCP server — `mcpServerFromAgent(AgentClass, opts?)`
+
+Wrap an `Agent` so external MCP clients (Claude Desktop, Cursor, etc.) can call it. Returns a `McpServer` from `@modelcontextprotocol/sdk` — connect with any SDK transport.
+
+```ts
+import { mcpServerFromAgent } from '@rudderjs/ai/mcp'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+
+const server = await mcpServerFromAgent(ResearchAgent)
+await server.connect(new StdioServerTransport())
+```
+
+Three exposure modes via `opts.expose`:
+- `'tools'` *(default)* — one MCP tool per `agent.tools()` entry; the wrapping agent isn't called, individual tools execute directly
+- `'agent'` — one MCP tool that runs the whole agent (`prompt(text) → response.text`); the differentiator move — ship an agent, callable from any MCP-aware client
+- `'both'` — individual tools and the agent prompt-tool side by side
+
+Other options: `name`, `version`, `instructions` (defaults to `agent.instructions()`), `agentToolName` (renames the prompt-tool when `expose: 'agent' | 'both'`).
+
+Approval gates (`needsApproval: true`) are dropped on the MCP side — there's no MCP-protocol way to forward "this tool needs human approval" to a remote client. The gate fires only inside the wrapping agent, not for external MCP callers.
+
 ## Providers
 
 | Provider | SDK | Model String | Text | Embeddings | Images | TTS/STT | Reranking | Files |

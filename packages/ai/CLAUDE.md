@@ -15,6 +15,7 @@ AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Ru
 - `src/vercel-protocol.ts` — `toVercelResponse()` for Vercel AI SDK streaming compatibility
 - `src/registry.ts` — Provider/model registry
 - `src/fake.ts` — `AiFake` for testing without real API calls
+- `src/mcp/` — MCP ↔ Agent bridge (`mcpClientTools()`, `mcpServerFromAgent()`); subpath export at `@rudderjs/ai/mcp`
 
 ## Runtime Compatibility
 
@@ -25,6 +26,7 @@ AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Ru
 | `@rudderjs/ai` | Node, browser, Electron main+renderer, React Native | Agents, tools, streaming, providers — any `fetch`-capable JS runtime |
 | `@rudderjs/ai/node` | Node only | `documentFromPath()`, `imageFromPath()`, `transcribeFromPath()` |
 | `@rudderjs/ai/server` | Node only | `AiProvider` (requires `@rudderjs/core`) |
+| `@rudderjs/ai/mcp` | Node only (in practice) | `mcpClientTools()` + `mcpServerFromAgent()` (requires `@modelcontextprotocol/sdk`) |
 
 The main entry has **zero `node:` static imports** — enforced by `src/isomorphic-check.test.ts`. `@rudderjs/core` is an optional peer; only `/server` consumers pull it in.
 
@@ -45,6 +47,7 @@ Provider auto-discovery reads `rudderjs.providerSubpath` from `package.json` (`"
 - **Prompt caching**: `Agent.cacheable() { return { instructions, tools, messages: N, ttl? } }`. The agent loop resolves into `CacheableMarkers` on `ProviderRequestOptions.cache`. Per-call override via `prompt(input, { cache: false | {...} })`. Anthropic adapter translates to `cache_control: { type: 'ephemeral' }` on the last block of each marked region. OpenAI adapter sets `prompt_cache_key` from a cyrb53 hash of the marked regions for routing affinity (caching itself is automatic above 1024 tokens). Google adapter manages `cachedContent` resources via `GoogleCacheRegistry` — auto-wired to `@rudderjs/cache` when bound, in-memory `Map` fallback otherwise; `ttl` field controls per-resource lifetime (default `'1h'`, Google-only). The shared cyrb53 helper lives at `src/util/hash.ts`.
 - **Strict-mode fakes**: `AiFake.fake().preventStrayPrompts()` makes any prompt without a matching `respondWithSequence` entry throw. Catches tests that silently fall back to the ambient `respondWith` default.
 - **Auto-persist conversations**: `Agent.conversational() { return { user, id?, agent?, historyLimit? } | false }` opts the class into auto-load + auto-save. Default returns `false` (stateless). Async returns supported. `runWithPersistence` (in `src/conversation-persistence.ts`) is the shared load/append helper used by both the class declaration path and `ConversableAgent` (the explicit `forUser`/`continue` form). Precedence (high → low): explicit `forUser`/`continue` > per-call `options.conversation` > class declaration. Threads are segregated by `(user, agent class name)` by default; override via `agent: 'custom'` on the spec.
+- **MCP bridge (1.6.0)**: `@rudderjs/ai/mcp` ships two connectors. `mcpClientTools(transport, opts?)` consumes a remote MCP server's tools as agent tools — accepts a URL string, `{ command, args }` for stdio subprocess, or an already-connected SDK Client (caller owns lifecycle). Returns `Tool[]` with a non-enumerable `close()` when this call owns the client. Remote JSON Schema flows through verbatim via the `jsonSchema` passthrough on `ToolDefinitionOptions` (no zod round-trip). `mcpServerFromAgent(AgentClass, opts?)` returns an SDK `McpServer` — three exposure modes: `'tools'` (default; one MCP tool per `agent.tools()`), `'agent'` (one prompt-tool that runs the whole agent — the differentiator move), or `'both'`. Approval gates aren't forwarded — the MCP protocol has no primitive for it.
 
 ## Stream Chunk Types
 

@@ -230,7 +230,7 @@ export class ToolBuilder<
     return {
       name: this.options.name,
       description: this.options.description,
-      parameters: zodToJsonSchema(this.options.inputSchema),
+      parameters: this.options.jsonSchema ?? zodToJsonSchema(this.options.inputSchema),
     }
   }
 }
@@ -325,6 +325,6 @@ export function toolToSchema(tool: { definition: ToolDefinitionOptions }): ToolD
   return {
     name: tool.definition.name,
     description: tool.definition.description,
-    parameters: zodToJsonSchema(tool.definition.inputSchema),
+    parameters: tool.definition.jsonSchema ?? zodToJsonSchema(tool.definition.inputSchema),
   }
 }

@@ -423,6 +423,15 @@ export interface ToolDefinitionOptions<
   lazy?: boolean | undefined
   /** Arbitrary metadata — used by provider-native tools to signal special handling */
   meta?: Record<string, unknown> | undefined
+  /**
+   * Pre-built JSON Schema for the tool's parameters. When set, takes precedence
+   * over `inputSchema` — the agent loop ships this directly to providers without
+   * a zod round-trip. Use for tools whose schema is constructed dynamically and
+   * already lives as JSON Schema (MCP imports via `mcpClientTools()`, OpenAPI
+   * generators). `inputSchema` should still be supplied as `z.unknown()` (or a
+   * placeholder) for runtime parsing in the agent loop.
+   */
+  jsonSchema?: Record<string, unknown> | undefined
 }
 
 /**
