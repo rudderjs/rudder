@@ -23,6 +23,10 @@ export type {
   ClientTool,
   ConversationStore,
   ConversationStoreMeta,
+  MemoryEntry,
+  RemembersOverride,
+  RemembersSpec,
+  UserMemory,
   FinishReason,
   HasMiddleware,
   HasMemory,
@@ -107,7 +111,7 @@ export { handoff, isHandoffTool } from './handoff.js'
 export type { HandoffTool, HandoffOptions, HandoffSpec } from './handoff.js'
 
 // Agent
-export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore } from './agent.js'
+export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore, setUserMemory, resolveUserMemory } from './agent.js'
 export type { InvalidToolArgumentsError } from './agent.js'
 export { QueuedPromptBuilder } from './queue-job.js'
 
@@ -119,6 +123,10 @@ export { Output, type OutputWrapper } from './output.js'
 
 // Conversation
 export { MemoryConversationStore } from './conversation.js'
+
+// User Memory (#A4)
+export { MemoryUserMemory, resolveRemembersSpec } from './memory.js'
+export type { UserMemoryLookup } from './memory.js'
 
 // Sub-agent run store (asTool streaming + suspend)
 export {

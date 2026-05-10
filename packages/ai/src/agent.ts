@@ -45,6 +45,7 @@ import type {
   MiddlewareContext,
   PrepareStepResult,
   ProviderRequestOptions,
+  RemembersSpec,
   StopCondition,
   StreamChunk,
   Tool,
@@ -53,6 +54,7 @@ import type {
   ToolResult,
   TokenUsage,
   ToolChoice,
+  UserMemory,
 } from './types.js'
 
 // ─── AI Observer (lazy accessor) ─────────────────────────
@@ -178,6 +180,34 @@ export abstract class Agent {
    * from an async DI binding.
    */
   conversational(): false | ConversationalSpec | Promise<false | ConversationalSpec> {
+    return false
+  }
+
+  /**
+   * Opt this agent class into per-user memory beyond conversation history
+   * (#A4). Returns a {@link RemembersSpec} naming the user whose memory
+   * the agent reads/writes, and how injection / extraction should behave.
+   * Returning `false` (the default) leaves the agent memory-stateless.
+   *
+   * Phase 1 wires the declaration + the per-call precedence chain so
+   * apps and downstream phases (auto-inject middleware in Phase 2,
+   * auto-extract middleware in Phase 3) can read a consistent spec.
+   * Calling this method directly today produces no runtime behavior
+   * unless application code reads it via `resolveRemembersSpec()`.
+   *
+   * **Precedence (high → low):**
+   * 1. Per-call `prompt(input, { memory: false | {...} })`
+   * 2. This method's return value
+   *
+   * Async returns are supported — useful when the user identity is fetched
+   * from an async DI binding.
+   *
+   * @example
+   * class SupportAgent extends Agent {
+   *   remembers() { return { user: ctx.user.id, inject: 'auto', tags: ['support'] } }
+   * }
+   */
+  remembers(): false | RemembersSpec | Promise<false | RemembersSpec> {
     return false
   }
 
@@ -773,6 +803,25 @@ export function setConversationStore(store: ConversationStore): void {
 
 function resolveConversationStore(): ConversationStore | undefined {
   return _conversationStore
+}
+
+// ─── User Memory Registry (#A4) ──────────────────────────
+
+let _userMemory: UserMemory | undefined
+
+/**
+ * Set the global {@link UserMemory} (called by `AiProvider` from
+ * `AiConfig.memory`, or manually for tests / standalone setups).
+ * Phase 2/3 middleware reads it via `resolveUserMemory()` —
+ * imported by the persistence layer the same way
+ * `resolveConversationStore` is wired today.
+ */
+export function setUserMemory(memory: UserMemory): void {
+  _userMemory = memory
+}
+
+export function resolveUserMemory(): UserMemory | undefined {
+  return _userMemory
 }
 
 /**

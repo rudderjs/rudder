@@ -618,6 +618,8 @@ export interface AiConfig {
   models?: AiModelConfig[]
   /** Conversation store for persisting agent conversations */
   conversations?: ConversationStore
+  /** User memory store for persisting per-user facts beyond conversation history (#A4) */
+  memory?: UserMemory
 }
 
 // ─── Agent Options ─────────────���──────────────────────────
@@ -698,6 +700,19 @@ export interface AgentPromptOptions {
    * chain.
    */
   conversation?: ConversationalOverride
+  /**
+   * Per-call override for the agent's `remembers()` declaration.
+   *
+   * - `false` — disable user-memory for this call (overrides any agent default).
+   * - {@link RemembersSpec} — replace the agent's declaration for this call.
+   * - omitted — use the agent's declaration unchanged.
+   *
+   * Auto-inject and auto-extract behaviors land in later phases (#A4 Phase 2/3);
+   * Phase 1 only wires the declaration + per-call precedence chain so manual
+   * `app().make<UserMemory>('ai.memory')` callers and downstream phases can
+   * read a consistent spec.
+   */
+  memory?: RemembersOverride
 }
 
 /** An attachment (file or image) to include with a prompt */
@@ -779,6 +794,92 @@ export interface ConversationalSpec {
  * declaration; omitted falls through to `Agent.conversational()`.
  */
 export type ConversationalOverride = false | ConversationalSpec
+
+// ─── User memory (#A4) ───────────────────────────────────
+
+/**
+ * A single user-memory entry — a fact about a user, persisted across
+ * conversations. Backends may add their own internal columns but the
+ * framework only consumes this shape.
+ */
+export interface MemoryEntry {
+  id:        string
+  userId:    string
+  fact:      string
+  tags?:     string[]
+  /**
+   * Optional confidence score in `[0, 1]`. Auto-extract sets this from
+   * the small model's self-rating; manual `remember()` calls may omit
+   * it. `recall()` ranking is implementation-defined when scores are
+   * absent.
+   */
+  score?:    number
+  createdAt: Date
+  updatedAt?: Date
+}
+
+/**
+ * Per-user fact storage. Drop-in alongside `ConversationStore`. Backends
+ * range from in-process (`MemoryUserMemory`) to ORM-backed (Phase 4) to
+ * embedding-backed (Phase 5). The interface is intentionally narrow so
+ * substring-match, full-text, and vector backends all satisfy it.
+ */
+export interface UserMemory {
+  remember(userId: string, fact: string,  opts?: { tags?: string[]; score?: number }): Promise<MemoryEntry>
+  recall  (userId: string, query: string, opts?: { limit?: number;  tags?: string[] }): Promise<MemoryEntry[]>
+  forget  (userId: string, factId: string                                            ): Promise<void>
+  list    (userId: string,                opts?: { tags?: string[]; limit?: number  }): Promise<MemoryEntry[]>
+  /**
+   * Optional bulk-erase for GDPR right-to-be-forgotten. Backends that
+   * don't implement it leave the cascade to the app.
+   */
+  forgetAll?(userId: string): Promise<void>
+}
+
+/**
+ * Return shape of {@link Agent.remembers} when an agent opts into user
+ * memory. Phase 1 wires the declaration + per-call precedence chain;
+ * the `inject` and `extract` knobs come live in Phase 2/3.
+ */
+export interface RemembersSpec {
+  /** Identity of the user whose memory this agent reads/writes. */
+  user: string
+  /**
+   * Auto-injection policy:
+   * - `'auto'` (Phase 2) — `recall()` runs before each turn and matches
+   *   are prepended to the system message.
+   * - `'manual'` — agent code calls `recall()` itself.
+   * - `false` (default) — no injection.
+   */
+  inject?:  'auto' | 'manual' | false
+  /**
+   * Auto-extraction policy:
+   * - `'auto'` (Phase 3) — a small model distills facts from each turn
+   *   and writes them via `remember()`.
+   * - `'manual'` — agent code calls `remember()` itself.
+   * - `false` (default) — no extraction.
+   */
+  extract?: 'auto' | 'manual' | false
+  /**
+   * Small-model id for `extract: 'auto'`. Required when extraction is
+   * enabled. Format: `'<provider>/<model>'`, e.g.
+   * `'anthropic/claude-haiku-4-5'`.
+   */
+  extractWith?: string
+  /** Tag scope for both inject and extract. */
+  tags?: string[]
+  /** Cap injected facts per turn. Default unbounded (Phase 2). */
+  injectLimit?: number
+  /** Hard token cap on the rendered injected block (Phase 2). */
+  injectTokenBudget?: number
+}
+
+/**
+ * Per-call override for `AgentPromptOptions.memory`. `false` disables
+ * memory for this call; a spec replaces the agent's declaration;
+ * omitted falls through to `Agent.remembers()`.
+ */
+export type RemembersOverride = false | RemembersSpec
 
 // ─── Sub-agent updates (asTool streaming projection) ──────
 

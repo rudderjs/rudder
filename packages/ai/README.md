@@ -742,6 +742,44 @@ await new ChatAgent().prompt('Continue?')  // resumes same thread (per user + cl
 
 Returning `false` (the default) keeps the agent stateless. Async returns are awaited; an optional `historyLimit` caps loaded messages. Per-call escape hatches: `prompt(input, { conversation: false })` or `agent.forUser(id).prompt()` / `agent.continue(id).prompt()` — explicit always wins. See `docs/guide/ai.md` for the full precedence chain.
 
+### User memory beyond conversation history (Mem0-style)
+
+Conversation history persists messages; user memory persists **facts** that should travel across conversations. Useful when the agent needs to remember "Alice's project is named Foo" in a brand-new thread without replaying the entire prior session.
+
+```ts
+import type { UserMemory } from '@rudderjs/ai'
+import { MemoryUserMemory } from '@rudderjs/ai'
+
+// config/ai.ts — wire a backend
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: { /* ... */ },
+  memory: new MemoryUserMemory(),    // in-process; swap for an ORM- or embedding-backed store in production
+} satisfies AiConfig
+
+// Use it directly
+const memory = app().make<UserMemory>('ai.memory')
+await memory.remember('user_123', 'Project name is Foo', { tags: ['project'] })
+const facts = await memory.recall('user_123', 'project')
+//=> [{ fact: 'Project name is Foo', tags: ['project'], ... }]
+```
+
+Or declare on an agent class — the auto-inject runtime lands in the next phase, but the per-user spec is wired today:
+
+```ts
+class SupportAgent extends Agent {
+  remembers() {
+    return {
+      user:   ctx.user.id,
+      inject: 'auto',                  // (Phase 2) prepend recalled facts to the system message
+      tags:   ['support'],
+    }
+  }
+}
+```
+
+**Phase 1 status:** the `UserMemory` interface, `MemoryUserMemory`, the `Agent.remembers()` declaration, the `AgentPromptOptions.memory` per-call override, and the `AiConfig.memory` config key all ship today. The auto-inject middleware (Phase 2), auto-extract middleware (Phase 3), ORM-backed `OrmUserMemory` (Phase 4), and embedding-backed `EmbeddingUserMemory` (Phase 5) land in subsequent releases.
+
 ### Model Selection
 
 Configure available models for user selection (used by `@rudderjs/panels` chat UI):
