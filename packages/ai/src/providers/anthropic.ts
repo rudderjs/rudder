@@ -189,12 +189,26 @@ export function toAnthropicMessages(messages: AiMessage[]): unknown[] {
       }
     }
     if (m.role === 'tool') {
+      // Tool results come in three shapes today:
+      //   - string                — standard scalar return (most tools)
+      //   - ContentPart[]         — rich content (e.g. computer-use's screenshot
+      //                             returns an image block; the adapter emits it
+      //                             as Anthropic's `content: [{ type: 'image', source: {...} }]`)
+      //   - any other value       — JSON-stringify fallback (legacy)
+      let content: unknown
+      if (typeof m.content === 'string') {
+        content = m.content
+      } else if (Array.isArray(m.content)) {
+        content = contentToAnthropicParts(m.content as import('../types.js').ContentPart[])
+      } else {
+        content = JSON.stringify(m.content)
+      }
       return {
         role: 'user',
         content: [{
           type: 'tool_result',
           tool_use_id: m.toolCallId,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          content,
         }],
       }
     }
@@ -207,11 +221,32 @@ export function toAnthropicMessages(messages: AiMessage[]): unknown[] {
 }
 
 export function toAnthropicTools(tools: ToolDefinitionSchema[]): unknown[] {
-  return tools.map(t => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.parameters,
-  }))
+  return tools.map(t => {
+    // Provider-native tool blocks: when a tool carries a recognized
+    // `providerHint`, emit Anthropic's native shape instead of the
+    // standard function-call schema. Currently:
+    //   - 'computer-use' → computer_20250124 (or whatever `tool` field
+    //                       declares; defaults to computer_20250124).
+    //                       The model is fine-tuned on the native block;
+    //                       quality is dramatically better than wrapping
+    //                       it as a function-call.
+    if (t.providerHint?.type === 'computer-use') {
+      const variant = (t.providerHint['tool'] as string | undefined) ?? 'computer_20250124'
+      const width   = (t.providerHint['display_width_px']  as number | undefined) ?? 1280
+      const height  = (t.providerHint['display_height_px'] as number | undefined) ?? 800
+      return {
+        type:              variant,
+        name:              t.name,
+        display_width_px:  width,
+        display_height_px: height,
+      }
+    }
+    return {
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters,
+    }
+  })
 }
 
 // ─── Prompt-cache markers ────────────────────────────────

@@ -205,11 +205,34 @@ export interface CacheableMarkers {
 
 export type ToolChoice = 'auto' | 'required' | 'none' | { name: string }
 
+/**
+ * Side-channel hint a tool can carry to ask provider adapters for
+ * non-default behavior — e.g. emit a native provider tool block instead
+ * of a generic function-call schema.
+ *
+ * `type` is the namespace + variant (`'computer-use'`); other fields are
+ * hint-specific. Adapters that don't recognize the `type` SHOULD ignore
+ * the hint and fall back to the standard function-call serialization.
+ *
+ * Currently used by `@rudderjs/ai/computer-use` to map to Anthropic's
+ * native `computer_20250124` tool block.
+ */
+export interface ProviderHint {
+  type: string
+  [k: string]: unknown
+}
+
 /** Tool definition as sent to the provider (JSON Schema) */
 export interface ToolDefinitionSchema {
   name: string
   description: string
   parameters: Record<string, unknown>
+  /**
+   * Optional provider-specific hint. Adapters that recognize the
+   * `providerHint.type` substitute their native serialization; others
+   * ignore the hint and emit the standard function-call shape.
+   */
+  providerHint?: ProviderHint
 }
 
 /** Provider adapter — thin wrapper around a provider SDK */
