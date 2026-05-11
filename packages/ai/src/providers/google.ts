@@ -87,6 +87,8 @@ export class GoogleAdapter implements ProviderAdapter {
   ): Promise<{ payload: Record<string, unknown>; cacheKey: string | undefined }> {
     const client = await this.getClient()
     const { system, contents } = toGeminiContents(options.messages)
+    // `toGeminiTools` returns the already-wrapped top-level array
+    // ({functionDeclarations: [...]} + any native blocks like google_search).
     const geminiTools = options.tools?.length ? toGeminiTools(options.tools) : undefined
 
     const config: Record<string, unknown> = {}
@@ -94,7 +96,7 @@ export class GoogleAdapter implements ProviderAdapter {
     if (options.temperature !== undefined) config['temperature'] = options.temperature
     if (options.topP !== undefined) config['topP'] = options.topP
     if (options.stop) config['stopSequences'] = options.stop
-    if (geminiTools) config['tools'] = [{ functionDeclarations: geminiTools }]
+    if (geminiTools && geminiTools.length > 0) config['tools'] = geminiTools
     if (options.toolChoice) config['toolConfig'] = toGeminiToolConfig(options.toolChoice)
     // The Gemini SDK reads abortSignal from the config block.
     if (options.signal) config['abortSignal'] = options.signal
@@ -111,7 +113,7 @@ export class GoogleAdapter implements ProviderAdapter {
           cacheKey,
           ...(options.cache.instructions && system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
           ...(cachedSlice.length > 0 ? { contents: cachedSlice } : {}),
-          ...(options.cache.tools && geminiTools ? { tools: [{ functionDeclarations: geminiTools }] } : {}),
+          ...(options.cache.tools && geminiTools && geminiTools.length > 0 ? { tools: geminiTools } : {}),
           ...(options.cache.ttl ? { ttl: durationToGoogleTtl(options.cache.ttl) } : {}),
         })
       }
@@ -271,12 +273,42 @@ function toGeminiContents(messages: AiMessage[]): { system: string | undefined; 
   return { system, contents }
 }
 
+/**
+ * Build Gemini's `tools` array. The Gemini API accepts a mixed array where
+ * function declarations live under one wrapper entry and provider-native
+ * blocks (e.g. `{ google_search: {} }`) sit as separate top-level entries:
+ *
+ *   tools: [
+ *     { functionDeclarations: [...] },
+ *     { google_search: {} },
+ *   ]
+ *
+ * Tools tagged with a recognized `providerHint.type` are emitted as their
+ * native top-level block; everything else collects into one
+ * `functionDeclarations` entry. Tools with unrecognized hints fall through
+ * to the function-declaration shape — the input schema's still there, so
+ * the worst case is the model treats it as a regular function-call tool.
+ */
 function toGeminiTools(tools: ToolDefinitionSchema[]): unknown[] {
-  return tools.map(t => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.parameters,
-  }))
+  const fnDecls: unknown[] = []
+  const blocks:  unknown[] = []
+  for (const t of tools) {
+    if (t.providerHint?.type === 'web-search') {
+      // Gemini's native search tool. The block's `google_search: {}` form is
+      // intentional — Gemini doesn't accept allowed_domains / max_uses on
+      // this block, so the WebSearch.domains() / .maxResults() opts are
+      // ignored on this provider (documented on WebSearch).
+      blocks.push({ google_search: {} })
+      continue
+    }
+    fnDecls.push({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })
+  }
+  if (fnDecls.length > 0) blocks.unshift({ functionDeclarations: fnDecls })
+  return blocks
 }
 
 function toGeminiToolConfig(choice: ToolChoice): unknown {

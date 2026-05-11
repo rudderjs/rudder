@@ -1,6 +1,6 @@
 # B8 — Hosted vector stores + `fileSearch` provider tool
 
-**Status:** Phase 1 ✓ shipped (#379). Phase 2 in flight on `feat-b8-file-search`. Phase 2.x / 3 not started.
+**Status:** Phase 1 ✓ shipped (#379). Phase 2 ✓ shipped (#380). Phase 2.x in flight on `worktree-b8-phase-2x-websearch`. Phase 3 not started.
 **Date:** 2026-05-11
 **Roadmap item:** B8 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 3 PR-sized phases + 1 sidecar.
@@ -11,8 +11,8 @@
 | Phase | What ships | PR | State |
 |---|---|---|---|
 | 1   | `VectorStores` facade + `VectorStore` wrapper — CRUD over OpenAI's hosted vector stores. New `VectorStoreAdapter` contract on `ProviderFactory.createVectorStores?()`. OpenAI adapter wraps `client.vectorStores.*` + `client.vectorStores.files.*`; lazy SDK load; file upload pipeline reuses the Files API; default `wait: true` polls `vectorStores.files.retrieve` until `'completed'` / `'failed'` / `'cancelled'` (configurable interval + timeout). Searchable `attributes` map directly to OpenAI's per-file metadata. | #379 | ✓ shipped |
-| 2   | `fileSearch({ stores, where?, maxResults?, name?, description? })` agent-tool factory + OpenAI adapter native-block emission via `providerHint`. Bundled latent bug fix: `toolToSchema` now propagates `definition.providerHint` so the agent loop's tool serialization wires hints through to adapters (fixes computer-use's hint too — it lived only on the instance `toSchema()` method, never reached `toAnthropicTools` through agent runs). Closes the agent loop end-to-end on OpenAI's `chat.completions`. | — | in flight |
-| 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. OpenAI adapter emits native `{ type: 'web_search' }`; Gemini adapter emits `{ google_search: {} }`. DuckDuckGo HTML scrape stays as the no-config fallback for providers without native support. ~half-day. | — | not started |
+| 2   | `fileSearch({ stores, where?, maxResults?, name?, description? })` agent-tool factory + OpenAI adapter native-block emission via `providerHint`. Bundled latent bug fix: `toolToSchema` now propagates `definition.providerHint` so the agent loop's tool serialization wires hints through to adapters (fixes computer-use's hint too — it lived only on the instance `toSchema()` method, never reached `toAnthropicTools` through agent runs). Closes the agent loop end-to-end on OpenAI's `chat.completions`. | #380 | ✓ shipped |
+| 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. **Anthropic** adapter emits native `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains? }`; **Gemini** adapter emits `{ google_search: {} }` as a separate top-level tools entry. **OpenAI's chat-completions** has no equivalent (`web_search` is Responses-API-only) — falls through to the existing DuckDuckGo HTML-scrape `server` execute. Same fallback applies to any provider without a native hint match. `WebSearch.domains([...])` lifts to `allowed_domains` on Anthropic; ignored on Gemini (the `google_search` block accepts no opts). `WebSearch.maxResults(n)` lifts to Anthropic's `max_uses`; ignored on Gemini. ~half-day. | — | in flight |
 | 3   | Local pgvector fallback bridge (when no hosted provider configured, `fileSearch` routes through B7's `similaritySearch`). Closes B8. | — | not started |
 | B8.5 | Gemini parity for `VectorStores` + `fileSearch` (Gemini's RAG surface uses `cachedContent`, not vector stores; spec drift means it deserves its own design pass). Deferred — locked decision. | — | future |
 
@@ -22,7 +22,7 @@ After Phase 3, B8 closes. B8.5 adds Gemini hosted RAG. Next Track B item is **B9
 
 - **Single `fileSearch({ stores, fallback? })` factory** (not separate hosted/local tools). Agent prompts stay identical across hosted and self-hosted RAG.
 - **Gemini deferred to B8.5.** OpenAI is the dominant hosted vector store today; Gemini's `cachedContent`-shaped RAG surface diverges enough from OpenAI's that one unified facade across both is leaky. Ship B8 (OpenAI hosted + local fallback) first; revisit Gemini in B8.5 once we have customer signal on the shape.
-- **WebSearch retrofit lands as a sidecar PR** between Phase 2 and Phase 3. Reuses the `providerHint` plumbing Phase 2 introduces; OpenAI emits native `web_search`, Gemini emits native `google_search`. DuckDuckGo fallback stays for providers without native support — zero new API keys, zero new dependencies.
+- **WebSearch retrofit lands as a sidecar PR** between Phase 2 and Phase 3. Reuses the `providerHint` plumbing Phase 2 introduces; **Anthropic** emits native `web_search_20250305`, **Gemini** emits native `google_search`. **OpenAI's chat-completions surface has no equivalent** (`web_search` only exists on the Responses API, which is its own migration); OpenAI keeps the DuckDuckGo fallback. Zero new API keys, zero new dependencies.
 
 ## Problem
 
@@ -92,7 +92,7 @@ A7 (computer-use) introduced `providerHint?: ProviderHint` on `ToolDefinitionSch
 
 B8 reuses the exact same mechanism on the OpenAI side. `fileSearch` returns a tool with `providerHint?.type === 'file-search'`; the OpenAI adapter sees that hint and emits `{ type: 'file_search', vector_store_ids: [...], filters: {...}, max_num_results: N }` instead of the function-call block. Same forward-compat trick as A7 — `providerHint.tool` could carry a future schema version.
 
-This means **B8 Phase 2 also touches `packages/ai/src/providers/openai.ts`**, similar to how A7 Phase 2 touched the Anthropic adapter. `WebSearch` already declares `meta.providerNative: true` aspirationally but no adapter consumes it; B8 also needs to either retrofit `WebSearch` to use `providerHint` (consistency) or leave it as a no-op fallback. **Decision:** leave `WebSearch` as-is for v1; revisit if customer asks. B8 only touches the file-search hint path.
+This means **B8 Phase 2 also touches `packages/ai/src/providers/openai.ts`**, similar to how A7 Phase 2 touched the Anthropic adapter. `WebSearch` already declared `meta.providerNative: true` aspirationally but no adapter consumed it. **Decision (revised):** Phase 2 lands the `providerHint` plumbing for `fileSearch`; **Phase 2.x** retrofits the same plumbing onto `WebSearch` for the providers that ship a native chat-completions web-search tool today (Anthropic + Gemini). OpenAI's chat-completions surface has no `web_search` block — that lives on the Responses API, which is a separate migration — so OpenAI continues to use the DuckDuckGo `server` execute as fallback.
 
 ## Design decisions to lock in before Phase 1
 
@@ -118,7 +118,7 @@ These force a rewrite if punted:
 
 ### Phase 2 — `fileSearch` provider tool + OpenAI native block
 
-**Shipped surface (in flight on `feat-b8-file-search`):**
+**Shipped surface (✓ #380):**
 
 - `packages/ai/src/file-search.ts` exports `fileSearch({ stores, where?, maxResults?, name?, description? })`. Returns a `FileSearchTool` — plain object tagged with `Symbol.for('rudderjs.ai.file-search')` (mirrors `COMPUTER_USE_MARKER`); `isFileSearchTool(t)` typeguard. No `execute` on the hosted path. Default tool name `file_search` (OpenAI's trained identifier). Placeholder `inputSchema = z.object({ query: z.string() })` so non-OpenAI providers see a regular function-call tool.
 - Provider hint lives on `definition.providerHint` — `{ type: 'file-search', vector_store_ids, filters?, max_num_results? }`. The agent loop's `toolToSchema()` propagates it onto `ToolDefinitionSchema` and the OpenAI adapter recognizes the hint.
@@ -135,6 +135,34 @@ These force a rewrite if punted:
 **Plan doc + changeset:** Phase 2 table row marked in flight + this body section + `.changeset/ai-b8-phase2-file-search.md` (minor).
 
 **Docs:** new `docs/guide/vector-stores.md` covers both Phase 1 (CRUD) + Phase 2 (agent tool). Added under the AI sidebar between "AI" and "MCP".
+
+### Phase 2.x — `WebSearch` retrofit (sidecar)
+
+**Shipped surface:**
+
+- `packages/ai/src/provider-tools.ts` — `WebSearch.toTool()` now sets `providerHint: { type: 'web-search', allowed_domains?, max_uses? }` from the chained `.domains([...])` / `.maxResults(n)` opts. The DuckDuckGo `server` execute stays in place as the fallback.
+- `packages/ai/src/providers/anthropic.ts` — `toAnthropicTools` recognizes the hint and emits `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains?, blocked_domains?, user_location? }`. Honors a `providerHint.tool` override for forward-compat with future Anthropic web-search variants (mirrors A7's computer-use forward-compat trick).
+- `packages/ai/src/providers/google.ts` — `toGeminiTools` is restructured to return the **already-wrapped top-level array** (`[{ functionDeclarations: [...] }, { google_search: {} }, ...]`) instead of just the function declarations list. Native blocks like `google_search` sit as separate top-level entries alongside the function-declarations wrapper, matching Gemini's mixed-tools shape. The two consumer sites (request payload + cache-key build) drop their re-wrapping.
+- **OpenAI's chat-completions has no native web-search block** (`web_search_preview` is Responses-API-only). The hint is harmless on OpenAI — `toOpenAITools` doesn't recognize `'web-search'` and the tool falls through to the standard function-call shape, where the DuckDuckGo `server` execute runs server-side. Same fallback for any other provider without a native match.
+
+**`domains` / `maxResults` semantics across providers:**
+
+| Provider  | `.domains([...])`           | `.maxResults(n)`           |
+|---|---|---|
+| Anthropic | → `allowed_domains`         | → `max_uses`               |
+| Gemini    | ignored (block accepts none) | ignored (block accepts none) |
+| OpenAI    | applied via DuckDuckGo `site:` query | bounded by `slice(0, 2000)` of HTML response |
+
+**Tests:** new `packages/ai/src/provider-tools.test.ts` — `WebSearch` providerHint cascade through `toolToSchema`, `toAnthropicTools` native-block emission with/without domains/max_uses, the `providerHint.tool` forward-compat override, `GoogleAdapter` request-payload shape (single native entry, mixed function-decls + native, function-decls-only sanity).
+
+**Verification:** `pnpm --filter @rudderjs/ai typecheck` ✓, `pnpm build` ✓ (51/51), `pnpm --filter @rudderjs/ai test` 715/715 ✓ (12 new across 3 suites).
+
+**Plan doc + changeset:** Phase 2 row → ✓ #380, Phase 2.x row + this body section + `.changeset/ai-b8-phase2x-websearch-retrofit.md` (minor).
+
+**Out of scope:**
+
+- Anthropic's `user_location` / `blocked_domains` lift onto `WebSearch.{ region(...), blockDomains(...) }` chained opts. The hint already passes them through if set manually; an ergonomic chain follows when there's customer demand.
+- OpenAI Responses-API migration. Big enough that it's its own track; lands later as a separate adapter (`packages/ai/src/providers/openai-responses.ts`) that the registry routes to for `*-search-preview` model ids.
 
 ### Phase 3 — Gemini parity + local pgvector fallback
 

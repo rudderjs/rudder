@@ -1,9 +1,24 @@
 import { z } from 'zod'
 import { toolDefinition } from './tool.js'
+import type { ProviderHint } from './types.js'
 
 /**
  * Web search tool — uses provider-native web search when available.
- * Falls back to a server-side DuckDuckGo fetch for providers without native support.
+ *
+ * Native emission via `providerHint: { type: 'web-search', ... }`:
+ *   - Anthropic adapter emits `{ type: 'web_search_20250305', name: 'web_search',
+ *     max_uses?, allowed_domains? }`.
+ *   - Google adapter emits a separate top-level tools entry `{ google_search: {} }`.
+ *   - OpenAI's chat-completions surface has no equivalent (web_search is
+ *     Responses-API-only) — falls through to the DuckDuckGo `server` execute
+ *     below. Same fallback applies to any provider without a native hint match.
+ *
+ * Mirrors the Phase 2 file-search providerHint cascade — same plumbing,
+ * different tool. `domains([...])` lowers to `allowed_domains` on Anthropic;
+ * Gemini's `google_search` block doesn't accept domain restriction so the
+ * `domains` opt is ignored there (the model still respects domain hints in
+ * the prompt). `maxResults(n)` lowers to Anthropic's `max_uses`; ignored on
+ * Gemini for the same reason.
  */
 export class WebSearch {
   private _domains: string[] | undefined
@@ -30,12 +45,17 @@ export class WebSearch {
     const domains = this._domains
     const maxResults = this._maxResults
 
+    const providerHint: ProviderHint = { type: 'web-search' }
+    if (domains)              providerHint['allowed_domains'] = domains
+    if (maxResults !== undefined) providerHint['max_uses']    = maxResults
+
     return toolDefinition({
       name: 'web_search',
       description: 'Search the web for current information.',
       inputSchema: z.object({
         query: z.string().describe('The search query'),
       }),
+      providerHint,
       meta: {
         providerNative: true,
         type: 'web_search',

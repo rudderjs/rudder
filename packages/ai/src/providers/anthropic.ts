@@ -241,6 +241,20 @@ export function toAnthropicTools(tools: ToolDefinitionSchema[]): unknown[] {
         display_height_px: height,
       }
     }
+    //   - 'web-search' → web_search_20250305 (or whatever `tool` field
+    //                    declares; defaults to web_search_20250305).
+    //                    Server-side; the model emits a `tool_use` block,
+    //                    Anthropic runs the search, results stream back as
+    //                    a `tool_result` block — no agent-loop round-trip.
+    if (t.providerHint?.type === 'web-search') {
+      const variant = (t.providerHint['tool'] as string | undefined) ?? 'web_search_20250305'
+      const block: Record<string, unknown> = { type: variant, name: t.name }
+      if (t.providerHint['max_uses']        !== undefined) block['max_uses']        = t.providerHint['max_uses']
+      if (t.providerHint['allowed_domains'] !== undefined) block['allowed_domains'] = t.providerHint['allowed_domains']
+      if (t.providerHint['blocked_domains'] !== undefined) block['blocked_domains'] = t.providerHint['blocked_domains']
+      if (t.providerHint['user_location']   !== undefined) block['user_location']   = t.providerHint['user_location']
+      return block
+    }
     return {
       name: t.name,
       description: t.description,
