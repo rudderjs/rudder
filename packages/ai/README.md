@@ -573,6 +573,38 @@ const agent = AI.agent({
 })
 ```
 
+### Hosted vector stores + `fileSearch`
+
+`VectorStores` is a CRUD façade over the provider's hosted vector store; `fileSearch({ stores })` is the agent tool that queries them. The provider runs ingestion, chunking, embedding, and retrieval server-side — no embedding pipeline, no pgvector setup, no `execute` to write. Supported on **OpenAI** (`vectorStores.*`) and **Gemini** (`fileSearchStores`). Same façade, same agent surface.
+
+```ts
+import { Agent, VectorStores, fileSearch } from '@rudderjs/ai'
+
+// 1. Manage the store
+const kb = await VectorStores.create('Knowledge Base')                      // OpenAI default
+await kb.add({ filePath: './report.pdf', attributes: { author: 'Alice', year: 2026 } })
+
+// 2. Use it as an agent tool
+class SupportAgent extends Agent {
+  model() { return 'openai/gpt-4o' }                                        // or 'google/gemini-2.5-flash'
+  tools() {
+    return [
+      fileSearch({
+        stores:     [kb.id],
+        where:      { author: 'Alice', year: 2026 },                        // server-side metadata filter
+        maxResults: 10,
+      }),
+    ]
+  }
+}
+```
+
+**Provider override:** pass `{ provider: 'google' }` to `VectorStores.create(...)` for Gemini. Store ids are full resource paths (`fileSearchStores/foo-bar`) on Gemini, opaque (`vs_abc123`) on OpenAI — apps pass them back verbatim through the same `VectorStores` API.
+
+**Self-hosted RAG fallback.** `fileSearch({ ..., fallback: { model, column, embedWith } })` lifts a `similaritySearch` `execute` onto the tool. Providers that recognize the file-search hint (OpenAI, Gemini) still emit their native block; other providers serialize the tool as a function-call and run the fallback against a local pgvector model. Same agent prompt across hosted and self-hosted RAG.
+
+Full surface (provider-differences table, `where`/filter shapes, testing with `AiFake`): the framework's [Vector Stores guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/vector-stores.md).
+
 ### Reranking
 
 Reorder documents by relevance to a query — useful for RAG pipelines:
