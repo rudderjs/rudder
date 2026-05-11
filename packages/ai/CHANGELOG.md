@@ -1,5 +1,800 @@
 # @rudderjs/ai
 
+## 1.6.0
+
+### Minor Changes
+
+- 82ca5b4: **B10 — VoyageAI provider for best-in-class embeddings + reranking. Closes Track B.** New `VoyageProvider` implements `EmbeddingAdapter` + `RerankingAdapter` against Voyage's REST API. Raw `fetch` adapter — no SDK peer dep (matches the Jina / ElevenLabs shape). Wired through `AiProvider` via `driver: 'voyage'`.
+
+  ```ts
+  // config/ai.ts
+  import { env } from "@rudderjs/support";
+
+  export default {
+    default: "openai/gpt-4o",
+    providers: {
+      openai: { driver: "openai", apiKey: env("OPENAI_API_KEY")! },
+      voyage: { driver: "voyage", apiKey: env("VOYAGE_API_KEY")! },
+    },
+  };
+  ```
+
+  ```ts
+  // Embeddings (defaults to input_type: 'document' — RAG ingestion)
+  const { embeddings } = await AI.embed("hello world", {
+    model: "voyage/voyage-3-large",
+  });
+
+  // Reranking
+  const ranked = await AI.rerank({
+    model: "voyage/rerank-2.5",
+    query: "how do I reset my password?",
+    documents: [
+      "change account name procedure",
+      "reset password procedure",
+      "enable two-factor authentication",
+    ],
+    topK: 5,
+  });
+  ```
+
+  **Models:**
+
+  - **Embeddings:** `voyage-3` (general), `voyage-3-large` (best quality), `voyage-code-3` (code), `voyage-finance-2` (finance), `voyage-law-2` (legal).
+  - **Reranking:** `rerank-2.5` (best), `rerank-2.5-lite`, `rerank-2`.
+
+  **Conventions:**
+
+  - `VoyageConfig.defaultInputType` defaults to `'document'` — Voyage embeddings perform measurably better when the API knows whether a string is a search **query** or an indexed **document**. Override per-deployment to `'query'` for query-side pipelines.
+  - Rerank requests forward `topK` → `top_k`; results map `relevance_score` → `relevanceScore`. The adapter prefers Voyage-echoed `document` text when present, otherwise looks up by index in the original input (defensive against API revisions that toggle the echo behavior).
+  - Embed responses are **defensively sorted by index** before returning — guards against future API revisions that might return out-of-order results.
+
+  **Closes Track B.** All of Tracks A and B are shipped. Next forward-looking item is **B8.5** (Gemini hosted RAG) once there's customer signal, or net-new ideas.
+
+  **Manual registration alternative** (matches Jina / Cohere precedent):
+
+  ```ts
+  import { AiRegistry, VoyageProvider } from "@rudderjs/ai";
+
+  AiRegistry.register(
+    new VoyageProvider({
+      apiKey: process.env.VOYAGE_API_KEY!,
+    })
+  );
+  ```
+
+- 3788bab: **B8 Phase 2 — `fileSearch` agent tool + OpenAI native `file_search` emission.** Adds the agent-side surface to the hosted vector stores shipped in B8 Phase 1. Closes the agent loop end-to-end on OpenAI: the model invokes `file_search` natively against your configured stores; no `execute` to write, no embedding pipeline, no tool round-trip.
+
+  ```ts
+  import { Agent, VectorStores, fileSearch } from "@rudderjs/ai";
+
+  const kb = await VectorStores.get("vs_abc123");
+
+  class SupportAgent extends Agent {
+    model() {
+      return "openai/gpt-4o";
+    }
+    tools() {
+      return [
+        fileSearch({
+          stores: [kb.id],
+          where: { author: "Alice", year: 2026 }, // server-side metadata filter
+          maxResults: 10,
+        }),
+      ];
+    }
+  }
+  ```
+
+  **Surface:**
+
+  - `fileSearch({ stores, where?, maxResults?, name?, description? })` returns a `FileSearchTool` tagged with `providerHint: { type: 'file-search', vector_store_ids, filters?, max_num_results? }`. Symbol marker `FILE_SEARCH_MARKER` + `isFileSearchTool(t)` typeguard.
+  - `where` accepts the sugar `{ key: value }` form (lowered to an `and` of `eq` filters) or the typed `{ type: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'and' | 'or', ... }` shape directly. `normalizeWhere` is exported for advanced use.
+  - `toOpenAITools` recognizes `providerHint?.type === 'file-search'` and emits OpenAI's native `{ type: 'file_search', vector_store_ids, filters, max_num_results }` block instead of a function-call shape. Mirrors A7 Phase 2's Anthropic-side substitution.
+  - `AiFake.respondWithFileSearchResults({ text? | hits?, usage? })` stubs a single-step assistant reply for tests — the hosted path produces the answer directly so no tool round-trip is needed.
+
+  **Latent bug fix bundled in:** `toolToSchema()` now propagates `definition.providerHint` onto the emitted `ToolDefinitionSchema`. Computer-use's provider hint already lived on the instance `toSchema()` method but never reached `toAnthropicTools` through the agent loop — so the native `computer_20250124` block was silently absent from real agent runs. The hint now flows correctly through both the file-search and computer-use paths. `ToolDefinitionOptions.providerHint?` is the new typed slot for tools that need adapter-native serialization.
+
+  **Compatibility:**
+
+  - OpenAI on `chat.completions` — native block. Phase 1 + 2 close the OpenAI RAG story.
+  - Gemini — deferred to B8.5 (RAG surface uses `cachedContent`; design diverges enough to deserve its own pass).
+  - Other providers — see `fileSearch` as a normal function-call tool with the placeholder `{ query: string }` schema. Without an `execute` they pause for client tools; Phase 3 will add a `fallback` opt that delegates to `similaritySearch` over a local pgvector model.
+
+  Docs: new `docs/guide/vector-stores.md` covers both Phase 1 (CRUD) and Phase 2 (agent tool). Added under the AI sidebar.
+
+- 4540248: **B8 Phase 2.x — `WebSearch` provider-native retrofit (Anthropic + Gemini).** Reuses Phase 2's `providerHint` plumbing on `WebSearch.toTool()`. Models that ship a native chat-completions web-search tool now invoke it directly instead of going through the DuckDuckGo fallback — same agent prompt, dramatically better quality on the providers where it matters.
+
+  ```ts
+  import { Agent, WebSearch } from "@rudderjs/ai";
+
+  class ResearchAgent extends Agent {
+    model() {
+      return "anthropic/claude-3-5-sonnet-latest";
+    }
+    tools() {
+      return [
+        WebSearch.make()
+          .domains(["anthropic.com", "docs.anthropic.com"])
+          .maxResults(5)
+          .toTool(),
+      ];
+    }
+  }
+  ```
+
+  **Surface:**
+
+  - `WebSearch.toTool()` now sets `providerHint: { type: 'web-search', allowed_domains?, max_uses? }` from the chained `.domains([...])` / `.maxResults(n)` opts. The DuckDuckGo `server` execute stays in place as the fallback.
+  - `toAnthropicTools` recognizes the hint and emits `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains?, blocked_domains?, user_location? }`. Honors a `providerHint.tool` override for forward-compat with future Anthropic web-search variants.
+  - Gemini — `toGeminiTools` is restructured to return the **already-wrapped top-level array** so native blocks like `{ google_search: {} }` sit as separate top-level entries alongside `{ functionDeclarations: [...] }`. The cache-key build uses the same shape, so cached requests pick up the change automatically.
+  - OpenAI — `chat.completions` has no native web-search block (it's Responses-API-only), so OpenAI continues to use the DuckDuckGo `server` execute as fallback. Same fallback for any other provider without a native hint match.
+
+  **`domains` / `maxResults` semantics across providers:**
+
+  | Provider  | `.domains([...])`                    | `.maxResults(n)`               |
+  | --------- | ------------------------------------ | ------------------------------ |
+  | Anthropic | → `allowed_domains`                  | → `max_uses`                   |
+  | Gemini    | ignored (block accepts none)         | ignored (block accepts none)   |
+  | OpenAI    | applied via DuckDuckGo `site:` query | bounded by HTML response slice |
+
+  **Compatibility:** strictly additive. Apps already using `WebSearch.make().toTool()` get native emission for free on Anthropic + Gemini; behavior on OpenAI / other providers is unchanged.
+
+- 94dc14a: **B8 Phase 3 — local pgvector fallback for `fileSearch`. Closes B8.** With the new `fallback` opt configured, the same `fileSearch` tool works on every provider — OpenAI runs the search natively, everyone else delegates to `similaritySearch` against a local pgvector model. Same agent prompt across hosted and self-hosted RAG, no re-prompting needed when ops swap deployment targets.
+
+  ```ts
+  import { Agent, fileSearch } from "@rudderjs/ai";
+  import { Document } from "./app/Models/Document.js";
+
+  class HybridAgent extends Agent {
+    // openai/* — native file_search runs server-side against vs_kb.
+    // anthropic/*, gemini/*, etc — similaritySearch runs locally against
+    //   the Document model. Same prompt, same tool name, same input schema.
+    model() {
+      return "openai/gpt-4o";
+    }
+    tools() {
+      return [
+        fileSearch({
+          stores: ["vs_kb"],
+          fallback: {
+            model: Document,
+            column: "embedding",
+            embedWith: "openai/text-embedding-3-small",
+            minSimilarity: 0.7,
+            limit: 10,
+            scope: (q) =>
+              q.where("tenantId", currentTenant).where("published", true),
+          },
+        }),
+      ];
+    }
+  }
+  ```
+
+  **Surface:**
+
+  - `FileSearchOptions.fallback?: FileSearchFallback<TInstance>` — accepts every B7 `similaritySearch` knob (`model`, `column`, `embedWith`, `metric`, `minSimilarity`, `limit`, `scope`, `projectResult`). `name` / `description` flow from the outer `fileSearch` so the agent prompt stays identical across providers.
+  - `FileSearchTool` widened to `Tool<{ query: string }, unknown>` with optional `execute` + `toModelOutput`. Both stay `undefined` when `fallback` is absent (Phase 2 back-compat). When `fallback` is set, both are lifted from an internal `similaritySearch(...)` instance.
+  - New `FileSearchFallback<TInstance>` type alias exported from `@rudderjs/ai` for apps that want to factor out the fallback config.
+
+  **Why no `supportsFileSearch` flag:** the original plan proposed a per-`ProviderFactory` capability check. It turned out unnecessary — the `providerHint` cascade at the adapter level already does the right thing. OpenAI's `toOpenAITools` substitutes the native `file_search` block (model never invokes execute on that path); other providers serialize the tool as a function-call schema (model invokes execute → fallback runs). Simpler, fewer moving parts.
+
+  **Compatibility:** strictly additive. Apps already calling `fileSearch({ stores })` see no change — `execute` stays absent, the OpenAI native path is unchanged, and the previously-degraded "client tool" pause on non-OpenAI providers is unchanged unless `fallback` is configured.
+
+  **Closes B8.** Gemini hosted `VectorStores` parity stays deferred to B8.5 (Gemini's `cachedContent` shape diverges enough to deserve its own design pass). Next Track B item is **B9** (ElevenLabs provider).
+
+- d685bee: **B8.5 — Gemini hosted RAG (`fileSearchStores`).** The `VectorStores` façade and `fileSearch` agent tool now work against Gemini, matching the OpenAI surface 1:1. Same code, different provider.
+
+  ```ts
+  import { VectorStores, fileSearch, Agent } from "@rudderjs/ai";
+
+  const kb = await VectorStores.create("Knowledge Base", {
+    provider: "google",
+  });
+  await kb.add({
+    filePath: "./report.pdf",
+    attributes: { author: "Alice", year: 2026 },
+  });
+
+  class SupportAgent extends Agent {
+    model() {
+      return "google/gemini-2.5-flash";
+    }
+    tools() {
+      return [
+        fileSearch({
+          stores: [kb.id], // 'fileSearchStores/foo-bar'
+          where: { author: "Alice", year: 2026 },
+          maxResults: 10,
+        }),
+      ];
+    }
+  }
+  ```
+
+  **What's new:**
+
+  - `GoogleVectorStoreAdapter` wraps Google's `fileSearchStores` API. CRUD (`create`/`list`/`get`/`delete`), ingestion via `uploadToFileSearchStore` (local path/Blob) or `importFile` (existing Files API id). Both paths return LROs polled to completion via `client.operations.get`. Failed ingestion surfaces as `{ status: 'failed', lastError }` without throwing.
+  - `toGeminiTools` recognizes `providerHint.type === 'file-search'` and emits the native `{ fileSearch: { fileSearchStoreNames, metadataFilter?, topK? } }` tool block (same `providerHint` mechanism A7 and B8 established).
+  - Typed `FileSearchFilter` (`{ type: 'eq', key, value }` etc.) translates to Gemini's `metadataFilter` string syntax (`(author = "Alice") AND (year > 2020)`) at the adapter layer. The user-facing API is unchanged.
+  - Per-document `attributes` map to Gemini's `CustomMetadata[]` shape. Strings → `stringValue`, numbers → `numericValue`, booleans → `stringValue: 'true' | 'false'` (Gemini has no boolean variant; string is lossless and filter-matchable).
+
+  **Provider differences (Gemini vs OpenAI):**
+
+  - Store ids are full resource paths (`fileSearchStores/foo-bar`), not opaque (`vs_abc123`).
+  - Store-level `metadata` and `expiresAfter` aren't supported by Gemini — passing either throws fail-loud. Use per-document `attributes` instead.
+  - Gemini's `fileSearchStores` is **Developer API only** — not available on Vertex AI.
+
+  **Closes B8.5.** All of Tracks A and B (including B8.5) are shipped. See `docs/plans/2026-05-11-b8.5-gemini-hosted-rag.md`.
+
+- 362a751: **B9 — ElevenLabs provider for premium TTS + STT.** New `ElevenLabsProvider` implements `TextToSpeechAdapter` + `SpeechToTextAdapter` against ElevenLabs's REST API. Raw `fetch` adapter — no SDK peer dep (matches the Jina / Cohere shape). Wired through `AiProvider` via `driver: 'elevenlabs'` so apps declare it in `config/ai.ts` alongside their LLM provider.
+
+  ```ts
+  // config/ai.ts
+  import { env } from "@rudderjs/support";
+
+  export default {
+    default: "openai/gpt-4o",
+    providers: {
+      openai: { driver: "openai", apiKey: env("OPENAI_API_KEY")! },
+      elevenlabs: { driver: "elevenlabs", apiKey: env("ELEVENLABS_API_KEY")! },
+    },
+  };
+  ```
+
+  ```ts
+  // TTS — model string is `<provider>/<voice_id>`; Rachel = 21m00Tcm4TlvDq8ikWAM
+  await AudioGenerator.of("Hello world")
+    .model("elevenlabs/21m00Tcm4TlvDq8ikWAM")
+    .format("mp3")
+    .generate();
+
+  // STT — model string is `<provider>/<model>`; scribe_v1 is the only model today
+  await Transcription.of(audioBuffer)
+    .model("elevenlabs/scribe_v1")
+    .transcribe();
+
+  // Failover from OpenAI TTS → ElevenLabs (existing AudioGenerator surface)
+  await AudioGenerator.of("Hello")
+    .model("openai/tts-1-hd")
+    .failover("elevenlabs/21m00Tcm4TlvDq8ikWAM")
+    .generate();
+  ```
+
+  **Conventions:**
+
+  - The model string after `elevenlabs/` is a **voice id** for TTS, an actual model id for STT. The TTS model id ships from `ElevenLabsConfig.defaultTtsModelId` (default `eleven_multilingual_v2`).
+  - `format` maps: `mp3` → `mp3_44100_128`, `opus` → `opus_48000_128`. `wav` / `aac` / `flac` throw clearly — re-encode at the app layer or use a provider with native support.
+  - `speed` is **ignored** by this adapter — ElevenLabs doesn't expose a top-level speed multiplier on the TTS endpoint.
+
+  **Manual registration alternative** (matches Jina / Cohere precedent — no `AiProvider` config needed):
+
+  ```ts
+  import { AiRegistry, ElevenLabsProvider } from "@rudderjs/ai";
+
+  AiRegistry.register(
+    new ElevenLabsProvider({
+      apiKey: process.env.ELEVENLABS_API_KEY!,
+    })
+  );
+  ```
+
+- 76822f6: **B6 — `.broadcast(channel)` on queued prompts.** Background AI work + live UI without polling. Closes a Laravel parity gap.
+
+  `QueuedPromptBuilder` (returned by `agent.queue(input)`) gains a new `.broadcast(channel, opts?)` method. When set, the queued job uses `agent.stream()` instead of `prompt()` and pushes each `StreamChunk` to the channel via `@rudderjs/broadcast`:
+
+  ```ts
+  await new SupportAgent()
+    .queue("Help with refund request")
+    .broadcast(`user.${userId}.support`)
+    .send();
+
+  // Subscribers receive: { event: 'chunk', data: <StreamChunk> } per chunk,
+  // then { event: 'done', data: <AgentResponse> } at completion,
+  // or { event: 'error', data: { message } } on failure.
+  ```
+
+  - Optional `eventPrefix` namespaces events (e.g. `agent.chunk` / `agent.done` / `agent.error`)
+  - `@rudderjs/broadcast` is loaded lazily — only required when `.broadcast()` is called
+  - Process-model caveat: `broadcast()` writes to in-process WS state. The typical RudderJS dev setup (single process running web + `queue:work`) works out of the box. Cross-process workers will need a pub/sub bridge (Redis, Reverb, etc.) — not in v1
+
+- 3f67151: **A6 Phase 1 — pricing catalog + cost estimation.** Foundation for the upcoming `withBudget(...)` middleware (phase 3). The eval framework's local `PRICING` table is replaced with this catalog so the cost column on eval reports is meaningful for every shipped provider, not just 8 hardcoded models.
+
+  - `ModelPricing` — `<provider>/<model>` → `{ inputPer1k, outputPer1k, cacheReadPer1k?, cacheWritePer1k?, _snapshotDate }`. Covers all headline models for every provider in `src/providers/` (Anthropic, OpenAI, Google, Bedrock, xAI, DeepSeek, Mistral, Groq, Cohere). Catalog snapshot is dated 2026-05-11; entries carry `_snapshotDate` per row so apps with negotiated rates can spot stale rows when they upgrade.
+  - `estimateCost(model, promptTokens, completionTokens, pricing?)` — same shape as the previous eval-internal `estimateCost`, but accepts an override map. Returns `0` for unknown models (eval cost columns shouldn't crash on a fresh model id). Re-exported from `@rudderjs/ai/eval` for back-compat.
+  - `assertKnownModelPricing(model, pricing?)` — fail-loud variant for budget enforcement. Throws `UnknownModelPricingError` carrying the model id + catalog snapshot date so apps fail at construction instead of zero-costing through a typo'd model.
+  - `BudgetExceededError` — error class shipped now so apps can `instanceof`-check against it from `withBudget({ onExceeded })` callbacks once phase 3 lands.
+
+  Override entries by spreading: `pricing: { ...ModelPricing, 'anthropic/claude-opus-4-7': { inputPer1k: 0.012, outputPer1k: 0.060, _snapshotDate: '2026-01-15' } }`.
+
+- e9d4dba: **A6 Phase 2 — `BudgetStorage` interface + `memoryBudgetStorage`.** Locks the persistence contract that `withBudget(...)` middleware (phase 3) and `ormBudgetStorage` (phase 4) both implement against.
+
+  - `BudgetStorage.checkAndDebit(opts)` — atomically reads the current spend, adds `costUsd` if it stays within `cap`, returns `{ allowed, spent, cap }`. Atomic by contract: implementations must keep the read + write in a single critical section to prevent two concurrent callers both passing the check before either debits.
+  - `memoryBudgetStorage()` — Map-backed in-process implementation. Atomic because `Map.get` / `Map.set` are synchronous; a concurrency test with 100 parallel `checkAndDebit` calls at the cap line confirms exactly `floor(cap/cost)` succeed. Cross-process caveat documented loudly: queue workers don't see the same Map, so apps with workers must use `ormBudgetStorage` (phase 4) or a Redis-backed storage.
+  - `periodKey(period, now, timezone?)` — TZ-aware bucket key (`YYYY-MM-DD` for `daily`, `YYYY-MM` for `monthly`). Default UTC; pass an IANA name (`'America/Los_Angeles'`) for user-local rollover. Daily buckets in PST roll at PST midnight, even when that crosses UTC date or month boundaries.
+  - `costUsd: 0` is a pure read — useful for "you've spent $X today" status displays without mutating the counter.
+  - Validation: rejects negative / NaN / Infinity for `cap` and `costUsd` at debit time.
+  - `reset?(userId, period, now?, timezone?)` — optional, useful for tests + admin overrides.
+
+  Phase 3 will compose this with the pricing catalog from phase 1 to ship the user-facing `withBudget(...)` middleware.
+
+- 0ec0abe: **A6 Phase 3 — `withBudget(...)` middleware.** Composes the pricing catalog (phase 1) and the `BudgetStorage` contract (phase 2) into the user-facing API. Per-user spend caps now enforce in production with a one-line install on any `Agent`.
+
+  ```ts
+  import { withBudget, memoryBudgetStorage } from "@rudderjs/ai";
+
+  const budgeted = withBudget({
+    user: (ctx) => ctx.context as string, // your app's user-id source
+    budget: () => ({ daily: 0.5, monthly: 10 }), // USD
+    storage: memoryBudgetStorage(), // ormBudgetStorage in phase 4
+  });
+
+  class MyAgent extends Agent {
+    middleware() {
+      return [budgeted];
+    }
+  }
+  ```
+
+  - **Pre-debit on `onIteration`** — fires before each model call (every step). Estimates input cost from the live messages array via the configured (or default) token estimator + `pricing[model].inputPer1k`. Calls `storage.checkAndDebit` with the estimate. Throws `BudgetExceededError` (or whatever your `onExceeded` throws) on the first denied period.
+  - **True-up on `onUsage`** — fires after each step with the provider's reported usage. Computes actual cost from `promptTokens` + `completionTokens`, debits the delta over the pre-debit. Always-applies (`cap: MAX_SAFE_INTEGER`) since the response already streamed; the next request bites if the user is now over cap.
+  - **Bypass** — `user` returning `null`/`undefined` skips enforcement (unauthenticated paths). `budget` returning neither `daily` nor `monthly` skips for that user.
+  - **Custom error class** — `onExceeded` can throw your own subclass; if it doesn't throw, the middleware throws `BudgetExceededError` so the run never silently passes a denied debit.
+  - **Daily AND monthly** — both caps may be set; first denial wins.
+  - **Pricing override** — pass any `Record<string, ModelPriceEntry>` for negotiated rates: `pricing: { ...ModelPricing, 'anthropic/claude-opus-4-7': { inputPer1k: 0.012, outputPer1k: 0.060, _snapshotDate: '2026-01-15' } }`.
+  - **Fail-loud on unknown model** — `assertKnownModelPricing` throws `UnknownModelPricingError` at iteration time if the agent's model isn't in the configured pricing catalog. Catches typos before they zero-cost through.
+
+  Caveats:
+
+  - **No refunds on errors.** If the provider call fails after the pre-debit, the estimate stays debited. Apps that need refund-on-error can subscribe `onError` and call `storage` directly.
+  - **No cache-rate accounting.** `TokenUsage` does not yet expose `cacheReadInputTokens` / `cacheWriteInputTokens`; cached requests are billed at the full `inputPer1k` rate. A `TokenUsage` widening + this middleware integration is a phase 3.x follow-up.
+  - **Tokenizer accuracy.** Default estimator is `Math.ceil(text.length / 4)` — fine for English-heavy prompts. Pass a tiktoken-backed `estimateTokens` for tight caps.
+
+  Also widens `AiFakeStep` with optional `usage` so tests can specify realistic provider-side token counts (used by the budget integration tests; useful for any middleware that depends on usage).
+
+- 5fa661d: **A6 Phase 4 — `ormBudgetStorage` + production-ready persistence.** Closes out #A6.
+
+  ```ts
+  import { withBudget } from "@rudderjs/ai";
+  import { ormBudgetStorage } from "@rudderjs/ai/budget-orm";
+
+  const budgeted = withBudget({
+    user: (ctx) => ctx.context as string,
+    budget: () => ({ daily: 0.5, monthly: 10 }),
+    storage: ormBudgetStorage(), // was: memoryBudgetStorage()
+  });
+  ```
+
+  - New subpath export `@rudderjs/ai/budget-orm` (lazy peer dep on `@rudderjs/orm`, mirrors `@rudderjs/ai/memory-orm`):
+    - `ormBudgetStorage()` — production-ready `BudgetStorage` implementation
+    - `OrmBudgetStorage` — class form for direct use
+    - `BudgetUsageRecord` — Model row exposed for admin queries (top spenders, period rollups)
+    - `budgetUsagePrismaSchema` — schema reference string for copy-paste
+  - Schema lives at `playground/prisma/schema/ai.prisma` (alongside the existing `UserMemory` model). The `@@unique([userId, period, periodKey])` constraint is required — without it, the find-or-create path can race and produce duplicate rows that silently break cap accounting.
+  - `checkAndDebit` uses find-or-create + atomic `Model.increment`. The unique constraint catches first-write races; the storage refetches and falls through to the increment path on a `create` collision.
+  - `costUsd: 0` is the pure-read path; doesn't touch storage on an empty bucket.
+  - Single debit larger than cap on an empty bucket refuses without creating a row (no polluting storage with denied requests).
+  - `reset(userId, period, now?, timezone?)` deletes the bucket for tests + admin overrides.
+
+  # Atomicity caveat
+
+  The cap check is read-then-conditional-increment. The increment itself is atomic (`UPDATE col = col + n`), but under high concurrency for a single user, two callers can both pass the check before either debits — total spend may briefly exceed `cap` by up to `costUsd × concurrency`. For typical apps (1–2 in-flight requests per user) this is negligible. Strict guarantees require serializable transactions or a Redis-backed counter — both planned as follow-ups.
+
+- 871e27e: **A7 Phase 1 — computer-use action vocabulary + Playwright executor.** Foundation for the upcoming `computerUseTool({ page })` factory (phase 2). Mirrors Anthropic's `computer_20250124` action schema verbatim so phase 2 can map cleanly to Anthropic's native tool block.
+
+  - `ComputerAction` — discriminated union covering every action Anthropic's `computer_20250124` tool emits: `screenshot`, `cursor_position`, `wait`, `mouse_move`, `left_click` / `right_click` / `middle_click` / `double_click` / `triple_click` (with optional modifier text), `left_mouse_down` / `left_mouse_up` (drag), `type`, `key` (chord), `hold_key`, `scroll`.
+  - `executeComputerAction(page, action, state)` — async dispatcher against a Playwright `Page`. Updates `state.cursor` after every coordinate-targeted action so `cursor_position` can answer. Never throws — Playwright failures surface as `{ type: 'error', text }` for the agent loop to forward as a tool-result with `is_error: true`.
+  - `PageLike` — structural Playwright `Page` subset. Lets `@rudderjs/ai` type-check and execute without taking a hard dependency on the `playwright` package (which carries a 300MB+ Chromium download). Apps install Playwright themselves and pass `page` in.
+  - `makeExecutorState()` — constructs the per-run cursor-tracking state. Threaded through every call within an agent run.
+  - `parseModifiers`, `normalizeKey`, `normalizeChord` — translate Anthropic / xdotool key naming (`ctrl`, `cmd`, `Return`) to Playwright's (`Control`, `Meta`, `Enter`).
+
+  Subpath export: `@rudderjs/ai/computer-use`. Module is Node-only in practice (Playwright); main entry stays runtime-agnostic.
+
+  ```ts
+  import { chromium } from "playwright";
+  import {
+    executeComputerAction,
+    makeExecutorState,
+  } from "@rudderjs/ai/computer-use";
+
+  const page = await (await chromium.launch()).newPage();
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const state = makeExecutorState();
+  const screen = await executeComputerAction(
+    page,
+    { action: "screenshot" },
+    state
+  );
+  await executeComputerAction(
+    page,
+    { action: "left_click", coordinate: [400, 200] },
+    state
+  );
+  ```
+
+  Phase 2 (next PR) wires this through `computerUseTool({ page })` — the agent tool factory that emits Anthropic's native `computer_20250124` block at the API level and routes execution through this executor. Non-Anthropic models will throw `ComputerUseProviderError` at agent boot.
+
+  See `docs/plans/2026-05-10-ai-computer-use.md` for the full A7 plan.
+
+- 5677b85: **A7 Phase 2 — `computerUseTool({ page })` factory + Anthropic native tool block.** Wires phase-1's executor into the agent loop. The tool maps to Anthropic's native `computer_20250124` tool block at the API level — Claude is fine-tuned on that exact tool, so quality is dramatically better than a generic function-call wrapper.
+
+  ```ts
+  import { Agent } from "@rudderjs/ai";
+  import { computerUseTool } from "@rudderjs/ai/computer-use";
+  import { chromium } from "playwright";
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  class BrowserAgent extends Agent {
+    model() {
+      return "anthropic/claude-opus-4-7";
+    }
+
+    tools() {
+      return [
+        computerUseTool({
+          page,
+          viewport: { width: 1280, height: 800 },
+          model: this.model(), // upfront provider check (recommended)
+        }),
+      ];
+    }
+  }
+  ```
+
+  - **`computerUseTool({ page, viewport?, model?, needsApproval?, maxActions?, state? })`** — plain object tagged with `Symbol.for('rudderjs.ai.computer-use')` (mirrors `HANDOFF_MARKER`). Tool name is fixed to `'computer'` (Anthropic-trained). `model` (optional) fails loud with `ComputerUseProviderError` for non-Anthropic models; without it, validation is deferred. `needsApproval` defaults to `true` and forwards through the standard approval channel. `maxActions` defaults to `50` per agent run; exceeding throws `ComputerUseLimitError`.
+  - **`ComputerUseProviderError`** (`code: 'COMPUTER_USE_PROVIDER_MISMATCH'`) and **`ComputerUseLimitError`** (`code: 'COMPUTER_USE_LIMIT_EXCEEDED'`) — both extend `Error`, both carry stable `code` fields for app `instanceof` + `.code` dispatch.
+  - **`isAnthropicLikeModel(model)`** — helper recognizing `anthropic/*` and `bedrock/<region.>?anthropic.*` (covers cross-region inference profiles `us.anthropic.*`, `eu.anthropic.*`, `apac.anthropic.*`). Excludes OpenRouter-routed Anthropic models — OpenRouter goes through the OpenAI SDK with a different base URL, so Anthropic's native computer-use block can't reach the wire.
+  - **`isComputerUseTool(t)`** typeguard for adapters / observers.
+
+  **Anthropic adapter changes** (`packages/ai/src/providers/anthropic.ts`):
+
+  - `toAnthropicTools` recognizes `providerHint?.type === 'computer-use'` and emits the native `{ type: 'computer_20250124', name, display_width_px, display_height_px }` block instead of the standard function-call shape. Honors `providerHint.tool` for forward-compat with future schema versions.
+  - `toAnthropicMessages` widens tool-message content handling: `string` passes through unchanged; `ContentPart[]` expands via the existing `contentToAnthropicParts` helper (so screenshot results emit as Anthropic's `content: [{ type: 'image', source: { type: 'base64', media_type, data } }]` shape); other values JSON-stringify (legacy fallback). Generic enhancement — useful for any future tool that wants to return rich content.
+
+  **`ToolDefinitionSchema`** gains an optional **`providerHint?: ProviderHint`** field. Adapters that recognize the `type` substitute their native serialization; others ignore it and emit the standard function-call shape. Currently used only by `@rudderjs/ai/computer-use`; opens the door for OpenAI / Google native tool blocks later.
+
+  **Out of this phase, deferred:**
+
+  - **Phase 3 — playground demo.** `playground/app/Agents/BrowserAgent.ts` + `/demos/browser` page wiring this end-to-end with a real Chromium and a streaming agent run. Lands in the next PR.
+  - **OpenAI native `computer_use_preview`** mapping. `providerHint` mechanism is in place; add when the API leaves preview and quality is competitive.
+  - **Function-call wrapper fallback** for non-native providers. Becomes a `wrapperFallback: true` opt on `computerUseTool` once a customer asks.
+  - **Custom `ComputerEnvironment` interface.** Today the tool takes a Playwright `Page` directly. If a second backend appears (Puppeteer, remote VNC, Docker sandbox), introduce an interface and keep `page` as the Playwright shorthand.
+
+  Plan: `docs/plans/2026-05-10-ai-computer-use.md`.
+
+- a5f49fe: **A5 Phase 1 — built-in eval framework.** A new subpath at `@rudderjs/ai/eval` ships `evalSuite()` + `runSuite()` + 3 metrics + a console reporter. `AiFake` proves your agent's wiring works; evals prove it does the right thing on real models.
+
+  - **`evalSuite(name, { agent, cases, timeout? })`** — frozen suite definition. Each case is `{ input, assert: Metric, name?, agent?, timeout?, skip? }`. Per-case `agent` and `timeout` override the suite-level defaults; `skip: true` or `skip: 'reason'` skips without calling the agent.
+  - **`runSuite(suite)`** — serial runner that walks every case and never throws. Agent errors AND assertion throws become `failed` rows with the message in `reason`. Returns a `SuiteReport` with cases, totals, duration, and cost rollup.
+  - **Three built-in metrics:** `exactMatch(string)`, `regex(RegExp)`, `llmJudge(criterion, opts?)`. The judge runs as a one-shot anonymous agent (no recursion concern — default `remembers()` is `false`) with `Output.object({ schema })` JSON-mode parsing. Judge token usage rolls into the case's cost via a `Symbol.for('rudderjs.ai.eval.judgeUsage')` side-channel.
+  - **User-defined metrics** implement `(response, ctx) => MetricResult` — no inheritance, no decorators. The catalog is a starting set, not a closed enum.
+  - **`reportConsole(report, sink?)`** — default reporter; emits a glyph table (✓/✗/○) with cost + tokens. Returns the report unchanged for chaining.
+  - **`estimateCost(model, prompt, completion)`** — minimal hardcoded `ModelPricing` subset (Anthropic, OpenAI, Google — the 7 most common models). A6 will ship the full versioned catalog.
+  - **Subpath `@rudderjs/ai/eval`** — keeps the metrics catalog out of the main runtime entry. No new peer deps; reuses `Output.object` from main entry, `agent()` factory from `agent.ts`.
+
+  ```ts
+  // evals/support-agent.eval.ts
+  import { evalSuite, llmJudge, exactMatch, regex } from "@rudderjs/ai/eval";
+  import { SupportAgent } from "../app/Agents/SupportAgent.js";
+
+  export default evalSuite("SupportAgent", {
+    agent: () => new SupportAgent(),
+    cases: [
+      {
+        name: "password reset",
+        input: "How do I reset my password?",
+        assert: llmJudge("mentions a password reset link"),
+      },
+      { name: "price", input: "How much?", assert: exactMatch("$99/month") },
+      { name: "support", input: "Contact?", assert: regex(/support@/) },
+    ],
+  });
+  ```
+
+  Run programmatically today via `runSuite()`. Phase 2 adds `pnpm rudder ai:eval` for CLI-driven discovery; Phase 3 adds `jsonShape` / `semanticMatch` / `tokenCost`; Phase 4 adds `--record` / `--replay` + telescope integration; Phase 5 adds an HTML report.
+
+  28 new tests covering suite definition validation, every built-in metric (including llmJudge fallbacks for unparseable judge responses + missing judge model), runner ordering / skip / per-case timeout / per-case agent override / agent-error-as-failed-row / assertion-throw-as-failed-row, judge token side-channel cleanup, `estimateCost` for 3 known models + 1 unknown (graceful 0), and the console reporter's glyphs + skip-reason rendering.
+
+- f06331e: **A5 Phase 2 — `pnpm rudder ai:eval` CLI + JSON reporter.** Phase 1 shipped the eval framework; Phase 2 makes it a first-class command. The CLI walks `evals/**/*.eval.ts` (override via `config('ai').eval.pattern`), runs each suite serially, and reports pass/fail + cost + tokens.
+
+  - **Console mode** (default) — uses Phase 1's `reportConsole` per suite.
+  - **`--json`** — emits a `{ suites: [{ suite, passed, failed, cases: [{ name, status, pass, score?, reason?, tokens, cost, duration }] }] }` envelope to stdout. CI scripts can pipe directly into `jq`; matches the `command_run` MCP tool envelope shape so the boost agent surface and the eval CLI feel like one family.
+  - **`--bail`** — stop on the first failing suite. Pairs with `--json` so a failing CI run streams the first failure without waiting for the rest.
+  - **Positional name filter** — `pnpm rudder ai:eval support` runs only suites whose `name` includes `'support'` (case-insensitive substring).
+
+  Exits 0 when every case passes, 1 otherwise (also 1 when no suites match in console mode; `--json` always exits 0 with an empty envelope so `jq` consumers don't crash).
+
+  Phase 3 adds `jsonShape`/`semanticMatch`/`tokenCost` metrics; Phase 4 adds `--record`/`--replay` (AiFake-backed) + telescope `agent.eval.completed` events; Phase 5 adds the HTML report.
+
+- 3ee9a97: **A5 Phase 3 — `jsonShape` / `semanticMatch` / `tokenCost` + `compose`.** Three new built-in metrics for `@rudderjs/ai/eval` plus a composition helper.
+
+  - **`jsonShape(schema: z.ZodType)`** — strict structural assertion. Strips ` ``` ` / ` ```json ` fences from `response.text`, parses, runs `safeParse`. On failure surfaces the zod issue path (e.g. `customer.email`) so debugging doesn't require a separate console log. Pairs naturally with `Output.object({ schema })` on the agent.
+  - **`semanticMatch(reference, opts?)`** — embedding-based fuzzy match. Embeds both `reference` and `response.text` via `AI.embed()`, computes pure-JS cosine, passes when score >= `opts.threshold` (default `0.85`, tighter than `EmbeddingUserMemory`'s 0.5 retrieval-rank floor since this is an assertion, not a ranking). Embed token usage rolls into the case's cost rollup via the same side-channel `llmJudge` already uses.
+  - **`tokenCost(threshold)`** — passes when `response.usage.totalTokens <= threshold`. Detects prompt-size regressions before they show up as a billing surprise.
+  - **`compose(...metrics)`** — runs metrics in order, short-circuits on the first failure, surfaces its reason. Awaits async metrics in declaration order.
+
+  Internal: the `judgeUsage` side-channel symbol is renamed to `extraUsage` so the embed cost from `semanticMatch` can ride the same channel without misleading naming. No public API change — the symbol is internal-only.
+
+  Phase 4 adds `--record` / `--replay` (AiFake-backed) + telescope `agent.eval.completed` events; Phase 5 adds the HTML report.
+
+- a35c600: **A5 Phase 4 — `--record` / `--replay` + `agent.eval.completed` observer event.** Deterministic regression tests for AI agents and a hook for telescope dashboards.
+
+  - **`pnpm rudder ai:eval --record [name-filter]`** runs each case against the real provider and writes the assistant turns to `evals/__fixtures__/<suite>/<case>.json`. Existing fixtures are overwritten — diff in your VCS to see what changed.
+  - **`pnpm rudder ai:eval --replay [name-filter]`** swaps the runtime with `AiFake.fake()` and feeds each case its recorded fixture via `respondWithSequence`. Zero API calls, zero cost, deterministic. Cases without a fixture fall through to a normal run with a stderr warning. `--record` and `--replay` are mutually exclusive.
+  - **`agent.eval.completed`** AiEvent variant (`{ kind, suite, case, status, pass, score?, reason?, tokens, cost, duration }`) emits after each case completes — including skipped cases, so dashboards can surface coverage gaps. Telescope's AI collector will land an "Evals" tab in a follow-up to aggregate pass-rate per `(suite, case)` over time.
+  - **`stepsFromResponse(response)`** + `EvalFixture` type re-exported from `@rudderjs/ai/eval` so external tooling (custom CI scripts, alternative replay engines) can compose without duplicating the extraction logic.
+
+  **Fixture format** is versioned (`version: 1`); reading a future-versioned fixture throws to force re-record rather than silently mis-replay. Suite/case names are slugified for filesystem safety (non-`[A-Za-z0-9._-]` collapses to `-`).
+
+  **Internal:** record/replay are implemented as a per-case `agent`/`assert` decoration — the `runSuite` runner stays unchanged. Replay pre-loads every fixture for a suite up-front so the per-case factory can prime `AiFake.respondWithSequence` synchronously.
+
+  **Out of scope (deferred to follow-ups):** `--check-fixtures` flag for catching non-deterministic agents, the telescope dashboard "Evals" tab, and Phase 5's HTML report.
+
+- c17731f: **A5 Phase 5 — HTML report + suite metadata.** Closes out the eval framework roadmap.
+
+  - **`pnpm rudder ai:eval --html <path>`** writes a self-contained HTML report to the given path. Inline CSS, minimal vanilla JS for row expand/collapse — no framework, no external assets. Pasteable into PR comments / Slack threads, openable offline. Coexists with `--json` (JSON still goes to stdout, HTML goes to disk). Defaults `path` resolution to the app cwd; intermediate directories are created.
+  - **`evalSuite('Name', { ..., metadata: { owner, lastReviewed, ticket } })`** — optional ownership / context, surfaced in the HTML report header. Open shape (`[k: string]: string | undefined`) so teams can attach custom keys; the report renders `camelCase` → `Title Case` for the well-known `lastReviewed` and passes others through verbatim.
+  - **`reportHtml(reports, opts?)`** — pure function exported from `@rudderjs/ai/eval` for programmatic use (e.g. emitting a report from a custom CI script). Defensive HTML-escape on every piece of user content (suite/case names, input, response, metadata, reasons).
+  - **`CaseResult.input`** is now always populated; **`CaseResult.responseText`** is set when the agent produced a response (omitted when the agent threw or the case was skipped). Threads through `runSuite` so reporters and external tooling can render the prompt + response alongside pass/fail.
+  - **`SuiteReport.metadata`** copies through from the spec when set so reporters can pick it up without re-reading the suite definition.
+
+  Phase 5 is the last A5 phase. The remaining surface — `--check-fixtures` for catching non-deterministic agents, the telescope dashboard "Evals" tab — lives outside the framework.
+
+- d558a42: **MCP ↔ Agent bridge** — `@rudderjs/ai/mcp` ships two paired connectors that close the loop between `@rudderjs/ai` and the Model Context Protocol. Net-new differentiator: Laravel ships neither side.
+
+  - `mcpClientTools(transport, opts?)` — connect to a remote MCP server (URL string for HTTP, `{ command, args }` for a stdio subprocess, or an already-connected SDK Client) and surface its tools as agent `Tool[]`. Remote JSON Schema flows through verbatim — no zod round-trip — via the new `jsonSchema` passthrough on `ToolDefinitionOptions`. The returned array carries a non-enumerable `close()` for shutdown when this call owns the client.
+  - `mcpServerFromAgent(AgentClass, opts?)` — wrap an `Agent` as an MCP server, returned as the SDK's `McpServer` (connect with any SDK transport — stdio, HTTP). Three exposure modes: `'tools'` (default; one MCP tool per `agent.tools()` entry), `'agent'` (one prompt-tool runs the whole agent — the marquee differentiator), or `'both'`.
+  - `ToolDefinitionOptions.jsonSchema?: Record<string, unknown>` — pre-built JSON Schema escape hatch for tools whose shape is constructed dynamically (MCP imports today; OpenAPI generators next). When set, takes precedence over `inputSchema` on the wire to providers.
+
+  `@modelcontextprotocol/sdk` is an optional peer dependency — apps that don't import the `/mcp` subpath aren't forced to install it.
+
+- 3d976cc: **B7 Phase 2 — `similaritySearch({ model, column, embedWith })` agent tool + auto-embed lift in `whereVectorSimilarTo`.** Wires Phase 1's pgvector primitives into the agent loop. Models emit a natural-language `query`; the tool embeds it, runs a `whereVectorSimilarTo` search, and returns top-K rows with similarity scores.
+
+  ```ts
+  import { Agent } from "@rudderjs/ai";
+  import { similaritySearch } from "@rudderjs/ai";
+  import { Document } from "./app/Models/Document.js";
+
+  class KnowledgeAgent extends Agent {
+    tools() {
+      return [
+        similaritySearch({
+          model: Document,
+          column: "embedding",
+          embedWith: "openai/text-embedding-3-small",
+          minSimilarity: 0.7,
+          limit: 10,
+        }),
+      ];
+    }
+  }
+  ```
+
+  `@rudderjs/ai`:
+
+  - **`similaritySearch({ model, column, embedWith, metric?, minSimilarity?, limit?, name?, description?, projectResult? })`** — exported from the main entry (`@rudderjs/ai`). Returns a `ServerToolBuilder` whose `inputSchema` is `z.object({ query: z.string().min(1) })`. Default tool name: `similarity_search_<model_lowercase>`. `embedWith` is required — fails loud at factory construction if missing, mirroring A6's `assertKnownModelPricing` pattern (no silent default-route to `AiRegistry.getDefault()`).
+  - **Execute flow:** `query` → `AI.embed(query, { model: embedWith })` → `model.query().whereVectorSimilarTo(column, vector, { metric, minSimilarity }).selectVectorDistance(...).limit(limit).get()` → `{ row, similarity }[]`. The internal distance alias is read off each row at result time and converted to `similarity = 1 - distance` (cosine convention; documented for non-cosine metrics).
+  - **`toModelOutput`** default formatter: `(0.85) {"id":1,"content":"..."}` per hit, newline-joined, with the internal alias stripped from the JSON. Empty-state returns `"No similar <Model> records found."`. Override via `projectResult: (row, similarity) => string` for custom shapes.
+
+  `@rudderjs/orm-prisma`:
+
+  - **`whereVectorSimilarTo(column, '<string>', { embedWith })`** no longer throws — auto-embed is **deferred** to terminal time so the chain stays sync. The string + model id get stored on the vector clause and resolved when `.get()` / `.first()` runs by lazy-loading `@rudderjs/ai` via `resolveOptionalPeer('@rudderjs/ai')`. `MissingEmbedderError` still fires when `embedWith` is omitted.
+  - **`@rudderjs/ai` is a new optional peer** of `@rudderjs/orm-prisma`. Apps that don't do RAG never load AI. `@rudderjs/support` is a new regular dep (for `resolveOptionalPeer`).
+
+  **Phase 2 limitations** (lifted in Phase 2.5):
+
+  - **Standalone vector queries only.** `similaritySearch` doesn't support a `scope` callback yet — agents see every row in the corpus that matches the vector. Apps needing tenant/user filtering today can pre-fetch IDs in user code and post-filter the result set.
+  - The chained `.where()` lift on `whereVectorSimilarTo` ships in Phase 2.5 alongside `scope`.
+
+  Plan: `docs/plans/2026-05-10-b7-vector-storage.md` (updated to reflect the Phase 2 / 2.5 split).
+
+- f80d2c1: **A4 Phase 1 — `UserMemory` interface + in-memory backend + DI wiring.** Foundation for per-user memory beyond conversation history (Mem0-style); the auto-inject and auto-extract runtimes land in Phase 2 and 3.
+
+  - `UserMemory` interface — `remember()` / `recall()` / `forget()` / `list()` (and optional `forgetAll()` for GDPR cascades). Drop-in alongside `ConversationStore`; backends range from in-process to ORM-backed to embedding-backed.
+  - `MemoryUserMemory` — in-process Map-backed implementation. Substring-match `recall()` (case-insensitive against fact + tags), tag-intersection filtering, per-user isolation. Ships in the runtime-agnostic main entry — no `node:` imports.
+  - `Agent.remembers()` — class hook returning `false | RemembersSpec | Promise<…>`. Default `false` (memory-stateless); subclasses opt in by returning `{ user, inject?, extract?, tags?, … }`. Mirrors `Agent.conversational()`.
+  - `AgentPromptOptions.memory?: false | RemembersSpec` — per-call override with the same precedence chain (per-call > class).
+  - `AiConfig.memory?: UserMemory` — config key wired by `AiProvider`. Bound to the `ai.memory` DI key and to the module-level `setUserMemory()` registry that Phase 2/3 middleware will consume.
+  - `resolveRemembersSpec()` — shared resolver used by the upcoming auto-inject middleware. Public re-export so apps reading the spec manually get the same precedence rules.
+
+  Phase 1 introduces no runtime behavior change to existing agents — `remembers()` defaults to `false` and nothing in the prompt loop reads the spec yet. Apps can already wire a backend via `AiConfig.memory` and call it manually through `app().make<UserMemory>('ai.memory')`.
+
+- 3347acd: **A4 Phase 2 — auto-inject middleware for user memory.** `Agent.remembers().inject === 'auto'` now actually injects facts; the declaration shipped in Phase 1 finally has a runtime.
+
+  - `withMemoryInject(spec, opts?)` — exported `AiMiddleware` factory. Runs in `onStart` (async, so `recall()` can await), reads the latest user message from `ctx.messages`, calls `mem.recall(spec.user, userText, { limit, tags })`, renders matched facts as a fenced `<user-memory>…</user-memory>` block, and prepends them to the system message in place. Skips silently when no `UserMemory` is registered, no facts match, or the budget can't fit even one entry.
+  - **Auto-cascade** — when `Agent.remembers()` returns `{ inject: 'auto', … }`, `Agent.prompt()` / `Agent.stream()` install `withMemoryInject` automatically before the loop runs. Continuation calls (`options.messages` set) skip injection so the system prompt isn't double-augmented across tool round-trips. Sync fast path preserved when both `conversational()` and `remembers()` declare nothing.
+  - **Token-budget enforcement** — `spec.injectTokenBudget` drops lowest-score facts first (undefined scores treated as 0.5). Default `~4 chars/token` estimator; override via `MemoryInjectOptions.estimateTokens`.
+  - **Recall improvement (Phase 1 carryover)** — `MemoryUserMemory.recall()` switches from naive substring match to **case-insensitive token overlap** (≥3-char tokens, alphanumeric split). Natural-language queries like "what is my project?" now pull facts containing "project" without forcing the caller to extract keywords. The Phase 1 single-word recall test continues to pass; the change is strictly more lenient.
+  - **Internal: `Symbol.for('rudderjs.ai.extraMiddlewares')` slot on options** — the auto-cascade plumbs framework-injected middlewares through this hidden slot so `getMiddleware(a, options)` can append them after `agent.middleware()` without polluting `AgentPromptOptions`'s public surface. Phase 3 (auto-extract) will reuse the slot.
+
+  ```ts
+  class SupportAgent extends Agent {
+    remembers() {
+      return {
+        user: "user_123",
+        inject: "auto",
+        tags: ["support"],
+        injectLimit: 5,
+        injectTokenBudget: 400,
+      };
+    }
+  }
+
+  // Recall fires before each model call; the matching facts get
+  // prepended to the system message as a `<user-memory>` block.
+  await new SupportAgent().prompt("Where does my project deploy?");
+  ```
+
+- 08e3603: **A4 Phase 3 — auto-extract middleware for user memory.** `Agent.remembers().extract === 'auto'` (with an `extractWith` model) now distills durable facts from each successful turn and writes them via `mem.remember()` — the third piece of the runtime that the Phase 1 declaration promised.
+
+  - `withMemoryExtract(spec, opts?)` — exported `AiMiddleware` factory. Runs in `onFinish` (only fires on successful runs, so failed turns don't pollute memory). Pulls the latest `[user, assistant]` turn from `ctx.messages`, calls a one-shot anonymous agent on the small model (`spec.extractWith`) with an `Output.object({ schema })` prompt asking for `{ facts: [{ fact, score, tags? }] }`, filters by confidence threshold, unions `spec.tags` into each entry, and writes via `mem.remember()`.
+  - **Auto-cascade extension** — the existing memory cascade in `Agent.prompt` / `Agent.stream` now installs both inject (Phase 2) AND extract (Phase 3) middlewares when each is opted in. Continuation calls (`options.messages` set) skip BOTH so the same facts aren't double-written across tool round-trips.
+  - **Confidence threshold** — `MemoryExtractOptions.threshold` defaults to `0.7`; facts below the floor are dropped before any `remember()` call. Tighten for high-risk domains; this is the v1 mitigation for the memory-poisoning pitfall.
+  - **Audit hook** — `MemoryExtractOptions.onExtracted(entries)` fires after a successful write with the persisted entries. Use it to stream into telescope, write an audit log, or assert in tests.
+  - **Failure swallow** — extract errors (network, JSON parse, zod validation, `remember()` throw) route through `MemoryExtractOptions.onError` and are otherwise swallowed. The parent prompt never breaks because of memory work.
+
+  ```ts
+  class SupportAgent extends Agent {
+    remembers() {
+      return {
+        user: "user_123",
+        inject: "auto",
+        extract: "auto",
+        extractWith: "anthropic/claude-haiku-4-5",
+        tags: ["support"],
+      };
+    }
+  }
+
+  // On success, durable facts get distilled and written. The next turn
+  // will see them via auto-inject's recall.
+  await new SupportAgent().prompt("hi, my project Foo lives at /var/www/foo");
+  ```
+
+- 71c6330: **A4 Phase 4 — `OrmUserMemory` production backend.** A new subpath at `@rudderjs/ai/memory-orm` ships an ORM-backed `UserMemory` that persists facts via the registered `@rudderjs/orm` adapter — drop-in alongside Phase 1's in-process `MemoryUserMemory`, but durable across restarts and queryable from outside the framework.
+
+  - `OrmUserMemory` — implements the `UserMemory` interface against the `@rudderjs/orm` `Model` API. Works on Prisma today; Drizzle works the moment the user's tables are wired (`tables: { userMemory: <table> }` on the `drizzle()` config).
+  - `UserMemoryRecord` — the `Model` row backing the store. Exposed so apps that want their own queries (admin views, audit dumps) don't have to route everything through the `UserMemory` interface.
+  - `userMemoryPrismaSchema` — exported reference Prisma schema string. Also dropped into `playground/prisma/schema/ai.prisma` for the demo. Includes a deliberately-nullable `embedding Bytes?` column so Phase 5's `EmbeddingUserMemory` lands as additive — no follow-up migration when you upgrade.
+  - New peer dep `@rudderjs/orm` (optional) — only consumers of the `/memory-orm` subpath pull it in.
+
+  ```ts
+  // config/ai.ts
+  import { OrmUserMemory } from "@rudderjs/ai/memory-orm";
+  import type { AiConfig } from "@rudderjs/ai";
+
+  export default {
+    default: "anthropic/claude-sonnet-4-5",
+    providers: {
+      /* ... */
+    },
+    memory: new OrmUserMemory(),
+  } satisfies AiConfig;
+  ```
+
+  **Recall semantics:** case-insensitive **OR-of-LIKE token overlap** on the `fact` column — mirrors `MemoryUserMemory.recall()` so the two backends are swap-compatible. Query tokenizes on non-alphanumeric boundaries (≥3-char tokens) and any row matching at least one token via `LIKE %tok%` is returned.
+
+  **Tags:** persist as JSON-encoded `String?`. Tag-filter recall happens JS-side after fetch — pushing array filtering into the WHERE is adapter-specific (Postgres `String[]`, SQLite JSON contains) and lands in a follow-up. Same trade-off Prisma shows you when you pick `String?` over `String[]` for portability.
+
+  19 new tests covering `remember` round-trip, `list` (insertion order, tag intersection, limit), `recall` (single-token + multi-token OR-of-LIKE, tag scope, limit, empty/no-match), `forget` (owner check + idempotent on unknown id), `forgetAll`, plus `UserMemoryRecord.getTags()` JSON parsing edge cases and the schema snapshot. Test fixture is a Map-backed in-process adapter that satisfies the `OrmAdapter` interface — no real DB required.
+
+- 7f42235: **A4 Phase 5 — `EmbeddingUserMemory` with cosine recall + GDPR cascade.** Closes out the A4 roadmap item. A new subpath at `@rudderjs/ai/memory-embedding` ships an embedding-backed `UserMemory` that composes Phase 4's `OrmUserMemory` with the registered embedding provider for semantic recall.
+
+  - **`EmbeddingUserMemory`** — composes `OrmUserMemory` + `AI.embed()`. `remember()` embeds the fact and writes the Float32-packed vector into the row's `embedding` column (added to the schema in Phase 4 as nullable, populated now). `recall()` embeds the query and ranks the user's facts by **pure-JS cosine similarity**.
+  - **GDPR right-to-be-forgotten cascades automatically** — the embedding lives in the same row as the fact, so `forget()` / `forgetAll()` delete both. No second store to keep in sync.
+  - **Backward compat with Phase 4** — rows whose `embedding` is null fall back to token-overlap on `fact` (`nullEmbeddingFallback: 'token-overlap'` default). Upgrading from `OrmUserMemory` to `EmbeddingUserMemory` doesn't lose recall on existing rows; new `remember()` calls populate the column going forward. Override to `'skip'` for strict embedding-only semantics.
+  - **`UserMemoryRecord.embedding` field added** to the existing class (Phase 4's class deliberately omitted it). `static fillable` extended to allow `embedding` on `Model.update()` calls.
+  - **Failure swallow** — `embed()` failures (network, missing peer SDK) don't break the parent. `remember()` persists the entry with `embedding === null`; `recall()` falls back to token-overlap.
+  - **`serializeVector` / `deserializeVector` / `cosineSimilarity` exported** for B7 (pgvector adapter) and any third-party backends. Float32 packing (4 bytes/dim); 1536-dim OpenAI vectors compress to 6144 bytes. `deserializeVector` honors `Uint8Array.byteOffset` for safe sub-views.
+
+  ```ts
+  import { OrmUserMemory } from "@rudderjs/ai/memory-orm";
+  import { EmbeddingUserMemory } from "@rudderjs/ai/memory-embedding";
+
+  export default {
+    default: "anthropic/claude-sonnet-4-5",
+    providers: {
+      /* ... */
+    },
+    memory: new EmbeddingUserMemory({
+      inner: new OrmUserMemory(),
+      model: "openai/text-embedding-3-small",
+      threshold: 0.5,
+    }),
+  } satisfies AiConfig;
+  ```
+
+  20 new tests covering the full lifecycle: `remember` populates the embedding column (and stays null on embed failure), `recall` ranks by cosine + applies threshold + applies tags + applies limit, fallback to token-overlap when query embed fails, fallback for null-embedding rows, `'skip'` mode drops null-embedding rows, `forget` cascades the embedding with the row, `forgetAll` does the same in bulk, `list` delegates unchanged. Plus `serializeVector` / `deserializeVector` / `cosineSimilarity` round-trips and edge cases (1536-dim vector, sliced `Uint8Array`, zero magnitudes, length mismatch).
+
+  **A4 roadmap complete.** Phase 1 → Phase 5 all shipped — interface, in-process backend, auto-inject, auto-extract, ORM backend, and embedding backend with GDPR cascade.
+
+- f133d08: **B7 Phase 2.5 — `scope` callback on `similaritySearch` + chained `.where()` lift in `whereVectorSimilarTo`.** Tenant / publication / soft-delete filtering for RAG agents, no over-fetching, no user-side post-filtering. The chain pre-filters in SQL.
+
+  ```ts
+  import { similaritySearch } from "@rudderjs/ai";
+  import { Document } from "./app/Models/Document.js";
+
+  class KnowledgeAgent extends Agent {
+    tools() {
+      return [
+        similaritySearch({
+          model: Document,
+          column: "embedding",
+          embedWith: "openai/text-embedding-3-small",
+          limit: 10,
+          scope: (q) =>
+            q.where("tenantId", currentTenant).where("published", true),
+        }),
+      ];
+    }
+  }
+  ```
+
+  `@rudderjs/orm-prisma`:
+
+  - `_getViaVector` composes flat `.where()` / `.orWhere()` chains into the vector SQL via a new `clauseToSql(clause, params[])` helper. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`. `null` values on `=` / `!=` map to `IS NULL` / `IS NOT NULL`. Empty `IN` short-circuits to `FALSE`; empty `NOT IN` to `TRUE` (Postgres rejects empty IN-lists).
+  - User-supplied values bind through positional `$N` placeholders to `$queryRawUnsafe(sql, ...params)` — defense-in-depth against SQL injection. Vector min-similarity stays inlined (numeric, safe).
+  - Polymorphic / pivot relation predicates (resolved via `_resolveDeferred`) flow through as flat `IN` / `NOT IN` clauses transparently.
+  - Soft-delete scoping (`withTrashed` / `onlyTrashed`) flows into the SQL alongside user wheres.
+  - **Still throws (out of scope for 2.5):** `.with()` (eager load), `whereGroup` / `orWhereGroup` (sub-builders pre-flatten to Prisma filter objects so the original `WhereClause[]` is lost), direct `whereHas` / `whereDoesntHave`, aggregates, redundant `.orderBy()`. Documented in the throw messages.
+
+  `@rudderjs/ai`:
+
+  - `similaritySearch({ scope })` accepts an optional `(q: SimilaritySearchQueryBuilder<T>) => SimilaritySearchQueryBuilder<T>` callback that runs before `whereVectorSimilarTo` attaches.
+  - `SimilaritySearchQueryBuilder<T>` widened with `where(col, op?, val)` / `orWhere(...)` / `withTrashed?()` / `onlyTrashed?()` overloads so the scope callback gets autocomplete. Main entry still has zero `@rudderjs/contracts` runtime dep — types only.
+  - New exported `SimilaritySearchWhereOperator` alias mirrors contracts' `WhereOperator` so apps writing scope callbacks don't have to import `@rudderjs/contracts`.
+
+  `@rudderjs/contracts`:
+
+  - JSDoc on `QueryBuilder.whereVectorSimilarTo` updated to reflect the lifted restriction. No surface change.
+
+  Plan: `docs/plans/2026-05-10-b7-vector-storage.md` (Phase 2.5 marked in flight).
+
+- a37e361: **B8 Phase 1 — `VectorStores` facade + OpenAI hosted-vector-store adapter.** Apps can now manage OpenAI's hosted vector stores end-to-end (`VectorStores.create()` / `.list()` / `.get()` / `.delete()`; `VectorStore.add()` / `.remove()` / `.files()` / `.delete()`) with no SDK boilerplate. Phase 2 will add the `fileSearch` agent tool that consumes these stores; Phase 3 adds the local pgvector fallback bridge.
+
+  ```ts
+  import { VectorStores } from "@rudderjs/ai";
+
+  const store = await VectorStores.create("Knowledge Base", {
+    metadata: { team: "support" },
+    expiresAfter: { anchor: "last_active_at", days: 7 },
+  });
+
+  // Upload + attach + poll until indexed (default wait: true).
+  await store.add({
+    filePath: "./report.pdf",
+    attributes: { author: "Alice", year: 2026 },
+  });
+
+  // Or skip the upload if you already have an OpenAI file id.
+  await store.add({ fileId: "file_abc", wait: false });
+
+  const all = await VectorStores.list();
+  await VectorStores.delete(store.id);
+  ```
+
+  `@rudderjs/ai`:
+
+  - **`VectorStoreAdapter` contract** added to `ProviderFactory.createVectorStores?()` — provider-agnostic CRUD over hosted vector stores, plus `addFile` / `removeFile` / `listFiles`. New types: `VectorStoreInfo`, `VectorStoreFileInfo`, `VectorStoreCreateOptions`, `VectorStoreAddOptions`, `VectorStoreListOptions`, `VectorStoreList`, `VectorStoreFileList`.
+  - **`AiRegistry.resolveVectorStores(providerName)`** — resolves the registered provider's vector-store adapter; throws a helpful error pointing at `similaritySearch()` over a local pgvector model when the provider doesn't implement the contract.
+  - **`OpenAIVectorStoreAdapter`** wraps `client.vectorStores.*` + `client.vectorStores.files.*` from the v4+ SDK. Lazy SDK load mirrors the rest of the OpenAI provider. File upload pipeline reuses the Files API (`files.create({ purpose: 'assistants' })`). Per-file searchable metadata routes through OpenAI's `attributes` field — Phase 2's `fileSearch({ where })` filters on these.
+  - **`addFile` polling** — defaults to `wait: true`, polling `vectorStores.files.retrieve` until status is `'completed'` / `'failed'` / `'cancelled'`. Default poll interval `1000ms`, total timeout `120_000ms` (2 min). Both configurable; `wait: false` returns immediately (fire-and-forget). Failed-status responses surface `lastError` without throwing — apps decide whether to retry.
+  - **Re-exported from `@rudderjs/ai` main entry** — `VectorStores`, `VectorStore`, plus all the contract types.
+  - **17 new tests** in `vector-stores.test.ts` cover provider resolution, create/list/get/delete, addFile (existing fileId path, upload-then-attach path, attribute forwarding, fire-and-forget, polling-until-completed, polling timeout, failed-status surfaced, missing-input error), removeFile, files listing, and store deletion. Hand-rolled fake OpenAI client captures every SDK call for assertion.
+
+  Plan: `docs/plans/2026-05-11-b8-hosted-vector-stores.md` — Phase 1 in flight, Phase 2 (`fileSearch` agent tool + OpenAI native-block emission via `providerHint`) is up next.
+
+### Patch Changes
+
+- Updated dependencies [924b863]
+- Updated dependencies [6f63467]
+  - @rudderjs/orm@1.9.0
+
 ## 1.5.0
 
 ### Minor Changes
