@@ -60,6 +60,7 @@ For framework patterns specific to a package, open the matching guideline:
 - `@rudderjs/auth` → `.ai/guidelines/auth.md`
 - `@rudderjs/broadcast` → `.ai/guidelines/broadcast.md`
 - `@rudderjs/cache` → `.ai/guidelines/cache.md`
+- `@rudderjs/cashier-paddle` → `.ai/guidelines/cashier-paddle.md`
 - `@rudderjs/concurrency` → `.ai/guidelines/concurrency.md`
 - `@rudderjs/console` → `.ai/guidelines/console.md`
 - `@rudderjs/contracts` → `.ai/guidelines/contracts.md`
@@ -75,11 +76,13 @@ For framework patterns specific to a package, open the matching guideline:
 - `@rudderjs/middleware` → `.ai/guidelines/middleware.md`
 - `@rudderjs/notification` → `.ai/guidelines/notification.md`
 - `@rudderjs/orm` → `.ai/guidelines/orm.md`
+- `@rudderjs/orm-prisma` → `.ai/guidelines/orm-prisma.md`
 - `@rudderjs/passport` → `.ai/guidelines/passport.md`
 - `@rudderjs/pennant` → `.ai/guidelines/pennant.md`
 - `@rudderjs/process` → `.ai/guidelines/process.md`
 - `@rudderjs/pulse` → `.ai/guidelines/pulse.md`
 - `@rudderjs/queue` → `.ai/guidelines/queue.md`
+- `@rudderjs/queue-bullmq` → `.ai/guidelines/queue-bullmq.md`
 - `@rudderjs/router` → `.ai/guidelines/router.md`
 - `@rudderjs/schedule` → `.ai/guidelines/schedule.md`
 - `@rudderjs/server-hono` → `.ai/guidelines/server-hono.md`
@@ -88,6 +91,7 @@ For framework patterns specific to a package, open the matching guideline:
 - `@rudderjs/support` → `.ai/guidelines/support.md`
 - `@rudderjs/sync` → `.ai/guidelines/sync.md`
 - `@rudderjs/telescope` → `.ai/guidelines/telescope.md`
+- `@rudderjs/terminal` → `.ai/guidelines/terminal.md`
 - `@rudderjs/view` → `.ai/guidelines/view.md`
 - `@rudderjs/vite` → `.ai/guidelines/vite.md`
 
