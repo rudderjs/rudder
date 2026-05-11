@@ -20,7 +20,8 @@
   "files": [
     "dist",
     "schema",
-    "views"
+    "views",
+    "boost"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
