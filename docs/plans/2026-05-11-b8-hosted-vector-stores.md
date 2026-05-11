@@ -1,6 +1,6 @@
 # B8 — Hosted vector stores + `fileSearch` provider tool
 
-**Status:** B8 ✓ closed. Phase 1 ✓ shipped (#379). Phase 2 ✓ shipped (#380). Phase 2.x ✓ shipped (#381). Phase 3 in flight on `worktree-b8-phase-3-fallback`.
+**Status:** B8 ✓ closed. Phase 1 ✓ shipped (#379). Phase 2 ✓ shipped (#380). Phase 2.x ✓ shipped (#381). Phase 3 ✓ shipped (#382). B8.5 ✓ shipped (see `2026-05-11-b8.5-gemini-hosted-rag.md`).
 **Date:** 2026-05-11
 **Roadmap item:** B8 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 3 PR-sized phases + 1 sidecar.
@@ -13,15 +13,15 @@
 | 1   | `VectorStores` facade + `VectorStore` wrapper — CRUD over OpenAI's hosted vector stores. New `VectorStoreAdapter` contract on `ProviderFactory.createVectorStores?()`. OpenAI adapter wraps `client.vectorStores.*` + `client.vectorStores.files.*`; lazy SDK load; file upload pipeline reuses the Files API; default `wait: true` polls `vectorStores.files.retrieve` until `'completed'` / `'failed'` / `'cancelled'` (configurable interval + timeout). Searchable `attributes` map directly to OpenAI's per-file metadata. | #379 | ✓ shipped |
 | 2   | `fileSearch({ stores, where?, maxResults?, name?, description? })` agent-tool factory + OpenAI adapter native-block emission via `providerHint`. Bundled latent bug fix: `toolToSchema` now propagates `definition.providerHint` so the agent loop's tool serialization wires hints through to adapters (fixes computer-use's hint too — it lived only on the instance `toSchema()` method, never reached `toAnthropicTools` through agent runs). Closes the agent loop end-to-end on OpenAI's `chat.completions`. | #380 | ✓ shipped |
 | 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. **Anthropic** adapter emits native `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains? }`; **Gemini** adapter emits `{ google_search: {} }` as a separate top-level tools entry. **OpenAI's chat-completions** has no equivalent (`web_search` is Responses-API-only) — falls through to the existing DuckDuckGo HTML-scrape `server` execute. Same fallback applies to any provider without a native hint match. `WebSearch.domains([...])` lifts to `allowed_domains` on Anthropic; ignored on Gemini (the `google_search` block accepts no opts). `WebSearch.maxResults(n)` lifts to Anthropic's `max_uses`; ignored on Gemini. ~half-day. | #381 | ✓ shipped |
-| 3   | **Local pgvector fallback** — `fileSearch({ ..., fallback: { model, column, embedWith, ... } })`. The cascade is automatic: OpenAI's adapter still emits the native `file_search` block (model never invokes execute on that path); other providers (Anthropic, Gemini, etc.) serialize the tool as a function-call schema and the model invokes the lifted `similaritySearch` execute against the local pgvector model. No detection flag — providerHint recognition at the adapter level is the discriminator. Same agent prompt across hosted and self-hosted RAG. Closes B8. | — | in flight |
-| B8.5 | Gemini parity for `VectorStores` + `fileSearch` (Gemini's RAG surface uses `cachedContent`, not vector stores; spec drift means it deserves its own design pass). Deferred — locked decision. | — | future |
+| 3   | **Local pgvector fallback** — `fileSearch({ ..., fallback: { model, column, embedWith, ... } })`. The cascade is automatic: OpenAI's adapter still emits the native `file_search` block (model never invokes execute on that path); other providers (Anthropic, Gemini, etc.) serialize the tool as a function-call schema and the model invokes the lifted `similaritySearch` execute against the local pgvector model. No detection flag — providerHint recognition at the adapter level is the discriminator. Same agent prompt across hosted and self-hosted RAG. Closes B8. | #382 | ✓ shipped |
+| B8.5 | **Gemini hosted RAG.** Wraps Google's `fileSearchStores` API as a `VectorStoreAdapter`; typed `where` filters translate to Gemini's `metadataFilter` string syntax; `toGeminiTools` emits the native `fileSearch` block via the same `providerHint` mechanism. Same façade as OpenAI. Locked-decision concern about `cachedContent`-shaped RAG turned out to be outdated — Google now ships a direct equivalent surface. Plan: `2026-05-11-b8.5-gemini-hosted-rag.md`. | — | ✓ shipped |
 
-**B8 is closed with Phase 3.** B8.5 adds Gemini hosted RAG. Next Track B item is **B9** (ElevenLabs provider — TTS/STT, ~2 days), then **B10** (VoyageAI provider — embeddings + reranking, ~2 days).
+**B8 is closed with Phase 3.** B8.5 (Gemini hosted RAG) shipped 2026-05-11. Track B fully closed with B10.
 
 ## Locked decisions
 
 - **Single `fileSearch({ stores, fallback? })` factory** (not separate hosted/local tools). Agent prompts stay identical across hosted and self-hosted RAG.
-- **Gemini deferred to B8.5.** OpenAI is the dominant hosted vector store today; Gemini's `cachedContent`-shaped RAG surface diverges enough from OpenAI's that one unified facade across both is leaky. Ship B8 (OpenAI hosted + local fallback) first; revisit Gemini in B8.5 once we have customer signal on the shape.
+- **Gemini deferred to B8.5.** OpenAI is the dominant hosted vector store today; Gemini's `cachedContent`-shaped RAG surface diverges enough from OpenAI's that one unified facade across both is leaky. Ship B8 (OpenAI hosted + local fallback) first; revisit Gemini in B8.5 once we have customer signal on the shape. *Revisited 2026-05-11 — Google shipped `fileSearchStores`, a direct OpenAI equivalent. B8.5 unifies the façade after all; see `2026-05-11-b8.5-gemini-hosted-rag.md`.*
 - **WebSearch retrofit lands as a sidecar PR** between Phase 2 and Phase 3. Reuses the `providerHint` plumbing Phase 2 introduces; **Anthropic** emits native `web_search_20250305`, **Gemini** emits native `google_search`. **OpenAI's chat-completions surface has no equivalent** (`web_search` only exists on the Responses API, which is its own migration); OpenAI keeps the DuckDuckGo fallback. Zero new API keys, zero new dependencies.
 
 ## Problem
@@ -211,7 +211,7 @@ class HybridAgent extends Agent {
 
 **Out of scope (matches the locked decisions above):**
 
-- Gemini hosted `VectorStores` + `fileSearch` parity → B8.5.
+- Gemini hosted `VectorStores` + `fileSearch` parity → B8.5 (shipped 2026-05-11).
 - Hybrid hosted + local merge (reciprocal rank fusion) — punted unless customer demand.
 - Vector store sync tooling — standalone follow-up.
 - Telescope "RAG queries" tab — `ai.file_search.queried` observer event lands when there's UI demand.
