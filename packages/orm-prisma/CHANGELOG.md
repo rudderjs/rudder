@@ -1,5 +1,189 @@
 # @rudderjs/orm-prisma
 
+## 1.7.0
+
+### Minor Changes
+
+- 3d976cc: **B7 Phase 2 — `similaritySearch({ model, column, embedWith })` agent tool + auto-embed lift in `whereVectorSimilarTo`.** Wires Phase 1's pgvector primitives into the agent loop. Models emit a natural-language `query`; the tool embeds it, runs a `whereVectorSimilarTo` search, and returns top-K rows with similarity scores.
+
+  ```ts
+  import { Agent } from "@rudderjs/ai";
+  import { similaritySearch } from "@rudderjs/ai";
+  import { Document } from "./app/Models/Document.js";
+
+  class KnowledgeAgent extends Agent {
+    tools() {
+      return [
+        similaritySearch({
+          model: Document,
+          column: "embedding",
+          embedWith: "openai/text-embedding-3-small",
+          minSimilarity: 0.7,
+          limit: 10,
+        }),
+      ];
+    }
+  }
+  ```
+
+  `@rudderjs/ai`:
+
+  - **`similaritySearch({ model, column, embedWith, metric?, minSimilarity?, limit?, name?, description?, projectResult? })`** — exported from the main entry (`@rudderjs/ai`). Returns a `ServerToolBuilder` whose `inputSchema` is `z.object({ query: z.string().min(1) })`. Default tool name: `similarity_search_<model_lowercase>`. `embedWith` is required — fails loud at factory construction if missing, mirroring A6's `assertKnownModelPricing` pattern (no silent default-route to `AiRegistry.getDefault()`).
+  - **Execute flow:** `query` → `AI.embed(query, { model: embedWith })` → `model.query().whereVectorSimilarTo(column, vector, { metric, minSimilarity }).selectVectorDistance(...).limit(limit).get()` → `{ row, similarity }[]`. The internal distance alias is read off each row at result time and converted to `similarity = 1 - distance` (cosine convention; documented for non-cosine metrics).
+  - **`toModelOutput`** default formatter: `(0.85) {"id":1,"content":"..."}` per hit, newline-joined, with the internal alias stripped from the JSON. Empty-state returns `"No similar <Model> records found."`. Override via `projectResult: (row, similarity) => string` for custom shapes.
+
+  `@rudderjs/orm-prisma`:
+
+  - **`whereVectorSimilarTo(column, '<string>', { embedWith })`** no longer throws — auto-embed is **deferred** to terminal time so the chain stays sync. The string + model id get stored on the vector clause and resolved when `.get()` / `.first()` runs by lazy-loading `@rudderjs/ai` via `resolveOptionalPeer('@rudderjs/ai')`. `MissingEmbedderError` still fires when `embedWith` is omitted.
+  - **`@rudderjs/ai` is a new optional peer** of `@rudderjs/orm-prisma`. Apps that don't do RAG never load AI. `@rudderjs/support` is a new regular dep (for `resolveOptionalPeer`).
+
+  **Phase 2 limitations** (lifted in Phase 2.5):
+
+  - **Standalone vector queries only.** `similaritySearch` doesn't support a `scope` callback yet — agents see every row in the corpus that matches the vector. Apps needing tenant/user filtering today can pre-fetch IDs in user code and post-filter the result set.
+  - The chained `.where()` lift on `whereVectorSimilarTo` ships in Phase 2.5 alongside `scope`.
+
+  Plan: `docs/plans/2026-05-10-b7-vector-storage.md` (updated to reflect the Phase 2 / 2.5 split).
+
+- f133d08: **B7 Phase 2.5 — `scope` callback on `similaritySearch` + chained `.where()` lift in `whereVectorSimilarTo`.** Tenant / publication / soft-delete filtering for RAG agents, no over-fetching, no user-side post-filtering. The chain pre-filters in SQL.
+
+  ```ts
+  import { similaritySearch } from "@rudderjs/ai";
+  import { Document } from "./app/Models/Document.js";
+
+  class KnowledgeAgent extends Agent {
+    tools() {
+      return [
+        similaritySearch({
+          model: Document,
+          column: "embedding",
+          embedWith: "openai/text-embedding-3-small",
+          limit: 10,
+          scope: (q) =>
+            q.where("tenantId", currentTenant).where("published", true),
+        }),
+      ];
+    }
+  }
+  ```
+
+  `@rudderjs/orm-prisma`:
+
+  - `_getViaVector` composes flat `.where()` / `.orWhere()` chains into the vector SQL via a new `clauseToSql(clause, params[])` helper. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`. `null` values on `=` / `!=` map to `IS NULL` / `IS NOT NULL`. Empty `IN` short-circuits to `FALSE`; empty `NOT IN` to `TRUE` (Postgres rejects empty IN-lists).
+  - User-supplied values bind through positional `$N` placeholders to `$queryRawUnsafe(sql, ...params)` — defense-in-depth against SQL injection. Vector min-similarity stays inlined (numeric, safe).
+  - Polymorphic / pivot relation predicates (resolved via `_resolveDeferred`) flow through as flat `IN` / `NOT IN` clauses transparently.
+  - Soft-delete scoping (`withTrashed` / `onlyTrashed`) flows into the SQL alongside user wheres.
+  - **Still throws (out of scope for 2.5):** `.with()` (eager load), `whereGroup` / `orWhereGroup` (sub-builders pre-flatten to Prisma filter objects so the original `WhereClause[]` is lost), direct `whereHas` / `whereDoesntHave`, aggregates, redundant `.orderBy()`. Documented in the throw messages.
+
+  `@rudderjs/ai`:
+
+  - `similaritySearch({ scope })` accepts an optional `(q: SimilaritySearchQueryBuilder<T>) => SimilaritySearchQueryBuilder<T>` callback that runs before `whereVectorSimilarTo` attaches.
+  - `SimilaritySearchQueryBuilder<T>` widened with `where(col, op?, val)` / `orWhere(...)` / `withTrashed?()` / `onlyTrashed?()` overloads so the scope callback gets autocomplete. Main entry still has zero `@rudderjs/contracts` runtime dep — types only.
+  - New exported `SimilaritySearchWhereOperator` alias mirrors contracts' `WhereOperator` so apps writing scope callbacks don't have to import `@rudderjs/contracts`.
+
+  `@rudderjs/contracts`:
+
+  - JSDoc on `QueryBuilder.whereVectorSimilarTo` updated to reflect the lifted restriction. No surface change.
+
+  Plan: `docs/plans/2026-05-10-b7-vector-storage.md` (Phase 2.5 marked in flight).
+
+- 6f63467: **B7 Phase 1 — vector storage foundations + Prisma pgvector adapter.** Foundation for the `similaritySearch()` agent tool (Phase 2) and Drizzle adapter + migration helper (Phase 3). Postgres + pgvector only in v1; Drizzle and non-Postgres connections throw `VectorStorageUnsupportedError`.
+
+  ```ts
+  import { Model, vector, type CastDefinition } from "@rudderjs/orm";
+
+  class Document extends Model {
+    static table = "document";
+    static casts = {
+      embedding: vector({ dimensions: 1536 }),
+    } as const satisfies Record<string, CastDefinition>;
+
+    embedding!: number[];
+  }
+
+  // Standalone vector query (v1 — chaining with .where() lands in Phase 2)
+  const docs = await Document.query()
+    .whereVectorSimilarTo("embedding", queryEmbedding, { minSimilarity: 0.4 })
+    .limit(10)
+    .get();
+
+  // Project the cosine distance as a column for explicit ordering / display
+  const ranked = await Document.query()
+    .whereVectorSimilarTo("embedding", queryEmbedding)
+    .selectVectorDistance("embedding", queryEmbedding, "score")
+    .limit(10)
+    .get();
+  ```
+
+  **`@rudderjs/orm` (new exports):**
+
+  - `vector({ dimensions })` cast factory. Returns a `CastUsing` class capturing `dimensions` in its closure. On write: validates the array length matches `dimensions`, validates every element is a finite number, serializes to pgvector text format `'[0.1,0.2,...]'`. On read: parses the text format back to `number[]`. Already-array values pass through (idempotent on roundtrips through caches/serializers).
+  - `VectorDimensionMismatchError` (`code: 'VECTOR_DIMENSION_MISMATCH'`) — thrown by the cast when a write attempts to persist a wrong-dim vector. Carries `column`, `expected`, `actual`.
+  - `VectorStorageUnsupportedError` (`code: 'VECTOR_STORAGE_UNSUPPORTED'`) — thrown by adapters that don't support pgvector or are connected to a non-Postgres backend / a Postgres instance without the `vector` extension.
+  - `MissingEmbedderError` (`code: 'VECTOR_MISSING_EMBEDDER'`) — thrown when `whereVectorSimilarTo(col, 'natural-language string')` is called without `embedWith`. Auto-embed itself lands in Phase 2; the error guards against accidental paid API hits.
+
+  **`@rudderjs/contracts` (`QueryBuilder<T>` extensions, both optional):**
+
+  - `whereVectorSimilarTo?(column, query, opts?)` — pgvector similarity filter. `query` can be `number[]` (literal embedding) or `string` (auto-embed via `AI.embed()` once Phase 2 lands; throws `MissingEmbedderError` in v1 unless `embedWith` is set, then throws "Phase 2" error). Default metric `'cosine'` (`<=>`); `'l2'` (`<->`) and `'inner-product'` (`<#>`) supported. `minSimilarity` is normalized to cosine `[-1, 1]` (higher = closer) so apps never see raw distance.
+  - `selectVectorDistance?(column, query, alias)` — projects the cosine distance as a column for ordering / display. `0` = identical, `1 - alias` gives back similarity.
+
+  Both optional on the contract — adapters that don't support pgvector simply omit them. Apps that need vector storage on a non-supporting adapter get a clear `Cannot read properties of undefined` typeguard rather than a silent miss.
+
+  **`@rudderjs/orm-prisma`** implements both. Uses `prisma.$queryRawUnsafe` to construct the pgvector SQL because Prisma's standard fluent API has no way to express pgvector ops. `_getViaVector` switches the terminal path on `get()` and `first()`; identifiers are double-quoted defensively. pgvector errors (`operator does not exist`, `type "vector" does not exist`, `extension "vector"`) are caught and re-thrown as `VectorStorageUnsupportedError` with a runnable `CREATE EXTENSION` hint.
+
+  **v1 limitations** (deliberate, documented — lifted in Phase 2):
+
+  - Chaining vector queries with `.where()` / `.orWhere()` / `.whereGroup()` / relation predicates throws — vector queries must be standalone.
+  - Eager loading via `.with()` alongside vector queries throws.
+  - `withCount` / aggregates alongside vector queries throws.
+  - `.orderBy()` alongside vector queries throws (redundant — vector queries order by similarity).
+  - `.count()` with a vector clause throws.
+  - Auto-embed (`whereVectorSimilarTo(col, 'string')`) throws — pre-embed via `AI.embed()` and pass `number[]` for now.
+
+  **`@rudderjs/orm-drizzle`** ships stub implementations of both methods that throw `VectorStorageUnsupportedError('drizzle', ...)` — Drizzle pgvector support lands in Phase 3 alongside the `pnpm rudder make:migration --vector <table> <column> <dim>` helper.
+
+  **Out of this phase, deferred:**
+
+  - **Phase 2 — `similaritySearch()` agent tool** in `@rudderjs/ai`. Wraps a Model + column as a drop-in agent tool with auto-embed via `AI.embed()`, configurable result projection, tag-based scoping. Lifts the v1 standalone-query restriction.
+  - **Phase 3 — Drizzle adapter + migration helper.** Same SQL shape via Drizzle's `sql\`...\``template;`pnpm rudder make:migration --vector`scaffolds the`CREATE EXTENSION`+`ALTER TABLE`+`CREATE INDEX hnsw` snippets.
+  - **pgvector-backed `EmbeddingUserMemory`.** A4 Phase 5's per-user memory uses Bytes packing + JS cosine; B7 targets app-scale corpora. Optional rewire after B7 ships if a customer reports recall slowdown.
+
+  Plan: `docs/plans/2026-05-10-b7-vector-storage.md`.
+
+### Patch Changes
+
+- Updated dependencies [82ca5b4]
+- Updated dependencies [3788bab]
+- Updated dependencies [4540248]
+- Updated dependencies [94dc14a]
+- Updated dependencies [d685bee]
+- Updated dependencies [362a751]
+- Updated dependencies [76822f6]
+- Updated dependencies [3f67151]
+- Updated dependencies [e9d4dba]
+- Updated dependencies [0ec0abe]
+- Updated dependencies [5fa661d]
+- Updated dependencies [871e27e]
+- Updated dependencies [5677b85]
+- Updated dependencies [a5f49fe]
+- Updated dependencies [f06331e]
+- Updated dependencies [3ee9a97]
+- Updated dependencies [a35c600]
+- Updated dependencies [c17731f]
+- Updated dependencies [d558a42]
+- Updated dependencies [3d976cc]
+- Updated dependencies [f80d2c1]
+- Updated dependencies [3347acd]
+- Updated dependencies [08e3603]
+- Updated dependencies [71c6330]
+- Updated dependencies [7f42235]
+- Updated dependencies [f133d08]
+- Updated dependencies [924b863]
+- Updated dependencies [a37e361]
+- Updated dependencies [6f63467]
+  - @rudderjs/ai@1.6.0
+  - @rudderjs/contracts@1.6.0
+  - @rudderjs/orm@1.9.0
+
 ## 1.6.0
 
 ### Minor Changes
