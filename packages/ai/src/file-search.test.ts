@@ -392,3 +392,211 @@ describe('toolToSchema — propagates definition.providerHint generally', () => 
     assert.equal(schema.providerHint, undefined)
   })
 })
+
+// ─── Phase 3 — local pgvector fallback ────────────────────
+//
+// When `fallback` is set, the returned FileSearchTool gains an `execute`
+// (delegating to similaritySearch) AND a `toModelOutput` projection, while
+// preserving the providerHint. The cascade is automatic: OpenAI's adapter
+// emits the native block (model never invokes execute), other providers
+// emit a function-call schema (model invokes execute → similaritySearch
+// runs locally).
+
+import { beforeEach, afterEach } from 'node:test'
+import type {
+  SimilaritySearchModel,
+  SimilaritySearchQueryBuilder,
+} from './similarity-search.js'
+
+interface DocRow {
+  id:                                   number
+  content:                              string
+  __rudderjs_similarity_distance__?:    number
+}
+
+interface QbCalls {
+  whereVectorSimilarTo?: { column: string; query: number[] | string; opts: unknown }
+  selectVectorDistance?: { column: string; query: number[]; alias:  string }
+  limit?:                number
+}
+
+function fakeDocumentModel(rows: DocRow[], calls: QbCalls = {}): SimilaritySearchModel<DocRow> {
+  const qb: SimilaritySearchQueryBuilder<DocRow> = {
+    where: () => qb, orWhere: () => qb,
+    whereVectorSimilarTo(column, query, opts) {
+      calls.whereVectorSimilarTo = { column, query, opts: opts ?? null }
+      return qb
+    },
+    selectVectorDistance(column, query, alias) {
+      calls.selectVectorDistance = { column, query, alias }
+      return qb
+    },
+    limit(n) { calls.limit = n; return qb },
+    get: async () => rows,
+  }
+  return { name: 'Document', query: () => qb }
+}
+
+describe('fileSearch — fallback (Phase 3)', () => {
+  let fake: AiFake
+  beforeEach(() => { fake = AiFake.fake() })
+  afterEach(() => { fake.restore() })
+
+  it('without fallback, execute remains undefined (back-compat with Phase 2)', () => {
+    const tool = fileSearch({ stores: ['vs_1'] })
+    assert.equal((tool as { execute?: unknown }).execute, undefined)
+    assert.equal((tool as { toModelOutput?: unknown }).toModelOutput, undefined)
+  })
+
+  it('with fallback, execute + toModelOutput are lifted from similaritySearch', () => {
+    const tool = fileSearch({
+      stores: ['vs_1'],
+      fallback: {
+        model:     fakeDocumentModel([]),
+        column:    'embedding',
+        embedWith: '__fake__/embed',
+      },
+    })
+    assert.equal(typeof (tool as { execute?: unknown }).execute,       'function')
+    assert.equal(typeof (tool as { toModelOutput?: unknown }).toModelOutput, 'function')
+  })
+
+  it('preserves providerHint when fallback is set (OpenAI native still wins)', () => {
+    const tool = fileSearch({
+      stores:     ['vs_kb'],
+      where:      { dept: 'eng' },
+      maxResults: 5,
+      fallback: {
+        model:     fakeDocumentModel([]),
+        column:    'embedding',
+        embedWith: '__fake__/embed',
+      },
+    })
+    assert.equal(tool.definition.providerHint?.type,                  'file-search')
+    assert.deepEqual(tool.definition.providerHint?.['vector_store_ids'], ['vs_kb'])
+    assert.deepEqual(tool.definition.providerHint?.['filters'],          { type: 'eq', key: 'dept', value: 'eng' })
+    assert.equal(tool.definition.providerHint?.['max_num_results'],     5)
+
+    // toOpenAITools still substitutes the native block — execute is dead
+    // weight on the OpenAI path because the model never invokes the
+    // function-call tool.
+    const native = toOpenAITools([toolToSchema(tool)]) as Array<{ type: string }>
+    assert.equal(native[0]!.type, 'file_search')
+  })
+
+  it('execute embeds the query and delegates to similaritySearch internals', async () => {
+    const calls: QbCalls = {}
+    const rows: DocRow[] = [
+      { id: 1, content: 'first',  __rudderjs_similarity_distance__: 0.10 },
+      { id: 2, content: 'second', __rudderjs_similarity_distance__: 0.30 },
+    ]
+    fake.respondWithEmbedding([[0.5, 0.5]])
+
+    const tool = fileSearch({
+      stores: ['vs_kb'],
+      fallback: {
+        model:     fakeDocumentModel(rows, calls),
+        column:    'embedding',
+        embedWith: '__fake__/embed',
+        limit:     3,
+      },
+    })
+
+    const execute = (tool as { execute: (input: { query: string }) => Promise<unknown> }).execute
+    const result  = await execute({ query: 'how do renewals work?' }) as Array<{ row: DocRow; similarity: number }>
+
+    // Embedding flowed to the QB.
+    assert.deepEqual(calls.whereVectorSimilarTo?.column, 'embedding')
+    assert.deepEqual(calls.whereVectorSimilarTo?.query,  [0.5, 0.5])
+    assert.equal(calls.limit, 3)
+
+    // Hits come back as SimilarityHit[] (similarity = 1 - distance).
+    assert.equal(result.length, 2)
+    assert.equal(result[0]!.row.id,        1)
+    assert.equal(result[0]!.similarity.toFixed(2), '0.90')
+    assert.equal(result[1]!.row.id,        2)
+    assert.equal(result[1]!.similarity.toFixed(2), '0.70')
+  })
+
+  it('toModelOutput projects hits into the (similarity) {json} shape the model sees', async () => {
+    const rows: DocRow[] = [
+      { id: 1, content: 'first',  __rudderjs_similarity_distance__: 0.20 },
+    ]
+    fake.respondWithEmbedding([[1, 0]])
+
+    const tool = fileSearch({
+      stores: ['vs_kb'],
+      fallback: {
+        model:     fakeDocumentModel(rows),
+        column:    'embedding',
+        embedWith: '__fake__/embed',
+      },
+    })
+
+    const execute       = (tool as { execute: (input: { query: string }) => Promise<unknown> }).execute
+    const toModelOutput = (tool as { toModelOutput: (result: unknown) => string | Promise<string> }).toModelOutput
+    const hits   = await execute({ query: 'q' })
+    const output = await toModelOutput(hits)
+
+    assert.match(output, /\(0\.80\)/)
+    assert.match(output, /"id":1/)
+    assert.match(output, /"content":"first"/)
+    // Internal distance alias stripped from the JSON projection.
+    assert.equal(output.includes('__rudderjs_similarity_distance__'), false)
+  })
+
+  it('honors fallback.scope for tenancy / pre-filter chains', async () => {
+    const wheres: Array<{ column: string; value: unknown }> = []
+    const qb: SimilaritySearchQueryBuilder<DocRow> = {
+      where(column: string, opOrVal: unknown, value?: unknown) {
+        const val = arguments.length === 3 ? value : opOrVal
+        wheres.push({ column, value: val })
+        return qb
+      },
+      orWhere: () => qb,
+      whereVectorSimilarTo: () => qb,
+      selectVectorDistance: () => qb,
+      limit: () => qb,
+      get: async () => [],
+    }
+    const model: SimilaritySearchModel<DocRow> = { name: 'Document', query: () => qb }
+    fake.respondWithEmbedding([[0.1]])
+
+    const tool = fileSearch({
+      stores: ['vs_kb'],
+      fallback: {
+        model,
+        column:    'embedding',
+        embedWith: '__fake__/embed',
+        scope:     q => q.where('tenantId', 'tenant_42').where('published', true),
+      },
+    })
+
+    const execute = (tool as { execute: (input: { query: string }) => Promise<unknown> }).execute
+    await execute({ query: 'q' })
+
+    assert.deepEqual(wheres, [
+      { column: 'tenantId',  value: 'tenant_42' },
+      { column: 'published', value: true        },
+    ])
+  })
+
+  it('execute throws if the fallback model has no vector-query adapter', async () => {
+    const noVectorModel: SimilaritySearchModel<DocRow> = {
+      name: 'Document',
+      query: () => ({
+        where: () => noVectorModel.query(), orWhere: () => noVectorModel.query(),
+        limit: () => noVectorModel.query(), get: async () => [],
+      } as unknown as SimilaritySearchQueryBuilder<DocRow>),
+    }
+    fake.respondWithEmbedding([[0.1]])
+
+    const tool = fileSearch({
+      stores: ['vs_kb'],
+      fallback: { model: noVectorModel, column: 'embedding', embedWith: '__fake__/embed' },
+    })
+    const execute = (tool as { execute: (input: { query: string }) => Promise<unknown> }).execute
+
+    await assert.rejects(execute({ query: 'q' }), /does not implement vector queries/)
+  })
+})

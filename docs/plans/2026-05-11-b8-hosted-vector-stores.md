@@ -1,6 +1,6 @@
 # B8 — Hosted vector stores + `fileSearch` provider tool
 
-**Status:** Phase 1 ✓ shipped (#379). Phase 2 ✓ shipped (#380). Phase 2.x in flight on `worktree-b8-phase-2x-websearch`. Phase 3 not started.
+**Status:** B8 ✓ closed. Phase 1 ✓ shipped (#379). Phase 2 ✓ shipped (#380). Phase 2.x ✓ shipped (#381). Phase 3 in flight on `worktree-b8-phase-3-fallback`.
 **Date:** 2026-05-11
 **Roadmap item:** B8 in `docs/plans/2026-05-09-ai-roadmap.md`
 **Effort:** ~1 week, 3 PR-sized phases + 1 sidecar.
@@ -12,11 +12,11 @@
 |---|---|---|---|
 | 1   | `VectorStores` facade + `VectorStore` wrapper — CRUD over OpenAI's hosted vector stores. New `VectorStoreAdapter` contract on `ProviderFactory.createVectorStores?()`. OpenAI adapter wraps `client.vectorStores.*` + `client.vectorStores.files.*`; lazy SDK load; file upload pipeline reuses the Files API; default `wait: true` polls `vectorStores.files.retrieve` until `'completed'` / `'failed'` / `'cancelled'` (configurable interval + timeout). Searchable `attributes` map directly to OpenAI's per-file metadata. | #379 | ✓ shipped |
 | 2   | `fileSearch({ stores, where?, maxResults?, name?, description? })` agent-tool factory + OpenAI adapter native-block emission via `providerHint`. Bundled latent bug fix: `toolToSchema` now propagates `definition.providerHint` so the agent loop's tool serialization wires hints through to adapters (fixes computer-use's hint too — it lived only on the instance `toSchema()` method, never reached `toAnthropicTools` through agent runs). Closes the agent loop end-to-end on OpenAI's `chat.completions`. | #380 | ✓ shipped |
-| 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. **Anthropic** adapter emits native `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains? }`; **Gemini** adapter emits `{ google_search: {} }` as a separate top-level tools entry. **OpenAI's chat-completions** has no equivalent (`web_search` is Responses-API-only) — falls through to the existing DuckDuckGo HTML-scrape `server` execute. Same fallback applies to any provider without a native hint match. `WebSearch.domains([...])` lifts to `allowed_domains` on Anthropic; ignored on Gemini (the `google_search` block accepts no opts). `WebSearch.maxResults(n)` lifts to Anthropic's `max_uses`; ignored on Gemini. ~half-day. | — | in flight |
-| 3   | Local pgvector fallback bridge (when no hosted provider configured, `fileSearch` routes through B7's `similaritySearch`). Closes B8. | — | not started |
+| 2.x | **WebSearch retrofit (sidecar PR)** — same `providerHint` mechanism Phase 2 introduces, retrofitted onto `WebSearch.toTool()`. **Anthropic** adapter emits native `{ type: 'web_search_20250305', name: 'web_search', max_uses?, allowed_domains? }`; **Gemini** adapter emits `{ google_search: {} }` as a separate top-level tools entry. **OpenAI's chat-completions** has no equivalent (`web_search` is Responses-API-only) — falls through to the existing DuckDuckGo HTML-scrape `server` execute. Same fallback applies to any provider without a native hint match. `WebSearch.domains([...])` lifts to `allowed_domains` on Anthropic; ignored on Gemini (the `google_search` block accepts no opts). `WebSearch.maxResults(n)` lifts to Anthropic's `max_uses`; ignored on Gemini. ~half-day. | #381 | ✓ shipped |
+| 3   | **Local pgvector fallback** — `fileSearch({ ..., fallback: { model, column, embedWith, ... } })`. The cascade is automatic: OpenAI's adapter still emits the native `file_search` block (model never invokes execute on that path); other providers (Anthropic, Gemini, etc.) serialize the tool as a function-call schema and the model invokes the lifted `similaritySearch` execute against the local pgvector model. No detection flag — providerHint recognition at the adapter level is the discriminator. Same agent prompt across hosted and self-hosted RAG. Closes B8. | — | in flight |
 | B8.5 | Gemini parity for `VectorStores` + `fileSearch` (Gemini's RAG surface uses `cachedContent`, not vector stores; spec drift means it deserves its own design pass). Deferred — locked decision. | — | future |
 
-After Phase 3, B8 closes. B8.5 adds Gemini hosted RAG. Next Track B item is **B9** (ElevenLabs provider — TTS/STT, ~2 days), then **B10** (VoyageAI provider — embeddings + reranking, ~2 days).
+**B8 is closed with Phase 3.** B8.5 adds Gemini hosted RAG. Next Track B item is **B9** (ElevenLabs provider — TTS/STT, ~2 days), then **B10** (VoyageAI provider — embeddings + reranking, ~2 days).
 
 ## Locked decisions
 
@@ -164,13 +164,57 @@ These force a rewrite if punted:
 - Anthropic's `user_location` / `blocked_domains` lift onto `WebSearch.{ region(...), blockDomains(...) }` chained opts. The hint already passes them through if set manually; an ergonomic chain follows when there's customer demand.
 - OpenAI Responses-API migration. Big enough that it's its own track; lands later as a separate adapter (`packages/ai/src/providers/openai-responses.ts`) that the registry routes to for `*-search-preview` model ids.
 
-### Phase 3 — Gemini parity + local pgvector fallback
+### Phase 3 — Local pgvector fallback (closes B8)
 
-- Gemini side: `client.files.upload` + `cachedContent` retrieval. Gemini's hosted RAG surface is shaped differently from OpenAI's — doesn't have a "vector store" abstraction in the same way; uses `cachedContent` resources. Plan: `VectorStores.create()` against `provider: 'google'` creates a `cachedContent`; `add()` appends files; `fileSearch` emits the appropriate Gemini tool. **Investigate API parity early** — if shapes diverge enough to make the unified facade leaky, document the divergence in JSDoc + ship the OpenAI-only path with Gemini deferred to B8.5.
-- `fallback` opt on `fileSearch`: when set AND the agent's model has no native file-search support, install an execute that calls `similaritySearch({ model: fallback.model, column: fallback.column, embedWith: fallback.embedWith })` internally. The tool's `inputSchema` ({ query: string }) matches `similaritySearch`'s; the execute just delegates.
-- Detection logic: provider-tool dispatch is a per-adapter capability check. Add `supportsFileSearch?: boolean` to the provider factory or a static method; default `false`. OpenAI / Google flip it to `true` in their factories.
-- Tests: fallback path executes when model is `anthropic/*` (no native support); native path executes when model is `openai/*`; agent prompts work identically across both.
-- Update plan doc + close B8.
+Gemini hosted parity stayed deferred to B8.5 (per the locked decision). Phase 3 ships **just** the local pgvector fallback. With a `fallback` opt configured, the same `fileSearch` tool works on every provider — OpenAI runs the search natively, everyone else runs `similaritySearch` against the local pgvector model.
+
+**Shipped surface:**
+
+- `packages/ai/src/file-search.ts` — new `fallback?: FileSearchFallback<TInstance>` opt on `FileSearchOptions`. Type alias `FileSearchFallback<TInstance> = Omit<SimilaritySearchOptions<TInstance>, 'name' | 'description'>` — every B7 similaritySearch knob (`model`, `column`, `embedWith`, `metric`, `minSimilarity`, `limit`, `scope`, `projectResult`) flows through. `name` / `description` are inherited from the outer `fileSearch` call so the agent prompt stays identical across providers.
+- `FileSearchTool` interface widened to `Tool<{ query: string }, unknown>` with optional `execute` + `toModelOutput`. Both stay `undefined` when `fallback` is absent (Phase 2 back-compat). When `fallback` is set, both are lifted from an internal `similaritySearch(...)` instance.
+- **No detection flag.** The `providerHint` recognition at the adapter level is the discriminator. OpenAI's `toOpenAITools` substitutes the native `file_search` block — the model never invokes the function-call tool, so `execute` is dead weight on that path. Anthropic / Gemini / others see a regular function-call schema with `{ query: string }`, the model invokes it, and `execute` delegates to `similaritySearch`. The plan originally proposed a `supportsFileSearch?: boolean` capability check on each `ProviderFactory` — turned out unnecessary; the existing `providerHint` cascade already does the right thing.
+
+**Example:**
+
+```ts
+import { Agent, fileSearch } from '@rudderjs/ai'
+import { Document } from './app/Models/Document.js'
+
+class HybridAgent extends Agent {
+  // On openai/*: native file_search runs server-side against vs_kb.
+  // On anthropic/*, gemini/*, etc: similaritySearch runs against the local
+  // Document model. Same prompt, same tool name, same input schema.
+  model() { return 'openai/gpt-4o' }
+  tools() {
+    return [
+      fileSearch({
+        stores: ['vs_kb'],
+        fallback: {
+          model:     Document,
+          column:    'embedding',
+          embedWith: 'openai/text-embedding-3-small',
+          minSimilarity: 0.7,
+          limit:     10,
+          scope:     q => q.where('tenantId', currentTenant).where('published', true),
+        },
+      }),
+    ]
+  }
+}
+```
+
+**Tests:** new `describe('fileSearch — fallback (Phase 3)', ...)` block in `packages/ai/src/file-search.test.ts` — back-compat (no `fallback` → no `execute`), execute + toModelOutput lifted when `fallback` is set, providerHint preserved (OpenAI native still wins), execute delegates the embedding + vector-similarity call chain, modelOutput projects the `(0.80) {json}` shape, `fallback.scope` flows tenant/visibility predicates into the underlying QueryBuilder, missing vector-query adapter throws clearly. **7 new tests.**
+
+**Verification:** `pnpm --filter @rudderjs/ai typecheck` ✓, `pnpm build` ✓ (51/51), `pnpm --filter @rudderjs/ai test` 722/722 ✓ (7 new in 1 new suite).
+
+**Plan doc + changeset:** Phase 3 row → ✓ shipped + this body section + `.changeset/ai-b8-phase3-pgvector-fallback.md` (minor) + roadmap row B8 marked shipped 2026-05-11.
+
+**Out of scope (matches the locked decisions above):**
+
+- Gemini hosted `VectorStores` + `fileSearch` parity → B8.5.
+- Hybrid hosted + local merge (reciprocal rank fusion) — punted unless customer demand.
+- Vector store sync tooling — standalone follow-up.
+- Telescope "RAG queries" tab — `ai.file_search.queried` observer event lands when there's UI demand.
 
 ## Out of scope (file as future plans if picked up)
 

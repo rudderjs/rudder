@@ -49,7 +49,9 @@
 
 import { z } from 'zod'
 
-import type { ProviderHint, Tool, ToolDefinitionOptions, ToolDefinitionSchema } from './types.js'
+import { similaritySearch } from './similarity-search.js'
+import type { SimilaritySearchOptions } from './similarity-search.js'
+import type { ProviderHint, Tool, ToolDefinitionOptions, ToolDefinitionSchema, ToolExecuteFn } from './types.js'
 
 /**
  * Symbol-tagged marker identifying a file-search tool. Mirrors the
@@ -77,7 +79,17 @@ export type FileSearchFilter =
 /** Sugar shape for `where` — `{ key: value }` pairs lowered to a typed `and` of `eq` filters. */
 export type FileSearchWhereSugar = Record<string, string | number | boolean>
 
-export interface FileSearchOptions {
+/**
+ * Local pgvector fallback configuration (#B8 Phase 3). When set, the tool
+ * gains an `execute` that delegates to {@link similaritySearch} against
+ * the supplied Model. Forwards every {@link SimilaritySearchOptions} field
+ * except `name` / `description` (those flow from the outer `fileSearch`
+ * call so the agent prompt stays identical across providers).
+ */
+export type FileSearchFallback<TInstance = unknown> =
+  Omit<SimilaritySearchOptions<TInstance>, 'name' | 'description'>
+
+export interface FileSearchOptions<TInstance = unknown> {
   /**
    * Vector-store IDs the model should search. At least one required.
    * Mixing providers (e.g. an OpenAI `vs_...` id with a Gemini cached-
@@ -97,23 +109,55 @@ export interface FileSearchOptions {
   name?: string
   /** Override the tool description shown to the model. Defaults to a generic phrasing. */
   description?: string
+  /**
+   * Local pgvector fallback (#B8 Phase 3). When set, the returned tool gains
+   * an `execute` that delegates to `similaritySearch` for providers that
+   * don't recognize the `'file-search'` `providerHint`.
+   *
+   * The cascade is automatic. On OpenAI the adapter emits the native
+   * `file_search` block — the search runs server-side, the model never
+   * invokes the function-call tool, and `execute` is dead weight. On any
+   * other provider (Anthropic, Gemini today, others) the tool serializes
+   * as a regular function-call schema, the model calls it, and `execute`
+   * delegates to `similaritySearch` against the local pgvector model.
+   *
+   * Same agent prompt across hosted and self-hosted RAG — ops can swap
+   * deployment targets without retraining.
+   *
+   * @example
+   * ```ts
+   * fileSearch({
+   *   stores: [vs_id],
+   *   fallback: {
+   *     model:     Document,
+   *     column:    'embedding',
+   *     embedWith: 'openai/text-embedding-3-small',
+   *   },
+   * })
+   * ```
+   */
+  fallback?: FileSearchFallback<TInstance>
 }
 
 /**
  * A `fileSearch` tool. Implements {@link Tool}; carries
- * {@link FILE_SEARCH_MARKER} for typeguarding. `execute` is intentionally
- * absent — on OpenAI the provider runs the search natively; on other
- * providers the tool behaves as a client tool until Phase 3 adds a
- * `fallback` execute.
+ * {@link FILE_SEARCH_MARKER} for typeguarding.
+ *
+ * `execute` is absent on the hosted-only path (no `fallback` opt) — the
+ * provider runs the search natively and the model gets results back
+ * inline. With a `fallback` opt configured (#B8 Phase 3), `execute` is
+ * present and delegates to `similaritySearch` so non-native providers
+ * (Anthropic, Gemini today, others) get a working RAG path against a
+ * local pgvector model.
  */
-export interface FileSearchTool extends Tool<{ query: string }, never> {
+export interface FileSearchTool extends Tool<{ query: string }, unknown> {
   readonly [FILE_SEARCH_MARKER]: true
   readonly definition: ToolDefinitionOptions
   toSchema(): ToolDefinitionSchema
 }
 
 /** Build the agent tool. See module JSDoc for usage. */
-export function fileSearch(opts: FileSearchOptions): FileSearchTool {
+export function fileSearch<TInstance = unknown>(opts: FileSearchOptions<TInstance>): FileSearchTool {
   if (!Array.isArray(opts.stores) || opts.stores.length === 0) {
     throw new Error(
       '[RudderJS AI] fileSearch({ stores }) requires at least one vector-store id. ' +
@@ -141,9 +185,26 @@ export function fileSearch(opts: FileSearchOptions): FileSearchTool {
     providerHint,
   }
 
+  // Build the fallback execute when configured. The inner similaritySearch
+  // tool's name/description are overridden so structural identity stays on
+  // the outer fileSearch (the model still sees the same tool and prompt).
+  let execute:        ToolExecuteFn<{ query: string }, unknown, unknown> | undefined
+  let toModelOutput:  ((result: unknown) => string | Promise<string>) | undefined
+  if (opts.fallback) {
+    const inner = similaritySearch<TInstance>({
+      ...opts.fallback,
+      name,
+      description,
+    })
+    execute       = inner.execute       as ToolExecuteFn<{ query: string }, unknown, unknown>
+    toModelOutput = inner.toModelOutput as ((result: unknown) => string | Promise<string>) | undefined
+  }
+
   const tool: FileSearchTool = {
     [FILE_SEARCH_MARKER]: true,
     definition,
+    ...(execute       ? { execute       } : {}),
+    ...(toModelOutput ? { toModelOutput } : {}),
     toSchema(): ToolDefinitionSchema {
       const schema: ToolDefinitionSchema = {
         name,
