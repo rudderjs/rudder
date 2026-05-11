@@ -18,6 +18,26 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./page-context-enhancers": {
+      "import": "./dist/page-context-enhancers.js",
+      "default": "./dist/page-context-enhancers.js",
+      "types": "./dist/page-context-enhancers.d.ts"
+    },
+    "./hooks/onCreatePageContext": {
+      "import": "./dist/hooks/onCreatePageContext.js",
+      "default": "./dist/hooks/onCreatePageContext.js",
+      "types": "./dist/hooks/onCreatePageContext.d.ts"
+    },
+    "./hooks/onError": {
+      "import": "./dist/hooks/onError.js",
+      "default": "./dist/hooks/onError.js",
+      "types": "./dist/hooks/onError.d.ts"
+    },
+    "./hooks/headersResponse": {
+      "import": "./dist/hooks/headersResponse.js",
+      "default": "./dist/hooks/headersResponse.js",
+      "types": "./dist/hooks/headersResponse.d.ts"
     }
   },
   "scripts": {
@@ -31,11 +51,15 @@
   "peerDependencies": {
     "vite": ">=5.0.0",
     "vike": ">=0.4.0",
+    "@rudderjs/core": "workspace:^",
     "@vitejs/plugin-react": ">=4.0.0",
     "@vitejs/plugin-vue": ">=5.0.0",
     "vike-solid": ">=0.8.0"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/core": {
+      "optional": true
+    },
     "@vitejs/plugin-react": {
       "optional": true
     },
@@ -47,6 +71,7 @@
     }
   },
   "devDependencies": {
+    "@rudderjs/core": "workspace:^",
     "@types/node": "^20.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitejs/plugin-vue": "^5.0.0",

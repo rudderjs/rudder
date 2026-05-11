@@ -19,6 +19,10 @@
  * programmatic `renderPage()`.
  */
 
+// Side-effect import — pulls in the Vike.PageContext.{viewProps,viewHeaders}
+// augmentation so app code can read both with full typing.
+import './types/vike.js'
+
 export type ViewProps = Record<string, unknown>
 
 export interface ViewResolveContext {
@@ -26,7 +30,45 @@ export interface ViewResolveContext {
   url: string
 }
 
+export interface ViewOptions {
+  /**
+   * Response headers to attach to the rendered page.
+   *
+   * Can be a plain object or a function returning one (the function form
+   * runs server-side at render time so per-request values like CSP nonces
+   * work). Framework-owned headers (`set-cookie`, `vary`, anything
+   * starting with `x-rudderjs-`) are dropped to prevent collisions with
+   * server-hono's response pipeline.
+   *
+   * @example
+   * return view('marketing.pricing', { plans }, {
+   *   headers: { 'cache-control': 'public, max-age=3600, s-maxage=86400' },
+   * })
+   *
+   * @example
+   * return view('admin.dashboard', props, {
+   *   headers: () => ({ 'content-security-policy': `script-src 'self' 'nonce-${nonce}'` }),
+   * })
+   */
+  headers?: Record<string, string> | (() => Record<string, string>)
+}
+
 const VIEW_URL_PREFIX = '/__view'
+
+/** Headers we never let a view override — these belong to the framework. */
+const RESERVED_HEADER_PREFIXES = ['x-rudderjs-']
+const RESERVED_HEADERS = new Set(['set-cookie', 'vary'])
+
+function filterReservedHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(headers)) {
+    const key = k.toLowerCase()
+    if (RESERVED_HEADERS.has(key)) continue
+    if (RESERVED_HEADER_PREFIXES.some(p => key.startsWith(p))) continue
+    out[k] = v
+  }
+  return out
+}
 
 export class ViewResponse {
   /** Marker checked by server-hono via duck-typing (avoids a hard import). */
@@ -35,7 +77,16 @@ export class ViewResponse {
   constructor(
     public readonly id: string,
     public readonly props: ViewProps,
+    public readonly options: ViewOptions = {},
   ) {}
+
+  /** Resolve the `headers` option to a plain object, filtering reserved keys. */
+  resolveHeaders(): Record<string, string> {
+    const raw = this.options.headers
+    if (!raw) return {}
+    const headers = typeof raw === 'function' ? raw() : raw
+    return filterReservedHeaders(headers)
+  }
 
   /**
    * Resolve this view to an HTTP Response by calling Vike's renderPage().
@@ -56,11 +107,17 @@ export class ViewResponse {
     // renderPage return a JSON envelope instead of HTML.
     const urlOriginal = ctx.url
 
+    const viewHeaders = this.resolveHeaders()
+
     const pageContext = await renderPage({
       urlOriginal,
       // Forwarded into pageContext on both server and client; the generated
       // Vike page reads it via `usePageContext().viewProps`.
       viewProps: this.props,
+      // Surfaced on pageContext.viewHeaders; @rudderjs/vite's +headersResponse
+      // hook (registered via the config preset) reads this and attaches them
+      // to the SSR response.
+      viewHeaders,
     } as Parameters<typeof renderPage>[0])
 
     if ((pageContext as { errorWhileRendering?: unknown }).errorWhileRendering) {
@@ -95,11 +152,12 @@ export class ViewResponse {
 /**
  * Render a view from `app/Views/` with controller-supplied props.
  *
- * @param id    Dot-notation view id (e.g. `'dashboard'` → `app/Views/Dashboard.tsx`)
- * @param props Plain object passed to the view component as props
+ * @param id      Dot-notation view id (e.g. `'dashboard'` → `app/Views/Dashboard.tsx`)
+ * @param props   Plain object passed to the view component as props
+ * @param options Optional response options (headers, etc.)
  */
-export function view(id: string, props: ViewProps = {}): ViewResponse {
-  return new ViewResponse(id, props)
+export function view(id: string, props: ViewProps = {}, options: ViewOptions = {}): ViewResponse {
+  return new ViewResponse(id, props, options)
 }
 
 /**

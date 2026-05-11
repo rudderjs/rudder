@@ -59,7 +59,8 @@
     "@rudderjs/hash": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@rudderjs/session": "workspace:^",
-    "@rudderjs/view": "workspace:^"
+    "@rudderjs/view": "workspace:^",
+    "@rudderjs/vite": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/hash": {
@@ -73,6 +74,9 @@
     },
     "@rudderjs/view": {
       "optional": false
+    },
+    "@rudderjs/vite": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -80,6 +84,7 @@
     "@rudderjs/router": "workspace:^",
     "@rudderjs/session": "workspace:^",
     "@rudderjs/view": "workspace:^",
+    "@rudderjs/vite": "workspace:^",
     "@types/node": "^20.0.0",
     "reflect-metadata": "^0.2.2",
     "typescript": "^5.4.0"

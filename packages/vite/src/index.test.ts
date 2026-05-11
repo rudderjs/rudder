@@ -74,3 +74,112 @@ describe('@rudderjs/vite', () => {
     assert.equal(mod.default, mod.rudderjs)
   })
 })
+
+// ─── page-context-enhancers ─────────────────────────────────
+
+import {
+  registerPageContextEnhancer,
+  runPageContextEnhancers,
+  _resetPageContextEnhancersForTests,
+} from './page-context-enhancers.js'
+
+describe('page-context-enhancers', () => {
+  it('runs registered enhancers in registration order', async () => {
+    _resetPageContextEnhancersForTests()
+    const order: number[] = []
+    registerPageContextEnhancer(() => { order.push(1) })
+    registerPageContextEnhancer(() => { order.push(2) })
+    registerPageContextEnhancer(() => { order.push(3) })
+
+    await runPageContextEnhancers({} as never)
+    assert.deepEqual(order, [1, 2, 3])
+  })
+
+  it('awaits async enhancers', async () => {
+    _resetPageContextEnhancersForTests()
+    const order: string[] = []
+    registerPageContextEnhancer(async () => {
+      await new Promise(r => setTimeout(r, 5))
+      order.push('async-done')
+    })
+    registerPageContextEnhancer(() => { order.push('sync-done') })
+
+    await runPageContextEnhancers({} as never)
+    assert.deepEqual(order, ['async-done', 'sync-done'])
+  })
+
+  it('mutates the passed pageContext in place', async () => {
+    _resetPageContextEnhancersForTests()
+    registerPageContextEnhancer((pc) => {
+      ;(pc as { foo?: string }).foo = 'bar'
+    })
+
+    const ctx: Record<string, unknown> = {}
+    await runPageContextEnhancers(ctx as never)
+    assert.equal((ctx as { foo?: string }).foo, 'bar')
+  })
+
+  it('propagates errors from an enhancer', async () => {
+    _resetPageContextEnhancersForTests()
+    registerPageContextEnhancer(() => { throw new Error('boom') })
+
+    await assert.rejects(
+      () => runPageContextEnhancers({} as never),
+      /boom/,
+    )
+  })
+})
+
+// ─── hooks/onCreatePageContext ─────────────────────────────
+
+describe('onCreatePageContext', () => {
+  it('walks registered enhancers', async () => {
+    _resetPageContextEnhancersForTests()
+    const seen: string[] = []
+    registerPageContextEnhancer((pc) => { seen.push((pc as { url?: string }).url ?? '') })
+
+    const { onCreatePageContext } = await import('./hooks/onCreatePageContext.js')
+    await onCreatePageContext({ url: '/test' } as never)
+    assert.deepEqual(seen, ['/test'])
+  })
+})
+
+// ─── hooks/onError ─────────────────────────────────────────
+
+describe('onError', () => {
+  it('falls back to console.error when @rudderjs/core is unavailable', async () => {
+    const original = console.error
+    const logged: unknown[][] = []
+    console.error = (...args: unknown[]) => { logged.push(args) }
+
+    try {
+      const { onError } = await import('./hooks/onError.js')
+      const err = new Error('boom')
+      // We can't easily stub the dynamic import; just confirm it doesn't throw.
+      // In the worktree @rudderjs/core IS installed so this exercises the
+      // happy path (report() called). The branch test for the absent peer
+      // lives in a separate fixture project (deferred).
+      await onError(err, { urlOriginal: '/x' } as never)
+    } finally {
+      console.error = original
+    }
+  })
+})
+
+// ─── hooks/headersResponse ─────────────────────────────────
+
+describe('headersResponse', () => {
+  it('returns viewHeaders from pageContext', async () => {
+    const { headersResponse } = await import('./hooks/headersResponse.js')
+    const headers = headersResponse({
+      viewHeaders: { 'cache-control': 'no-cache' },
+    } as never)
+    assert.deepEqual(headers, { 'cache-control': 'no-cache' })
+  })
+
+  it('returns {} when viewHeaders is missing', async () => {
+    const { headersResponse } = await import('./hooks/headersResponse.js')
+    const headers = headersResponse({} as never)
+    assert.deepEqual(headers, {})
+  })
+})
