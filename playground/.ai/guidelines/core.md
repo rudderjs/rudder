@@ -51,14 +51,21 @@ export class AppServiceProvider extends ServiceProvider {
 }
 ```
 
-Many packages export a **factory function** that returns a provider class (e.g., `cache(config)`, `queue(config)`). These are used in `bootstrap/providers.ts`:
+Most packages export a `*Provider` class directly. List them by reference in `bootstrap/providers.ts` — `defaultProviders()` from `@rudderjs/core` auto-discovers all installed framework providers via the manifest at `bootstrap/cache/providers.json` (run `pnpm rudder providers:discover` after install):
 
 ```ts
-import { cache } from '@rudderjs/cache'
-export default [cache(cacheConfig), AppServiceProvider]
+import { defaultProviders } from '@rudderjs/core'
+import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+
+export default [
+  ...(await defaultProviders()),
+  AppServiceProvider,
+]
 ```
 
-Providers can be registered dynamically at runtime via `app().register(ProviderClass)`. Duplicates are silently skipped (guarded by class reference and class name).
+To register manually, list each `*Provider` class explicitly (`CacheProvider`, `QueueProvider`, etc.) and read config from a `config: configs` object passed to `Application.configure()` — the providers resolve their config keys via the DI container.
+
+Providers can also be registered dynamically at runtime via `app().register(ProviderClass)`. Duplicates are silently skipped (guarded by class reference and class name).
 
 Deferred providers define `provides()` returning token strings -- they are lazily booted on first container resolve of those tokens.
 
@@ -100,6 +107,12 @@ Contextual bindings let you override a dependency for a specific consumer:
 container.when(PhotoController).needs('storage').give(() => new S3Storage())
 ```
 
+Conditional binding helpers (`bindIf` / `singletonIf` / `scopedIf`) register only when the token is currently unbound — used by framework providers so app providers can override defaults by binding first.
+
+Tagging groups bindings under one or more tag names: `container.tag(['csv.exporter', 'xlsx.exporter'], 'reports.exporters')`, then `container.tagged<Exporter>('reports.exporters')` resolves all of them in insertion order. Singletons stay singletons across `tagged()` calls. Inject the array directly with `@Tag('reports.exporters')` on a constructor parameter, or use `tagToken('reports.exporters')` as a token in `when().needs().give()`.
+
+`extend(token, fn)` wraps the resolved value with a decorator function — chained in registration order, applied eagerly to any cached singleton/instance. `rebinding(token, fn)` registers a listener that fires when an existing binding is replaced (not on the initial bind), useful for test hot-swaps and `app->refresh()` parity.
+
 ### Middleware
 
 Middleware is configured in `bootstrap/app.ts` via `withMiddleware()`. Each handler receives a `MiddlewareHandler` signature from `@rudderjs/contracts`:
@@ -119,24 +132,48 @@ Use `abort(status, message?)`, `abort_if(condition, status)`, and `abort_unless(
 
 Extend `Listener` and call `dispatch(new MyEvent(data))`. Register listeners in a provider's `boot()`.
 
+### Testing Events (`EventFake`)
+
+Use `EventFake.fake()` in tests to intercept dispatched events without running real listeners:
+
+```ts
+import { EventFake, dispatch } from '@rudderjs/core'
+
+const fake = EventFake.fake()
+
+await dispatch(new UserRegistered(user))
+
+fake.assertDispatched('UserRegistered')
+fake.assertDispatchedTimes('UserRegistered', 1)
+fake.assertNotDispatched('OrderPlaced')
+fake.assertNothingDispatched() // fails if anything was dispatched
+
+// Access payloads
+const [event] = fake.dispatched('UserRegistered')
+
+fake.restore() // always call in afterEach
+```
+
+`EventFake.fake()` replaces `dispatcher.dispatch` globally for the duration of the test. Always restore in `afterEach` to avoid leaking state across tests.
+
 ### Validation
 
-Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.object({...})`). `z` is re-exported from `@rudderjs/core`.
+Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.object({...})`). `z` is re-exported from `@rudderjs/core`. Five optional lifecycle hooks mirror Laravel: `prepareForValidation` (mutate input pre-parse), `messages` (per-request error message overrides keyed by dot-path), `after` (array of cross-field check closures with `addError(path, msg)`), `passedValidation` (final transform on parsed data), and `failedValidation` (override the throw — return a `Response` to short-circuit, otherwise it throws `ValidationError`). Parameterize as `extends FormRequest<typeof schema>` to get `z.infer<typeof schema>` typing inside the hooks.
 
 ## Common Pitfalls
 
 - **Missing `reflect-metadata`**: Must be imported at the very top of `bootstrap/app.ts` before any other imports. Install as a `dependency`, not `devDependency`.
 - **Provider boot order matters**: `DatabaseServiceProvider` must come before any provider that uses ORM models. Order your `providers` array accordingly.
-- **Scoped bindings outside request scope**: Calling `app().make('scopedToken')` outside of `container.runScoped()` throws. Ensure `ScopeMiddleware` is registered or wrap the call manually.
+- **Scoped bindings outside request scope**: Calling `app().make('scopedToken')` outside of `container.runScoped()` throws. `@rudderjs/server-hono` wraps each request automatically — in tests or scripts, call `container.runScoped(() => ...)` manually.
 - **Dynamic provider duplicates**: `app().register()` is safe to call multiple times with the same class -- duplicates are skipped. But factory functions create anonymous classes, so use consistent references.
 - **Circular dependency with `@rudderjs/router`**: Core loads router at runtime via dynamic `import()`. Never add `@rudderjs/core` to router's `dependencies` -- use `peerDependencies` only.
 
 ## Key Imports
 
 ```ts
-import { Application, app, resolve, ServiceProvider, Injectable, Inject } from '@rudderjs/core'
-import { FormRequest, ValidationError, z } from '@rudderjs/core'
-import { Listener, dispatch, events } from '@rudderjs/core'
+import { Application, app, resolve, ServiceProvider, Injectable, Inject, Tag, tagToken } from '@rudderjs/core'
+import { FormRequest, ValidationError, ValidationResponse, z } from '@rudderjs/core'
+import { Listener, dispatch, eventsProvider } from '@rudderjs/core'
 import { HttpException, abort, abort_if, report } from '@rudderjs/core'
 import { Collection, Env, env, config, sleep } from '@rudderjs/core'
 import { rudder, Command } from '@rudderjs/core'

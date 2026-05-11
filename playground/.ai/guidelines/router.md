@@ -34,6 +34,106 @@ route('posts.show', { slug: 'hello' })    // optional ':id?' segment omitted
 
 Throws if a required parameter is missing or the name is not registered.
 
+### Parameter constraints
+
+```ts
+import { Route } from '@rudderjs/router'
+
+Route.get('/users/:id', handler).whereNumber('id').name('users.show')
+Route.get('/u/:id', handler).whereUuid('id')
+Route.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+Route.get('/n/:n', handler).where('n', /\d{3,5}/)
+```
+
+Available shortcuts: `whereNumber` / `whereAlpha` / `whereAlphaNumeric` / `whereUuid` / `whereUlid` / `whereIn(param, values)`. Base method `.where(param, regex)` accepts a string or `RegExp`. Throws when the path has no `:param` segment, or when `whereIn` gets an empty values array. Order-independent against `.name()`.
+
+> Fluent-only — decorator routes (`@Get('/users/:id')`) don't return a `RouteBuilder`.
+
+### Route groups
+
+```ts
+import { router } from '@rudderjs/router'
+
+router.group({ prefix: '/admin', middleware: [adminAuth] }, () => {
+  router.get('/users', listUsers)            // GET /admin/users (with adminAuth)
+})
+
+router.group({ domain: ':tenant.example.com', prefix: '/api' }, () => {
+  router.get('/me', me)                      // GET :tenant.example.com/api/me
+})
+```
+
+Nested groups concatenate prefixes and middleware; innermost defined `domain` wins. `router.group()` is the user-facing scoping primitive — distinct from `runWithGroup('web' | 'api', …)` (the framework's web/api middleware-group tag).
+
+### Subdomain routing
+
+```ts
+router.get('/users', listUsers).domain('api.example.com')
+router.get('/me', me).domain(':tenant.example.com')
+// req.params.tenant === 'acme' for Host: acme.example.com
+```
+
+Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same name collide — path wins.
+
+### Resource routes
+
+```ts
+import { router } from '@rudderjs/router'
+
+// Full REST resource: index, create, store, show, edit, update, destroy
+router.resource('posts', PostController)
+
+// Subset
+router.resource('posts', PostController, { only: ['index', 'show'] })
+router.resource('posts', PostController, { except: ['destroy'] })
+
+// API resource (no create/edit — those render HTML forms)
+router.apiResource('posts', PostController)
+
+// Singleton resource — only one of the thing (e.g. the current user's profile)
+router.singleton('profile', ProfileController)
+router.singleton('profile', ProfileController).creatable()   // also registers create + store
+router.singleton('profile', ProfileController).destroyable() // also registers destroy
+```
+
+Generated route names follow `{resource}.{verb}` — e.g. `posts.index`, `posts.show`, `posts.store`. Use with `route('posts.show', { post: 42 })`.
+
+### Route model binding
+
+```ts
+import { router } from '@rudderjs/router'
+
+// Bind ':user' param to User model — auto-resolves req.bound.user from req.params.user
+router.bind('user', User)
+
+// Optional — resolves to null instead of 404 when not found
+router.bind('viewer', User, { optional: true })
+
+// Custom slug key — User.routeKey = 'slug' overrides the default 'id'
+```
+
+The resolved model is available as `req.bound.user` in the handler. Missing records throw `RouteModelNotFoundError` (→ 404). Optional bindings skip the throw and set `req.bound.user = null`.
+
+### Fallback route
+
+```ts
+router.fallback((_req, res) => res.status(404).json({ message: 'Not found' }))
+```
+
+Catches all unmatched requests. Must be registered last.
+
+### Route binding 404 customisation
+
+```ts
+router.get('/users/:user', show)
+  .missing((_req, err) => Response.json({ error: err.message }, { status: 404 }))
+
+router.get('/posts/:post', show)
+  .missing((_req, err) => ({ message: `Post ${err.value} not found` }))
+```
+
+Returns: `Response`, plain object → JSON, string → body, or `undefined` (callback wrote to `res` directly). Optional bindings do NOT trigger `.missing()`.
+
 ### Route-level middleware
 
 ```ts
