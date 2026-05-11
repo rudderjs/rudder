@@ -2,7 +2,7 @@
 
 `@rudderjs/ai` ships first-class support for hosted vector stores — managed RAG infrastructure where the provider handles ingestion, chunking, embedding, and retrieval server-side. Apps drop in `fileSearch({ stores })` as an agent tool and the model runs the search natively; no embedding pipeline, no pgvector setup, no glue code.
 
-Today only OpenAI implements the hosted-store contract. For self-hosted RAG over a local Postgres + pgvector model, use the `similaritySearch` agent tool — same surface, against an ORM model you own.
+OpenAI and Gemini (Developer API) both implement the hosted-store contract. For self-hosted RAG over a local Postgres + pgvector model, use the `similaritySearch` agent tool — same surface, against an ORM model you own.
 
 ## Managing stores
 
@@ -22,11 +22,11 @@ await VectorStores.delete(store.id)
 
 `store.add(...)` accepts:
 
-- `{ fileId: 'file-...' }` — an existing OpenAI Files API id
+- `{ fileId: 'file-...' }` — an existing provider Files API id (OpenAI `file_...` or Gemini `files/...`)
 - `{ filePath: './foo.pdf' }` — local path; uploaded via the Files API first (`Node` only)
 - `{ fileBuffer: Buffer, filename }` — in-memory bytes
 
-By default `add()` polls the provider until indexing is `'completed'` (status `'failed'` / `'cancelled'` throws). Pass `wait: false` for fire-and-forget. `attributes` map to OpenAI's per-file searchable metadata — `fileSearch({ where })` filters on these.
+By default `add()` polls the provider until ingestion is `'completed'`. Failed status surfaces as `{ status: 'failed', lastError }` without throwing. Pass `wait: false` for fire-and-forget. `attributes` map to per-document searchable metadata — `fileSearch({ where })` filters on these.
 
 ### Provider override
 
@@ -35,11 +35,28 @@ The default provider comes from the registered AI default (`@rudderjs/ai`'s `AiR
 ```ts
 const store = await VectorStores.create('KB', { provider: 'openai' })
 const list  = await VectorStores.list({ provider: 'openai' })
+
+// Same shape against Gemini
+const kb    = await VectorStores.create('KB', { provider: 'google' })
 ```
+
+### Provider differences
+
+The `VectorStores` façade and `fileSearch` tool factory are identical across providers, but the underlying APIs diverge in a few ways. Keep an agent's stores on one provider at a time.
+
+| Feature | OpenAI | Gemini |
+|---|---|---|
+| Store id shape | `vs_abc123` (opaque) | `fileSearchStores/foo-bar` (resource path) |
+| Store-level `metadata` | ✓ | not supported — pass per-document `attributes` |
+| `expiresAfter` policy | ✓ | not supported — stores persist until deleted |
+| Per-document attributes | flat `Record<string, string \| number \| boolean>` | same surface; booleans coerce to string under the hood |
+| Filter shape on the wire | typed `{ type, key, value }` object | string syntax (`author = "Alice" AND year > 2020`) |
+| Ingestion model | sync attach + poll `vectorStores.files.retrieve` | long-running `operations.get` poll |
+| Vertex AI support | n/a | ✗ Developer API only |
 
 ## The `fileSearch` agent tool
 
-`fileSearch({ stores })` returns a tool that the model uses to query the configured stores. On OpenAI the adapter emits the native `file_search` block — the model runs retrieval inline and the results land in the assistant reply. No tool-call round-trip, no `execute` to write.
+`fileSearch({ stores })` returns a tool that the model uses to query the configured stores. On OpenAI the adapter emits the native `file_search` block; on Gemini it emits the native `fileSearch` tool block. Either way the model runs retrieval inline and the results land in the assistant reply — no tool-call round-trip, no `execute` to write.
 
 ```ts
 import { Agent, VectorStores, fileSearch } from '@rudderjs/ai'
@@ -122,9 +139,9 @@ Pass `text` directly for full control over the assistant reply, or `usage` to th
 
 | Provider | Native `file_search` | Notes |
 |----------|----------------------|-------|
-| OpenAI   | ✓ | Phase 1 shipped — `VectorStores.create/list/get/delete`, `add`, native tool emission via `chat.completions`. |
-| Gemini   | future (B8.5) | Gemini's hosted RAG uses `cachedContent`, not vector stores; deferred to B8.5. |
-| Others   | falls back | Non-OpenAI providers see `fileSearch` as a regular function-call tool with `{ query: string }`. Without an `execute` the agent loop pauses for client tools — pair with a Phase 3 `fallback` (in flight) to delegate to `similaritySearch` over a local pgvector model. |
+| OpenAI   | ✓ | `VectorStores.create/list/get/delete`, `add`, native tool emission via `chat.completions`. |
+| Gemini   | ✓ | Wraps Google's `fileSearchStores` (Gemini Developer API only — not Vertex AI). Same façade as OpenAI; store-level `metadata`/`expiresAfter` aren't supported (Gemini's API has no equivalent — pass per-document `attributes` instead). Typed `where` filters translate to Gemini's `metadataFilter` string syntax. |
+| Others   | falls back | Other providers see `fileSearch` as a regular function-call tool with `{ query: string }`. Pair with `fallback` to delegate to `similaritySearch` over a local pgvector model. |
 
 ## Cost surprise
 

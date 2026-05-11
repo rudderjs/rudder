@@ -36,7 +36,8 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | B5 | OpenRouter provider ✓ | S (~3 d) | Routing/failover layer popular for cost optimization. *Shipped 2026-05-10.* |
 | B6 | `broadcastOnQueue()` integration | S (~2 d) | Background AI → live UI without polling. We have `@rudderjs/broadcast` + `queue()` separately; just glue. |
 | B7 | Vector storage in ORM + `SimilaritySearch` tool | M (~1 wk) | Lives in `@rudderjs/orm`, not `ai`. Real RAG ergonomics. |
-| B8 | Hosted vector stores + `fileSearch` provider tool ✓ | M (~1 wk) | OpenAI hosted stores + native `file_search` agent tool; `WebSearch` retrofit (Anthropic + Gemini native) as a sidecar; local pgvector fallback closes the loop. *Shipped 2026-05-11 — Phase 1 #379, Phase 2 #380, Phase 2.x #381, Phase 3 (this PR). Gemini hosted RAG deferred to B8.5.* |
+| B8 | Hosted vector stores + `fileSearch` provider tool ✓ | M (~1 wk) | OpenAI hosted stores + native `file_search` agent tool; `WebSearch` retrofit (Anthropic + Gemini native) as a sidecar; local pgvector fallback closes the loop. *Shipped 2026-05-11 — Phase 1 #379, Phase 2 #380, Phase 2.x #381, Phase 3 #382.* |
+| B8.5 | Gemini hosted RAG (`fileSearchStores`) ✓ | S (~half-day) | Wraps Google's `fileSearchStores` API as a `VectorStoreAdapter`; typed `where` filters translate to Gemini's `metadataFilter` string syntax; `toGeminiTools` emits the native `fileSearch` block via the existing `providerHint` mechanism. *Shipped 2026-05-11.* |
 | B9 | ElevenLabs provider ✓ | S (~2 d) | Premium TTS (`eleven_multilingual_v2` default) + STT (`scribe_v1`). Raw `fetch` adapter — no SDK peer. *Shipped 2026-05-11.* |
 | B10 | VoyageAI provider ✓ | S (~2 d) | Best-in-class embeddings (`voyage-3`, `voyage-3-large`, `voyage-code-3`) + reranking (`rerank-2.5`). Raw `fetch` adapter — no SDK peer. *Shipped 2026-05-11. Closes Track B.* |
 
@@ -546,7 +547,7 @@ const ranked = await AI.rerank({
 - Rerank requests forward `topK` → `top_k`; results map `relevance_score` → `relevanceScore`. Adapter prefers Voyage-echoed `document` text when present, otherwise looks up by index in the original input (defensive against API revisions that toggle the echo behavior).
 - Embed responses are **defensively sorted by index** before returning — guards against future API revisions that might return out-of-order results.
 
-**Closes Track B.** All of Tracks A and B are shipped after B10. The next forward-looking item is **B8.5** (Gemini hosted RAG) once there's customer signal, or net-new ideas.
+**Closes Track B.** All of Tracks A and B are shipped after B10. B8.5 (Gemini hosted RAG) shipped 2026-05-11 — see `docs/plans/2026-05-11-b8.5-gemini-hosted-rag.md`.
 
 **Effort:** ~2 days as planned (closer to ~half-day in practice — small REST surface, Cohere as the closest reference).
 
