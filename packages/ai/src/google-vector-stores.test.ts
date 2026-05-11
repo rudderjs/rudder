@@ -23,6 +23,7 @@ import {
   customMetadataToAttributes,
   fromGeminiFileSearchStore,
   fromGeminiDocument,
+  mimeTypeFromFilename,
 } from './providers/google.js'
 import { fileSearch } from './file-search.js'
 import { toolToSchema } from './tool.js'
@@ -169,6 +170,33 @@ describe('filterToGeminiString', () => {
       () => filterToGeminiString({ type: 'or', filters: [] }),
       /OR requires at least one sub-filter/,
     )
+  })
+})
+
+// ─── mimeTypeFromFilename ────────────────────────────────
+
+describe('mimeTypeFromFilename', () => {
+  it('maps common text extensions', () => {
+    assert.equal(mimeTypeFromFilename('notes.txt'),    'text/plain')
+    assert.equal(mimeTypeFromFilename('README.md'),    'text/markdown')
+    assert.equal(mimeTypeFromFilename('index.html'),   'text/html')
+    assert.equal(mimeTypeFromFilename('table.csv'),    'text/csv')
+  })
+
+  it('maps common document extensions', () => {
+    assert.equal(mimeTypeFromFilename('report.pdf'),   'application/pdf')
+    assert.equal(mimeTypeFromFilename('memo.docx'),    'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    assert.equal(mimeTypeFromFilename('data.json'),    'application/json')
+  })
+
+  it('is case-insensitive on the extension', () => {
+    assert.equal(mimeTypeFromFilename('REPORT.PDF'),   'application/pdf')
+    assert.equal(mimeTypeFromFilename('Notes.Txt'),    'text/plain')
+  })
+
+  it('returns empty string for unknown extensions (defer to SDK error)', () => {
+    assert.equal(mimeTypeFromFilename('mystery.xyz'),  '')
+    assert.equal(mimeTypeFromFilename('no-extension'), '')
   })
 })
 
@@ -548,7 +576,7 @@ describe('GoogleVectorStoreAdapter — addFile (upload path)', () => {
     assert.equal(args.file,                '/tmp/test.pdf')
   })
 
-  it('routes fileBuffer through Blob + uploadToFileSearchStore (with displayName)', async () => {
+  it('routes fileBuffer through Blob + uploadToFileSearchStore (with displayName + mimeType)', async () => {
     const { client, calls } = makeFakeGoogleClient()
     const adapter = adapterWith(client)
 
@@ -558,9 +586,38 @@ describe('GoogleVectorStoreAdapter — addFile (upload path)', () => {
     })
 
     const upload = calls.find(c => c.method === 'fileSearchStores.uploadToFileSearchStore')!
-    const args = upload.args[0] as { fileSearchStoreName: string; file: Blob; config?: { displayName?: string } }
+    const args = upload.args[0] as { fileSearchStoreName: string; file: Blob; config?: { displayName?: string; mimeType?: string } }
     assert.ok(args.file instanceof Blob)
     assert.equal(args.config?.displayName, 'report.pdf')
+    // mimeType is required by the Gemini SDK for Blob uploads — the adapter
+    // must derive it from the filename to avoid 'Can not determine mimeType'.
+    assert.equal(args.config?.mimeType,    'application/pdf')
+  })
+
+  it('omits mimeType when filename extension is unknown (defer to SDK error)', async () => {
+    const { client, calls } = makeFakeGoogleClient()
+    const adapter = adapterWith(client)
+
+    const created = await adapter.create({ name: 'kb' })
+    await adapter.addFile(created.id, {
+      fileBuffer: { data: new Uint8Array([1, 2, 3]), filename: 'mystery.xyz' },
+    })
+
+    const upload = calls.find(c => c.method === 'fileSearchStores.uploadToFileSearchStore')!
+    const args = upload.args[0] as { config?: { mimeType?: string } }
+    assert.equal('mimeType' in (args.config ?? {}), false)
+  })
+
+  it('does not set mimeType on the filePath upload path (SDK infers from extension)', async () => {
+    const { client, calls } = makeFakeGoogleClient()
+    const adapter = adapterWith(client)
+
+    const created = await adapter.create({ name: 'kb' })
+    await adapter.addFile(created.id, { filePath: '/tmp/test.pdf' })
+
+    const upload = calls.find(c => c.method === 'fileSearchStores.uploadToFileSearchStore')!
+    const args = upload.args[0] as { config?: { mimeType?: string } }
+    assert.equal('mimeType' in (args.config ?? {}), false)
   })
 
   it('throws when neither fileId, filePath, nor fileBuffer is passed', async () => {
