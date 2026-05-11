@@ -99,6 +99,13 @@ export class AiProvider extends ServiceProvider {
             ...(providerConfig.baseUrl              ? { baseUrl:           providerConfig.baseUrl                              } : {}),
             ...(providerConfig['defaultTtsModelId'] ? { defaultTtsModelId: providerConfig['defaultTtsModelId'] as string       } : {}),
           }))
+        } else if (driver === 'voyage') {
+          const { VoyageProvider } = await import('../providers/voyage.js')
+          AiRegistry.register(new VoyageProvider({
+            apiKey: providerConfig.apiKey!,
+            ...(providerConfig.baseUrl             ? { baseUrl:          providerConfig.baseUrl                                            } : {}),
+            ...(providerConfig['defaultInputType'] ? { defaultInputType: providerConfig['defaultInputType'] as 'query' | 'document'        } : {}),
+          }))
         }
       }
 

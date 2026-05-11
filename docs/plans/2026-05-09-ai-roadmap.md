@@ -38,7 +38,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | B7 | Vector storage in ORM + `SimilaritySearch` tool | M (~1 wk) | Lives in `@rudderjs/orm`, not `ai`. Real RAG ergonomics. |
 | B8 | Hosted vector stores + `fileSearch` provider tool ✓ | M (~1 wk) | OpenAI hosted stores + native `file_search` agent tool; `WebSearch` retrofit (Anthropic + Gemini native) as a sidecar; local pgvector fallback closes the loop. *Shipped 2026-05-11 — Phase 1 #379, Phase 2 #380, Phase 2.x #381, Phase 3 (this PR). Gemini hosted RAG deferred to B8.5.* |
 | B9 | ElevenLabs provider ✓ | S (~2 d) | Premium TTS (`eleven_multilingual_v2` default) + STT (`scribe_v1`). Raw `fetch` adapter — no SDK peer. *Shipped 2026-05-11.* |
-| B10 | VoyageAI provider | S (~2 d) | Best-in-class embeddings + reranking. |
+| B10 | VoyageAI provider ✓ | S (~2 d) | Best-in-class embeddings (`voyage-3`, `voyage-3-large`, `voyage-code-3`) + reranking (`rerank-2.5`). Raw `fetch` adapter — no SDK peer. *Shipped 2026-05-11. Closes Track B.* |
 
 **Dependencies:**
 - A5 (evals) benefits from A1 (caching) to keep eval costs down.
@@ -515,13 +515,40 @@ await Transcription
 
 ---
 
-## B10. VoyageAI provider
+## B10. VoyageAI provider ✓ shipped 2026-05-11
 
-**Problem.** Best-in-class embeddings (`voyage-3`, `voyage-large-2`) and reranking (`rerank-2.5`). Cohere is the closest, but VoyageAI consistently wins benchmarks.
+**Problem.** Best-in-class embeddings (`voyage-3`, `voyage-3-large`, `voyage-code-3`, `voyage-finance-2`, `voyage-law-2`) and reranking (`rerank-2.5`, `rerank-2.5-lite`). Cohere is the closest analog, but Voyage consistently wins benchmarks.
 
-**Design.** New `packages/ai/src/providers/voyageai.ts`. Implements `EmbeddingAdapter` + `RerankingAdapter`. No text generation.
+**Shipped.** `packages/ai/src/providers/voyage.ts` implements `EmbeddingAdapter` + `RerankingAdapter` via raw `fetch` (no SDK peer dep, matches the Jina / ElevenLabs shape). `create()` throws (no chat completions). Wired through `AiProvider` via `driver: 'voyage'`:
 
-**Effort:** ~2 days.
+```ts
+// config/ai.ts
+providers: {
+  openai: { driver: 'openai', apiKey: env('OPENAI_API_KEY')! },
+  voyage: { driver: 'voyage', apiKey: env('VOYAGE_API_KEY')! },
+}
+
+// Embed (defaults to input_type: 'document' — RAG ingestion)
+const { embeddings } = await AI.embed('hello world', { model: 'voyage/voyage-3-large' })
+
+// Rerank
+const ranked = await AI.rerank({
+  model:     'voyage/rerank-2.5',
+  query:     'how do I reset my password?',
+  documents: [...],
+  topK:      5,
+})
+```
+
+**Conventions worth knowing:**
+
+- `defaultInputType` config defaults to `'document'` (RAG ingestion). Override per-deployment to `'query'` for query-side pipelines. Voyage embeddings perform measurably better when the API knows whether a string is a query or a document.
+- Rerank requests forward `topK` → `top_k`; results map `relevance_score` → `relevanceScore`. Adapter prefers Voyage-echoed `document` text when present, otherwise looks up by index in the original input (defensive against API revisions that toggle the echo behavior).
+- Embed responses are **defensively sorted by index** before returning — guards against future API revisions that might return out-of-order results.
+
+**Closes Track B.** All of Tracks A and B are shipped after B10. The next forward-looking item is **B8.5** (Gemini hosted RAG) once there's customer signal, or net-new ideas.
+
+**Effort:** ~2 days as planned (closer to ~half-day in practice — small REST surface, Cohere as the closest reference).
 
 ---
 
