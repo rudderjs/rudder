@@ -92,6 +92,13 @@ export class AiProvider extends ServiceProvider {
           AiRegistry.register(new BedrockProvider(
             credentials ? { region, credentials } : { region },
           ))
+        } else if (driver === 'elevenlabs') {
+          const { ElevenLabsProvider } = await import('../providers/elevenlabs.js')
+          AiRegistry.register(new ElevenLabsProvider({
+            apiKey: providerConfig.apiKey!,
+            ...(providerConfig.baseUrl              ? { baseUrl:           providerConfig.baseUrl                              } : {}),
+            ...(providerConfig['defaultTtsModelId'] ? { defaultTtsModelId: providerConfig['defaultTtsModelId'] as string       } : {}),
+          }))
         }
       }
 

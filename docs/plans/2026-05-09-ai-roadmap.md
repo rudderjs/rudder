@@ -37,7 +37,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | B6 | `broadcastOnQueue()` integration | S (~2 d) | Background AI → live UI without polling. We have `@rudderjs/broadcast` + `queue()` separately; just glue. |
 | B7 | Vector storage in ORM + `SimilaritySearch` tool | M (~1 wk) | Lives in `@rudderjs/orm`, not `ai`. Real RAG ergonomics. |
 | B8 | Hosted vector stores + `fileSearch` provider tool ✓ | M (~1 wk) | OpenAI hosted stores + native `file_search` agent tool; `WebSearch` retrofit (Anthropic + Gemini native) as a sidecar; local pgvector fallback closes the loop. *Shipped 2026-05-11 — Phase 1 #379, Phase 2 #380, Phase 2.x #381, Phase 3 (this PR). Gemini hosted RAG deferred to B8.5.* |
-| B9 | ElevenLabs provider | S (~2 d) | Premium TTS/STT. |
+| B9 | ElevenLabs provider ✓ | S (~2 d) | Premium TTS (`eleven_multilingual_v2` default) + STT (`scribe_v1`). Raw `fetch` adapter — no SDK peer. *Shipped 2026-05-11.* |
 | B10 | VoyageAI provider | S (~2 d) | Best-in-class embeddings + reranking. |
 
 **Dependencies:**
@@ -480,13 +480,38 @@ Behind the scenes the tool maps to OpenAI's `file_search` or Gemini's equivalent
 
 ---
 
-## B9. ElevenLabs provider
+## B9. ElevenLabs provider ✓ shipped 2026-05-11
 
 **Problem.** Premium voice synthesis (TTS) and transcription (STT). Customers shipping voice apps need it.
 
-**Design.** New `packages/ai/src/providers/elevenlabs.ts`. ElevenLabs has its own SDK (`elevenlabs-node` or direct REST). Implements `TextToSpeechAdapter` + `SpeechToTextAdapter`. No text generation.
+**Shipped.** `packages/ai/src/providers/elevenlabs.ts` implements `TextToSpeechAdapter` + `SpeechToTextAdapter`. **Raw `fetch`** — no SDK peer dep (matches the Jina / Cohere shape). `create()` throws (no chat completions). Wired through `AiProvider` via `driver: 'elevenlabs'` so apps declare it in `config/ai.ts` alongside their LLM provider:
 
-**Effort:** ~2 days.
+```ts
+// config/ai.ts
+providers: {
+  openai:     { driver: 'openai',     apiKey: env('OPENAI_API_KEY')! },
+  elevenlabs: { driver: 'elevenlabs', apiKey: env('ELEVENLABS_API_KEY')! },
+}
+
+// in app code
+await AudioGenerator
+  .of('Hello world')
+  .model('elevenlabs/21m00Tcm4TlvDq8ikWAM')   // <provider>/<voice_id>
+  .generate()
+
+await Transcription
+  .of(audioBuffer)
+  .model('elevenlabs/scribe_v1')
+  .transcribe()
+```
+
+**Conventions worth knowing:**
+
+- The model string after `elevenlabs/` is a **voice id** for TTS (Rachel = `21m00Tcm4TlvDq8ikWAM`), an actual model id for STT (`scribe_v1`). The TTS model id ships from `ElevenLabsConfig.defaultTtsModelId` (default `eleven_multilingual_v2`) — TTS model is a deployment knob; voice is per-call.
+- `format` maps: `mp3` → `mp3_44100_128`, `opus` → `opus_48000_128`. `wav` / `aac` / `flac` throw clearly (not supported by ElevenLabs; re-encode at the app layer or use a different provider).
+- `speed` is **ignored** — ElevenLabs steers timing through `voice_settings.stability` etc. on a different surface; out of scope for v1. OpenAI failover → ElevenLabs will produce default-speed audio.
+
+**Effort:** ~2 days as planned (closer to ~half-day in practice — small REST surface).
 
 ---
 
