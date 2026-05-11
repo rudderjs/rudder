@@ -11,6 +11,16 @@ Three collectors:
 2. **MetricsCollector** — Periodically snapshots per-queue stats: throughput, wait time, runtime, pending/active/completed/failed counts
 3. **WorkerCollector** — Reports current process as a worker with memory usage and job counts
 
+### File Layout
+
+- `src/index.ts` — `HorizonProvider`, `Horizon` facade, `HorizonRegistry`, public re-exports
+- `src/types.ts` — `HorizonJob`, `QueueMetric`, `WorkerInfo`, `HorizonStorage`, `HorizonConfig`
+- `src/storage.ts` — `MemoryStorage`, `SqliteStorage`
+- `src/collectors/` — three collector classes (job, metrics, worker)
+- `src/routes.ts` — `registerHorizonRoutes(storage, opts)` — UI + API route registration. Mirrors `@rudderjs/telescope`'s `registerTelescopeRoutes()`.
+- `src/api/routes.ts` — pure handler functions (`getStats`, `listRecentJobs`, `retryJob`, `authMiddleware`, …) called from `routes.ts`. Holds no router calls.
+- `src/views/vanilla/` — UI pages (one file per page): `Layout`, `Dashboard`, `RecentJobs`, `FailedJobs`, `Queues`, `Workers`, `_html` (auto-escape helper), `_jobTable` (shared table partial).
+
 ## Key Patterns
 
 - `HorizonJob` records the full lifecycle: dispatchedAt, startedAt, completedAt, duration, exception

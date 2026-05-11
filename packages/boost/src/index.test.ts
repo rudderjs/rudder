@@ -11,6 +11,8 @@ import { listCommands } from './tools/commands-list.js'
 import { runCommand } from './tools/command-run.js'
 import { parseFirstJsonObject } from './tools/_pm.js'
 import { createBoostServer, BoostProvider } from './index.js'
+import { parseFrontmatter } from './frontmatter.js'
+import { generateClaudeMd } from './generators/claude-md.js'
 
 // Use the playground as the test project
 const PLAYGROUND = join(import.meta.dirname, '..', '..', '..', 'playground')
@@ -194,5 +196,128 @@ describe('runCommand', () => {
 describe('BoostProvider', () => {
   it('is a constructor', () => {
     assert.strictEqual(typeof BoostProvider, 'function')
+  })
+})
+
+// ─── parseFrontmatter ────────────────────────────────────
+
+describe('parseFrontmatter', () => {
+  it('returns empty data + full body when no frontmatter', () => {
+    const r = parseFrontmatter('# Hello\n\nNo frontmatter here.')
+    assert.deepStrictEqual(r.data, {})
+    assert.ok(r.body.startsWith('# Hello'))
+  })
+
+  it('parses scalar fields', () => {
+    const r = parseFrontmatter('---\nname: orm-models\nlicense: MIT\n---\n\n# Body\n')
+    assert.strictEqual(r.data['name'], 'orm-models')
+    assert.strictEqual(r.data['license'], 'MIT')
+    assert.ok(r.body.startsWith('# Body'))
+  })
+
+  it('parses array fields (block style)', () => {
+    const r = parseFrontmatter(`---
+appliesTo:
+  - '@rudderjs/orm'
+  - '@rudderjs/orm-prisma'
+---
+
+Body
+`)
+    assert.deepStrictEqual(r.data['appliesTo'], ['@rudderjs/orm', '@rudderjs/orm-prisma'])
+  })
+
+  it('parses nested object fields', () => {
+    const r = parseFrontmatter(`---
+metadata:
+  author: rudderjs
+  version: '1.0'
+---
+Body
+`)
+    assert.deepStrictEqual(r.data['metadata'], { author: 'rudderjs', version: '1.0' })
+  })
+
+  it('strips quotes from scalar values', () => {
+    const r = parseFrontmatter(`---
+trigger: "use when X happens"
+skip: 'use when Y'
+---
+`)
+    assert.strictEqual(r.data['trigger'], 'use when X happens')
+    assert.strictEqual(r.data['skip'], 'use when Y')
+  })
+})
+
+// ─── generateClaudeMd ────────────────────────────────────
+
+describe('generateClaudeMd', () => {
+  const sampleInput = {
+    cwd: '/tmp/fake-project',
+    packages: [
+      { name: '@rudderjs/core', shortName: 'core', hasGuideline: true },
+      { name: '@rudderjs/ai',   shortName: 'ai',   hasGuideline: true },
+      { name: '@rudderjs/foo',  shortName: 'foo',  hasGuideline: false }, // no guideline
+    ],
+    skills: [
+      {
+        name:    'orm-models',
+        trigger: 'editing a Model',
+        skip:    'reading from a route handler',
+      },
+    ],
+    nodeVersion: 'v22.0.0',
+  }
+
+  it('wraps output in <rudderjs-boost-guidelines> tags', () => {
+    const out = generateClaudeMd(sampleInput)
+    assert.ok(out.startsWith('<rudderjs-boost-guidelines>'))
+    assert.ok(out.trimEnd().endsWith('</rudderjs-boost-guidelines>'))
+  })
+
+  it('emits the three section dividers', () => {
+    const out = generateClaudeMd(sampleInput)
+    assert.ok(out.includes('=== foundation rules ==='))
+    assert.ok(out.includes('=== boost rules ==='))
+    assert.ok(out.includes('=== skills activation ==='))
+  })
+
+  it('lists foundational context with node + every package', () => {
+    const out = generateClaudeMd(sampleInput)
+    assert.ok(out.includes('- node — v22.0.0'))
+    assert.ok(out.includes('- @rudderjs/core'))
+    assert.ok(out.includes('- @rudderjs/ai'))
+    assert.ok(out.includes('- @rudderjs/foo'))
+  })
+
+  it('only emits pointer lines for packages with a guideline', () => {
+    const out = generateClaudeMd(sampleInput)
+    assert.ok(out.includes('`@rudderjs/core` → `.ai/guidelines/core.md`'))
+    assert.ok(out.includes('`@rudderjs/ai` → `.ai/guidelines/ai.md`'))
+    assert.ok(!out.includes('`@rudderjs/foo` → `.ai/guidelines/foo.md`'))
+  })
+
+  it('renders skill activation with trigger + skip', () => {
+    const out = generateClaudeMd(sampleInput)
+    assert.ok(out.includes('`orm-models` — **ACTIVATE when:** editing a Model. **SKIP when:** reading from a route handler.'))
+  })
+
+  it('lists every MCP tool', () => {
+    const out = generateClaudeMd(sampleInput)
+    for (const tool of ['app_info', 'db_schema', 'route_list', 'model_list', 'config_get', 'db_query', 'last_error', 'read_logs', 'browser_logs', 'get_absolute_url', 'search_docs', 'commands_list', 'command_run']) {
+      assert.ok(out.includes(`\`${tool}\``), `expected MCP tool ${tool} in output`)
+    }
+  })
+
+  it('produces a compact output under 200 lines for typical inputs', () => {
+    const out = generateClaudeMd(sampleInput)
+    const lines = out.split('\n').length
+    assert.ok(lines < 200, `expected < 200 lines, got ${lines}`)
+  })
+
+  it('omits Skills Activation section when no skills supplied', () => {
+    const out = generateClaudeMd({ ...sampleInput, skills: [] })
+    assert.ok(!out.includes('=== skills activation ==='))
+    assert.ok(!out.includes('# Skills Activation'))
   })
 })

@@ -9,6 +9,9 @@
     "@rudderjs/boost",
     "@rudderjs/broadcast",
     "@rudderjs/cache",
+    "@rudderjs/cashier-paddle",
+    "@rudderjs/concurrency",
+    "@rudderjs/console",
     "@rudderjs/contracts",
     "@rudderjs/core",
     "@rudderjs/hash",
@@ -24,11 +27,12 @@
     "@rudderjs/orm",
     "@rudderjs/orm-prisma",
     "@rudderjs/passport",
+    "@rudderjs/pennant",
+    "@rudderjs/process",
     "@rudderjs/pulse",
     "@rudderjs/queue",
     "@rudderjs/queue-bullmq",
     "@rudderjs/router",
-    "@rudderjs/console",
     "@rudderjs/schedule",
     "@rudderjs/server-hono",
     "@rudderjs/session",
@@ -36,9 +40,18 @@
     "@rudderjs/support",
     "@rudderjs/sync",
     "@rudderjs/telescope",
+    "@rudderjs/terminal",
     "@rudderjs/view",
     "@rudderjs/vite",
     "@rudderjs/cli"
   ],
-  "generatedAt": "2026-04-17T23:06:56.735Z"
+  "skills": [
+    "ai-agents",
+    "ai-tools",
+    "auth-setup",
+    "mcp-servers",
+    "orm-models",
+    "controller-views"
+  ],
+  "generatedAt": "2026-05-11T22:05:05.612Z"
 }

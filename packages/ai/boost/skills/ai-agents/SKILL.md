@@ -1,6 +1,13 @@
 ---
 name: ai-agents
 description: Building AI agents with tools, streaming, conversation memory, approval flows, and middleware in RudderJS
+license: MIT
+appliesTo:
+  - '@rudderjs/ai'
+trigger: building an `Agent` class, calling `Agent.prompt()`/`.stream()`, defining `tools()` or `middleware()`, or wiring conversations / failover
+skip: writing a tool definition by itself — load `ai-tools` instead
+metadata:
+  author: rudderjs
 ---
 
 # AI Agents

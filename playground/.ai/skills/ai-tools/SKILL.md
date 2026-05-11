@@ -1,6 +1,13 @@
 ---
 name: ai-tools
 description: Defining server and client tools with Zod schemas, approval gates, streaming yields, and modelOutput for RudderJS AI agents
+license: MIT
+appliesTo:
+  - '@rudderjs/ai'
+trigger: writing a `toolDefinition()`, defining server or client tools, adding streaming yields, or wiring approval gates
+skip: configuring an `Agent` class itself — load `ai-agents` instead
+metadata:
+  author: rudderjs
 ---
 
 # AI Tools

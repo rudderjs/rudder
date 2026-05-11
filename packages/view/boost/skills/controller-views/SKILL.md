@@ -1,6 +1,13 @@
 ---
 name: controller-views
 description: Creating controller-returned views with route overrides, multi-framework support, and the html tagged template in RudderJS
+license: MIT
+appliesTo:
+  - '@rudderjs/view'
+trigger: creating files in `app/Views/`, returning `view('id', props)` from a route handler, or overriding the view-id → URL mapping
+skip: working with Vike `+Page.tsx` / `+config.ts` directly — that's outside `app/Views/`
+metadata:
+  author: rudderjs
 ---
 
 # Controller Views
