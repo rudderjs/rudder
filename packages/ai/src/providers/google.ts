@@ -704,12 +704,19 @@ class GoogleVectorStoreAdapter implements VectorStoreAdapter {
 
     // Path 2: upload a local file directly. Either `filePath` or
     // `fileBuffer` is required — Gemini's SDK accepts a path string OR a
-    // Blob.
+    // Blob. For `filePath`, the SDK infers mimeType from the extension;
+    // for `fileBuffer`, it reads `blob.type` which is empty on a
+    // untyped `new Blob([data])`, so we forward an explicit `mimeType`
+    // derived from `filename` to avoid `Can not determine mimeType`.
     if (opts.filePath || opts.fileBuffer) {
       const uploadConfig: Record<string, unknown> = {}
       if (customMetadata)        uploadConfig['customMetadata'] = customMetadata
       if (opts.chunkingStrategy) uploadConfig['chunkingConfig'] = opts.chunkingStrategy
       if (opts.fileBuffer?.filename) uploadConfig['displayName'] = opts.fileBuffer.filename
+      if (opts.fileBuffer?.filename) {
+        const mimeType = mimeTypeFromFilename(opts.fileBuffer.filename)
+        if (mimeType) uploadConfig['mimeType'] = mimeType
+      }
 
       const file = opts.filePath ?? new Blob([opts.fileBuffer!.data])
       const op = await client.fileSearchStores.uploadToFileSearchStore({
@@ -957,4 +964,38 @@ export function customMetadataToAttributes(
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Best-effort MIME type from a filename extension. Gemini's
+ * `uploadToFileSearchStore` requires a mimeType on Blob uploads (it
+ * reads `blob.type`, which is empty on untyped `new Blob([data])`).
+ *
+ * Coverage matches Gemini's supported FileSearchStore document formats.
+ * Unknown extensions return `''` — the caller drops the field so the
+ * Gemini SDK's own error fires loudly rather than silently picking a
+ * wrong type.
+ *
+ * @internal
+ */
+export function mimeTypeFromFilename(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop() ?? ''
+  switch (ext) {
+    case 'txt':  return 'text/plain'
+    case 'md':   return 'text/markdown'
+    case 'pdf':  return 'application/pdf'
+    case 'html':
+    case 'htm':  return 'text/html'
+    case 'json': return 'application/json'
+    case 'csv':  return 'text/csv'
+    case 'tsv':  return 'text/tab-separated-values'
+    case 'xml':  return 'application/xml'
+    case 'rtf':  return 'application/rtf'
+    case 'doc':  return 'application/msword'
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    case 'js':   return 'text/javascript'
+    case 'ts':   return 'text/x-typescript'
+    case 'py':   return 'text/x-python'
+    default:     return ''
+  }
 }
