@@ -90,6 +90,7 @@ export { AzureOpenAIProvider, type AzureOpenAIConfig } from './providers/azure.j
 export { CohereProvider, type CohereConfig } from './providers/cohere.js'
 export { JinaProvider, type JinaConfig } from './providers/jina.js'
 export { ElevenLabsProvider, type ElevenLabsConfig, DEFAULT_TTS_MODEL_ID, DEFAULT_VOICE_ID } from './providers/elevenlabs.js'
+export { VoyageProvider, type VoyageConfig, type VoyageEmbedExtras } from './providers/voyage.js'
 export { OpenRouterProvider, type OpenRouterConfig } from './providers/openrouter.js'
 export { BedrockProvider, type BedrockConfig } from './providers/bedrock.js'
 
