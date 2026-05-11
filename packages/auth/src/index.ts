@@ -12,6 +12,10 @@ declare module '@rudderjs/contracts' {
   }
 }
 
+// Pulls in the Vike.PageContext.user augmentation so app code can read
+// `pageContext.user` with full typing when this package is installed.
+import './types/vike.js'
+
 // ─── Re-exports ───────────────────────────────────────────
 
 export { Auth, auth } from './auth-manager.js'
@@ -205,5 +209,30 @@ export class AuthProvider extends ServiceProvider {
     // API routes opt into bearer auth with `RequireBearer()` from @rudderjs/passport
     // or `RequireAuth('api')` with a token-based guard.
     appendToGroup('web', AuthMiddleware())
+
+    // Register a Vike page-context enhancer that exposes the current user
+    // on `pageContext.user`. `@rudderjs/vite` is an optional peer — apps
+    // without it (e.g. API-only services) silently skip this registration.
+    await registerVikeUserEnhancer()
+  }
+}
+
+async function registerVikeUserEnhancer(): Promise<void> {
+  try {
+    const mod = await import('@rudderjs/vite/page-context-enhancers').catch(() => null) as
+      | { registerPageContextEnhancer?: (fn: (pc: { user?: AuthUser | null }) => Promise<void> | void) => void }
+      | null
+    if (!mod?.registerPageContextEnhancer) return
+
+    mod.registerPageContextEnhancer(async (pageContext) => {
+      try {
+        const u = await Auth.user()
+        pageContext.user = u ? userToPlain(u) : null
+      } catch {
+        pageContext.user = null
+      }
+    })
+  } catch {
+    // Optional peer not installed — quietly skip.
   }
 }

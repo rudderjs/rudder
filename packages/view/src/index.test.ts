@@ -122,3 +122,60 @@ describe('view() + isViewResponse()', () => {
     assert.equal(s.toString(), '<b>bold</b>')
   })
 })
+
+// ─── view() options.headers ───────────────────────────────
+
+describe('view() with options.headers', () => {
+  it('stores plain-object headers on the response', () => {
+    const r = view('marketing.pricing', {}, {
+      headers: { 'cache-control': 'public, max-age=3600' },
+    })
+    assert.deepEqual(r.resolveHeaders(), { 'cache-control': 'public, max-age=3600' })
+  })
+
+  it('resolves function-form headers at call time', () => {
+    let count = 0
+    const r = view('admin.dashboard', {}, {
+      headers: () => ({ 'x-nonce': String(++count) }),
+    })
+    assert.deepEqual(r.resolveHeaders(), { 'x-nonce': '1' })
+    assert.deepEqual(r.resolveHeaders(), { 'x-nonce': '2' })
+  })
+
+  it('returns {} when no headers option provided', () => {
+    const r = view('home', {})
+    assert.deepEqual(r.resolveHeaders(), {})
+  })
+
+  it('drops reserved framework-owned headers (set-cookie, vary)', () => {
+    const r = view('home', {}, {
+      headers: {
+        'cache-control': 'public, max-age=60',
+        'set-cookie':    'session=hijack',
+        'vary':          'cookie',
+      },
+    })
+    assert.deepEqual(r.resolveHeaders(), { 'cache-control': 'public, max-age=60' })
+  })
+
+  it('drops x-rudderjs-* prefixed headers', () => {
+    const r = view('home', {}, {
+      headers: {
+        'cache-control':       'public',
+        'x-rudderjs-internal': 'leak',
+      },
+    })
+    assert.deepEqual(r.resolveHeaders(), { 'cache-control': 'public' })
+  })
+
+  it('treats reserved header check case-insensitively', () => {
+    const r = view('home', {}, {
+      headers: {
+        'cache-control': 'public',
+        'Set-Cookie':    'foo=bar',
+        'Vary':          'cookie',
+      },
+    })
+    assert.deepEqual(r.resolveHeaders(), { 'cache-control': 'public' })
+  })
+})
