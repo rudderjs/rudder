@@ -36,7 +36,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | B5 | OpenRouter provider ✓ | S (~3 d) | Routing/failover layer popular for cost optimization. *Shipped 2026-05-10.* |
 | B6 | `broadcastOnQueue()` integration | S (~2 d) | Background AI → live UI without polling. We have `@rudderjs/broadcast` + `queue()` separately; just glue. |
 | B7 | Vector storage in ORM + `SimilaritySearch` tool | M (~1 wk) | Lives in `@rudderjs/orm`, not `ai`. Real RAG ergonomics. |
-| B8 | Hosted vector stores + `FileSearch` provider tool | M (~1 wk) | Wraps OpenAI/Gemini hosted stores. |
+| B8 | Hosted vector stores + `fileSearch` provider tool ✓ | M (~1 wk) | OpenAI hosted stores + native `file_search` agent tool; `WebSearch` retrofit (Anthropic + Gemini native) as a sidecar; local pgvector fallback closes the loop. *Shipped 2026-05-11 — Phase 1 #379, Phase 2 #380, Phase 2.x #381, Phase 3 (this PR). Gemini hosted RAG deferred to B8.5.* |
 | B9 | ElevenLabs provider | S (~2 d) | Premium TTS/STT. |
 | B10 | VoyageAI provider | S (~2 d) | Best-in-class embeddings + reranking. |
 
