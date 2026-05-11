@@ -142,6 +142,38 @@ class CounterAgent extends Agent {
 
 **Client tools** — omit `.server()` and the loop pauses, surfacing the call as `pendingClientToolCalls` on the response so the browser can execute it and resume. See the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai) for the resume protocol.
 
+## Hosted vector stores & RAG
+
+`fileSearch({ stores })` is a first-class agent tool for retrieval-augmented generation backed by a provider-hosted vector store. The provider runs ingestion, chunking, embedding, and search server-side; the model invokes the native tool block (OpenAI's `file_search` or Gemini's `fileSearch`) and the results land inline in the assistant reply — no tool round-trip, no `execute` to write.
+
+```ts
+import { Agent, VectorStores, fileSearch } from '@rudderjs/ai'
+
+// 1. Manage the store
+const kb = await VectorStores.create('Knowledge Base')          // OpenAI by default
+await kb.add({ filePath: './report.pdf', attributes: { author: 'Alice', year: 2026 } })
+
+// 2. Wire it into an agent
+class SupportAgent extends Agent {
+  model() { return 'openai/gpt-4o' }
+  tools() {
+    return [
+      fileSearch({
+        stores:     [kb.id],
+        where:      { author: 'Alice', year: 2026 },   // server-side metadata filter
+        maxResults: 10,
+      }),
+    ]
+  }
+}
+```
+
+Both **OpenAI** (`vectorStores.*`) and **Gemini** (`fileSearchStores`) are supported — same `VectorStores` façade, same `fileSearch({ stores })` surface. Pass `{ provider: 'google' }` to `VectorStores.create(...)` for Gemini.
+
+For self-hosted RAG over a local Postgres + pgvector model, `fileSearch({ ..., fallback })` delegates non-hosted providers to a `similaritySearch` over an ORM model you own — same agent prompt across hosted and self-hosted.
+
+See [Vector Stores](./vector-stores) for the full surface, provider-differences table, and testing patterns.
+
 ## Streaming
 
 `agent.stream(...)` returns `{ stream, response }` — a chunk iterator plus a promise that resolves to the full `AgentResponse` after the loop finishes:
