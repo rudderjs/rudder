@@ -7,16 +7,16 @@ import { Cache } from '@rudderjs/cache'
 import { Storage } from '@rudderjs/storage'
 import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
 import { notify } from '@rudderjs/notification'
-import { UserService } from '../app/Services/UserService.js'
-import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
-import { CreateUserRequest } from '../app/Http/Requests/CreateUserRequest.js'
-import { TestController } from '../app/Http/Controllers/TestController.js'
-import { AppError } from '../app/Exceptions/AppError.js'
+import { UserService } from 'App/Services/UserService.js'
+import { WelcomeNotification } from 'App/Notifications/WelcomeNotification.js'
+import { CreateUserRequest } from 'App/Http/Requests/CreateUserRequest.js'
+import { TestController } from 'App/Http/Controllers/TestController.js'
+import { AppError } from 'App/Exceptions/AppError.js'
 import { Model } from '@rudderjs/orm'
-import { Post } from '../app/Models/Post.js'
-import { Video } from '../app/Models/Video.js'
-import { Comment } from '../app/Models/Comment.js'
-import { Tag } from '../app/Models/Tag.js'
+import { Post } from 'App/Models/Post.js'
+import { Video } from 'App/Models/Video.js'
+import { Comment } from 'App/Models/Comment.js'
+import { Tag } from 'App/Models/Tag.js'
 import { z } from 'zod'
 
 // Register decorator-based controllers
@@ -488,7 +488,7 @@ Route.get('/api/polymorphic/tags/:id/items', async (req, res) => {
 
 // POST /api/queue/dispatch — enqueue ExampleJob. Worker drains it during dev.
 Route.post('/api/queue/dispatch', async (_req, res) => {
-  const { ExampleJob } = await import('../app/Jobs/ExampleJob.js')
+  const { ExampleJob } = await import('App/Jobs/ExampleJob.js')
   await ExampleJob.dispatch('hello from /api/queue/dispatch').send()
   res.json({ ok: true, queue: 'default', dispatchedAt: new Date().toISOString() })
 })
@@ -500,7 +500,7 @@ Route.post('/api/mail/send', async (req, res) => {
     return res.status(422).json({ message: 'Body must be { to, subject }' })
   }
   const { Mail }     = await import('@rudderjs/mail')
-  const { DemoMail } = await import('../app/Mail/DemoMail.js')
+  const { DemoMail } = await import('App/Mail/DemoMail.js')
   await Mail.to(body.to).send(new DemoMail(body.subject))
   return res.json({
     ok:      true,
@@ -741,7 +741,7 @@ Route.post('/api/browser/run', async (req, res) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto(url, { timeout: 15_000 })
 
-    const { BrowserAgent } = await import('../app/Agents/BrowserAgent.js')
+    const { BrowserAgent } = await import('App/Agents/BrowserAgent.js')
     const agent = new BrowserAgent(page as never)
     const response = await agent.prompt(query)
 
@@ -837,7 +837,7 @@ Route.get('/api/passport/me', async (req, res) => {
 // GET  /api/tokens                           — list current user's tokens
 // DELETE /api/tokens                         — revoke all of the user's tokens
 import { RequireAuth } from '@rudderjs/auth'
-import { User } from '../app/Models/User.js'
+import { User } from 'App/Models/User.js'
 
 Route.post('/api/tokens', async (req, res) => {
   const { name, scopes } = req.body as { name?: string; scopes?: string[] }

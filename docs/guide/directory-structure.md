@@ -74,6 +74,29 @@ Your application code, organized by concern.
 
 PascalCase filenames in `Views/` map to kebab-case ids: `AdminUsers.tsx` → `admin-users`. Nested directories use dotted ids: `Auth/Login.tsx` → `auth.login`.
 
+#### Importing from `app/`
+
+Use the `App/` path alias instead of relative imports — it works the same way `App\\` does in Laravel:
+
+```ts
+// routes/web.ts
+import { Route } from '@rudderjs/router'
+import { User } from 'App/Models/User.js'                      // ✅ alias
+import { AuthController } from 'App/Http/Controllers/AuthController.js'
+
+Route.get('/users', async () => User.all())
+```
+
+```ts
+// ❌ Avoid — brittle and verbose, especially as files move
+import { User } from '../app/Models/User.js'
+import { User } from '../../app/Models/User.js'
+```
+
+The alias resolves via `tsconfig.json` `paths` (typecheck + IDE jump-to-definition) and the `@rudderjs/vite` plugin (dev + build). Both are wired automatically by `create-rudder-app`. Sibling imports inside `app/` itself stay relative — `App/` is for code outside the directory reaching in.
+
+A separate `@/` alias points at `src/` for non-`app/` code like CSS entry points: `import '@/index.css'`.
+
 ### `routes/`
 
 Side-effect files — they run for their side effects (registering routes or commands) and export nothing.

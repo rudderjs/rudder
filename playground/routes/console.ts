@@ -2,8 +2,8 @@ import { Rudder } from '@rudderjs/console'
 import { Schedule } from '@rudderjs/schedule'
 import { Cache } from '@rudderjs/cache'
 import { terminal } from '@rudderjs/terminal'
-import { User } from '../app/Models/User.js'
-import { Greet } from '../app/Commands/Greet.js'
+import { User } from 'App/Models/User.js'
+import { Greet } from 'App/Commands/Greet.js'
 
 Rudder.register(Greet)
 
