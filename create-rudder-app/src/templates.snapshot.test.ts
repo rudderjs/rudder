@@ -60,7 +60,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-09 (add @rudderjs/terminal opt-in).
+  // Baseline last captured 2026-05-12 — swap `} satisfies Config` for
+  // `} as unknown as Config` in pages/+config.ts templates (workaround for
+  // vikejs/vike#3251 — extends + exactOptionalPropertyTypes incompatibility).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -69,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65931
-const EXPECTED_CONTENT_HASH = 'd8972aef55e7a26a6e5c14ec10a3243d02d34e1708768822fa0f60e1468b1a38'
+const EXPECTED_TOTAL_BYTES = 65951
+const EXPECTED_CONTENT_HASH = 'cb17271770a2f72ff997eeffac4a9949b4ddfa0a06ae591a3dd21fce30950b09'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

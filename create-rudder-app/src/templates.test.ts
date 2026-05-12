@@ -645,7 +645,10 @@ describe('getTemplates() — +server.ts and vike-photon removal', () => {
     const config = files['pages/+config.ts']!
     assert.ok(!config.includes('vike-photon'))
     assert.ok(!config.includes('photon'))
-    assert.ok(config.includes('satisfies Config'))
+    // Uses `as unknown as Config` (not `satisfies Config`) — workaround for
+    // vikejs/vike#3251 (extends rejects vike-*/config objects under
+    // exactOptionalPropertyTypes, which is in our base tsconfig).
+    assert.ok(config.includes('as unknown as Config'))
   })
 })
 
