@@ -13,14 +13,14 @@ ${rendererImport}
 
 export default {
   extends: [${rendererVar}],
-} satisfies Config
+} as unknown as Config
 `
   }
 
   // Multi-framework: no renderer in root config — each page picks its own
   return `import type { Config } from 'vike/types'
 
-export default {} satisfies Config
+export default {} as unknown as Config
 `
 }
 
@@ -32,7 +32,7 @@ import vikeVue from 'vike-vue/config'
 
 export default {
   extends: vikeVue,
-} satisfies Config
+} as unknown as Config
 `
     case 'solid':
       return `import type { Config } from 'vike/types'
@@ -40,7 +40,7 @@ import vikeSolid from 'vike-solid/config'
 
 export default {
   extends: vikeSolid,
-} satisfies Config
+} as unknown as Config
 `
     default: // react
       return `import type { Config } from 'vike/types'
@@ -48,7 +48,7 @@ import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
-} satisfies Config
+} as unknown as Config
 `
   }
 }
