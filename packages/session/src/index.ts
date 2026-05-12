@@ -3,6 +3,10 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 
+// Side-effect import — pulls in the Vike.PageContext.flash augmentation so
+// app code can read pageContext.flash with full typing.
+import './types/vike.js'
+
 // ─── Module Augmentation ───────────────────────────────────
 
 declare module '@rudderjs/contracts' {
@@ -109,6 +113,14 @@ export class SessionInstance {
     return (key in this._flash ? this._flash[key] : fallback) as T | undefined
   }
 
+  /**
+   * Return a copy of every flash value set by the *previous* request.
+   * Useful for serializing flash messages into pageContext for SSR views.
+   */
+  allFlash(): Record<string, unknown> {
+    return { ...this._flash }
+  }
+
   has(key: string): boolean {
     return key in this._data
   }
@@ -207,6 +219,11 @@ export class Session {
 
   static getFlash<T>(key: string, fallback?: T): T | undefined {
     return this.current().getFlash<T>(key, fallback)
+  }
+
+  /** All flash values set by the previous request. Returns `{}` outside an ALS session context. */
+  static allFlash(): Record<string, unknown> {
+    return this.maybeCurrent()?.allFlash() ?? {}
   }
 
   static has(key: string): boolean {
@@ -505,5 +522,25 @@ export class SessionProvider extends ServiceProvider {
     // flow) need session; api routes are stateless. Apps that want session on
     // api routes can call SessionMiddleware() per-route.
     appendToGroup('web', mw)
+
+    // Register a Vike page-context enhancer so views can read flash messages
+    // from `pageContext.flash`. `@rudderjs/vite` is an optional peer — apps
+    // without it (API-only services) silently skip this registration.
+    await registerVikeFlashEnhancer()
+  }
+}
+
+async function registerVikeFlashEnhancer(): Promise<void> {
+  try {
+    const mod = await import('@rudderjs/vite/page-context-enhancers').catch(() => null) as
+      | { registerPageContextEnhancer?: (fn: (pc: { flash?: Record<string, unknown> }) => void) => void }
+      | null
+    if (!mod?.registerPageContextEnhancer) return
+
+    mod.registerPageContextEnhancer((pageContext) => {
+      pageContext.flash = Session.allFlash()
+    })
+  } catch {
+    // Optional peer not installed — quietly skip.
   }
 }

@@ -183,6 +183,26 @@ describe('SessionInstance — flash', () => {
     assert.strictEqual(s.getFlash('msg'), undefined)
   })
 
+  it('allFlash() returns every flash value set by the previous request', async () => {
+    const { second } = await twoRequests((s) => {
+      s.flash('success', 'Saved!')
+      s.flash('user', { id: 1 })
+    })
+    assert.deepStrictEqual(second.allFlash(), { success: 'Saved!', user: { id: 1 } })
+  })
+
+  it('allFlash() returns {} when the previous request set no flash', async () => {
+    const { second } = await twoRequests(() => { /* no flash */ })
+    assert.deepStrictEqual(second.allFlash(), {})
+  })
+
+  it('allFlash() returns a copy — mutation does not affect the session', async () => {
+    const { second } = await twoRequests((s) => { s.flash('msg', 'hello') })
+    const snapshot = second.allFlash()
+    snapshot['msg'] = 'tampered'
+    assert.strictEqual(second.getFlash('msg'), 'hello')
+  })
+
   it('regular session data survives across requests', async () => {
     const { second } = await twoRequests(s => s.put('user', 'alice'))
     assert.strictEqual(second.get('user'), 'alice')
