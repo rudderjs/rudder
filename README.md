@@ -49,6 +49,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
 - **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
 - **Pay-as-you-go** — 46 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages.
 - **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
 
