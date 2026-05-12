@@ -57,7 +57,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## A taste of RudderJS
 
-Seven features, seven snippets. Each one is real code from the playground — copy, run, ship.
+Thirteen features, thirteen snippets. Each one is real code from the playground — copy, run, ship.
 
 ### 1. Bootstrap — the whole app shape in one file
 
@@ -106,7 +106,36 @@ Route.post('/api/users', async (req, res) => res.json({ created: req.body }))
 
 Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default.
 
-### 3. Console & Terminal — rudder commands + Ink
+### 3. Controllers, middleware & views
+
+```ts
+// app/Http/Controllers/UserController.ts
+import { Controller, Get, Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
+import { view } from '@rudderjs/view'
+import { User } from 'App/Models/User.js'
+
+@Controller('/users')
+export class UserController {
+  @Get('/')
+  @Middleware([RateLimit.perMinute(60)])
+  async index() {
+    const users = await User.all()
+    return view('users.index', { users })
+  }
+}
+```
+
+```tsx
+// app/Views/Users/Index.tsx — typed props, SSR'd through Vike
+export default function Index({ users }: { users: User[] }) {
+  return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
+}
+```
+
+Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
+
+### 4. Console & Terminal — rudder commands + Ink
 
 ```ts
 // routes/console.ts — wire rudder commands
@@ -140,35 +169,6 @@ export default function Dashboard({ users, orders }: { users: number; orders: nu
 ```
 
 Run with `pnpm rudder users:count` or `pnpm rudder dashboard`. Scaffold new ones with `make:command` (plain handlers) or `make:terminal` (Ink components). Class-based commands extend `Command` for DI + signature parsing.
-
-### 4. Controllers, middleware & views
-
-```ts
-// app/Http/Controllers/UserController.ts
-import { Controller, Get, Middleware } from '@rudderjs/router'
-import { RateLimit } from '@rudderjs/middleware'
-import { view } from '@rudderjs/view'
-import { User } from 'App/Models/User.js'
-
-@Controller('/users')
-export class UserController {
-  @Get('/')
-  @Middleware([RateLimit.perMinute(60)])
-  async index() {
-    const users = await User.all()
-    return view('users.index', { users })
-  }
-}
-```
-
-```tsx
-// app/Views/Users/Index.tsx — typed props, SSR'd through Vike
-export default function Index({ users }: { users: User[] }) {
-  return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
-}
-```
-
-Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
 
 ### 5. ORM — active record, Prisma or Drizzle
 
@@ -263,6 +263,151 @@ text.insert(0, 'Hello, collaborator!')
 ```
 
 Conflict-free merging, offline support, presence — same port as your HTTP server. Persist to memory, Redis, or Prisma.
+
+### 9. Auth — guards, policies, vendored views
+
+```ts
+// config/auth.ts
+import { User } from 'App/Models/User.js'
+
+export default {
+  defaults:  { guard: 'web' },
+  guards:    { web: { driver: 'session', provider: 'users' } },
+  providers: { users: { driver: 'eloquent', model: User } },
+}
+```
+
+```ts
+// routes/web.ts
+import { Route } from '@rudderjs/router'
+import { auth, Gate } from '@rudderjs/auth'
+import { registerAuthRoutes } from '@rudderjs/auth/routes'
+
+registerAuthRoutes(Route)   // /login, /register, /forgot-password, /reset-password
+
+Gate.define('edit-post', (user, post: { authorId: number }) => user?.id === post.authorId)
+
+Route.get('/me', async (req, res) => {
+  const user = await auth().user()
+  return res.json({ user })
+})
+```
+
+`AuthMiddleware` auto-installs on the web group — `req.user` is populated for every web route. Login/register pages are vendored into `app/Views/Auth/` at scaffold time so the app owns the files. `Gate` + `Policy` mirror Laravel's authorization API.
+
+### 10. Validation — `FormRequest` + Zod
+
+```ts
+// app/Http/Requests/CreateUserRequest.ts
+import { FormRequest, z } from '@rudderjs/core'
+
+const schema = z.object({
+  name:  z.string().min(2, 'Name must be at least 2 characters.'),
+  email: z.string().email('Invalid email address.'),
+  role:  z.enum(['admin', 'user']).optional().default('user'),
+})
+
+export class CreateUserRequest extends FormRequest<typeof schema> {
+  rules() { return schema }
+}
+```
+
+```ts
+// routes/api.ts
+Route.post('/api/users', async (req, res) => {
+  const data = await new CreateUserRequest().validate(req)
+  // data is typed: { name: string; email: string; role: 'admin' | 'user' }
+  return res.json({ created: data })
+})
+```
+
+Validation failures throw a `ValidationError` that the framework auto-renders as `422 { errors: {...} }` for JSON requests, or flashes back to the form with `old` data on web routes. Lifecycle hooks (`prepareForValidation`, `messages`, `after`, `passedValidation`, `failedValidation`) match Laravel's `FormRequest`.
+
+### 11. MCP servers — expose your app to AI agents
+
+```ts
+// app/Mcp/EchoServer.ts
+import { McpServer, Name, Version, Instructions } from '@rudderjs/mcp'
+import { EchoTool } from './EchoTool.js'
+
+@Name('echo-server')
+@Version('1.0.0')
+@Instructions('A demo MCP server that echoes messages back.')
+export class EchoServer extends McpServer {
+  protected tools = [EchoTool]
+}
+```
+
+```ts
+// app/Mcp/EchoTool.ts — typed input, DI-injected dependencies
+import { z } from 'zod'
+import { McpTool, McpResponse, Description, Handle } from '@rudderjs/mcp'
+import { GreetingService } from 'App/Services/GreetingService.js'
+
+@Description("Greets someone by name using the app's GreetingService")
+export class EchoTool extends McpTool {
+  schema() { return z.object({ name: z.string().describe('The name to greet') }) }
+
+  @Handle(GreetingService)
+  async handle(input: Record<string, unknown>, greeter: GreetingService) {
+    return McpResponse.text(greeter.greet(String(input['name'])))
+  }
+}
+```
+
+Mount over HTTP or stdio. Inspect tool calls live with `pnpm rudder mcp:inspector`. Bridge an `Agent` straight to MCP with `mcpServerFromAgent(MyAgent)` — Laravel doesn't ship this; RudderJS does.
+
+### 12. Queue — typed jobs, retries, priorities
+
+```ts
+// app/Jobs/WelcomeUserJob.ts
+import { Job } from '@rudderjs/queue'
+
+export class WelcomeUserJob extends Job {
+  static override queue   = 'default'
+  static override retries = 3
+
+  constructor(private readonly name: string, private readonly email: string) {
+    super()
+  }
+
+  async handle() {
+    // send mail, sync CRM, whatever
+  }
+
+  failed(error: unknown) {
+    console.error('[WelcomeUserJob] failed:', error)
+  }
+}
+```
+
+```ts
+// anywhere — dispatch from a controller, event listener, or another job
+await WelcomeUserJob.dispatch('Ada', 'ada@example.com').send()
+await WelcomeUserJob.dispatch('VIP', 'vip@example.com').onQueue('priority').send()
+```
+
+Sync driver for dev, BullMQ + Inngest adapters for prod. Run workers with `pnpm rudder queue:work`. Monitor live with `@rudderjs/horizon` (Laravel Horizon equivalent).
+
+### 13. Schedule — fluent cron, no crontab edits
+
+```ts
+// routes/console.ts
+import { Schedule } from '@rudderjs/schedule'
+import { Cache } from '@rudderjs/cache'
+
+Schedule.call(async () => {
+  await Cache.forget('users:all')
+}).everyFiveMinutes().description('Flush users:all cache')
+
+Schedule.call(() => sendDigest())
+  .weekdays()
+  .dailyAt('9:00')
+  .timezone('America/New_York')
+  .description('Morning digest')
+```
+
+Run the scheduler with `pnpm rudder schedule:work` (long-lived) or `schedule:run` (one-shot, cron-driven). Frequency helpers, timezones, overlap prevention, and per-task descriptions surface in `pnpm rudder schedule:list`.
 
 ---
 
