@@ -31,9 +31,9 @@ export default {
   previousKeys: env('APP_PREVIOUS_KEYS', '').split(',').filter(Boolean),
 }
 
-// bootstrap/providers.ts
-import { CryptProvider } from '@rudderjs/crypt'
-export default [CryptProvider]
+// bootstrap/providers.ts — `CryptProvider` is auto-discovered; run `pnpm rudder providers:discover`
+import { defaultProviders } from '@rudderjs/core'
+export default [...(await defaultProviders())]
 ```
 
 ## Usage

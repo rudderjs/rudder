@@ -10,10 +10,12 @@ pnpm add @rudderjs/schedule
 
 ## Setup
 
+`ScheduleProvider` is auto-discovered. Install the package, run `pnpm rudder providers:discover`, and the default `bootstrap/providers.ts` picks it up:
+
 ```ts
 // bootstrap/providers.ts
-import { ScheduleProvider } from '@rudderjs/schedule'
-export default [ScheduleProvider]
+import { defaultProviders } from '@rudderjs/core'
+export default [...(await defaultProviders())]
 ```
 
 ```ts

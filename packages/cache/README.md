@@ -10,10 +10,12 @@ pnpm add @rudderjs/cache
 
 ## Setup
 
+`CacheProvider` is auto-discovered. Install the package and run `pnpm rudder providers:discover` — your existing `bootstrap/providers.ts` doesn't need to change:
+
 ```ts
 // bootstrap/providers.ts
-import { CacheProvider } from '@rudderjs/cache'
-export default [CacheProvider]
+import { defaultProviders } from '@rudderjs/core'
+export default [...(await defaultProviders())]
 ```
 
 ## Cache Facade

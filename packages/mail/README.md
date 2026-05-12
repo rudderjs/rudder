@@ -34,11 +34,13 @@ export default {
 } satisfies MailConfig
 ```
 
+`MailProvider` is auto-discovered — install the package and run `pnpm rudder providers:discover`. The default `bootstrap/providers.ts` from `create-rudder-app` already picks it up:
+
 ```ts
 // bootstrap/providers.ts
-import { MailProvider } from '@rudderjs/mail'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [MailProvider]
+export default [...(await defaultProviders())]
 ```
 
 ## Defining Mailables

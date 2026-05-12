@@ -43,13 +43,13 @@ export default {
 
 ### 3. Register provider
 
+`LocalizationProvider` is auto-discovered. Install the package, run `pnpm rudder providers:discover`, and the default `bootstrap/providers.ts` picks it up:
+
 ```ts
 // bootstrap/providers.ts
-import { LocalizationProvider } from '@rudderjs/localization'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [
-  LocalizationProvider,
-]
+export default [...(await defaultProviders())]
 ```
 
 ---

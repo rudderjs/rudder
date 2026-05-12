@@ -24,9 +24,9 @@ export default {
   argon2: { memory: 65536, time: 3, threads: 4 },
 }
 
-// bootstrap/providers.ts
-import { HashProvider } from '@rudderjs/hash'
-export default [HashProvider]
+// bootstrap/providers.ts — `HashProvider` is auto-discovered; run `pnpm rudder providers:discover`
+import { defaultProviders } from '@rudderjs/core'
+export default [...(await defaultProviders())]
 ```
 
 ## Usage
