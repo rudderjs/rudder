@@ -10,16 +10,7 @@ pnpm add @rudderjs/context
 
 ## Setup
 
-Register the provider in `bootstrap/providers.ts`:
-
-```ts
-import { ContextProvider } from '@rudderjs/context'
-
-export default [
-  // ...other providers
-  ContextProvider,
-]
-```
+`ContextProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 Add the middleware in `bootstrap/app.ts`:
 

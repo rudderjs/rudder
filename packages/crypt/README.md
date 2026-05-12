@@ -31,10 +31,9 @@ export default {
   previousKeys: env('APP_PREVIOUS_KEYS', '').split(',').filter(Boolean),
 }
 
-// bootstrap/providers.ts
-import { CryptProvider } from '@rudderjs/crypt'
-export default [CryptProvider]
 ```
+
+`CryptProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ## Usage
 

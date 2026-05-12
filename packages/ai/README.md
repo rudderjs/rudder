@@ -70,10 +70,9 @@ export default {
   },
 }
 
-// bootstrap/providers.ts
-import { AiProvider } from '@rudderjs/ai/server'
-export default [AiProvider]
 ```
+
+`AiProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed. The class lives at `@rudderjs/ai/server` (the main entry is runtime-agnostic); auto-discovery reads `rudderjs.providerSubpath` and loads it for you.
 
 ## Usage
 

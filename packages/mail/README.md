@@ -34,12 +34,7 @@ export default {
 } satisfies MailConfig
 ```
 
-```ts
-// bootstrap/providers.ts
-import { MailProvider } from '@rudderjs/mail'
-
-export default [MailProvider]
-```
+`MailProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ## Defining Mailables
 

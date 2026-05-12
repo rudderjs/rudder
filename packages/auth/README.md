@@ -15,31 +15,13 @@ pnpm add @rudderjs/auth @rudderjs/hash @rudderjs/session
 import { User } from '../app/Models/User.js'
 
 export default {
-  defaults: {
-    guard: 'web',
-  },
-  guards: {
-    web: { driver: 'session', provider: 'users' },
-  },
-  providers: {
-    users: { driver: 'eloquent', model: User },
-  },
+  defaults: { guard: 'web' },
+  guards:   { web: { driver: 'session', provider: 'users' } },
+  providers:{ users: { driver: 'eloquent', model: User } },
 }
-
-// bootstrap/providers.ts
-import { SessionProvider } from '@rudderjs/session'
-import { HashProvider } from '@rudderjs/hash'
-import { AuthProvider } from '@rudderjs/auth'
-
-export default [
-  SessionProvider,
-  HashProvider,
-  AuthProvider,
-]
 ```
 
-> `AuthProvider` is the service-provider class — list it directly in the providers array.
-> `auth()` (lowercase) is the per-request helper — see below.
+`AuthProvider`, `SessionProvider`, and `HashProvider` are picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` (or `--install` during scaffold) is all that's needed.
 
 ## Usage
 

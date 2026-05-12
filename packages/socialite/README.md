@@ -27,10 +27,9 @@ export default {
   },
 }
 
-// bootstrap/providers.ts
-import { SocialiteProvider } from '@rudderjs/socialite'
-export default [SocialiteProvider]
 ```
+
+`SocialiteProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ## Usage
 
@@ -154,9 +153,9 @@ request shape — `@rudderjs/server-hono` already does this.
 ## Custom Providers
 
 ```ts
-import { SocialiteProvider, SocialUser, Socialite } from '@rudderjs/socialite'
+import { SocialiteDriver, SocialUser, Socialite } from '@rudderjs/socialite'
 
-class GitLabProvider extends SocialiteProvider {
+class GitLabProvider extends SocialiteDriver {
   protected defaultScopes() { return ['read_user'] }
   protected authUrl()  { return 'https://gitlab.com/oauth/authorize' }
   protected tokenUrl() { return 'https://gitlab.com/oauth/token' }

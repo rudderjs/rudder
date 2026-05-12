@@ -10,16 +10,7 @@ pnpm add @rudderjs/broadcast
 
 ## Setup
 
-Register the provider in `bootstrap/providers.ts`:
-
-```ts
-import { BroadcastingProvider } from '@rudderjs/broadcast'
-
-export default [
-  // ... other providers
-  BroadcastingProvider,
-]
-```
+`BroadcastingProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 Add a channels file to `bootstrap/app.ts`:
 

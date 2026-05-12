@@ -10,16 +10,7 @@ pnpm add @rudderjs/pennant
 
 ## Setup
 
-Register the provider in `bootstrap/providers.ts`:
-
-```ts
-import { PennantProvider } from '@rudderjs/pennant'
-
-export default [
-  // ...other providers
-  PennantProvider,
-]
-```
+`PennantProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ## Usage
 
