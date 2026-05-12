@@ -945,10 +945,12 @@ function runStreamWithMaybeAutoPersist(
 
 // ─── Helpers ─────────────────────────────────────────────
 
+function hasToolsMethod(a: Agent): a is Agent & HasTools {
+  return 'tools' in a && typeof (a as { tools?: unknown }).tools === 'function'
+}
+
 function getTools(a: Agent): AnyTool[] {
-  return 'tools' in a && typeof (a as any).tools === 'function'
-    ? (a as unknown as HasTools).tools()
-    : []
+  return hasToolsMethod(a) ? a.tools() : []
 }
 
 /**
@@ -964,10 +966,12 @@ interface ExtraMiddlewareOptions {
   [EXTRA_MIDDLEWARES]?: AiMiddleware[]
 }
 
+function hasMiddlewareMethod(a: Agent): a is Agent & HasMiddleware {
+  return 'middleware' in a && typeof (a as { middleware?: unknown }).middleware === 'function'
+}
+
 function getMiddleware(a: Agent, options?: AgentPromptOptions): AiMiddleware[] {
-  const own = 'middleware' in a && typeof (a as any).middleware === 'function'
-    ? (a as unknown as HasMiddleware).middleware()
-    : []
+  const own = hasMiddlewareMethod(a) ? a.middleware() : []
   const extras = (options as (AgentPromptOptions & ExtraMiddlewareOptions) | undefined)?.[EXTRA_MIDDLEWARES] ?? []
   return extras.length > 0 ? [...own, ...extras] : own
 }
@@ -1739,10 +1743,14 @@ function runAgentLoopStreamingOnce(a: Agent, input: string, options?: AgentPromp
 
     // Emit pending state to consumers via dedicated chunk types
     if (loopCtx.pendingClientToolCalls.length > 0) {
-      yield { type: 'pending-client-tools' as const, toolCalls: loopCtx.pendingClientToolCalls } as unknown as StreamChunk
+      yield { type: 'pending-client-tools', toolCalls: loopCtx.pendingClientToolCalls }
     }
     if (loopCtx.pendingApprovalToolCall) {
-      yield { type: 'pending-approval' as const, toolCall: loopCtx.pendingApprovalToolCall.toolCall, isClientTool: loopCtx.pendingApprovalToolCall.isClientTool } as unknown as StreamChunk
+      yield {
+        type:         'pending-approval',
+        toolCall:     loopCtx.pendingApprovalToolCall.toolCall,
+        isClientTool: loopCtx.pendingApprovalToolCall.isClientTool,
+      }
     }
 
     const result = buildAgentResponse(loopCtx)
