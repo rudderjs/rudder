@@ -90,6 +90,71 @@ Plain template literals do not escape — always use `html\`\`` in vanilla views
 
 Drop a `+Layout.tsx` under `pages/__view/` and Vike wraps every controller view with it. Nested layouts scope to subdirectories — `pages/__view/admin/+Layout.tsx` wraps only views under `app/Views/Admin/**`.
 
+### Per-page response headers
+
+`view()` takes an optional third argument for response headers — cache-control, CSP, anything else — without leaving the controller. Headers attach via `@rudderjs/vite`'s `+headersResponse` Vike hook (auto-installed in `pages/+headersResponse.ts` by the view scanner):
+
+```ts
+// Static headers
+Route.get('/pricing', async () => {
+  const plans = await Plan.all()
+  return view('marketing.pricing', { plans }, {
+    headers: { 'cache-control': 'public, max-age=3600, s-maxage=86400' },
+  })
+})
+
+// Function form — for per-request values like CSP nonces
+Route.get('/admin/dashboard', async () => {
+  const nonce = useCspNonce()
+  return view('admin.dashboard', await loadProps(), {
+    headers: () => ({
+      'content-security-policy': `script-src 'self' 'nonce-${nonce}'`,
+    }),
+  })
+}, [AuthMiddleware()])
+```
+
+Reserved headers the framework owns and you can't override: `set-cookie`, `vary`, anything matching `x-rudderjs-*`. These are silently dropped to prevent collisions with the server-hono response pipeline.
+
+### Reading framework state from views
+
+`@rudderjs/vite` ships a page-context enhancer registry. Framework packages register from their provider's `boot()` so per-request state lands on `pageContext` without a `+data.ts`:
+
+| Package | Adds to `pageContext` |
+|---|---|
+| `@rudderjs/auth` | `pageContext.user` — current authenticated user, or `null` for guests |
+| `@rudderjs/session` | `pageContext.flash` — flash bag carried over from the previous request |
+| `@rudderjs/localization` | `pageContext.locale` — resolved locale for the current request |
+
+```tsx
+// app/Views/Dashboard.tsx
+import { usePageContext } from 'vike-react/usePageContext'
+
+export default function Dashboard() {
+  const { user, locale, flash } = usePageContext()  // typed via Vike.PageContext augmentation
+  return (
+    <div>
+      <h1>Hello {user?.name ?? 'guest'}</h1>
+      {flash.success && <Banner>{flash.success}</Banner>}
+    </div>
+  )
+}
+```
+
+App code can register its own enhancers from a service provider:
+
+```ts
+import { registerPageContextEnhancer } from '@rudderjs/vite/page-context-enhancers'
+
+registerPageContextEnhancer(async (pageContext) => {
+  pageContext.tenant = await resolveTenantForRequest()
+})
+```
+
+Enhancers run in registration order on every render — keep them fast.
+
+The first sync also writes `pages/+onCreatePageContext.ts`, `pages/+onError.ts`, and `pages/+headersResponse.ts` re-export stubs. They're stock Vike hooks; you can overwrite any of them in place to customize, and the scanner won't replace your edits on subsequent runs.
+
 ## Vike pages
 
 Vike pages route by filesystem — the URL is the directory name under `pages/`. Each page is a directory containing `+`-prefixed files.

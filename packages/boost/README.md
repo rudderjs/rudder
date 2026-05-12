@@ -24,10 +24,13 @@ export default [..., BoostProvider]
 ### Quick Start
 
 ```bash
-rudder boost:install                        # Auto-detect agents, generate configs
-rudder boost:install --agent=claude-code    # Specific agent
-rudder boost:install --agent=cursor,copilot # Multiple agents
+rudder boost:install                          # Auto-detect agents, generate configs
+rudder boost:install --agent=claude-code      # Specific agent
+rudder boost:install --agent=cursor,copilot   # Multiple agents
+rudder boost:install --include-all-skills     # Install every shipped skill, even ones whose target package isn't present
 ```
+
+`boost:install` writes a `boost.json` at the project root recording the agents you selected and the skills it installed; `boost:update` reads it back to drive incremental re-scans without re-prompting. Commit `boost.json` so teammates and CI get the same agent configuration.
 
 ### Supported Agents
 
@@ -85,7 +88,22 @@ Each `@rudderjs/*` package can ship `boost/guidelines.md` and `boost/skills/*/SK
 
 - `.ai/guidelines/{package}.md` — per-package AI coding guidelines
 - `.ai/skills/*/SKILL.md` — on-demand task-specific knowledge modules
-- Per-agent guideline files (`CLAUDE.md`, `.cursorrules`, etc.) — concatenated guidelines
+- Per-agent guideline files (`CLAUDE.md`, `.cursorrules`, etc.) — concatenated guidelines, with foundational context (installed `@rudderjs/*` packages + versions, Boost MCP tool list) and a Skills Activation section listing each skill's ACTIVATE/SKIP heuristics
+
+### Skill targeting (`appliesTo`)
+
+A skill's frontmatter can declare `appliesTo: [<package>, ...]`. `boost:install` only installs the skill when at least one of those packages is present in the project — keeps the skills directory focused on what the project actually uses. Use `--include-all-skills` to bypass and install every shipped skill, even ones whose target package isn't installed.
+
+```yaml
+# boost/skills/orm-models/SKILL.md
+---
+name: orm-models
+appliesTo:
+  - @rudderjs/orm
+  - @rudderjs/orm-prisma
+trigger: when defining or editing ORM models
+---
+```
 
 ## Custom Agent Registration
 

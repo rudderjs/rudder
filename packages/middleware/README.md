@@ -103,7 +103,8 @@ All built-in middleware are **callable factory functions** — no `new`, no `.to
 Double-submit cookie CSRF protection. Sets a `csrf_token` cookie on GET requests and validates it on mutating requests via `X-CSRF-Token` header or `_token` body field. Returns `419` on mismatch.
 
 ```ts
-import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
+// Server side — middleware wiring
+import { CsrfMiddleware } from '@rudderjs/middleware'
 
 // Install on the web group — covers every web route, skips api
 .withMiddleware((m) => {
@@ -115,10 +116,20 @@ Route.post('/contact', handler, [CsrfMiddleware()])
 
 // Exclude specific paths
 CsrfMiddleware({ exclude: ['/webhooks/*'] })
+```
 
-// Client-side: read the token from the cookie
+```ts
+// Client side — read the token from the cookie. Import from the /client
+// subpath so the browser bundle stays free of server-only code (cache,
+// node:crypto). The main barrel pulls in @rudderjs/cache and will crash
+// at module-evaluation time in the browser.
+import { getCsrfToken } from '@rudderjs/middleware/client'
+
 const token = getCsrfToken()
-fetch('/contact', { method: 'POST', headers: { 'X-CSRF-Token': token } })
+fetch('/contact', {
+  method:  'POST',
+  headers: { 'X-CSRF-Token': token },
+})
 ```
 
 | Option | Default | Description |
@@ -190,4 +201,5 @@ Defaults: `origin: '*'`, standard HTTP methods, `Content-Type` + `Authorization`
 - `CsrfMiddleware()` belongs on **web routes** only. API routes authenticate via tokens, not CSRF cookies.
 - `RateLimit` uses `@rudderjs/cache` — the `memory` driver does not share state across processes. Use `redis` for distributed deployments.
 - Static asset paths (`/assets/app.js`, `/@vite/client`) are automatically skipped by both `ThrottleMiddleware` and `RateLimit`.
+- `getCsrfToken()` is the only export from `@rudderjs/middleware/client`. Importing it from the main barrel works in Node but drags `@rudderjs/cache` and a top-level `node:crypto` import into the client bundle — Vite externalises `node:crypto` and it throws at module-evaluation time in the browser. Always use the `/client` subpath in browser code (the vendored auth views and `Contact` demo already do).
 - `sideEffects: false` — fully tree-shakable.

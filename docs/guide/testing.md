@@ -143,6 +143,23 @@ it('queues a welcome job and sends a welcome mail', async () => {
 
 Each fake exposes the assertions that match its API surface — see the per-feature pages: [Queues](/guide/queues), [Mail](/guide/mail), [Notifications](/guide/notifications), [Events](/guide/events), [Cache](/guide/cache), [File Storage](/guide/storage), [HTTP Client](/guide/http-client).
 
+## Testing AI agents
+
+For agent-level testing, `@rudderjs/ai/eval` ships a dedicated eval framework with built-in metrics (`exactMatch`, `regex`, `llmJudge`, `jsonShape`, `semanticMatch`, `tokenCost`), `compose(...)`, `--record` / `--replay` for fixture-driven runs (zero API calls), HTML report output, and the `pnpm rudder ai:eval` CLI. See [AI / Evals](/guide/ai#evals) for the full surface.
+
+For lower-level mocking (no model calls, no eval runner), `AiFake.fake()` swaps in a deterministic adapter — same `.fake()` / `.restore()` shape as the other facades.
+
+```ts
+import { AiFake, AI } from '@rudderjs/ai'
+
+const fake = AiFake.fake()
+fake.respondWith('Mocked response')
+
+const response = await AI.prompt('Hello')
+assert.strictEqual(response.text, 'Mocked response')
+fake.restore()
+```
+
 ## Full example
 
 ```ts

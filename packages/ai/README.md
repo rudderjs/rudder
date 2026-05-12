@@ -16,7 +16,9 @@ pnpm add openai                         # OpenAI (GPT) — also used for OpenRou
 pnpm add @google/genai                  # Google (Gemini)
 pnpm add cohere-ai                      # Cohere (reranking + embeddings)
 pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
-# Jina — no extra package needed
+# ElevenLabs (premium TTS + STT)        — no extra package needed (direct HTTP)
+# VoyageAI (embeddings + reranking)     — no extra package needed (direct HTTP)
+# Jina                                   — no extra package needed (direct HTTP)
 ```
 
 ## Runtime Compatibility
@@ -28,6 +30,12 @@ pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
 | `@rudderjs/ai` | Node, browser, Electron main+renderer, React Native | Agents, tools, streaming, providers — any `fetch`-capable JS runtime |
 | `@rudderjs/ai/node` | Node only | `documentFromPath()`, `imageFromPath()`, `transcribeFromPath()` (filesystem helpers) |
 | `@rudderjs/ai/server` | Node only | `AiProvider` (the RudderJS `ServiceProvider` — auto-discovered, you rarely import it) |
+| `@rudderjs/ai/mcp` | Node only (in practice) | `mcpClientTools()` + `mcpServerFromAgent()` — requires `@modelcontextprotocol/sdk` |
+| `@rudderjs/ai/memory-orm` | Node only | `OrmUserMemory` + `UserMemoryRecord` — ORM-backed `UserMemory` |
+| `@rudderjs/ai/memory-embedding` | Node only | `EmbeddingUserMemory` — semantic recall via the registered embedding model |
+| `@rudderjs/ai/budget-orm` | Node only | `OrmBudgetStorage` + `BudgetUsageRecord` — ORM-backed `BudgetStorage` |
+| `@rudderjs/ai/eval` | Any `fetch`-capable runtime | `evalSuite()` + `runSuite()` + metrics for testing agents against real models |
+| `@rudderjs/ai/computer-use` | Node only (in practice) | `executeComputerAction(page, action, state)` — lower-level Playwright dispatcher |
 
 The main entry has zero `node:*` static imports, so you can call agents and tools directly from a React Native screen, an Electron renderer, or a browser. `@rudderjs/core` is an optional peer — only `/server` consumers pull it in.
 
@@ -46,6 +54,8 @@ export default {
     ollama:    { driver: 'ollama',    baseUrl: 'http://localhost:11434' },
     cohere:    { driver: 'cohere',    apiKey: process.env.COHERE_API_KEY! },
     jina:      { driver: 'jina',      apiKey: process.env.JINA_API_KEY! },
+    voyage:    { driver: 'voyage',    apiKey: process.env.VOYAGE_API_KEY! },        // embeddings + reranking
+    elevenlabs:{ driver: 'elevenlabs', apiKey: process.env.ELEVENLABS_API_KEY! },   // premium TTS + STT
     openrouter: {
       driver:   'openrouter',
       apiKey:   process.env.OPENROUTER_API_KEY!,
@@ -573,6 +583,36 @@ const agent = AI.agent({
 })
 ```
 
+### Computer Use (Anthropic)
+
+`computerUseTool({ page })` exposes a Playwright `Page` to an Anthropic Claude model via the native `computer_20250124` tool block — the model takes screenshots, moves the cursor, clicks, types, scrolls, presses keys. Anthropic-only (`anthropic/*` and `bedrock/anthropic.*`); OpenRouter-routed Anthropic models throw `ComputerUseProviderError`.
+
+```ts
+import { chromium } from 'playwright'
+import { Agent, computerUseTool } from '@rudderjs/ai'
+
+const browser = await chromium.launch()
+const page    = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+
+class BrowserAgent extends Agent {
+  model() { return 'anthropic/claude-sonnet-4-5' }
+  tools() {
+    return [
+      computerUseTool({
+        page,
+        viewport:      { width: 1280, height: 800 },
+        needsApproval: true,    // default — pauses the loop before every action
+        maxActions:    50,       // per-instance safety cap; throws ComputerUseLimitError when exceeded
+      }),
+    ]
+  }
+}
+
+await new BrowserAgent().prompt('Find the cheapest flight from SFO to JFK next Tuesday.')
+```
+
+Playwright is **not** a dep of `@rudderjs/ai` — install it in your app. The tool accepts a structural `PageLike` subset so types check without the 300MB Playwright bundle. Action failures surface as `is_error: true` tool-results so the model can retry. `needsApproval: true` (the default) routes every action through the standard approval gate — review what the model wants to click before it clicks it.
+
 ### Hosted vector stores + `fileSearch`
 
 `VectorStores` is a CRUD façade over the provider's hosted vector store; `fileSearch({ stores })` is the agent tool that queries them. The provider runs ingestion, chunking, embedding, and retrieval server-side — no embedding pipeline, no pgvector setup, no `execute` to write. Supported on **OpenAI** (`vectorStores.*`) and **Gemini** (`fileSearchStores`). Same façade, same agent surface.
@@ -955,6 +995,44 @@ const loggingMiddleware: AiMiddleware = {
 }
 ```
 
+### Per-user budgets — `withBudget(...)`
+
+Cap daily or monthly spend per user. The middleware pre-debits the estimated input cost on every iteration (refusing with `BudgetExceededError` when the cap would be exceeded) and trues up the actual delta after each step's usage report:
+
+```ts
+import { withBudget, memoryBudgetStorage, BudgetExceededError } from '@rudderjs/ai'
+
+class ChatAgent extends Agent {
+  model() { return 'anthropic/claude-sonnet-4-5' }
+  middleware() {
+    return [
+      withBudget({
+        user:    () => req.user?.id ?? null,         // null bypasses enforcement (unauth)
+        budget:  { period: 'monthly', cap: 5.00 },   // USD; also 'daily'
+        storage: memoryBudgetStorage(),               // swap for ormBudgetStorage in production
+        // timezone:    'America/Los_Angeles',         // optional — period rollover boundary
+        // onExceeded:  ({ spent, cap }) => log.warn({ spent, cap }, 'budget hit'),
+        // pricing:     { ...ModelPricing, 'custom/model': { ... } },   // overrides
+      }),
+    ]
+  }
+}
+```
+
+**Production storage — `OrmBudgetStorage`** persists spend rows via your registered ORM adapter:
+
+```ts
+import { OrmBudgetStorage, BudgetUsageRecord } from '@rudderjs/ai/budget-orm'
+
+withBudget({
+  user:    () => req.user.id,
+  budget:  { period: 'monthly', cap: 25 },
+  storage: new OrmBudgetStorage(),
+})
+```
+
+Schema reference is exported as `budgetUsagePrismaSchema` from `@rudderjs/ai/budget-orm` (also lives at `playground/prisma/schema/ai.prisma`). The `@@unique([userId, period, periodKey])` index is load-bearing — it provides first-write race protection. Caveats: refunds on errors are **not** issued; cache token deltas (Anthropic ephemeral, OpenAI prefix) aren't yet exposed on `TokenUsage`, so cached requests bill at full input rate; default token estimator is `text.length / 4` (override via `estimateTokens` for `tiktoken`). Under high single-user concurrency, total spend can briefly exceed `cap` by up to `costUsd × concurrency` (R-M-W race in the cap-check). The `BudgetExceededError` bubbles up — catch it at the route boundary to return a friendly 402.
+
 ### Testing
 
 ```ts
@@ -1186,6 +1264,8 @@ Approval gates (`needsApproval: true`) are dropped on the MCP side — there's n
 | Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | ✓ | | | ✓ |
 | Cohere | `cohere-ai` | `cohere/rerank-v3.5` | | ✓ | | | ✓ | |
 | Jina | *(none)* | `jina/jina-reranker-v2-base-multilingual` | | ✓ | | | ✓ | |
+| VoyageAI | *(none)* | `voyage/voyage-3-large` | | ✓ | | | ✓ | |
+| ElevenLabs | *(none)* | `elevenlabs/eleven_multilingual_v2` | | | | ✓ | | |
 | Ollama | *(none)* | `ollama/llama3` | ✓ | | | | | |
 | Groq | *(none)* | `groq/llama-3.3-70b` | ✓ | | | | | |
 | DeepSeek | *(none)* | `deepseek/deepseek-chat` | ✓ | | | | | |

@@ -196,6 +196,23 @@ Returning `null` from `findForRoute` triggers `RouteModelNotFoundError` (HTTP 40
 
 The `RouteResolver` contract is duck-typed — `name: string` + `findForRoute(value): unknown | Promise<unknown | null>` — so the router doesn't depend on `@rudderjs/orm`.
 
+### Catch-all fallback with `router.fallback()`
+
+Register a handler that runs when no other route matches — Laravel's `Route::fallback()`. Use it for custom 404 JSON shapes, vanity URL redirects, or a "soft" landing on api routes:
+
+```ts
+router.fallback((_req, res) => res.status(404).json({
+  message: 'Endpoint not found',
+}))
+
+// Per-request middleware works too
+router.fallback(handler, [LogUnknownRoute()])
+```
+
+Only one fallback per router — registering a second one replaces the first. The fallback runs after every other matcher, including `router.all('/api/*', ...)`, so use it as the last-resort 404 path.
+
+---
+
 ### Custom 404 with `.missing()`
 
 Override the default 404 response per route. Receives the request and the binding error; return a value the route handler may return — `Response`, plain object → JSON, string → body, or `undefined` (you wrote to `res` directly).
@@ -368,6 +385,7 @@ router.mount(serverAdapter)
 | `use(middleware)` | `this` | Register global middleware |
 | `bind(name, resolver, opts?)` | `this` | Bind a `:param` to a `RouteResolver` (e.g. an ORM Model) for auto-resolution |
 | `listBindings()` | `Record<string, RouteResolver>` | All registered route bindings |
+| `fallback(handler, mw?)` | `RouteBuilder` | Catch-all handler when no other route matches |
 | `group(opts, fn)` | `this` | Apply prefix/domain/middleware to every route registered inside `fn` |
 | `resource(name, Ctrl, opts?)` | `ResourceRegistration` | Register the seven canonical RESTful routes |
 | `apiResource(name, Ctrl, opts?)` | `ResourceRegistration` | Resource minus `create`/`edit` |

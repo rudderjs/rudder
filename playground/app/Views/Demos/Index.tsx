@@ -34,6 +34,12 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/browser',
     packages:    ['@rudderjs/ai/computer-use', 'playwright'],
   },
+  {
+    title:       'Vike pageContext enhancers',
+    description: 'auth, session, and localization providers push user / flash / locale onto pageContext via @rudderjs/vite’s enhancer registry. View reads them through usePageContext() with no +data.ts. Demonstrates view(id, props, { headers }) too.',
+    href:        '/demos/page-context',
+    packages:    ['@rudderjs/vite', '@rudderjs/auth', '@rudderjs/session', '@rudderjs/localization'],
+  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]

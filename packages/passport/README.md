@@ -6,10 +6,11 @@ OAuth 2 server for RudderJS — the Laravel Passport equivalent. Turns your app 
 
 - **Four OAuth 2 grants** — authorization code (with PKCE), client credentials, refresh token, device code
 - **Personal access tokens** — Laravel-style `user.createToken()` via the `HasApiTokens` mixin
-- **JWT with RS256** — signed with an RSA private key; third parties can verify tokens without calling your server
-- **Auto-registered routes** — `/oauth/authorize`, `/oauth/token`, `/oauth/scopes`, `/oauth/device/*`, plus token revocation
-- **Bearer middleware** — `RequireBearer()` + `scope('read', 'write')` for per-route API auth
-- **Customization hooks** — swap any model, wire a custom consent screen, disable routes selectively
+- **JWT with RS256 + JWKS-style key rotation** — third parties verify without calling your server; rotating keys keeps a previous-key verification window
+- **Auto-registered routes** — `/oauth/authorize`, `/oauth/token`, `/oauth/scopes`, `/oauth/device/*`, plus token revocation; web/api split available so consent lives on the `web` group and stateless endpoints on `api`
+- **Bearer middleware** — `RequireBearer()` + `scope('read', 'write')` (AND) or `scopeAny(...)` (OR) for per-route API auth
+- **Issuer & device-flow knobs** — opt-in `iss` claim, configurable device-code polling cap
+- **Customization hooks** — swap any model, wire a custom consent screen, mount per-endpoint middleware (CSRF / rate limit), disable routes selectively
 
 ## Installation
 
@@ -69,28 +70,40 @@ export default [
 ]
 ```
 
-Register the OAuth routes. API routes are the right home because they're stateless — but the consent + device-approve endpoints both need a signed-in user, so if you use those, mount them on the `web` group:
+Register the OAuth routes. The recommended layout splits the routes across the web and api groups so the consent flow gets session + CSRF, and the stateless token/device/scope endpoints stay on api:
 
 ```ts
-// routes/api.ts
-import { registerPassportRoutes } from '@rudderjs/passport'
+// routes/web.ts — consent flow (needs session + signed-in user + CSRF)
+import { registerPassportWebRoutes } from '@rudderjs/passport'
 
 export default (router) => {
-  registerPassportRoutes(router)
+  registerPassportWebRoutes(router)   // GET/POST/DELETE /oauth/authorize + DELETE /oauth/tokens/:id
+}
+
+// routes/api.ts — stateless token endpoints
+import { registerPassportApiRoutes } from '@rudderjs/passport'
+
+export default (router) => {
+  registerPassportApiRoutes(router)   // /oauth/token, /oauth/device/*, /oauth/scopes
 }
 ```
 
+Or use the legacy single-mount form `registerPassportRoutes(router)` to register everything onto one router — kept for back-compat / single-group apps.
+
+> **POST `/oauth/authorize` is CSRF-protected.** Mount `CsrfMiddleware()` on the entire `web` group (`m.web(CsrfMiddleware())` in `withMiddleware`) — that covers it along with every other state-changing web route. Don't double-mount `CsrfMiddleware` via `authorizeMiddleware` as well; it emits duplicate `Set-Cookie`s on GETs.
+
 ## Protecting API Routes
 
-`RequireBearer()` validates the JWT signature, checks expiration, and confirms the token hasn't been revoked. `scope(...)` enforces OAuth scopes on the token.
+`RequireBearer()` validates the JWT signature, checks expiration, and confirms the token hasn't been revoked. Pair it with either `scope(...)` (AND — must have **every** listed scope) or `scopeAny(...)` (OR — must have **at least one**):
 
 ```ts
-import { RequireBearer, scope } from '@rudderjs/passport'
+import { RequireBearer, scope, scopeAny } from '@rudderjs/passport'
 
-router.get('/api/user',    [RequireBearer()],                 (req) => req.user)
-router.get('/api/posts',   [RequireBearer(), scope('read')],  listPosts)
-router.post('/api/posts',  [RequireBearer(), scope('write')], createPost)
-router.post('/api/admin',  [RequireBearer(), scope('admin')], adminAction)
+router.get('/api/user',    [RequireBearer()],                            (req) => req.user)
+router.get('/api/posts',   [RequireBearer(), scope('read')],             listPosts)
+router.post('/api/posts',  [RequireBearer(), scope('write')],            createPost)
+router.post('/api/admin',  [RequireBearer(), scope('admin')],            adminAction)
+router.get('/api/feed',    [RequireBearer(), scopeAny('read', 'admin')], showFeed)  // either scope unlocks it
 ```
 
 A valid request attaches the resolved user to `req.user`, so handlers read it the same way they would under session auth.
@@ -289,6 +302,38 @@ Available groups: `authorize`, `token`, `revoke`, `scopes`, `device`.
 
 To disable route registration entirely, call `Passport.ignoreRoutes()` before the provider boots. `registerPassportRoutes()` becomes a no-op.
 
+### Per-endpoint middleware
+
+`registerPassportRoutes()` (and the web/api variants) accept per-endpoint middleware so you can layer rate limits or CSRF onto exactly the endpoints that need them:
+
+```ts
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+
+registerPassportRoutes(router, {
+  // POST /oauth/token — the canonical brute-force target. Composite key
+  // (ip + client_id) so one noisy client behind shared NAT can't exhaust
+  // the budget for legitimate co-tenants, AND a single IP can't churn
+  // through every client_id in the registry.
+  tokenMiddleware: [
+    RateLimit.perMinute(10).by((req) => `${req.ip}:${req.body?.client_id}`),
+  ],
+
+  // POST /oauth/device/code + /oauth/device/approve + /oauth/device/token
+  // — opt-in tighter per-IP limit on top of the api-group rate limit.
+  deviceMiddleware: [
+    RateLimit.perMinute(5).by((req) => req.ip),
+  ],
+
+  // GET/POST /oauth/authorize — opt-in per-route CSRF when you're NOT
+  // running CsrfMiddleware on the whole web group. Don't do both.
+  authorizeMiddleware: [
+    CsrfMiddleware(),
+  ],
+})
+```
+
+> `RateLimit` requires `@rudderjs/cache` registered before middleware runs — without a cache provider the limiter silently passes through.
+
 ## Configuration
 
 ### Key Management
@@ -321,6 +366,36 @@ All in milliseconds:
 | `tokensExpireIn` | 15 days | Access token lifetime |
 | `refreshTokensExpireIn` | 30 days | Refresh token lifetime |
 | `personalAccessTokensExpireIn` | ~6 months | Personal access token lifetime |
+
+### JWT issuer (opt-in)
+
+```ts
+// config/passport.ts
+export default {
+  issuer: 'https://app.example.com',   // or call Passport.useIssuer(url) at boot
+}
+```
+
+When set, every new JWT carries this URL as the `iss` claim and `BearerMiddleware` / `RequireBearer` reject tokens whose `iss` doesn't match. Tokens minted before the issuer was configured carry no `iss` claim and stay verifiable during the migration window. Single-issuer deployments don't need this; turn it on once you have more than one possible signer (multi-tenant, staging+prod sharing keys) — RFC 8725 §3.10.
+
+> **Rotating the issuer URL invalidates every live token.** Plan changes as a forced sign-out window — same blast radius as rotating the RSA keypair.
+
+### Device-flow polling cap
+
+```ts
+// config/passport.ts
+export default {
+  deviceMaxInterval: 60,   // seconds; default 60, floor 5 (clamped), call `Passport.deviceMaxInterval()` at boot for the same effect
+}
+```
+
+Device-code polling starts at 5 seconds and escalates by 5s per `slow_down` response per RFC 8628 §3.5. `deviceMaxInterval` is the cap that escalation will never exceed. Raise it for machine-only / no-human-in-the-loop device flows where misbehaving clients warrant aggressive back-off. Values below 5 are clamped to the 5s floor — escalation always needs to be able to take effect.
+
+### Key rotation grace window
+
+`pnpm rudder passport:keys --force` rotates the RSA keypair and writes timestamped audit backups (`*.bak.<ISO-timestamp>`) plus a rolling `storage/oauth-previous-public.key`. Every JWT carries a `kid` header equal to the SHA-256 fingerprint of the public key that signed it; `verifyToken()` walks `[currentPublicKey, ...previousPublicKeys]` and accepts a match against any retained key, so **tokens minted before the rotation keep verifying until they expire naturally** — no global sign-out at rotation time.
+
+One previous-slot is retained by design. Drop `oauth-previous-public.key` (or call `Passport.setPreviousPublicKey(null)`) once the old tokens have expired to close the window. Operators needing a longer history should stage rotations to land outside the configured access-token lifetime.
 
 ## CLI Commands
 
@@ -366,7 +441,13 @@ pnpm rudder passport:purge
 - **Refresh token replay** — reusing an old refresh token returns `invalid_grant`; the rotation already revoked it.
 - **Stale personal-access client cache** — `resetPersonalAccessClient()` is test-only. Don't call it at runtime.
 - **Prisma delegate vs `@@map`** — if you override a model, `static table` must be the Prisma delegate name (camelCase), not the `@@map`'d SQL name. `oauthClient`, not `oauth_clients`.
-- **Scope middleware ordering** — `scope(...)` must run after `RequireBearer()` or `BearerMiddleware()`. It reads token scopes from the request state set by the bearer middleware.
+- **Scope middleware ordering** — `scope(...)` / `scopeAny(...)` must run after `RequireBearer()` or `BearerMiddleware()`. They read token scopes from the request state set by the bearer middleware.
+- **`APP_KEY` rotation invalidates every peppered client secret.** When `APP_KEY` is set, `passport:client` stores client secrets as `peppered:<HMAC-SHA256(secret, APP_KEY)>`. Replace `APP_KEY` and the HMAC no longer reproduces — every confidential client fails token-endpoint authentication until you re-issue secrets via `passport:client`. Plan rotations as a coordinated re-issuance window with third-party integrations. Legacy plain-SHA-256 rows (minted before `APP_KEY` was set) are unaffected.
+- **Don't trust `Host` / `X-Forwarded-Host` for OAuth URLs.** The device flow falls back to `${req.protocol}://${req.hostname}${prefix}/device` when `verificationUri` isn't configured — an attacker-controlled `Host` header steers users to a phishing origin. Always pass an explicit `verificationUri` (or derive OAuth URLs from `config('app.url')`) when registering passport routes behind a reverse proxy.
+
+## Reaping expired tokens
+
+`AuthCode`, `DeviceCode`, `AccessToken`, and `RefreshToken` are all `MassPrunable`, so `pnpm rudder model:prune` reaps expired/revoked rows automatically — no need to schedule `passport:purge` separately. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so the prune walker sees them on day-1 fresh apps before any oauth flow has fired. `passport:purge` remains available for one-off cleanups.
 
 ## Related
 

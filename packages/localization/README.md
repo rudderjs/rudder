@@ -123,6 +123,28 @@ setLocale() only works inside a request context (within runWithLocale()).
 
 ---
 
+## Reading the locale from a view
+
+When `@rudderjs/vite` is installed, `LocalizationProvider.boot()` registers a
+page-context enhancer that exposes the resolved locale on `pageContext.locale`,
+so views read it without per-route plumbing:
+
+```tsx
+// app/Views/Dashboard.tsx
+import { usePageContext } from 'vike-react/usePageContext'
+
+export default function Dashboard() {
+  const { locale } = usePageContext()  // typed via Vike.PageContext augmentation
+  return <p>Active locale: {locale}</p>
+}
+```
+
+Outside an ALS request context, the enhancer falls back to the configured
+default locale. The registration is lazy and no-ops when `@rudderjs/vite`
+isn't installed.
+
+---
+
 ## Nested keys
 
 ```json

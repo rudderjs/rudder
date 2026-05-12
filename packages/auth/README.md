@@ -70,6 +70,27 @@ Route.get('/profile', async (req) => {
 matched by `withRouting({ web })` has the auth context populated before your
 handler runs.
 
+### Reading the user from a view
+
+When `@rudderjs/vite` is installed, `AuthProvider.boot()` also registers a
+page-context enhancer that exposes the current user on `pageContext.user` —
+controller views (and any Vike page) can read it directly without a
+`+data.ts` or controller plumbing:
+
+```tsx
+// app/Views/Dashboard.tsx
+import { usePageContext } from 'vike-react/usePageContext'
+
+export default function Dashboard() {
+  const { user } = usePageContext()  // typed via Vike.PageContext augmentation
+  return <h1>Hello {user?.name ?? 'guest'}</h1>
+}
+```
+
+`pageContext.user` is `null` for guests. The registration is lazy and silently
+no-ops when `@rudderjs/vite` isn't installed, so the package stays usable
+standalone.
+
 **API routes stay stateless.** `AuthMiddleware` does not run on the `api` group
 by default — `req.user` will be `undefined`, and `Auth.user()` returns `null`.
 For token-based API auth, reach for [`@rudderjs/passport`](../passport):
