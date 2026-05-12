@@ -132,9 +132,11 @@ Route.post('/api/debug/validate', async (req) => {
   return Response.json({ valid: true, data })
 })
 
-// GET /api/me — returns current user (null if not logged in).
-// No AuthMiddleware needed: the auth provider installs it globally,
-// so `req.user` is populated on every request.
+// GET /api/me — always returns { user: null } on api routes.
+// AuthMiddleware auto-installs on the `web` group only; api routes are
+// stateless by default. To populate req.user here, either mount
+// SessionMiddleware() + AuthMiddleware() per-route, or use RequireBearer()
+// + scope(...) from @rudderjs/passport for token auth.
 Route.get('/api/me', async (req) => {
   return Response.json({ user: req.user ?? null })
 })

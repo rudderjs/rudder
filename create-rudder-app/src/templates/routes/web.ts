@@ -48,6 +48,8 @@ Route.registerController(AuthController)
     : ''
 
   // ── welcome page wiring ─────────────────────────────────
+  // SiteHeader reads `user` from pageContext (set by @rudderjs/auth's enhancer),
+  // so the welcome controller no longer needs to pass it as a prop.
   const welcomeBlock = hasWelcome
     ? `
 // Read RudderJS version from @rudderjs/core's package.json at boot time.
@@ -55,29 +57,12 @@ const _require = createRequire(import.meta.url)
 const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
 
 // Welcome page — delete this route and app/Views/Welcome.${welcomeExt(ctx.primary)} to replace it.
-Route.get('/', async () => {${hasAuth ? `
-  // Resolve the current user (if signed in) — AuthMiddleware auto-installs on
-  // the web group, so auth() has a populated ALS context here.
-  const current = await auth().user() as Record<string, unknown> | null
-  const user    = current
-    ? { name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }
-    : null` : `
-  // Auth is not installed, so the welcome page never shows a signed-in user.
-  const user = null`}
-  return view('welcome', {
-    appName:       config<string>('app.name', 'RudderJS'),
-    rudderVersion: rudderCorePkg.version,
-    nodeVersion:   process.version.replace(/^v/, ''),
-    env:           config<string>('app.env', 'development'),
-    user,
-    // Laravel's Route::has() — the welcome nav renders Log in / Register links
-    // only when the auth package registered these named routes. Install
-    // @rudderjs/auth + call registerAuthRoutes() and they appear automatically;
-    // uninstall and they vanish. No scaffold-time flag.
-    loginUrl:    Route.getNamedRoute('login')    ?? null,
-    registerUrl: Route.getNamedRoute('register') ?? null,
-  })
-}${hasAuth ? ', webMw' : ''})
+Route.get('/', async () => view('welcome', {
+  appName:       config<string>('app.name', 'RudderJS'),
+  rudderVersion: rudderCorePkg.version,
+  nodeVersion:   process.version.replace(/^v/, ''),
+  env:           config<string>('app.env', 'development'),
+})${hasAuth ? ', webMw' : ''})
 `
     : ''
 

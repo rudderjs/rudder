@@ -45,6 +45,7 @@ const ctx: TemplateContext = {
     http:          true,
     process:       true,
     concurrency:   true,
+    terminal:      true,
   },
   demos: ['contact', 'ws', 'sync'],
 }

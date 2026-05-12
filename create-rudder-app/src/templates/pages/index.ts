@@ -1,6 +1,10 @@
 import type { TemplateContext } from '../../templates.js'
 
 export function pagesRootConfig(ctx: TemplateContext): string {
+  // Forward @rudderjs/vite pageContext enhancers (user/locale/flash) to the
+  // client during hydration. Without this, components reading
+  // pageContext.user via usePageContext() render signed-in on the server but
+  // signed-out on the client, causing a hydration flicker.
   if (ctx.frameworks.length === 1) {
     const rendererImport = ctx.primary === 'vue'
       ? `import vikeVue from 'vike-vue/config'`
@@ -12,7 +16,8 @@ export function pagesRootConfig(ctx: TemplateContext): string {
 ${rendererImport}
 
 export default {
-  extends: [${rendererVar}],
+  extends:      [${rendererVar}],
+  passToClient: ['user', 'locale', 'flash'],
 } as unknown as Config
 `
   }
@@ -20,7 +25,9 @@ export default {
   // Multi-framework: no renderer in root config — each page picks its own
   return `import type { Config } from 'vike/types'
 
-export default {} as unknown as Config
+export default {
+  passToClient: ['user', 'locale', 'flash'],
+} as unknown as Config
 `
 }
 
@@ -128,6 +135,7 @@ export default function Page() {
 
   return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 import type { Data } from './+data.js'
 
 export default function Page() {
@@ -137,8 +145,11 @@ export default function Page() {
   async function signOut() {
     await fetch('/auth/sign-out', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    '{}',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
+      body: '{}',
     })
     window.location.href = '/'
   }
@@ -204,6 +215,7 @@ const data = useData<Data>()
   return `<script setup lang="ts">
 ${cssImport}import { ref } from 'vue'
 import { useData } from 'vike-vue/useData'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 import type { Data } from './+data.js'
 
 const data = useData<Data>()
@@ -212,8 +224,11 @@ const user = ref(data.user)
 async function signOut() {
   await fetch('/auth/sign-out', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    '{}',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+    body: '{}',
   })
   window.location.href = '/'
 }
@@ -275,6 +290,7 @@ export default function Page() {
 
   return `${cssImport}import { createSignal, Show } from 'solid-js'
 import { useData } from 'vike-solid/useData'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 import type { Data } from './+data.js'
 
 export default function Page() {
@@ -284,8 +300,11 @@ export default function Page() {
   async function signOut() {
     await fetch('/auth/sign-out', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    '{}',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
+      body: '{}',
     })
     window.location.href = '/'
   }

@@ -43,6 +43,7 @@ import { routesWeb, welcomeExt } from './templates/routes/web.js'
 import { routesConsole } from './templates/routes/console.js'
 import { pagesRootConfig, pagesIndexConfig, pagesIndexData, pagesIndexPage } from './templates/pages/index.js'
 import { welcomeView } from './templates/views/welcome.js'
+import { siteHeaderComponent, siteHeaderExt } from './templates/components/site-header.js'
 import { pagesErrorConfig, pagesErrorPage } from './templates/pages/error.js'
 import { aiChatPageConfig, aiChatPage } from './templates/pages/ai-chat.js'
 import { demoPageConfig, demoPage } from './templates/pages/demo.js'
@@ -196,6 +197,9 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     // through @rudderjs/view and wired in routes/web.ts. The file lives in
     // app/Views/ and is owned by the user from day one.
     files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
+    // Shared header component used by Welcome + Demos. Kept outside app/Views/
+    // so the @rudderjs/vite scanner doesn't pick it up as a page.
+    files[`app/Components/SiteHeader.${siteHeaderExt(ctx.primary)}`] = siteHeaderComponent(ctx)
   } else {
     // Multi-framework projects keep pages/index/+Page.* with a per-page
     // +config.ts that picks the primary renderer. The view scanner can't

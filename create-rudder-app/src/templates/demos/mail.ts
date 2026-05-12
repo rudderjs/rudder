@@ -4,6 +4,7 @@
 export function demosMailView(): string {
   return `import { useState } from 'react'
 import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 interface MailResponse {
   ok:        boolean
@@ -39,16 +40,7 @@ export default function MailDemo() {
 
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/demos" className="nav-link">Demos</a>
-          <a href="/" className="nav-link">Home</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Mail send</h1>
