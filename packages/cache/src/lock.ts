@@ -1,4 +1,7 @@
-import { randomUUID } from 'node:crypto'
+// `randomUUID` is read from `globalThis.crypto` (Web Crypto API) rather
+// than `node:crypto`. Node 18+ and every modern browser expose it, so
+// this file stays safe to evaluate in either runtime — even if it gets
+// transitively pulled into a client bundle.
 
 // ─── Public types ──────────────────────────────────────────
 
@@ -50,8 +53,8 @@ export class LockTimeoutError extends Error {
 
 /** Generate a 128-bit random owner token. */
 export function newOwnerToken(): string {
-  // randomUUID is 128 bits of entropy in Node's crypto. Hex would also work; UUID is fine.
-  return randomUUID()
+  // 128 bits of entropy. globalThis.crypto is the Web Crypto API — works in Node 18+ and browsers.
+  return globalThis.crypto.randomUUID()
 }
 
 // ─── BaseLock ──────────────────────────────────────────────

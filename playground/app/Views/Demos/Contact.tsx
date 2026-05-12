@@ -1,6 +1,6 @@
 import '@/index.css'
 import { useState } from 'react'
-import { getCsrfToken } from '@rudderjs/middleware'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 
 interface FormFields { name: string; email: string; message: string }
 interface FormErrors { name?: string; email?: string; message?: string }

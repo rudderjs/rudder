@@ -1,7 +1,7 @@
 import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
-import { getCsrfToken } from '@rudderjs/middleware'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 
 // URL this view is served at — MUST match the controller route registered
 // by registerAuthRoutes() in the consumer project. If you override
