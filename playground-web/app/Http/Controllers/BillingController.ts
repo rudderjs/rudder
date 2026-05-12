@@ -4,7 +4,7 @@ import { auth } from '@rudderjs/auth'
 import { config } from '@rudderjs/core'
 import type { CashierConfig } from '@rudderjs/cashier-paddle'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
-import { User } from '../../Models/User.js'
+import { User } from 'App/Models/User.js'
 
 interface PriceCard {
   id:          string

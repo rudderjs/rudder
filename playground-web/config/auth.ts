@@ -1,5 +1,5 @@
 import type { AuthConfig } from '@rudderjs/auth'
-import { User } from '../app/Models/User.js'
+import { User } from 'App/Models/User.js'
 
 export default {
   defaults: {

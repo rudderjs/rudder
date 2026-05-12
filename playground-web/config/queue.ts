@@ -1,7 +1,7 @@
 import { Env } from '@rudderjs/core'
 import { isWebContainer } from '@rudderjs/support'
 import type { QueueConfig } from '@rudderjs/queue'
-import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
+import { WelcomeUserJob } from 'App/Jobs/WelcomeUserJob.js'
 
 // In WebContainer, BullMQ (Redis over raw TCP) doesn't work and isn't installed
 // in this variant — fall back to the in-process `sync` driver.

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { Todo } from '../../Modules/Todo/TodoSchema.js'
+import type { Todo } from 'App/Modules/Todo/TodoSchema.js'
 
 interface TodosDemoProps {
   todos: Todo[]

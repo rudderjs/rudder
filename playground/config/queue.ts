@@ -1,7 +1,7 @@
 import { Env } from '@rudderjs/core'
 import type { QueueConfig } from '@rudderjs/queue'
-import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
-import { FailingJob } from '../app/Jobs/FailingJob.js'
+import { WelcomeUserJob } from 'App/Jobs/WelcomeUserJob.js'
+import { FailingJob } from 'App/Jobs/FailingJob.js'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'bullmq'),
