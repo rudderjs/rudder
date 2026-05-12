@@ -44,13 +44,162 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## Highlights
 
-- 🎨 **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
-- 🧠 **AI-native** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina), agents with tools, streaming, MCP, queue-backed runs, approval gates.
-- 🔌 **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
-- 🧱 **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
-- 🪶 **Pay-as-you-go** — 46 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
-- 🛠️ **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages.
-- 🔒 **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
+- **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
+- **AI-native** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina), agents with tools, streaming, MCP, queue-backed runs, approval gates.
+- **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
+- **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
+- **Pay-as-you-go** — 46 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages.
+- **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
+
+---
+
+## A taste of RudderJS
+
+Six features, six snippets. Each one is real code from the playground — copy, run, ship.
+
+### 1. Routing — web & API in one router
+
+```ts
+// routes/web.ts
+import { Route } from '@rudderjs/router'
+import { view }  from '@rudderjs/view'
+
+Route.get('/dashboard', async () => view('dashboard'))
+```
+
+```ts
+// routes/api.ts
+import { Route } from '@rudderjs/router'
+
+Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+Route.post('/api/users', async (req, res) => res.json({ created: req.body }))
+```
+
+Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default.
+
+### 2. Controllers, middleware & views
+
+```ts
+// app/Http/Controllers/UserController.ts
+import { Controller, Get, Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
+import { view } from '@rudderjs/view'
+import { User } from '../../Models/User.js'
+
+@Controller('/users')
+export class UserController {
+  @Get('/')
+  @Middleware([RateLimit.perMinute(60)])
+  async index() {
+    const users = await User.all()
+    return view('users.index', { users })
+  }
+}
+```
+
+```tsx
+// app/Views/Users/Index.tsx — typed props, SSR'd through Vike
+export default function Index({ users }: { users: User[] }) {
+  return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
+}
+```
+
+Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
+
+### 3. ORM — active record, Prisma or Drizzle
+
+```ts
+// app/Models/Post.ts
+import { Model } from '@rudderjs/orm'
+
+export class Post extends Model {
+  static table    = 'post'
+  static fillable = ['title', 'body', 'authorId']
+
+  id!: number
+  title!: string
+  body!: string
+}
+
+// Anywhere — query, mutate, paginate
+const recent = await Post.where('published', true).orderBy('createdAt', 'desc').paginate(1, 20)
+const post   = await Post.create({ title: 'Hello', body: 'World', authorId: 1 })
+await post.update({ title: 'Hello, RudderJS' })
+```
+
+Same API on top of Prisma or Drizzle — swap adapters without touching model code.
+
+### 4. AI agents — 11 providers, tools, streaming
+
+```ts
+import { agent, toolDefinition } from '@rudderjs/ai'
+import { z } from 'zod'
+
+const getWeather = toolDefinition({
+  name: 'get_weather',
+  description: 'Get the current weather for a city',
+  inputSchema: z.object({ city: z.string() }),
+}).server(async ({ city }) => `${city}: 22°C and sunny`)
+
+const weatherAgent = agent({
+  instructions: 'You help people check the weather. Use get_weather when asked.',
+  model: 'anthropic/claude-haiku-4-5-20251001',
+  tools: [getWeather],
+})
+
+const reply = await weatherAgent.prompt('What is the weather in Tokyo?')
+// reply.text, reply.steps, reply.usage
+```
+
+Same agent works with Anthropic, OpenAI, Google, Groq, Ollama, xAI, DeepSeek, Mistral, Azure, Cohere, Jina. Add `.stream()` for SSE, run agents on the queue, gate tool calls with approval.
+
+### 5. Real-time — WebSocket channels on the same port
+
+```ts
+// routes/channels.ts — declare a presence channel
+import { Broadcast } from '@rudderjs/broadcast'
+
+Broadcast.channel('presence-lobby', async (req) => {
+  return { id: req.user?.id, name: req.user?.name }
+})
+```
+
+```ts
+// anywhere — push to every subscriber
+import { broadcast } from '@rudderjs/broadcast'
+
+broadcast('chat', 'message', { user: 'Ada', text: 'Hi there', ts: Date.now() })
+```
+
+WebSocket server bundled with `@rudderjs/broadcast` — no second daemon, no Pusher dependency. Auth, presence, and wildcard channels work out of the box.
+
+### 6. Sync — collaborative documents with Yjs CRDT
+
+```ts
+// bootstrap/providers.ts
+import { SyncProvider } from '@rudderjs/sync'
+
+export default [
+  ...(await defaultProviders()),
+  SyncProvider,  // mounts /ws-sync on the same Hono server
+]
+```
+
+```ts
+// client — any browser, any framework
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+
+const doc      = new Y.Doc()
+const provider = new WebsocketProvider('ws://localhost:3000/ws-sync', 'article:42', doc)
+const text     = doc.getText('content')
+
+text.observe(() => console.log(text.toString()))
+text.insert(0, 'Hello, collaborator!')
+```
+
+Conflict-free merging, offline support, presence — same port as your HTTP server. Persist to memory, Redis, or Prisma.
 
 ---
 
