@@ -15,30 +15,13 @@ pnpm add @rudderjs/auth @rudderjs/hash @rudderjs/session
 import { User } from '../app/Models/User.js'
 
 export default {
-  defaults: {
-    guard: 'web',
-  },
-  guards: {
-    web: { driver: 'session', provider: 'users' },
-  },
-  providers: {
-    users: { driver: 'eloquent', model: User },
-  },
+  defaults: { guard: 'web' },
+  guards:   { web: { driver: 'session', provider: 'users' } },
+  providers:{ users: { driver: 'eloquent', model: User } },
 }
-
-// bootstrap/providers.ts
-//
-// `AuthProvider`, `SessionProvider`, and `HashProvider` are auto-discovered.
-// Install the packages, run `pnpm rudder providers:discover`, and the default
-// `bootstrap/providers.ts` from `create-rudder-app` picks them up in the right
-// order (foundation → infrastructure → feature) — no manual imports needed.
-import { defaultProviders } from '@rudderjs/core'
-
-export default [...(await defaultProviders())]
 ```
 
-> `auth()` (lowercase) is the per-request helper used inside route handlers — see below.
-> If you ever need to register `AuthProvider` explicitly (opt-out of auto-discovery), import the class from `@rudderjs/auth` and add it to the array after `SessionProvider` and `HashProvider`.
+`AuthProvider`, `SessionProvider`, and `HashProvider` are picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` (or `--install` during scaffold) is all that's needed.
 
 ## Usage
 
