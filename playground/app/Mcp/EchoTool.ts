@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { McpTool, McpResponse, Description, Handle } from '@rudderjs/mcp'
 import type { McpToolResult } from '@rudderjs/mcp'
-import { GreetingService } from '../Services/GreetingService.js'
+import { GreetingService } from 'App/Services/GreetingService.js'
 
 @Description('Greets someone by name using the app\'s GreetingService')
 export class EchoTool extends McpTool {

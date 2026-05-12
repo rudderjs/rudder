@@ -8,7 +8,7 @@ import {
   type AuthUserModelLike,
 } from '@rudderjs/auth'
 import { Hash } from '@rudderjs/hash'
-import { User } from '../../Models/User.js'
+import { User } from 'App/Models/User.js'
 
 // Per-IP + per-path rate limit — each action has its own budget so sign-in
 // attempts don't exhaust the sign-up or password-reset budget for the same client.

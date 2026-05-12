@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import '@/index.css'
-import type { Todo } from '../../Modules/Todo/TodoSchema.js'
+import type { Todo } from 'App/Modules/Todo/TodoSchema.js'
 
 interface TodosDemoProps {
   todos: Todo[]
