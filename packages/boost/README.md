@@ -12,14 +12,7 @@ pnpm add -D @rudderjs/boost
 
 ## Setup
 
-`BoostProvider` is auto-discovered. Run `pnpm rudder providers:discover` after install — the default `bootstrap/providers.ts` already picks it up:
-
-```ts
-// bootstrap/providers.ts
-import { defaultProviders } from '@rudderjs/core'
-
-export default [...(await defaultProviders())]
-```
+`BoostProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ### Quick Start
 

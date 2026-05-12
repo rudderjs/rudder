@@ -39,14 +39,7 @@ export default {
 
 ### 2. Register the provider
 
-`SessionProvider` is auto-discovered. Install the package, run `pnpm rudder providers:discover`, and the default `bootstrap/providers.ts` picks it up — no manual import needed:
-
-```ts
-// bootstrap/providers.ts
-import { defaultProviders } from '@rudderjs/core'
-
-export default [...(await defaultProviders())]
-```
+`SessionProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
 
 ### 3. That's it — the `web` group is auto-wired
 
