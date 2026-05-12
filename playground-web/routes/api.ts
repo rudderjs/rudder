@@ -6,11 +6,11 @@ import { Cache } from '@rudderjs/cache'
 import { Storage } from '@rudderjs/storage'
 import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
 import { notify } from '@rudderjs/notification'
-import { UserService } from '../app/Services/UserService.js'
-import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
-import { CreateUserRequest } from '../app/Http/Requests/CreateUserRequest.js'
-import { TestController } from '../app/Http/Controllers/TestController.js'
-import { AppError } from '../app/Exceptions/AppError.js'
+import { UserService } from 'App/Services/UserService.js'
+import { WelcomeNotification } from 'App/Notifications/WelcomeNotification.js'
+import { CreateUserRequest } from 'App/Http/Requests/CreateUserRequest.js'
+import { TestController } from 'App/Http/Controllers/TestController.js'
+import { AppError } from 'App/Exceptions/AppError.js'
 import { z } from 'zod'
 
 // Register decorator-based controllers
@@ -354,7 +354,7 @@ Route.get('/api/passport/me', async (req, res) => {
 // GET  /api/tokens                           — list current user's tokens
 // DELETE /api/tokens                         — revoke all of the user's tokens
 import { RequireAuth } from '@rudderjs/auth'
-import { User } from '../app/Models/User.js'
+import { User } from 'App/Models/User.js'
 
 Route.post('/api/tokens', async (req, res) => {
   const { name, scopes } = req.body as { name?: string; scopes?: string[] }
