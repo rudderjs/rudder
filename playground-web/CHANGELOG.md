@@ -1,5 +1,28 @@
 # rudderjs-playground-web
 
+## 0.0.33
+
+### Patch Changes
+
+- Updated dependencies [7eab2d2]
+- Updated dependencies [d0db9f0]
+- Updated dependencies [b74fc57]
+- Updated dependencies [2670dc3]
+- Updated dependencies [937cdac]
+  - @rudderjs/cashier-paddle@3.0.1
+  - @rudderjs/orm-prisma@1.7.1
+  - @rudderjs/boost@1.2.0
+  - @rudderjs/ai@1.6.1
+  - @rudderjs/auth@5.1.0
+  - @rudderjs/mcp@5.1.1
+  - @rudderjs/orm@1.9.1
+  - @rudderjs/view@1.1.0
+  - @rudderjs/middleware@1.1.0
+  - @rudderjs/cache@1.1.3
+  - @rudderjs/session@1.1.0
+  - @rudderjs/localization@1.1.0
+  - @rudderjs/vite@1.1.0
+
 ## 0.0.32
 
 ### Patch Changes
