@@ -2,7 +2,102 @@ import { ServiceProvider, config } from '@rudderjs/core'
 import { AiRegistry } from '../registry.js'
 import { setConversationStore, setUserMemory } from '../agent.js'
 import { GoogleCacheRegistry, type CacheStoreLike } from '../providers/google-cache-registry.js'
-import type { AiConfig, ConversationStore, UserMemory } from '../types.js'
+import type { AiConfig, AiProviderConfig, ProviderFactory } from '../types.js'
+
+/**
+ * Throw with a clear pointer to the offending config key when an apiKey-
+ * requiring provider has no key set. The config type lets `apiKey` be
+ * undefined (some drivers — ollama, bedrock — don't need one), so this is
+ * the bootstrap-time enforcement point for the drivers that do.
+ */
+function requireKey(name: string, cfg: AiProviderConfig): string {
+  if (!cfg.apiKey) {
+    throw new Error(`[RudderJS AI] config('ai').providers.${name} is missing apiKey (driver "${cfg.driver ?? name}").`)
+  }
+  return cfg.apiKey
+}
+
+type DriverDeps = { googleCacheRegistry: GoogleCacheRegistry }
+type DriverBuilder = (name: string, cfg: AiProviderConfig, deps: DriverDeps) => Promise<ProviderFactory>
+
+const DRIVERS: Record<string, DriverBuilder> = {
+  anthropic: async (name, cfg) => {
+    const { AnthropicProvider } = await import('../providers/anthropic.js')
+    return new AnthropicProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  openai: async (name, cfg) => {
+    const { OpenAIProvider } = await import('../providers/openai.js')
+    return new OpenAIProvider({
+      apiKey:       requireKey(name, cfg),
+      baseUrl:      cfg.baseUrl,
+      organization: cfg['organization'] as string | undefined,
+    })
+  },
+  google: async (name, cfg, { googleCacheRegistry }) => {
+    const { GoogleProvider } = await import('../providers/google.js')
+    return new GoogleProvider({ apiKey: requireKey(name, cfg) }, googleCacheRegistry)
+  },
+  ollama: async (_name, cfg) => {
+    const { OllamaProvider } = await import('../providers/ollama.js')
+    return new OllamaProvider({ baseUrl: cfg.baseUrl })
+  },
+  deepseek: async (name, cfg) => {
+    const { DeepSeekProvider } = await import('../providers/deepseek.js')
+    return new DeepSeekProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  xai: async (name, cfg) => {
+    const { XaiProvider } = await import('../providers/xai.js')
+    return new XaiProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  groq: async (name, cfg) => {
+    const { GroqProvider } = await import('../providers/groq.js')
+    return new GroqProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  mistral: async (name, cfg) => {
+    const { MistralProvider } = await import('../providers/mistral.js')
+    return new MistralProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  azure: async (name, cfg) => {
+    const { AzureOpenAIProvider } = await import('../providers/azure.js')
+    if (!cfg.baseUrl) {
+      throw new Error(`[RudderJS AI] config('ai').providers.${name} is missing baseUrl (driver "azure" requires it).`)
+    }
+    return new AzureOpenAIProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+  },
+  openrouter: async (name, cfg) => {
+    const { OpenRouterProvider } = await import('../providers/openrouter.js')
+    return new OpenRouterProvider({
+      apiKey:   requireKey(name, cfg),
+      baseUrl:  cfg.baseUrl,
+      siteUrl:  cfg['siteUrl'] as string | undefined,
+      siteName: cfg['siteName'] as string | undefined,
+    })
+  },
+  bedrock: async (_name, cfg) => {
+    const { BedrockProvider } = await import('../providers/bedrock.js')
+    const region = (cfg['region'] as string | undefined) ?? 'us-east-1'
+    const credentials = cfg['credentials'] as
+      | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
+      | undefined
+    return new BedrockProvider(credentials ? { region, credentials } : { region })
+  },
+  elevenlabs: async (name, cfg) => {
+    const { ElevenLabsProvider } = await import('../providers/elevenlabs.js')
+    return new ElevenLabsProvider({
+      apiKey: requireKey(name, cfg),
+      ...(cfg.baseUrl              ? { baseUrl:           cfg.baseUrl                              } : {}),
+      ...(cfg['defaultTtsModelId'] ? { defaultTtsModelId: cfg['defaultTtsModelId'] as string       } : {}),
+    })
+  },
+  voyage: async (name, cfg) => {
+    const { VoyageProvider } = await import('../providers/voyage.js')
+    return new VoyageProvider({
+      apiKey: requireKey(name, cfg),
+      ...(cfg.baseUrl             ? { baseUrl:          cfg.baseUrl                                            } : {}),
+      ...(cfg['defaultInputType'] ? { defaultInputType: cfg['defaultInputType'] as 'query' | 'document'        } : {}),
+    })
+  },
+}
 
 /**
  * AI ServiceProvider — reads config from `config('ai')`.
@@ -20,111 +115,26 @@ export class AiProvider extends ServiceProvider {
     const googleCacheRegistry = this.buildGoogleCacheRegistry()
 
     for (const [name, providerConfig] of Object.entries(cfg.providers)) {
-        const driver = providerConfig.driver ?? name
-
-        if (driver === 'anthropic') {
-          const { AnthropicProvider } = await import('../providers/anthropic.js')
-          AiRegistry.register(new AnthropicProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'openai') {
-          const { OpenAIProvider } = await import('../providers/openai.js')
-          AiRegistry.register(new OpenAIProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-            organization: providerConfig['organization'] as string | undefined,
-          }))
-        } else if (driver === 'google') {
-          const { GoogleProvider } = await import('../providers/google.js')
-          AiRegistry.register(new GoogleProvider({
-            apiKey: providerConfig.apiKey!,
-          }, googleCacheRegistry))
-        } else if (driver === 'ollama') {
-          const { OllamaProvider } = await import('../providers/ollama.js')
-          AiRegistry.register(new OllamaProvider({
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'deepseek') {
-          const { DeepSeekProvider } = await import('../providers/deepseek.js')
-          AiRegistry.register(new DeepSeekProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'xai') {
-          const { XaiProvider } = await import('../providers/xai.js')
-          AiRegistry.register(new XaiProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'groq') {
-          const { GroqProvider } = await import('../providers/groq.js')
-          AiRegistry.register(new GroqProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'mistral') {
-          const { MistralProvider } = await import('../providers/mistral.js')
-          AiRegistry.register(new MistralProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-          }))
-        } else if (driver === 'azure') {
-          const { AzureOpenAIProvider } = await import('../providers/azure.js')
-          AiRegistry.register(new AzureOpenAIProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl!,
-          }))
-        } else if (driver === 'openrouter') {
-          const { OpenRouterProvider } = await import('../providers/openrouter.js')
-          AiRegistry.register(new OpenRouterProvider({
-            apiKey: providerConfig.apiKey!,
-            baseUrl: providerConfig.baseUrl,
-            siteUrl: providerConfig['siteUrl'] as string | undefined,
-            siteName: providerConfig['siteName'] as string | undefined,
-          }))
-        } else if (driver === 'bedrock') {
-          const { BedrockProvider } = await import('../providers/bedrock.js')
-          const region = (providerConfig['region'] as string | undefined) ?? 'us-east-1'
-          const credentials = providerConfig['credentials'] as
-            | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
-            | undefined
-          AiRegistry.register(new BedrockProvider(
-            credentials ? { region, credentials } : { region },
-          ))
-        } else if (driver === 'elevenlabs') {
-          const { ElevenLabsProvider } = await import('../providers/elevenlabs.js')
-          AiRegistry.register(new ElevenLabsProvider({
-            apiKey: providerConfig.apiKey!,
-            ...(providerConfig.baseUrl              ? { baseUrl:           providerConfig.baseUrl                              } : {}),
-            ...(providerConfig['defaultTtsModelId'] ? { defaultTtsModelId: providerConfig['defaultTtsModelId'] as string       } : {}),
-          }))
-        } else if (driver === 'voyage') {
-          const { VoyageProvider } = await import('../providers/voyage.js')
-          AiRegistry.register(new VoyageProvider({
-            apiKey: providerConfig.apiKey!,
-            ...(providerConfig.baseUrl             ? { baseUrl:          providerConfig.baseUrl                                            } : {}),
-            ...(providerConfig['defaultInputType'] ? { defaultInputType: providerConfig['defaultInputType'] as 'query' | 'document'        } : {}),
-          }))
-        }
-      }
+      const driver = providerConfig.driver ?? name
+      const build = DRIVERS[driver]
+      if (!build) continue
+      AiRegistry.register(await build(name, providerConfig, { googleCacheRegistry }))
+    }
 
     AiRegistry.setDefault(cfg.default)
     AiRegistry.setModels(cfg.models ?? [])
     this.app.instance('ai.registry', AiRegistry)
 
     // Register conversation store if provided in config
-    if ((cfg as AiConfig & { conversations?: ConversationStore }).conversations) {
-      const store = (cfg as AiConfig & { conversations?: ConversationStore }).conversations!
-      setConversationStore(store)
-      this.app.instance('ai.conversations', store)
+    if (cfg.conversations) {
+      setConversationStore(cfg.conversations)
+      this.app.instance('ai.conversations', cfg.conversations)
     }
 
     // Register user-memory store if provided in config (#A4)
-    if ((cfg as AiConfig & { memory?: UserMemory }).memory) {
-      const memory = (cfg as AiConfig & { memory?: UserMemory }).memory!
-      setUserMemory(memory)
-      this.app.instance('ai.memory', memory)
+    if (cfg.memory) {
+      setUserMemory(cfg.memory)
+      this.app.instance('ai.memory', cfg.memory)
     }
 
     // Register make:agent scaffolder
