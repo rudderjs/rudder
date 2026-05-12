@@ -439,6 +439,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/vite':
+        specifier: workspace:^
+        version: link:../vite
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -888,6 +891,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/vite':
+        specifier: workspace:^
+        version: link:../vite
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35

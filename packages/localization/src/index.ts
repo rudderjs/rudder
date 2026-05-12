@@ -3,6 +3,10 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ServiceProvider, config } from '@rudderjs/core'
 
+// Side-effect import — pulls in the Vike.PageContext.locale augmentation so
+// app code can read pageContext.locale with full typing.
+import './types/vike.js'
+
 export interface LocalizationConfig {
 	locale: string
 	fallback: string
@@ -211,5 +215,27 @@ export class LocalizationProvider extends ServiceProvider {
 	register(): void {
 		const cfg = config<LocalizationConfig>('localization')
 		LocalizationRegistry.configure(cfg)
+	}
+
+	async boot(): Promise<void> {
+		// Register a Vike page-context enhancer so views can read the active
+		// locale from `pageContext.locale`. `@rudderjs/vite` is an optional
+		// peer — apps without it silently skip this registration.
+		await registerVikeLocaleEnhancer()
+	}
+}
+
+async function registerVikeLocaleEnhancer(): Promise<void> {
+	try {
+		const mod = await import('@rudderjs/vite/page-context-enhancers').catch(() => null) as
+			| { registerPageContextEnhancer?: (fn: (pc: { locale?: string }) => void) => void }
+			| null
+		if (!mod?.registerPageContextEnhancer) return
+
+		mod.registerPageContextEnhancer((pageContext) => {
+			pageContext.locale = getLocale()
+		})
+	} catch {
+		// Optional peer not installed — quietly skip.
 	}
 }

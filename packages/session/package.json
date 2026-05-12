@@ -36,10 +36,19 @@
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^"
   },
+  "peerDependencies": {
+    "@rudderjs/vite": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/vite": {
+      "optional": true
+    }
+  },
   "optionalDependencies": {
     "ioredis": "^5.3.0"
   },
   "devDependencies": {
+    "@rudderjs/vite": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
