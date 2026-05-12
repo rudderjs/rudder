@@ -105,7 +105,42 @@ Route.post('/api/users', async (req, res) => res.json({ created: req.body }))
 
 Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default.
 
-### 3. Controllers, middleware & views
+### 3. Console & Terminal — rudder commands + Ink
+
+```ts
+// routes/console.ts — wire rudder commands
+import { Rudder } from '@rudderjs/console'
+import { terminal } from '@rudderjs/terminal'
+import { User } from 'App/Models/User.js'
+
+// Inline command — read DB, print stdout
+Rudder.command('users:count', async () => {
+  console.log(`${await User.count()} users`)
+}).description('Count users')
+
+// Same handler, but renders an Ink component in the terminal
+Rudder.command('dashboard', async () => {
+  return terminal('dashboard', { users: 1240, orders: 87 })
+}).description('Show a terminal dashboard')
+```
+
+```tsx
+// app/Terminal/Dashboard.tsx — typed props, React 19 + Ink
+import { Box, Text } from 'ink'
+
+export default function Dashboard({ users, orders }: { users: number; orders: number }) {
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Text bold color="cyan">Daily snapshot</Text>
+      <Text>{users} users · {orders} orders</Text>
+    </Box>
+  )
+}
+```
+
+Run with `pnpm rudder users:count` or `pnpm rudder dashboard`. Scaffold new ones with `make:command` (plain handlers) or `make:terminal` (Ink components). Class-based commands extend `Command` for DI + signature parsing.
+
+### 4. Controllers, middleware & views
 
 ```ts
 // app/Http/Controllers/UserController.ts
@@ -134,7 +169,7 @@ export default function Index({ users }: { users: User[] }) {
 
 Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
 
-### 4. ORM — active record, Prisma or Drizzle
+### 5. ORM — active record, Prisma or Drizzle
 
 ```ts
 // app/Models/Post.ts
@@ -157,7 +192,7 @@ await post.update({ title: 'Hello, RudderJS' })
 
 Same API on top of Prisma or Drizzle — swap adapters without touching model code.
 
-### 5. AI agents — 11 providers, tools, streaming
+### 6. AI agents — 11 providers, tools, streaming
 
 ```ts
 import { agent, toolDefinition } from '@rudderjs/ai'
@@ -181,7 +216,7 @@ const reply = await weatherAgent.prompt('What is the weather in Tokyo?')
 
 Same agent works with Anthropic, OpenAI, Google, Groq, Ollama, xAI, DeepSeek, Mistral, Azure, Cohere, Jina. Add `.stream()` for SSE, run agents on the queue, gate tool calls with approval.
 
-### 6. Real-time — WebSocket channels on the same port
+### 7. Real-time — WebSocket channels on the same port
 
 ```ts
 // routes/channels.ts — declare a presence channel
@@ -201,7 +236,7 @@ broadcast('chat', 'message', { user: 'Ada', text: 'Hi there', ts: Date.now() })
 
 WebSocket server bundled with `@rudderjs/broadcast` — no second daemon, no Pusher dependency. Auth, presence, and wildcard channels work out of the box.
 
-### 7. Sync — collaborative documents with Yjs CRDT
+### 8. Sync — collaborative documents with Yjs CRDT
 
 ```ts
 // bootstrap/providers.ts
