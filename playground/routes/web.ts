@@ -7,14 +7,14 @@ import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { registerPassportWebRoutes } from '@rudderjs/passport'
 import { registerCashierRoutes, Cashier } from '@rudderjs/cashier-paddle'
 import { Feature, FeatureMiddleware } from '@rudderjs/pennant'
-import { AuthController } from '../app/Http/Controllers/AuthController.js'
-import { BillingController, billingDemoProps, billingSubscriptionsProps } from '../app/Http/Controllers/BillingController.js'
-import { TodoService } from '../app/Modules/Todo/TodoService.js'
-import { User } from '../app/Models/User.js'
-import { Post } from '../app/Models/Post.js'
-import { Video } from '../app/Models/Video.js'
-import { Tag } from '../app/Models/Tag.js'
-import type { Comment } from '../app/Models/Comment.js'
+import { AuthController } from 'App/Http/Controllers/AuthController.js'
+import { BillingController, billingDemoProps, billingSubscriptionsProps } from 'App/Http/Controllers/BillingController.js'
+import { TodoService } from 'App/Modules/Todo/TodoService.js'
+import { User } from 'App/Models/User.js'
+import { Post } from 'App/Models/Post.js'
+import { Video } from 'App/Models/Video.js'
+import { Tag } from 'App/Models/Tag.js'
+import type { Comment } from 'App/Models/Comment.js'
 
 
 // GET view pages — /login, /register, /forgot-password, /reset-password
@@ -212,8 +212,8 @@ Route.get('/session/demo', (req, res) => {
 
 // GET /test/queries — fires a few ORM queries for telescope testing
 Route.get('/test/queries', async (_req, res) => {
-  const { User } = await import('../app/Models/User.js')
-  const { Todo } = await import('../app/Models/Todo.js')
+  const { User } = await import('App/Models/User.js')
+  const { Todo } = await import('App/Models/Todo.js')
 
   const users     = await User.all()
   const firstUser = await User.first()
@@ -277,7 +277,7 @@ Route.get('/test/mail', async (_req, res) => {
 // GET /test/notification — dispatches the real WelcomeNotification (mail + database channels)
 Route.get('/test/notification', async (_req, res) => {
   const { notify } = await import('@rudderjs/notification')
-  const { WelcomeNotification } = await import('../app/Notifications/WelcomeNotification.js')
+  const { WelcomeNotification } = await import('App/Notifications/WelcomeNotification.js')
 
   await notify(
     { id: 'user-1', name: 'Telescope Tester', email: 'test@example.com' },
@@ -295,7 +295,7 @@ Route.get('/test/http', async (_req, res) => {
 
 // GET /test/model — fires ORM model operations for telescope testing
 Route.get('/test/model', async (_req, res) => {
-  const { Todo } = await import('../app/Models/Todo.js')
+  const { Todo } = await import('App/Models/Todo.js')
   const todo = await Todo.create({ title: 'Telescope test', completed: false })
   await Todo.update(todo.id, { title: 'Telescope test (updated)' })
   await Todo.delete(todo.id)
@@ -353,7 +353,7 @@ Route.get('/test/dump', async (_req, res) => {
 // which fires SendWelcomeEmailListener → Mail.send(WelcomeEmail)
 Route.get('/test/event', async (_req, res) => {
   const { dispatch } = await import('@rudderjs/core')
-  const { UserRegistered } = await import('../app/Events/UserRegistered.js')
+  const { UserRegistered } = await import('App/Events/UserRegistered.js')
 
   // Also dispatch a no-listener event to verify the collector still records it
   class OrderCompleted { constructor(public orderId: number, public total: number) {} }
@@ -365,7 +365,7 @@ Route.get('/test/event', async (_req, res) => {
 
 // GET /test/job — dispatches a queue job for telescope testing
 Route.get('/test/job', async (_req, res) => {
-  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
+  const { WelcomeUserJob } = await import('App/Jobs/WelcomeUserJob.js')
   await WelcomeUserJob.dispatch('Test User', 'test@example.com').send()
   await WelcomeUserJob.dispatch('Priority User', 'priority@example.com')
     .onQueue('priority')
@@ -379,8 +379,8 @@ Route.get('/test/job', async (_req, res) => {
 // Pair with `pnpm rudder queue:work` in another terminal so a real worker
 // process picks up the jobs (BullMQ; needs Redis).
 Route.get('/test/horizon', async (_req, res) => {
-  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
-  const { FailingJob }     = await import('../app/Jobs/FailingJob.js')
+  const { WelcomeUserJob } = await import('App/Jobs/WelcomeUserJob.js')
+  const { FailingJob }     = await import('App/Jobs/FailingJob.js')
 
   // Default queue
   await WelcomeUserJob.dispatch('Alice', 'alice@example.com').send()
@@ -406,8 +406,8 @@ Route.get('/test/horizon', async (_req, res) => {
 Route.get('/test/pulse', async (_req, res) => {
   const { Cache } = await import('@rudderjs/cache')
   const { report } = await import('@rudderjs/core')
-  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
-  const { User } = await import('../app/Models/User.js')
+  const { WelcomeUserJob } = await import('App/Jobs/WelcomeUserJob.js')
+  const { User } = await import('App/Models/User.js')
 
   // 1. Cache recorder — hits + misses
   await Cache.set('pulse:warmup', 'value', 60)
