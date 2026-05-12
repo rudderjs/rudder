@@ -23,7 +23,7 @@ RudderJS is a **batteries-included, modular TypeScript framework for Node.js**. 
 // routes/web.ts
 import { Route } from '@rudderjs/router'
 import { view }  from '@rudderjs/view'
-import { User }  from './app/Models/User.js'
+import { User }  from 'App/Models/User.js'
 
 Route.get('/dashboard', async () => {
   const users = await User.all()
@@ -85,7 +85,7 @@ Same router, same middleware engine — the `web` group runs through session + a
 import { Controller, Get, Middleware } from '@rudderjs/router'
 import { RateLimit } from '@rudderjs/middleware'
 import { view } from '@rudderjs/view'
-import { User } from '../../Models/User.js'
+import { User } from 'App/Models/User.js'
 
 @Controller('/users')
 export class UserController {
