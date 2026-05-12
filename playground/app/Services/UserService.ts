@@ -1,5 +1,5 @@
 import { Injectable } from '@rudderjs/core'
-import { User } from '../Models/User.js'
+import { User } from 'App/Models/User.js'
 
 @Injectable()
 export class UserService {
