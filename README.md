@@ -56,9 +56,36 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## A taste of RudderJS
 
-Six features, six snippets. Each one is real code from the playground — copy, run, ship.
+Seven features, seven snippets. Each one is real code from the playground — copy, run, ship.
 
-### 1. Routing — web & API in one router
+### 1. Bootstrap — the whole app shape in one file
+
+```ts
+// bootstrap/app.ts
+import 'reflect-metadata'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+import configs from '../config/index.ts'
+import providers from './providers.ts'
+
+export default Application.configure({ server: hono(configs.server), config: configs, providers })
+  .withRouting({
+    web:      () => import('../routes/web.ts'),
+    api:      () => import('../routes/api.ts'),
+    commands: () => import('../routes/console.ts'),
+  })
+  .withMiddleware((m) => {
+    m.web(CsrfMiddleware())
+    m.web(RateLimit.perMinute(120))
+    m.api(RateLimit.perMinute(60))
+  })
+  .create()
+```
+
+One file — server adapter, config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. No nested config trees, no decorators-at-the-root, no surprise files.
+
+### 2. Routing — web & API in one router
 
 ```ts
 // routes/web.ts
@@ -78,7 +105,7 @@ Route.post('/api/users', async (req, res) => res.json({ created: req.body }))
 
 Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default.
 
-### 2. Controllers, middleware & views
+### 3. Controllers, middleware & views
 
 ```ts
 // app/Http/Controllers/UserController.ts
@@ -107,7 +134,7 @@ export default function Index({ users }: { users: User[] }) {
 
 Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
 
-### 3. ORM — active record, Prisma or Drizzle
+### 4. ORM — active record, Prisma or Drizzle
 
 ```ts
 // app/Models/Post.ts
@@ -130,7 +157,7 @@ await post.update({ title: 'Hello, RudderJS' })
 
 Same API on top of Prisma or Drizzle — swap adapters without touching model code.
 
-### 4. AI agents — 11 providers, tools, streaming
+### 5. AI agents — 11 providers, tools, streaming
 
 ```ts
 import { agent, toolDefinition } from '@rudderjs/ai'
@@ -154,7 +181,7 @@ const reply = await weatherAgent.prompt('What is the weather in Tokyo?')
 
 Same agent works with Anthropic, OpenAI, Google, Groq, Ollama, xAI, DeepSeek, Mistral, Azure, Cohere, Jina. Add `.stream()` for SSE, run agents on the queue, gate tool calls with approval.
 
-### 5. Real-time — WebSocket channels on the same port
+### 6. Real-time — WebSocket channels on the same port
 
 ```ts
 // routes/channels.ts — declare a presence channel
@@ -174,7 +201,7 @@ broadcast('chat', 'message', { user: 'Ada', text: 'Hi there', ts: Date.now() })
 
 WebSocket server bundled with `@rudderjs/broadcast` — no second daemon, no Pusher dependency. Auth, presence, and wildcard channels work out of the box.
 
-### 6. Sync — collaborative documents with Yjs CRDT
+### 7. Sync — collaborative documents with Yjs CRDT
 
 ```ts
 // bootstrap/providers.ts
@@ -323,7 +350,7 @@ RudderJS is the middle ground — batteries-included, modular, UI-agnostic, full
 
 RudderJS is **fully on 1.0+** as of 2026-05-02. Every published `@rudderjs/*` package has a stable public API; breaking changes from here on require explicit major bumps and migration notes.
 
-RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line, same model as Laravel's first-party packages, AdonisJS, and most of the npm ecosystem. A higher major reflects iteration history, not "more important."
+RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line, matching the norm across the npm ecosystem. A higher major reflects iteration history, not "more important."
 
 ---
 
