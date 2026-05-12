@@ -182,6 +182,21 @@ Queue.assertNothingPushed()
 
 `Queue.fake()` captures dispatched jobs in memory and never invokes the adapter — assertions pass or fail without side effects.
 
+## Job lifecycle events
+
+`@rudderjs/queue/observers` exposes a process-wide event stream of job transitions — used by `@rudderjs/telescope`, `@rudderjs/horizon`, and `@rudderjs/pulse` for telemetry, and available to your app for custom dashboards or audit logs.
+
+```ts
+import { queueObservers } from '@rudderjs/queue/observers'
+
+const unsubscribe = queueObservers.subscribe((event) => {
+  // event.kind: 'job.dispatched' | 'job.active' | 'job.completed' | 'job.failed'
+  log.info({ kind: event.kind, name: event.name, queue: event.queue }, 'queue event')
+})
+```
+
+The registry is a `globalThis` singleton (mirrors `@rudderjs/mcp/observers`, `@rudderjs/http/observers`, `@rudderjs/ai/observers`). The `sync` adapter emits these natively; the BullMQ adapter emits them from the **worker process**, so cross-process subscribers (Horizon's `RedisStorage`) see every transition without the dispatcher needing to be involved.
+
 ## Pitfalls
 
 - **`sync` driver in production.** Jobs run on the request thread, blocking the response. Switch to BullMQ or Inngest before deploy.

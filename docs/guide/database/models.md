@@ -510,6 +510,32 @@ Built-in casts: `'string'`, `'integer'`, `'float'`, `'boolean'`, `'date'`, `'dat
 
 For custom transforms, implement `CastUsing` — see the [@rudderjs/orm README](https://github.com/rudderjs/rudder/tree/main/packages/orm) for examples.
 
+### `vector({ dimensions })` — pgvector
+
+For pgvector columns, use the `vector` cast factory. Writes validate length and finiteness; reads return a `number[]`:
+
+```ts
+import { Model, vector } from '@rudderjs/orm'
+
+class Document extends Model {
+  static casts = {
+    embedding: vector({ dimensions: 1536 }),
+  }
+  declare embedding: number[]
+}
+```
+
+Pair with `whereVectorSimilarTo()` on the QueryBuilder for similarity search:
+
+```ts
+const matches = await Document
+  .where('tenantId', tenantId)
+  .whereVectorSimilarTo('embedding', queryEmbedding, { metric: 'cosine', limit: 10 })
+  .get()
+```
+
+Postgres + the pgvector extension required. Scaffold the migration with `pnpm rudder make:migration add_embedding --vector`. See [Vector stores](/guide/vector-stores) for the full surface, including hosted-vector-store integration with `@rudderjs/ai`.
+
 ## Accessors and mutators
 
 Use `Attribute.make()` for computed reads and write transforms:

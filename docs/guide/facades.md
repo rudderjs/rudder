@@ -59,15 +59,29 @@ Session.put('flash.success', 'Saved!')   // Session writes are sync
 
 ## Request-scoped facades
 
-`auth()` and `Session` both live behind AsyncLocalStorage — they read from the current request's scope. Calling them outside a request (during boot, in a script that bypasses middleware) throws a clear error rather than returning a silent ghost.
+`auth()` and `Session` both live behind AsyncLocalStorage — they read from the current request's scope. They behave slightly differently when called outside a request:
+
+- **`auth().user()` soft-fails to `null`.** Matches Laravel's `Auth::user()` semantics — unauthenticated, not a hard error. Safe to reference from api handlers (which run without `AuthMiddleware` by default), CLI scripts, or background jobs; it just returns `null`.
+- **`Session.get(...)` / `Session.flash(...)` throw.** Session data lives in cookies that only exist inside an HTTP request — there's no sensible fallback. Use `Session.maybeCurrent()` for a non-throwing check before calling other methods.
 
 ```ts
-// ❌ Throws — no request scope
+// ✓ Safe — returns null outside a request
 import { auth } from '@rudderjs/auth'
 
 class AppServiceProvider extends ServiceProvider {
   async boot() {
-    const user = await auth().user()  // throws: "No auth context"
+    const user = await auth().user()  // null during boot
+  }
+}
+```
+
+```ts
+// ❌ Throws — no session context
+import { Session } from '@rudderjs/session'
+
+class AppServiceProvider extends ServiceProvider {
+  async boot() {
+    Session.get('theme')   // throws: "No session in context"
   }
 }
 ```
@@ -75,8 +89,9 @@ class AppServiceProvider extends ServiceProvider {
 ```ts
 // ✓ Works — runs inside an HTTP request
 Route.get('/me', async () => {
-  const user = await auth().user()
-  return { user }
+  const user  = await auth().user()
+  const theme = Session.get('theme')
+  return { user, theme }
 })
 ```
 

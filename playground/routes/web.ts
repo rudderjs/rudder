@@ -104,6 +104,18 @@ Route.get('/demos/ws', async () => view('demos.ws'))
 // GET /demos/cache — Cache.get + Cache.set round-trip (@rudderjs/cache).
 Route.get('/demos/cache', async () => view('demos.cache'))
 
+// GET /demos/page-context — pageContext.user/.flash/.locale enhancer demo + per-page headers.
+Route.get('/demos/page-context', async () => view('demos.page-context', {}, {
+  headers: { 'cache-control': 'no-store' },
+}))
+
+// POST /demos/page-context/notify — set a flash and redirect back so the next render reads it from pageContext.flash.
+Route.post('/demos/page-context/notify', async (_req, res) => {
+  const { Session } = await import('@rudderjs/session')
+  Session.flash('greeting', `Hello at ${new Date().toLocaleTimeString()}`)
+  res.redirect('/demos/page-context')
+})
+
 // GET /demos/queue — Job dispatch demo (@rudderjs/queue).
 Route.get('/demos/queue', async () => view('demos.queue'))
 

@@ -17,6 +17,8 @@ The view file lives at `app/Views/Dashboard.tsx`, takes typed props, and is rend
 
 **Framework support:** React, Vue, Solid, and vanilla HTML-string mode are all supported. The scanner auto-detects which Vike renderer is installed (`vike-react`, `vike-vue`, `vike-solid`) and emits the matching stub — see [Framework support](#framework-support) below.
 
+**Per-page headers:** pass `{ headers }` as the third argument to `view()` to attach response headers (cache-control, CSP, etc.) without leaving the controller — see [Per-page response headers](#per-page-response-headers) below.
+
 ---
 
 ## Why use this instead of Vike pages directly?
@@ -140,6 +142,69 @@ export default function Login() { /* ... */ }
 **This is required whenever the controller URL diverges from the id-derived path.** Without the export, Vike's client route table doesn't match the browser URL and SPA navigation falls back to full page reloads — you won't get an error, just silent perf regression.
 
 The Vite scanner reads the export at build time and wires the Vike page to the explicit path.
+
+---
+
+## Per-page response headers
+
+`view()` takes an optional third argument for response headers. The headers attach to the rendered SSR response via `@rudderjs/vite`'s `+headersResponse` Vike hook — no manual `Response` wrapping in the controller, no middleware boilerplate:
+
+```ts
+// Static headers — most common case
+Route.get('/pricing', async () => {
+  const plans = await Plan.all()
+  return view('marketing.pricing', { plans }, {
+    headers: { 'cache-control': 'public, max-age=3600, s-maxage=86400' },
+  })
+})
+```
+
+Pass a **function** when a header needs per-request values (CSP nonces, request-scoped tokens):
+
+```ts
+Route.get('/admin/dashboard', async () => {
+  const nonce = useCspNonce()
+  return view('admin.dashboard', await loadProps(), {
+    headers: () => ({
+      'content-security-policy': `script-src 'self' 'nonce-${nonce}'`,
+    }),
+  })
+}, [AuthMiddleware()])
+```
+
+**Reserved headers** the framework owns and you can't override:
+
+- `set-cookie` (session, auth, CSRF cooperate on this — see the multi-value Set-Cookie pitfall in CLAUDE.md)
+- `vary`
+- Anything matching `x-rudderjs-*`
+
+These are silently dropped from your `headers` object to prevent collisions with the server-hono response pipeline.
+
+---
+
+## Reading framework state from views
+
+When `@rudderjs/vite` is installed, framework packages can push per-request state onto Vike's `pageContext`, so any view can read it via `usePageContext()` without a `+data.ts` file or controller plumbing:
+
+| Package | Available as |
+|---|---|
+| `@rudderjs/auth` | `pageContext.user` — current authenticated user (or `null`) |
+| `@rudderjs/session` | `pageContext.flash` — flash bag from the previous request |
+| `@rudderjs/localization` | `pageContext.locale` — resolved locale for the current request |
+
+```tsx
+// app/Views/Dashboard.tsx
+import { usePageContext } from 'vike-react/usePageContext'
+
+export default function Dashboard() {
+  const { user, locale, flash } = usePageContext()
+  // user, locale, flash are all typed because the packages augment
+  // Vike.PageContext when imported.
+  return <h1>Hello {user?.name ?? 'guest'} — {locale}</h1>
+}
+```
+
+App code can register its own enhancers via `@rudderjs/vite/page-context-enhancers` — see the [Vike framework hooks](../vite/README.md#vike-framework-hooks) section in `@rudderjs/vite`.
 
 ---
 
@@ -268,11 +333,12 @@ No `<Link>` component needed — plain `<a href="/dashboard">` tags are intercep
 
 The package is a thin coordination layer. The heavy lifting is done by `@rudderjs/vite` (which generates the virtual Vike pages) and `@rudderjs/server-hono` (which intercepts `ViewResponse` from controller handlers and resolves it via Vike's `renderPage()`).
 
-1. **`view(id, props)`** returns a `ViewResponse` instance (a class with a static `__rudder_view__` marker).
+1. **`view(id, props, options?)`** returns a `ViewResponse` instance (a class with a static `__rudder_view__` marker). The optional third arg accepts `{ headers }` for per-page response headers.
 2. **`@rudderjs/server-hono`** detects the marker via duck-typing (no hard import on this package) and calls `result.toResponse()` after the controller's middleware chain runs.
-3. **`toResponse()`** builds the Vike URL from the id (`'home'` → `/home`), preserves the `.pageContext.json` suffix if the request came from SPA nav, and calls Vike's `renderPage()`.
-4. **`renderPage()`** routes the URL to the matching Vike page (the auto-generated stub at `pages/__view/<id>/+Page.tsx`), which reads `pageContext.viewProps` and passes them to the user's view component.
-5. **The HTML is streamed back** with the controller-supplied props serialized for client hydration.
+3. **`toResponse()`** builds the Vike URL from the id (`'home'` → `/home`), preserves the `.pageContext.json` suffix if the request came from SPA nav, resolves the `headers` option (calling it if it's a function, filtering reserved keys), and calls Vike's `renderPage()` with both `viewProps` and `viewHeaders` attached to `pageContext`.
+4. **`renderPage()`** routes the URL to the matching Vike page (the auto-generated stub at `pages/__view/<id>/+Page.tsx`), which reads `pageContext.viewProps` and passes them to the user's view component. The generated `pages/__view/+config.ts` forwards both `viewProps` and `viewHeaders` to the client via `passToClient`.
+5. **`@rudderjs/vite`'s `+headersResponse` hook** (auto-generated stub in `pages/+headersResponse.ts`) reads `pageContext.viewHeaders` and Vike attaches them to the SSR response.
+6. **The HTML is streamed back** with the controller-supplied props serialized for client hydration and the custom headers in place.
 
 For SPA navigation, a separate fetch handler in `@rudderjs/server-hono` recognizes Vike's `*.pageContext.json` URL pattern and rewrites it to the bare URL — but only for paths registered as controller routes, so Vike's own pages are unaffected.
 

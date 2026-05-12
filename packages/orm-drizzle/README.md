@@ -207,6 +207,39 @@ When the Model enables soft deletes (via `_enableSoftDeletes()` on the QueryBuil
 
 ---
 
+## pgvector similarity search
+
+The adapter implements `whereVectorSimilarTo()` against Postgres + the pgvector extension via `db.execute(sql\`...\`)`. SQLite and LibSQL connections throw `VectorStorageUnsupportedError` — vector queries require a Postgres driver (`postgres-js`, `pg`, or `neon-serverless`).
+
+```ts
+import { Model, vector } from '@rudderjs/orm'
+
+class Document extends Model {
+  static override casts = {
+    embedding: vector({ dimensions: 1536 }),
+  }
+  declare embedding: number[]
+}
+
+const hits = await Document
+  .where('tenantId', tenantId)
+  .whereVectorSimilarTo('embedding', queryEmbedding, { metric: 'cosine', limit: 10 })
+  .get()
+```
+
+Setup:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE documents ADD COLUMN embedding vector(1536);
+```
+
+Or scaffold the migration: `pnpm rudder make:migration add_embedding_to_documents --vector`.
+
+See the [Vector search](../orm/README.md#vector-search) section in `@rudderjs/orm` for the full API + limitations.
+
+---
+
 ## Known Limitations
 
 ### `with()` is a no-op

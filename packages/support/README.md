@@ -188,6 +188,13 @@ users.partition(u => u.role === 'admin')  // [Collection<admin>, Collection<user
 | `partition(fn)` | Split into `[passing, failing]` tuple of collections. |
 | `sliding(size, step?)` | Overlapping windows of `size`. |
 
+**Sort / Dedupe**
+
+| Method | Description |
+|---|---|
+| `sortBy(key \| fn)` | Stable ascending sort by property name or selector. Strings compare via `localeCompare`, everything else via `<` / `>`. |
+| `unique(key? \| fn?)` | Distinct items. With no argument, dedupes by identity (`Set` semantics); with a key or selector, dedupes by that derived value (first occurrence wins). |
+
 **Combination**
 
 | Method | Description |
@@ -325,6 +332,8 @@ isObject(null)        // false
 | `tap(value, fn)` | Calls `fn(value)` and returns `value`. |
 | `deepClone(value)` | Deep clone via JSON round-trip. |
 | `isObject(value)` | `true` for plain objects only — `false` for `Date`, `Map`, arrays, `null`. |
+| `isWebContainer()` | `true` when running inside WebContainer / StackBlitz / Bolt.new — gates filesystem-heavy paths that don't behave the same in browser-sandboxed Node. |
+| `resolveOptionalPeer(name)` | Resolve an optional peer package from the app root, with an ESM-only `exports.import` fallback for packages where `createRequire().resolve()` fails. Used internally by adapters. |
 
 ---
 
@@ -333,4 +342,3 @@ isObject(null)        // false
 - All exports are re-exported from `@rudderjs/core` — you rarely need to import `@rudderjs/support` directly.
 - `defineEnv()` validates eagerly at module evaluation time — failures surface at boot.
 - `dd()` calls `process.exit(1)` — development use only.
-- `resolveOptionalPeer()` resolves optional peer packages from the app root — used internally by adapters.

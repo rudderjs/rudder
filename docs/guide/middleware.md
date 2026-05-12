@@ -125,7 +125,8 @@ Requires a registered cache adapter. Falls open if none is configured.
 Double-submit-cookie CSRF protection. Apply to web routes only — not API routes.
 
 ```ts
-import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
+// Server side
+import { CsrfMiddleware } from '@rudderjs/middleware'
 
 Route.post('/contact', handler, [CsrfMiddleware()])
 
@@ -133,10 +134,16 @@ Route.post('/contact', handler, [CsrfMiddleware()])
 CsrfMiddleware({ exclude: ['/api/*'] })
 ```
 
-Read the token client-side from the cookie:
+Read the token client-side from the cookie. **Import from `@rudderjs/middleware/client`**, not the main barrel — the barrel pulls in `@rudderjs/cache` and a top-level `node:crypto` import, which Vite externalises and crashes in the browser at module-evaluation time:
 
 ```ts
-fetch('/contact', { method: 'POST', headers: { 'X-CSRF-Token': getCsrfToken() } })
+// Client side
+import { getCsrfToken } from '@rudderjs/middleware/client'
+
+fetch('/contact', {
+  method:  'POST',
+  headers: { 'X-CSRF-Token': getCsrfToken() },
+})
 ```
 
 ### `CorsMiddleware`

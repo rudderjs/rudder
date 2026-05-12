@@ -99,6 +99,38 @@ Laravel-style migration commands that delegate to the appropriate ORM tool. The 
 
 Lists all registered API routes (from `@rudderjs/router`) and Vike filesystem page routes.
 
+### `command:list`
+
+Show every command available in the project — CLI-owned, package-contributed, and user-defined. Useful for discoverability and for AI agents that need a structured view of what commands they can run.
+
+```bash
+pnpm rudder command:list                 # tabular output, user-defined only
+pnpm rudder command:list --all           # include built-in + package commands
+pnpm rudder command:list --all --json    # machine-readable; consumed by @rudderjs/boost's commands_list MCP tool
+```
+
+The `--json` shape carries name, description, args, options, and source for each command, plus a `bootError` field when the app fails to boot so consumers (Boost's MCP) get partial info instead of a crash.
+
+### `providers:discover`
+
+Scan installed `@rudderjs/*` packages and write `bootstrap/cache/providers.json` — the manifest that `defaultProviders()` reads at boot. Run after installing or removing any framework package; the scaffolder runs it automatically on `--install`.
+
+```bash
+pnpm rudder providers:discover
+```
+
+This command **skips `bootApp()`** (chicken-and-egg with the manifest) so it's fast and works even when the app can't boot.
+
+### `model:prune`
+
+Walk every Model registered with `ModelRegistry` that defines `static prunable()` and delete matching rows. Pairs with Passport's `MassPrunable` tokens and any app-defined prunable models.
+
+```bash
+pnpm rudder model:prune
+```
+
+Honors each model's `pruneMode`: `'instance'` (default) re-queries each chunk and fires `deleting`/`deleted` observers; `'mass'` (`MassPrunable`) runs `deleteAll()` per chunk — no observers, soft-deletes bypassed.
+
 ## `make:module` Scaffold
 
 The `make:module Blog` command creates:
@@ -115,6 +147,27 @@ app/Modules/Blog/
 It also auto-registers `BlogServiceProvider` in `bootstrap/providers.ts`.
 
 After scaffolding, run `pnpm rudder module:publish --generate` to merge the Prisma shard and regenerate the client.
+
+## Commands from other packages
+
+The CLI is the runner — most commands are owned by the package that ships the feature. `loadPackageCommands()` eagerly imports command modules from each installed package via subpath exports, so they appear automatically in `--help` once the package is in `package.json`.
+
+| Package | Commands |
+|---|---|
+| `@rudderjs/ai` | `make:agent`, `ai:eval` |
+| `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
+| `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `db:push`, `db:generate`, `model:prune` |
+| `@rudderjs/router` | `route:list` |
+| `@rudderjs/queue` | `queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry` |
+| `@rudderjs/schedule` | `schedule:run`, `schedule:work`, `schedule:list` |
+| `@rudderjs/storage` | `storage:link` |
+| `@rudderjs/sync` | `sync:docs`, `sync:clear`, `sync:inspect` |
+| `@rudderjs/broadcast` | `broadcast:connections` |
+| `@rudderjs/boost` | `boost:install`, `boost:update`, `boost:mcp` |
+| `@rudderjs/passport` | `passport:keys`, `passport:client`, `passport:purge` |
+| `@rudderjs/terminal` | `make:terminal` |
+
+CLI-owned commands stay focused on scaffolding (`make:*`, `module:*`, `vendor:publish`) and process meta (`command:list`, `providers:discover`).
 
 ## User-Defined Commands
 

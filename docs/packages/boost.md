@@ -46,10 +46,29 @@ pnpm rudder boost:install --agent=cursor,copilot # multiple agents
 ## Commands
 
 ```bash
-pnpm rudder boost:install     # generate per-agent configs, guidelines, skills, boost.json
-pnpm rudder boost:update      # re-scan packages and update all agent configs
-                              # --discover flag re-runs for newly installed packages
-pnpm rudder boost:mcp         # start the MCP server (stdio transport)
+pnpm rudder boost:install                          # generate per-agent configs, guidelines, skills, boost.json
+pnpm rudder boost:install --agent=cursor,copilot   # restrict to specific agents
+pnpm rudder boost:install --include-all-skills     # install every shipped skill, even ones whose target package isn't present
+pnpm rudder boost:update                           # re-scan packages and update all agent configs
+                                                   # --discover flag re-runs for newly installed packages
+pnpm rudder boost:mcp                              # start the MCP server (stdio transport)
+```
+
+`boost:install` writes a `boost.json` at the project root recording the agents you selected and the skills it installed; `boost:update` reads it back to drive incremental re-scans without re-prompting. **Commit `boost.json`** so teammates and CI get the same agent configuration.
+
+### Skill targeting (`appliesTo`)
+
+A skill's frontmatter can declare `appliesTo: [<package>, ...]`. `boost:install` only installs the skill when at least one of those packages is present in the project — keeps the skills directory focused on what the project actually uses. Use `--include-all-skills` to bypass and install every shipped skill, even ones whose target package isn't installed.
+
+```yaml
+# boost/skills/orm-models/SKILL.md
+---
+name: orm-models
+appliesTo:
+  - @rudderjs/orm
+  - @rudderjs/orm-prisma
+trigger: when defining or editing ORM models
+---
 ```
 
 ## MCP tools

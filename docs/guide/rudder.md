@@ -130,15 +130,21 @@ The framework ships several built-in commands that show up automatically. The se
 |---|---|---|
 | `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `make:job`, `make:notification` | core | Scaffold boilerplate files |
 | `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
-| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM) |
+| `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
+| `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
+| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM) |
+| `model:prune` | orm | Walk `prunable()` models and delete matching rows. Honors `pruneMode: 'instance' \| 'mass'` |
 | `queue:work` | queue | Worker process |
 | `storage:link` | storage | Symlink `public/storage → storage/app/public` |
 | `schedule:work`, `schedule:run`, `schedule:list` | schedule | Task scheduler |
 | `route:list` | router | List all registered routes with name + middleware |
-| `command:list` | rudder | List all registered commands |
+| `command:list` | rudder | List all registered commands. `--all` includes built-in + package commands; `--json` emits a machine-readable envelope used by `@rudderjs/boost`'s MCP tools |
 | `vendor:publish` | core | Publish package assets (configs, views, schemas) |
 | `providers:discover` | core | Refresh the provider manifest |
 | `mcp:inspector` | mcp | Dev UI for MCP servers |
+| `ai:eval` | ai | Run agent evals with metrics; `--record` / `--replay` for fixtures, `--html <path>` for a self-contained report |
+| `passport:keys`, `passport:client`, `passport:purge` | passport | OAuth 2 key + client + token management |
+| `boost:install`, `boost:update`, `boost:mcp` | boost | AI-agent DX setup + MCP server |
 
 For the full set, run `pnpm rudder --help`.
 

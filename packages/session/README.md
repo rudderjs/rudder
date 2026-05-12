@@ -99,7 +99,29 @@ req.session.flash('error', 'Something went wrong.')
 
 // Read on the next request
 const msg = Session.getFlash<string>('success')
+
+// Read every flash entry at once
+const all = Session.allFlash()           // { success?: string, error?: string, ... }
+const all = req.session.allFlash()       // same, instance form
 ```
+
+### Reading flash from a view
+
+When `@rudderjs/vite` is installed, `SessionProvider.boot()` registers a
+page-context enhancer that copies the previous request's flash bag onto
+`pageContext.flash`, so controller views can read it without a `+data.ts`:
+
+```tsx
+// app/Views/Dashboard.tsx
+import { usePageContext } from 'vike-react/usePageContext'
+
+export default function Dashboard() {
+  const { flash } = usePageContext()
+  return flash.success ? <Banner>{flash.success}</Banner> : null
+}
+```
+
+The registration is lazy and no-ops when `@rudderjs/vite` isn't installed.
 
 ### Session ID
 
@@ -122,6 +144,7 @@ await req.session.regenerate()    // new ID, same data (use after login)
 | `flush()` | Clear all session data. |
 | `flash(key, value)` | Store a value readable on the *next* request via `getFlash()`. |
 | `getFlash<T>(key, fallback?)` | Read a flash value set by the *previous* request. |
+| `allFlash()` | Return a shallow copy of every flash entry set by the *previous* request. |
 | `has(key)` | Check whether a key exists. |
 | `all()` | Return a shallow copy of all session data. |
 | `id()` | Return the current session ID. |
@@ -131,7 +154,7 @@ await req.session.regenerate()    // new ID, same data (use after login)
 
 Mirrors `SessionInstance` as static methods, backed by `AsyncLocalStorage`. Throws if called outside a request wrapped by `SessionMiddleware()`.
 
-`get` · `put` · `forget` · `flash` · `getFlash` · `has` · `all` · `regenerate`
+`get` · `put` · `forget` · `flash` · `getFlash` · `allFlash` · `has` · `all` · `regenerate`
 
 ---
 

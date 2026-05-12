@@ -298,6 +298,45 @@ await user!.loadMissing('profile', 'posts')
 
 ---
 
+## Vector search
+
+`whereVectorSimilarTo(column, query, opts?)` runs a pgvector similarity query on the column. The terminal call (`get`/`first`/`all`) routes through raw SQL because pgvector ops (`<=>`, `<->`, `<#>`) can't be expressed in the fluent select APIs of either adapter, but everything else — `where(...)` chains, `limit`, `offset`, hydration, casts — composes normally.
+
+```ts
+const matches = await Document
+  .where('tenantId', tenantId)
+  .whereVectorSimilarTo('embedding', queryEmbedding, {
+    metric:        'cosine',  // 'cosine' (default) | 'euclidean' | 'inner_product'
+    minSimilarity: 0.75,       // optional — 1 - distance threshold
+    limit:         10,
+  })
+  .selectVectorDistance('embedding', queryEmbedding, 'distance')  // optional projected column
+  .get()
+
+// matches: Document[] with .distance set when selectVectorDistance() is used
+```
+
+**`query`** is either a `number[]` (pre-computed embedding) or a string — when a string, the adapter calls the registered embedder (see `@rudderjs/ai`'s `similaritySearch` lift) to produce the vector. Without a registered embedder, passing a string throws `MissingEmbedderError`.
+
+**Requirements** — Postgres + the pgvector extension, and a `vector(N)` column on the table:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE documents ADD COLUMN embedding vector(1536);
+```
+
+Helper: `pnpm rudder make:migration <name> --vector` scaffolds a migration with the `CREATE EXTENSION` + column add already filled in.
+
+**Limitations (v1):**
+
+- `whereGroup` / `orWhereGroup` / `whereHas` cannot wrap a `whereVectorSimilarTo` call — the raw-SQL path can't be nested inside a fluent subquery.
+- `.with(...)` and `withCount` / `withSum` / etc. don't compose with vector queries yet.
+- `orderBy` is redundant (vector queries always order by similarity) and throws if combined.
+- `count()` alongside `whereVectorSimilarTo` is not supported.
+- pgvector-only — SQLite/MySQL throw `VectorStorageUnsupportedError`.
+
+---
+
 ## Route model binding
 
 Models opt into route binding by exposing `static routeKey` (defaults to `'id'`) and `static findForRoute(value)`. The router's `router.bind(name, ModelClass)` API picks them up:
@@ -364,8 +403,22 @@ class Post extends Model {
 | `'encrypted'` | Decrypts string | Encrypts string |
 | `'encrypted:array'` | Decrypts + parses JSON | Encrypts JSON |
 | `'encrypted:object'` | Decrypts + parses JSON | Encrypts JSON |
+| `vector({ dimensions })` | `number[]` from pgvector text | `number[]` → pgvector text literal |
 
 Encrypted casts require `@rudderjs/crypt` to be installed.
+
+The `vector` cast is a factory — call it with the column's dimension so writes validate (`VectorDimensionMismatchError` on bad length, `NaN`, or `Infinity` before the SQL ever runs). Pair with `whereVectorSimilarTo()` for similarity search — see [Vector search](#vector-search) below.
+
+```ts
+import { Model, vector } from '@rudderjs/orm'
+
+class Document extends Model {
+  static override casts = {
+    embedding: vector({ dimensions: 1536 }),
+  }
+  declare embedding: number[]
+}
+```
 
 ### Custom cast classes
 
