@@ -253,16 +253,11 @@ export function CsrfMiddleware(options?: CsrfOptions): MiddlewareHandler {
   return handler
 }
 
-/**
- * Read the CSRF token from the browser cookie (client-side only).
- * Safe to call in SSR — returns '' on the server.
- */
-export function getCsrfToken(cookieName = 'csrf_token'): string {
-  if (typeof (globalThis as Record<string, unknown>)['document'] === 'undefined') return ''
-  const doc = (globalThis as Record<string, unknown>)['document'] as { cookie: string }
-  const match = doc.cookie.match(new RegExp(`(?:^|;\\s*)${cookieName}=([^;]+)`))
-  return match?.[1] ? decodeURIComponent(match[1]) : ''
-}
+// Re-exported from the client subpath so server code can still
+// `import { getCsrfToken } from '@rudderjs/middleware'`. Browser code
+// should import from `@rudderjs/middleware/client` to avoid pulling
+// the server-only barrel into the client bundle.
+export { getCsrfToken } from './client.js'
 
 // ─── Helper to convert class-based middleware to handler ───
 

@@ -20,6 +20,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "default": "./dist/client.js",
+      "types": "./dist/client.d.ts"
     }
   },
   "scripts": {

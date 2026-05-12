@@ -1,6 +1,6 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
-import { getCsrfToken } from '@rudderjs/middleware'
+import { getCsrfToken } from '@rudderjs/middleware/client'
 
 // URL this view is served at — see Login.tsx for rationale.
 export const route = '/reset-password'
