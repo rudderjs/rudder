@@ -12,14 +12,13 @@ pnpm add @rudderjs/log
 
 ## Quick Start
 
+`LogProvider` is auto-discovered. Install the package, run `pnpm rudder providers:discover`, and the default `bootstrap/providers.ts` picks it up:
+
 ```ts
 // bootstrap/providers.ts
-import { LogProvider } from '@rudderjs/log'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [
-  LogProvider,
-  // ...other providers
-]
+export default [...(await defaultProviders())]
 ```
 
 ```ts

@@ -10,15 +10,13 @@ pnpm add @rudderjs/notification
 
 ## Setup
 
+`NotificationProvider` and `MailProvider` are both auto-discovered, and `defaultProviders()` orders them correctly (mail before notification so the mail channel is registered first). Install the packages, run `pnpm rudder providers:discover`, and the default `bootstrap/providers.ts` picks them up:
+
 ```ts
 // bootstrap/providers.ts
-import { MailProvider } from '@rudderjs/mail'
-import { NotificationProvider } from '@rudderjs/notification'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [
-  MailProvider,           // required before NotificationProvider when using mail channel
-  NotificationProvider,   // registers built-in mail + database + broadcast channels
-]
+export default [...(await defaultProviders())]
 ```
 
 ## Defining Notifications
