@@ -12,6 +12,7 @@ export function demosIndexView(ctx: TemplateContext): string {
     .join('\n')
 
   return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 // Override the id-derived URL ('/demos/index') so SPA nav matches the controller ('/demos').
 export const route = '/demos'
@@ -19,15 +20,7 @@ export const route = '/demos'
 export default function DemosIndex() {
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/" className="nav-link">Home</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Demos</h1>

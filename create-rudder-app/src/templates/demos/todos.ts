@@ -6,6 +6,7 @@
 
 export function demosTodosView(): string {
   return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 import { useState, useRef } from 'react'
 import type { Todo } from '../../Modules/Todo/TodoSchema.js'
 
@@ -53,16 +54,7 @@ export default function TodosDemo({ todos: initial }: TodosDemoProps) {
 
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/demos" className="nav-link">Demos</a>
-          <a href="/" className="nav-link">Home</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Todo List</h1>

@@ -7,6 +7,7 @@ export function demosContactView(ctx: TemplateContext): string {
   const sendsCsrf = ctx.packages.auth ? 'true' : 'false'
 
   return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 import { useState } from 'react'
 import { getCsrfToken } from '@rudderjs/middleware'
 
@@ -54,15 +55,7 @@ export default function ContactDemo() {
 
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/demos" className="nav-link">← Demos</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Contact</h1>

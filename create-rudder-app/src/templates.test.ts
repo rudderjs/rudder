@@ -276,14 +276,18 @@ describe('getTemplates() — auth pages', () => {
     }
   })
 
-  it('welcome view and routes/web.ts register /login when auth is selected', () => {
+  it('welcome view delegates auth UI to SiteHeader when auth is selected', () => {
     const files = getTemplates(ctx({ packages: { ...defaultPkgs, auth: true }, tailwind: true }))
-    const welcome = files['app/Views/Welcome.tsx']!
-    const web     = files['routes/web.ts']!
-    // Welcome receives loginUrl/registerUrl as props from the controller
-    // (Laravel's Route::has() idiom) — no hardcoded URLs in the view itself.
-    assert.ok(welcome.includes('props.loginUrl'))
-    assert.ok(welcome.includes('props.registerUrl'))
+    const welcome    = files['app/Views/Welcome.tsx']!
+    const siteHeader = files['app/Components/SiteHeader.tsx']!
+    const web        = files['routes/web.ts']!
+    // Welcome imports the shared SiteHeader; SiteHeader reads user from
+    // pageContext (set by @rudderjs/auth's enhancer), so the welcome
+    // controller no longer needs to pass loginUrl/registerUrl props.
+    assert.ok(welcome.includes("import { SiteHeader } from 'App/Components/SiteHeader.js'"))
+    assert.ok(siteHeader.includes('/auth/sign-out'))
+    assert.ok(siteHeader.includes("href=\"/login\""))
+    assert.ok(siteHeader.includes("href=\"/register\""))
     // routes/web.ts wires registerAuthRoutes() and the welcome route.
     assert.ok(web.includes('registerAuthRoutes(Route'))
     assert.ok(web.includes("view('welcome'"))

@@ -53,20 +53,12 @@ const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: stri
 
 // Welcome page — replaces the pages/index/ Vike page with a controller view.
 // Delete this route and app/Views/Welcome.tsx to swap in your own landing page.
-Route.get('/', async () => {
-  const current = await auth().user() as Record<string, unknown> | null
-  const user = current
-    ? { name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }
-    : null
-
-  return view('welcome', {
-    appName:       config<string>('app.name', 'RudderJS'),
-    rudderVersion: rudderCorePkg.version,
-    nodeVersion:   process.version.replace(/^v/, ''),
-    env:           config<string>('app.env', 'development'),
-    user,
-  })
-})
+Route.get('/', async () => view('welcome', {
+  appName:       config<string>('app.name', 'RudderJS'),
+  rudderVersion: rudderCorePkg.version,
+  nodeVersion:   process.version.replace(/^v/, ''),
+  env:           config<string>('app.env', 'development'),
+}))
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing

@@ -137,6 +137,15 @@
 .page {
   @apply min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100;
 }
+.page-flex {
+  @apply flex flex-col;
+}
+.page-main-centered {
+  @apply flex flex-1 items-center justify-center pb-40;
+}
+.page-main-centered .hero {
+  @apply py-0;
+}
 .page-nav {
   @apply mx-auto flex max-w-6xl items-center justify-between px-6 py-5;
 }

@@ -44,9 +44,11 @@ const features: Feature[] = [
   },
 ]`
 
-export function welcomeViewReact(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n\n`
-  return `${cssImport}// URL this view is served at — MUST match the Route.get('/', ...) in routes/web.ts.
+export function welcomeViewReact(_ctx: TemplateContext): string {
+  return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
+
+// URL this view is served at — MUST match the Route.get('/', ...) in routes/web.ts.
 // The scanner reads this constant and writes it into the generated +route.ts,
 // so Vike's client router can SPA-navigate here instead of doing full reloads.
 export const route = '/'
@@ -56,11 +58,6 @@ export interface WelcomeProps {
   rudderVersion: string
   nodeVersion:   string
   env:           string
-  user:          { name: string; email: string } | null
-  // null when the auth package isn't installed (Laravel's Route::has() idiom).
-  loginUrl:      string | null
-  registerUrl:   string | null
-  signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
 }
@@ -74,47 +71,12 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const signOutUrl  = props.signOutUrl  ?? '/auth/sign-out'
-  const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
-  const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
-
-  async function handleSignOut() {
-    await fetch(signOutUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    '{}',
-    })
-    // Full reload so the server resolves a fresh pageContext (logged-out user).
-    window.location.href = '/'
-  }
+  const docsUrl   = props.docsUrl   ?? DEFAULT_DOCS
+  const githubUrl = props.githubUrl ?? DEFAULT_GITHUB
 
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          {props.loginUrl && (props.user ? (
-            <>
-              <span className="nav-badge">
-                Signed in as <strong>{props.user.name}</strong>
-              </span>
-              <button type="button" onClick={handleSignOut} className="nav-button">
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <a href={props.loginUrl} className="nav-link">Log in</a>
-              {props.registerUrl && (
-                <a href={props.registerUrl} className="nav-button">Register</a>
-              )}
-            </>
-          ))}
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">{props.appName}</h1>
@@ -158,8 +120,7 @@ export default function Welcome(props: WelcomeProps) {
 `
 }
 
-export function welcomeViewVue(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n`
+export function welcomeViewVue(_ctx: TemplateContext): string {
   // Vue SFC quirk: top-level `export` statements must live in a regular
   // <script> block, NOT <script setup> (the compiler rejects exports there).
   // The scanner reads both blocks as plain text, so the route override is
@@ -171,17 +132,14 @@ export const route = '/'
 </script>
 
 <script setup lang="ts">
-${cssImport}
+import '@/index.css'
+import SiteHeader from 'App/Components/SiteHeader.vue'
+
 export interface WelcomeProps {
   appName:       string
   rudderVersion: string
   nodeVersion:   string
   env:           string
-  user:          { name: string; email: string } | null
-  // null when the auth package isn't installed (Laravel's Route::has() idiom).
-  loginUrl:      string | null
-  registerUrl:   string | null
-  signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
 }
@@ -196,43 +154,13 @@ interface Feature {
 
 ${WELCOME_FEATURES}
 
-const signOutUrl  = props.signOutUrl  ?? '/auth/sign-out'
-const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
-const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
-
-async function handleSignOut() {
-  await fetch(signOutUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    '{}',
-  })
-  // Full reload so the server resolves a fresh pageContext (logged-out user).
-  window.location.href = '/'
-}
+const docsUrl   = props.docsUrl   ?? DEFAULT_DOCS
+const githubUrl = props.githubUrl ?? DEFAULT_GITHUB
 </script>
 
 <template>
   <div class="page">
-    <nav class="page-nav">
-      <div class="brand">
-        <span class="brand-dot"></span>
-        RudderJS
-      </div>
-      <div v-if="props.loginUrl" class="nav-right">
-        <template v-if="props.user">
-          <span class="nav-badge">
-            Signed in as <strong>{{ props.user.name }}</strong>
-          </span>
-          <button type="button" @click="handleSignOut" class="nav-button">
-            Sign out
-          </button>
-        </template>
-        <template v-else>
-          <a :href="props.loginUrl" class="nav-link">Log in</a>
-          <a v-if="props.registerUrl" :href="props.registerUrl" class="nav-button">Register</a>
-        </template>
-      </div>
-    </nav>
+    <SiteHeader />
 
     <section class="hero">
       <h1 class="hero-title">{{ props.appName }}</h1>
@@ -273,9 +201,10 @@ async function handleSignOut() {
 `
 }
 
-export function welcomeViewSolid(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n`
-  return `${cssImport}import { For, Show } from 'solid-js'
+export function welcomeViewSolid(_ctx: TemplateContext): string {
+  return `import '@/index.css'
+import { For } from 'solid-js'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 // URL this view is served at — see the React variant for rationale.
 export const route = '/'
@@ -285,11 +214,6 @@ export interface WelcomeProps {
   rudderVersion: string
   nodeVersion:   string
   env:           string
-  user:          { name: string; email: string } | null
-  // null when the auth package isn't installed (Laravel's Route::has() idiom).
-  loginUrl:      string | null
-  registerUrl:   string | null
-  signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
 }
@@ -303,58 +227,12 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const signOutUrl  = () => props.signOutUrl  ?? '/auth/sign-out'
-  const docsUrl     = () => props.docsUrl     ?? DEFAULT_DOCS
-  const githubUrl   = () => props.githubUrl   ?? DEFAULT_GITHUB
-
-  async function handleSignOut() {
-    await fetch(signOutUrl(), {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    '{}',
-    })
-    // Full reload so the server resolves a fresh pageContext (logged-out user).
-    window.location.href = '/'
-  }
+  const docsUrl   = () => props.docsUrl   ?? DEFAULT_DOCS
+  const githubUrl = () => props.githubUrl ?? DEFAULT_GITHUB
 
   return (
     <div class="page">
-      <nav class="page-nav">
-        <div class="brand">
-          <span class="brand-dot" />
-          RudderJS
-        </div>
-        <Show when={props.loginUrl}>
-          {(loginUrl) => (
-            <div class="nav-right">
-              <Show
-                when={props.user}
-                fallback={
-                  <>
-                    <a href={loginUrl()} class="nav-link">Log in</a>
-                    <Show when={props.registerUrl}>
-                      {(registerUrl) => (
-                        <a href={registerUrl()} class="nav-button">Register</a>
-                      )}
-                    </Show>
-                  </>
-                }
-              >
-                {(user) => (
-                  <>
-                    <span class="nav-badge">
-                      Signed in as <strong>{user().name}</strong>
-                    </span>
-                    <button type="button" onClick={handleSignOut} class="nav-button">
-                      Sign out
-                    </button>
-                  </>
-                )}
-              </Show>
-            </div>
-          )}
-        </Show>
-      </nav>
+      <SiteHeader />
 
       <section class="hero">
         <h1 class="hero-title">{props.appName}</h1>

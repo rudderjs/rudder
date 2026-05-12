@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 export const route = '/demos/billing/subscriptions'
 
@@ -44,15 +45,7 @@ export default function BillingSubscriptions({ mock, subscriptions: initial }: P
 
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/demos/billing" className="nav-link">Back</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Manage subscription</h1>

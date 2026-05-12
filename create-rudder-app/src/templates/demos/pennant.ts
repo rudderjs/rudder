@@ -4,6 +4,7 @@
 
 export function demosPennantView(): string {
   return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 interface PennantProps {
   user:   { id: string; name: string; email: string } | null
@@ -27,16 +28,7 @@ const features: FeatureCardSpec[] = [
 export default function PennantDemo({ user, values }: PennantProps) {
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/demos" className="nav-link">Demos</a>
-          <a href="/" className="nav-link">Home</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Feature flags</h1>
@@ -107,6 +99,7 @@ export default function PennantDemo({ user, values }: PennantProps) {
 
 export function demosPennantBetaView(): string {
   return `import '@/index.css'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 // Override the id-derived URL ('/demos/pennant-beta') so SPA nav matches the
 // controller route, which is '/demos/pennant/beta' (a sub-path under pennant).
@@ -114,14 +107,18 @@ export const route = '/demos/pennant/beta'
 
 export default function PennantBeta() {
   return (
-    <div className="error-wrap">
-      <h1 className="heading-lg">Beta dashboard</h1>
-      <p className="muted" style={{ maxWidth: '32rem', textAlign: 'center' }}>
-        You only see this page if <code className="inline-code">beta-dashboard</code> is active for your scope.
-        The route is wrapped in <code className="inline-code">FeatureMiddleware('beta-dashboard')</code>;
-        unauthorized scopes get a 403 before this view ever renders.
-      </p>
-      <a href="/demos/pennant" className="error-link">← Back to /demos/pennant</a>
+    <div className="page">
+      <SiteHeader />
+
+      <section className="hero">
+        <h1 className="hero-title">Beta dashboard</h1>
+        <p className="hero-lead">
+          You only see this page if <code className="inline-code">beta-dashboard</code> is active for your scope.
+          The route is wrapped in <code className="inline-code">FeatureMiddleware('beta-dashboard')</code>;
+          unauthorized scopes get a 403 before this view ever renders.
+        </p>
+        <a href="/demos/pennant" className="demo-back-link">← Back to /demos/pennant</a>
+      </section>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import '@/index.css'
 import { DEMOS, demoHref, demoTitle, type DemoSpec } from 'create-rudder-app/demos-registry'
+import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 // Override the id-derived URL (`/demos/index`) so SPA nav matches the controller (`/demos`).
 export const route = '/demos'
@@ -47,15 +48,7 @@ const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]
 export default function DemosIndex() {
   return (
     <div className="page">
-      <nav className="page-nav">
-        <div className="brand">
-          <span className="brand-dot" />
-          RudderJS
-        </div>
-        <div className="nav-right">
-          <a href="/" className="nav-link">Home</a>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <h1 className="hero-title">Demos</h1>
