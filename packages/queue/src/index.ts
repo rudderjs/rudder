@@ -215,7 +215,14 @@ export class SyncAdapter implements QueueAdapter {
         duration: completedAt.getTime() - startedAt.getTime(),
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       })
-      await job.failed?.(error)
+      // The job's own `failed()` hook is best-effort — if it throws, log
+      // and continue so the original failure is the one that propagates.
+      // Otherwise the user-defined hook's error would mask the real cause.
+      try {
+        await job.failed?.(error)
+      } catch (hookError) {
+        console.error(`[RudderJS Queue] job.failed() hook threw for "${name}":`, hookError)
+      }
       throw error
     }
   }

@@ -41,6 +41,13 @@ export function isUniqueUntilProcessing(job: Job): job is Job & ShouldBeUniqueUn
 }
 
 // ─── In-memory lock store (fallback when no cache adapter) ──
+//
+// The fallback map is module-scoped, so it is **process-local** and grows
+// without an external eviction trigger. For long-running processes that
+// dispatch many unique jobs without `@rudderjs/cache`, register the cache
+// (Redis or a TTL-aware driver) so locks expire centrally — otherwise the
+// map accumulates entries with `ttl=0` jobs held until the heuristic
+// 24-hour fallback expires.
 
 const _locks = new Map<string, number>()
 
@@ -50,6 +57,8 @@ const _locks = new Map<string, number>()
  * Returns `false` if the lock is already held (job should be skipped).
  *
  * Uses `@rudderjs/cache` if available, otherwise falls back to in-memory.
+ * The in-memory map is process-local — use a shared cache driver for
+ * cross-process uniqueness.
  */
 export async function acquireUniqueLock(job: Job & ShouldBeUnique): Promise<boolean> {
   const key = `rudderjs:unique:${job.uniqueId()}`

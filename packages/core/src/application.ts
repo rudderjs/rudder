@@ -348,6 +348,11 @@ const groupMiddlewareStore = (() => {
  * Register middleware for a named route group (`'web'` | `'api'`). Called
  * by framework providers during `boot()` — e.g. `@rudderjs/auth` appends
  * `AuthMiddleware()` to the `web` group so it only runs on web routes.
+ *
+ * **Not deduplicated.** Calling this twice with the same handler installs it
+ * twice. Providers that may `boot()` more than once (HMR reload, test
+ * harness) must either guard against re-installation or rely on
+ * `resetGroupMiddleware()` to clear the store before re-boot.
  */
 export function appendToGroup(group: RouteGroupName, handler: MiddlewareHandler): void {
   groupMiddlewareStore[group].push(handler)

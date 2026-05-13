@@ -28,15 +28,21 @@ export interface PasswordResetConfig {
   /** Seconds between reset requests for the same email (default: 60) */
   throttle?: number
   /**
-   * HMAC secret for hashing stored reset tokens.
-   * Defaults to the generic string 'password-reset' when omitted.
-   * Set this to your APP_KEY (or a derived value) so stored token
+   * HMAC secret for hashing stored reset tokens. **Required in production**
+   * — the broker throws on construction when `NODE_ENV === 'production'`
+   * and this is unset. In dev/test, an unset secret falls back to a
+   * hardcoded placeholder with a one-time `console.warn`, so apps boot
+   * without configuration but the gap is visible.
+   *
+   * Set this to your `APP_KEY` (or a value derived from it) so stored token
    * hashes are bound to your app instance.
    */
   secret?: string
 }
 
 // ─── Password Broker ──────────────────────────────────────
+
+let _devSecretWarned = false
 
 export class PasswordBroker {
   private readonly expire: number
@@ -50,7 +56,23 @@ export class PasswordBroker {
   ) {
     this.expire   = config.expire   ?? 60
     this.throttle = config.throttle ?? 60
-    this.secret   = config.secret   ?? 'password-reset'
+    if (config.secret) {
+      this.secret = config.secret
+    } else if (process.env['NODE_ENV'] === 'production') {
+      throw new Error(
+        '[@rudderjs/auth] PasswordBroker requires `secret` in production. ' +
+        'Set auth.passwords.secret in your config (typically derived from APP_KEY).'
+      )
+    } else {
+      if (!_devSecretWarned) {
+        console.warn(
+          '[@rudderjs/auth] PasswordBroker is using a hardcoded dev secret. ' +
+          'Set auth.passwords.secret for production.'
+        )
+        _devSecretWarned = true
+      }
+      this.secret = 'password-reset'
+    }
   }
 
   /**
@@ -133,6 +155,13 @@ export class PasswordBroker {
 
 // ─── In-Memory Token Repository (for testing / dev) ───────
 
+/**
+ * Process-local token store backed by a `Map`. **Not for production.**
+ * Pending reset tokens are lost on every restart, and the store is invisible
+ * to other processes (a multi-worker app would issue a token from one worker
+ * and reject it from another). Use a database-backed `TokenRepository` —
+ * `@rudderjs/orm` ships one — for any real deployment.
+ */
 export class MemoryTokenRepository implements TokenRepository {
   private store = new Map<string, { token: string; createdAt: Date; expiresAt: Date }>()
 

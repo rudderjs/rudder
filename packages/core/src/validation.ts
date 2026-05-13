@@ -52,6 +52,16 @@ export abstract class FormRequest<T extends ZodType = ZodType> {
 
   // ─── Lifecycle hooks (default no-ops; override in subclass) ──
 
+  /**
+   * Normalize input **before** `authorize()` and schema validation. Pipeline
+   * order: `prepareForValidation` → `authorize` → schema `parse` → `after` →
+   * `passedValidation`. Use this to canonicalize values that `authorize()`
+   * needs to read (e.g. lower-casing an email before a uniqueness check).
+   *
+   * Return the prepared input to replace `input` for the rest of the
+   * pipeline, or return nothing to leave it unchanged. Async overrides are
+   * awaited.
+   */
   protected prepareForValidation(
     _input: Record<string, unknown>,
   ): Record<string, unknown> | void | Promise<Record<string, unknown> | void> {
@@ -62,6 +72,12 @@ export abstract class FormRequest<T extends ZodType = ZodType> {
     return []
   }
 
+  /**
+   * Final transform after schema validation succeeds. Return data to
+   * **override** the validated value (the controller receives whatever you
+   * return). Return nothing (or `undefined`) to use the schema's parsed
+   * result unchanged.
+   */
   protected passedValidation(_data: z.infer<T>): z.infer<T> | void | Promise<z.infer<T> | void> {
     // default: no-op
   }

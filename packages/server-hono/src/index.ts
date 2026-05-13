@@ -71,6 +71,19 @@ function normalizeIp(ip: string): string {
   return ip === '::1' || ip === '::ffff:127.0.0.1' ? '127.0.0.1' : ip
 }
 
+/**
+ * Extract the client IP from proxy headers. Reads `x-forwarded-for` (taking
+ * the first hop) then `x-real-ip`. Returns `undefined` when `trustProxy` is
+ * false or no proxy header is present — never falls back to the socket
+ * address, which would be the proxy's IP and is almost always wrong.
+ *
+ * In dev, `@rudderjs/vite`'s `rudderjs:ip` plugin injects `x-real-ip` from
+ * `req.socket.remoteAddress` before universal-middleware converts the Node
+ * request to a Web Request, so dev sees the real client IP via the same path
+ * as prod-behind-proxy.
+ *
+ * `::1` and `::ffff:127.0.0.1` are normalized to `127.0.0.1`.
+ */
 function extractIp(c: Context, trustProxy: boolean): string | undefined {
   if (!trustProxy) return undefined
   // x-forwarded-for / x-real-ip (reverse proxy, or injected by rudderjs:ip vite plugin)
@@ -81,6 +94,26 @@ function extractIp(c: Context, trustProxy: boolean): string | undefined {
   return undefined
 }
 
+/**
+ * Build an `AppRequest` from a Hono context.
+ *
+ * Called twice per request — once by `applyMiddleware()` and once by
+ * `registerRoute()` — both passing the same Hono context. Per-request
+ * augmentations (`body`, `session`, `user`, `token`) are stored on `c` under
+ * `__rjs_*` keys and exposed as **getters** on each `req` object, so a value
+ * set during middleware is visible to the route handler even though the two
+ * `req` objects are distinct instances.
+ *
+ * **Plain property assignment on `req` does NOT cross between the two calls.**
+ * Middleware that needs to share state with the route handler must either
+ * (a) write via the dedicated setters (`req.body = ...` is wired through a
+ * setter that stashes onto `c`) or (b) stash directly on `c.req.raw` /
+ * `c.set()`. Adding a new shared field requires both a getter here and a
+ * matching `c`-stash from the writer side.
+ *
+ * `params` merges `__rjs_host_params` (captured by `host` route templates)
+ * with path params; path params win on collision.
+ */
 function normalizeRequest(c: Context, trustProxy = false): AppRequest {
   const url = new URL(c.req.url)
   // Subdomain params captured by the route's `host` template are stashed by
@@ -138,6 +171,23 @@ function normalizeRequest(c: Context, trustProxy = false): AppRequest {
 
 // ─── Response Normalizer ───────────────────────────────────
 
+/**
+ * Build an `AppResponse` over a Hono context.
+ *
+ * **Multi-value Set-Cookie handling.** Set-Cookie is the only standard header
+ * that can legitimately repeat. Cookies are tracked in a dedicated `cookies`
+ * array (not in the headers record) so two cooperative middleware writing
+ * separate cookies — the canonical pair is `CsrfMiddleware` + `SessionMiddleware`
+ * — don't clobber each other. When the route handler returns a raw `Response`
+ * or `ViewResponse`, the framework calls the stashed `__rjs_merge_pending`
+ * function which uses `headers.append('Set-Cookie', value)` to add cookies to
+ * the existing `Response.headers` in place.
+ *
+ * **Never clone with `new Response(body, { headers: someHeaders })`** — Node's
+ * undici-backed `Response` constructor collapses multi-value Set-Cookie into a
+ * single comma-joined header, which most clients then parse as one cookie. Any
+ * new cooperative cookie-writing path must mutate `res.headers` directly.
+ */
 function normalizeResponse(c: Context): AppResponse {
   let statusCode = 200
   const headers: Record<string, string> = {}
