@@ -19,6 +19,7 @@ import {
   renderServerError,
   report,
   setExceptionReporter,
+  wantsJson,
 } from './exceptions.js'
 import { ValidationError, ValidationResponse } from './validation.js'
 
@@ -163,10 +164,25 @@ export class ExceptionConfigurator {
         }
       }
 
-      // 6. Unhandled — report + render 500
+      // 6. Unhandled — report, then either bubble (so the adapter's rich
+      // dev error page fires) or render the safe fallback page.
+      //
+      // In dev mode AND for HTML-accepting clients, re-throw so the adapter
+      // (e.g. server-hono's Ignition-style `renderErrorPage`) catches it
+      // and renders a stack-frame view with source context. Without this,
+      // every unhandled 500 fell through to `renderServerError`'s plain
+      // card-style page below — the dev page was effectively dead code from
+      // 2026-04-06 onward when this central pipeline was added.
+      //
+      // Prod (`debug === false`) and JSON clients always use the safe page:
+      // the former mustn't leak source-context to attackers, the latter
+      // doesn't render HTML at all.
       report(err)
       let debug = false
       try { debug = Application.getInstance().debug } catch { /* app not ready */ }
+      if (debug && !wantsJson(req)) {
+        throw err
+      }
       return renderServerError(req, debug, err)
     }
   }

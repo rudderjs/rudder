@@ -41,6 +41,12 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/page-context',
     packages:    ['@rudderjs/vite', '@rudderjs/auth', '@rudderjs/session', '@rudderjs/localization'],
   },
+  {
+    title:       'Error pages',
+    description: 'Trigger every error shape — Ignition-style dev page on generic throws, HttpException via abort(), ValidationError → 422 JSON, and a custom AppError renderer wired in bootstrap/app.ts. APP_DEBUG=false in .env shows the production-safe variant instead.',
+    href:        '/demos/errors',
+    packages:    ['@rudderjs/core', '@rudderjs/server-hono'],
+  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]
