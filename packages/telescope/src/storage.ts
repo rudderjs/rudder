@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import type { TelescopeEntry, TelescopeStorage, ListOptions, EntryType } from './types.js'
+import { notifySubscribers } from './stream.js'
 
 const _g = globalThis as Record<string, unknown>
 const _recKey = '__rudderjs_telescope_recording__'
@@ -40,6 +41,10 @@ export class MemoryStorage implements TelescopeStorage {
     if (this.entries.length > this.maxEntries) {
       this.entries.length = this.maxEntries
     }
+    // Fan out to live-stream subscribers after the in-memory write. Sync
+    // call — does not await any persistence, dashboard latency tracks the
+    // emit only.
+    notifySubscribers(entry)
   }
 
   storeBatch(entries: TelescopeEntry[]): void {
@@ -180,6 +185,7 @@ export class SqliteStorage implements TelescopeStorage {
       `INSERT INTO telescope_entries (id, batch_id, type, content, tags, family_hash, created_at)
        VALUES (@id, @batch_id, @type, @content, @tags, @family_hash, @created_at)`,
     ).run(row)
+    notifySubscribers(entry)
   }
 
   storeBatch(entries: TelescopeEntry[]): void {
@@ -193,6 +199,7 @@ export class SqliteStorage implements TelescopeStorage {
       for (const row of rows) stmt.run(row)
     })
     tx(entries.map(e => this.toRow(e)))
+    for (const entry of entries) notifySubscribers(entry)
   }
 
   list(options: ListOptions): TelescopeEntry[] {

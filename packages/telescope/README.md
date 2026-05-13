@@ -23,15 +23,27 @@ export default {
   enabled: Env.getBool('TELESCOPE_ENABLED', true),
   path: 'telescope',
   storage: 'memory',
+  // Real-time dashboard:
+  //   'polling' (default) — re-fetch every `pollInterval` ms when Live is on
+  //   'stream'            — subscribe to `<path>/api/stream` via EventSource
+  updates: 'polling',
+  pollInterval: 2000,
 } satisfies TelescopeConfig
 ```
+
+### Real-time updates (SSE)
+
+Flip `updates: 'stream'` and the dashboard subscribes to a Server-Sent Events
+endpoint instead of polling. New entries appear the moment they're recorded —
+no peer dependency, no WebSocket upgrade, no extra auth model. The existing
+recording toggle and auth gate still apply to the stream endpoint.
 
 ## Dashboard
 
 Telescope serves a built-in UI at `/{path}` (default `/telescope`) with:
 
 - **Dashboard** — count cards for all entry types
-- **Per-type list pages** — searchable, paginated tables with tag filtering and auto-refresh (2s polling)
+- **Per-type list pages** — searchable, paginated tables with tag filtering and a live-updates toggle (polling by default, SSE-streamed if `updates: 'stream'`)
 - **Detail pages** — rich, type-specific views at `/telescope/{type}/{id}` (formatted SQL, mail HTML preview, stack traces, WebSocket timelines, etc.)
 - **Batch grouping** — entries linked by `batchId` (e.g. all queries from one request, all events from one WebSocket connection) viewable at `/telescope/batches/{batchId}`
 - **Sensitive data redaction** — headers and body fields are redacted at collection time, before they reach storage

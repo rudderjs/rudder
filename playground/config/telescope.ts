@@ -9,4 +9,7 @@ export default {
   slowQueryThreshold: 100,
   ignoreRequests:     ['/telescope*', '/health', '/@*'],
   recordAi:           true,
+  // Demo the SSE push transport — flip to 'polling' to fall back to the
+  // default 2s fetch-poll behavior.
+  updates:            'stream',
 } satisfies TelescopeConfig

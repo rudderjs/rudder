@@ -3,6 +3,7 @@ import type { TelescopeStorage, TelescopeConfig, EntryType } from './types.js'
 import { Dashboard, EntryList, pages } from './views/vanilla/index.js'
 import { DetailLayout, detailViews, NotFoundPage, BatchPage } from './views/vanilla/details/index.js'
 import { listEntries, showEntry, overview, prune, listBatch, getRecording, toggleRecording, authMiddleware } from './api/routes.js'
+import { createStreamResponse } from './stream.js'
 
 const ENTRY_TYPES: EntryType[] = [
   'request', 'query', 'job', 'exception', 'log',
@@ -17,6 +18,14 @@ export interface RegisterTelescopeRoutesOptions {
   auth?: TelescopeConfig['auth']
   /** Extra middleware to prepend to all routes */
   middleware?: MiddlewareHandler[]
+  /**
+   * How the dashboard receives new entries. `'polling'` (default) re-fetches
+   * the list endpoint on a timer; `'stream'` registers the SSE endpoint and
+   * the dashboard subscribes via `EventSource`. See `TelescopeConfig.updates`.
+   */
+  updates?: 'polling' | 'stream'
+  /** Poll interval in ms when `updates === 'polling'`. Default `2000`. */
+  pollInterval?: number
 }
 
 /**
@@ -41,8 +50,10 @@ export async function registerTelescopeRoutes(
     return // @rudderjs/router not installed — telescope routes disabled
   }
 
-  const basePath  = `/${(opts.path ?? 'telescope').replace(/^\/+/, '')}`
-  const apiPrefix = `${basePath}/api`
+  const basePath     = `/${(opts.path ?? 'telescope').replace(/^\/+/, '')}`
+  const apiPrefix    = `${basePath}/api`
+  const updates      = opts.updates      ?? 'polling'
+  const pollInterval = opts.pollInterval ?? 2000
   const middleware: MiddlewareHandler[] = [
     ...(opts.middleware ?? []),
     ...(opts.auth ? [authMiddleware({ auth: opts.auth })] : []),
@@ -67,6 +78,8 @@ export async function registerTelescopeRoutes(
         pageKey,
         title:   config.title,
         columns: config.columns,
+        updates,
+        pollInterval,
       })), middleware)
 
     // Detail — fetches the entry, dispatches to the watcher-specific view
@@ -152,4 +165,17 @@ export async function registerTelescopeRoutes(
     getRecording(res), middleware)
   router.patch(`${apiPrefix}/recording`, (_req: AppRequest, res: AppResponse) =>
     toggleRecording(res), middleware)
+
+  // ── API: real-time SSE stream ─────────────────────────────
+  // Only registered when the app opts in via `config.telescope.updates: 'stream'`.
+  // The dashboard subscribes via `EventSource(<apiPrefix>/stream?type=<entryType>)`.
+  if (updates === 'stream') {
+    router.get(`${apiPrefix}/stream`, (req: AppRequest) => {
+      const t = req.query['type']
+      const typeFilter = (t && ENTRY_TYPES.includes(t as EntryType))
+        ? (t as EntryType)
+        : null
+      return createStreamResponse(typeFilter)
+    }, middleware)
+  }
 }
