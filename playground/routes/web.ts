@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module'
 import { Route } from '@rudderjs/router'
 import { view } from '@rudderjs/view'
-import { config, resolve } from '@rudderjs/core'
+import { config, resolve, abort, ValidationError } from '@rudderjs/core'
+import { AppError } from 'App/Exceptions/AppError.ts'
 import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { registerPassportWebRoutes } from '@rudderjs/passport'
@@ -207,6 +208,48 @@ Route.get('/demos/billing/subscriptions', async () => {
   const subs = await u.subscriptions()
   return view('demos.billing-subscriptions', billingSubscriptionsProps(mock, subs))
 })
+
+// ─── Error-page demos ───────────────────────────────────────
+// Each route below intentionally throws a different shape of exception so the
+// hub at /demos/errors can show how the framework renders each. APP_DEBUG=true
+// in playground/.env gives you the Ignition-style page on the generic throws;
+// recognized exception types (HttpException, ValidationError, AppError) bypass
+// the dev page and return their structured response.
+
+// GET /demos/errors — hub page.
+Route.get('/demos/errors', async () => view('demos.errors'))
+
+// GET /demos/errors/throw — generic throw → Ignition page in dev.
+Route.get('/demos/errors/throw', () => {
+  throw new Error('Hi from /demos/errors/throw — this is the Ignition-style dev error page in @rudderjs/server-hono.')
+})
+
+// GET /demos/errors/deep — stack-depth demo for the frame list.
+function deepThree(): never { throw new Error('Boom from deepThree() — scroll the stack frames to see the chain.') }
+function deepTwo(): never  { return deepThree() }
+function deepOne(): never  { return deepTwo() }
+Route.get('/demos/errors/deep', () => deepOne())
+
+// GET /demos/errors/not-found — HttpException 404 via abort().
+Route.get('/demos/errors/not-found', () => { abort(404, 'User #42 not found') })
+
+// GET /demos/errors/forbidden — HttpException 403 via abort().
+Route.get('/demos/errors/forbidden', () => { abort(403) })
+
+// GET /demos/errors/validation — ValidationError → 422 JSON.
+Route.get('/demos/errors/validation', () => {
+  throw new ValidationError({
+    email:    ['The email field is required.'],
+    password: ['Must be at least 8 characters.', 'Must contain a number.'],
+  })
+})
+
+// GET /demos/errors/app-error — custom AppError → renderer registered in bootstrap/app.ts.
+Route.get('/demos/errors/app-error', () => {
+  throw new AppError('Demo AppError from /demos/errors/app-error', 418, 'DEMO_ERROR')
+})
+
+// ─── Session demo ──────────────────────────────────────────
 
 // GET /session/demo — increments a visit counter across requests
 Route.get('/session/demo', (req, res) => {

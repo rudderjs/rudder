@@ -509,8 +509,65 @@ describe('ExceptionConfigurator', () => {
 
   it('ignore() returns this for chaining', () => {
     const exc = new ExceptionConfigurator()
-     
+
     assert.strictEqual(exc.ignore(Error as any), exc)
+  })
+
+  // ─── Dev-page bubble (regression guard, 2026-05-14) ───────────────
+  //
+  // For ~5 weeks (2026-04-06 → 2026-05-14) the unhandled-error branch returned
+  // a plain card-style 500 page even in dev, suppressing server-hono's
+  // Ignition-style stack-frame renderer. The fix re-throws when `debug` is
+  // on AND the client wants HTML, so the adapter's dev page fires. Prod and
+  // JSON clients keep the safe inline page.
+
+  describe('buildHandler() — dev-page bubble', () => {
+    function htmlReq() {
+      return { headers: { accept: 'text/html' } } as unknown as Parameters<ReturnType<ExceptionConfigurator['buildHandler']>>[1]
+    }
+    function jsonReq() {
+      return { headers: { accept: 'application/json' } } as unknown as Parameters<ReturnType<ExceptionConfigurator['buildHandler']>>[1]
+    }
+
+    beforeEach(reset)
+
+    it('re-throws unhandled errors in debug mode for HTML-accepting clients', async () => {
+      Application.create({ name: 'TestDebug', env: 'local', debug: true })
+      const exc = new ExceptionConfigurator()
+      const handler = exc.buildHandler()
+      const err = new Error('boom — should bubble to the adapter dev page')
+      await assert.rejects(async () => handler(err, htmlReq()), /boom/)
+    })
+
+    it('returns 500 JSON for JSON clients even in debug mode (no HTML to render)', async () => {
+      Application.create({ name: 'TestDebugJson', env: 'local', debug: true })
+      const exc = new ExceptionConfigurator()
+      const handler = exc.buildHandler()
+      const res = await handler(new Error('json client'), jsonReq())
+      assert.strictEqual(res.status, 500)
+      const body = await res.json() as { status: number; exception?: string }
+      assert.strictEqual(body.status, 500)
+      assert.strictEqual(body.exception, 'json client', 'JSON 500 includes the error message in debug')
+    })
+
+    it('returns 500 HTML page in prod (debug=false) — safe, no source-context leak', async () => {
+      Application.create({ name: 'TestProd', env: 'production', debug: false })
+      const exc = new ExceptionConfigurator()
+      const handler = exc.buildHandler()
+      const res = await handler(new Error('prod error'), htmlReq())
+      assert.strictEqual(res.status, 500)
+      const body = await res.text()
+      assert.ok(!body.includes('prod error'), 'production page must not leak the error message')
+    })
+
+    it('returns 500 HTML page when no Application instance exists (env-unaware fallback)', async () => {
+      // Application.getInstance() throws — handler should swallow + render the
+      // safe page rather than crashing the response.
+      const exc = new ExceptionConfigurator()
+      const handler = exc.buildHandler()
+      const res = await handler(new Error('no-app'), htmlReq())
+      assert.strictEqual(res.status, 500)
+    })
   })
 })
 

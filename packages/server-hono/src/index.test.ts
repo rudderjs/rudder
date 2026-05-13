@@ -350,6 +350,65 @@ describe('renderErrorPage()', () => {
   })
 })
 
+// ─── End-to-end dev-page wiring (regression guard, 2026-05-14) ─────
+//
+// Verifies the full pipeline: a route throws → the registered user-handler
+// re-throws (matching `app-builder.ts` buildHandler's dev+HTML behavior) →
+// `createFetchHandler`'s onError catches the rethrow and renders the
+// Ignition-style page. The user-handler-rethrows path was effectively dead
+// from 2026-04-06 (when the core error pipeline always returned a Response)
+// until 2026-05-14 when buildHandler started bubbling for HTML+debug.
+
+describe('createFetchHandler() — dev error page wiring', () => {
+  async function fetchThrowingRoute(opts: {
+    isProd: boolean
+    accept: string
+    userHandler?: (err: unknown) => Promise<Response>
+  }): Promise<Response> {
+    const prev = process.env['APP_ENV']
+    process.env['APP_ENV'] = opts.isProd ? 'production' : 'development'
+    try {
+      const provider = hono()
+      const handler = await provider.createFetchHandler((adapter) => {
+        const route: RouteDefinition = {
+          method:     'GET',
+          path:       '/boom',
+          handler:    async () => { throw new Error('integration boom') },
+          middleware: [] as MiddlewareHandler[],
+        }
+        adapter.registerRoute(route)
+        // Mimic the dev+HTML branch of `buildHandler()`: re-throw so the
+        // adapter's onError catches it and renders the dev page.
+        const userHandler = opts.userHandler ?? (async (err: unknown) => { throw err })
+        adapter.setErrorHandler?.(userHandler)
+      })
+      return await handler(new Request('http://localhost/boom', {
+        headers: { accept: opts.accept },
+      }))
+    } finally {
+      if (prev === undefined) delete process.env['APP_ENV']
+      else process.env['APP_ENV'] = prev
+    }
+  }
+
+  it('renders the Ignition-style HTML page in dev when the user-handler rethrows', async () => {
+    const res = await fetchThrowingRoute({ isProd: false, accept: 'text/html' })
+    assert.strictEqual(res.status, 500)
+    const html = await res.text()
+    assert.ok(html.startsWith('<!DOCTYPE html>'), 'must be a full HTML document')
+    assert.ok(html.includes('integration boom'), 'must include the thrown error message')
+    assert.ok(html.includes('Error'), 'must include the error name')
+  })
+
+  it('renders the simple JSON 500 in prod even when the user-handler rethrows', async () => {
+    const res = await fetchThrowingRoute({ isProd: true, accept: 'text/html' })
+    assert.strictEqual(res.status, 500)
+    const body = await res.text()
+    assert.ok(!body.includes('integration boom'), 'prod must not leak the error message')
+    assert.ok(!body.startsWith('<!DOCTYPE html>'), 'prod returns JSON, not HTML')
+  })
+})
+
 // ─── normalizeRequest getter persistence ────────────────────
 //
 // The framework relies on the contract that `req.body`/`session`/`user`/`token`

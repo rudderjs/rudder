@@ -94,7 +94,14 @@ export function report_if(condition: boolean, err: unknown): void {
 
 // ─── Internal rendering helpers ───────────────────────────
 
-function wantsJson(req: AppRequest): boolean {
+/**
+ * @internal — Best-effort content-negotiation: does this client want a
+ * machine-readable JSON response, or an HTML error page? Used by the error
+ * pipeline to gate the dev-page-fallback decision in `buildHandler()` as
+ * well as by `renderHttpException` / `renderServerError`. Kept private to
+ * the package; not part of the public API surface.
+ */
+export function wantsJson(req: AppRequest): boolean {
   const accept = req.headers['accept'] ?? ''
   // Treat as JSON unless Accept explicitly prefers HTML
   if (!accept) return true
