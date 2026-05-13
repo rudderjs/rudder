@@ -16,6 +16,7 @@ import type { McpPrompt } from './McpPrompt.js'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
 import { getInjectTokens, getToolAnnotations, getResourceAnnotations, type InjectToken } from './decorators.js'
 import type { McpObserverRegistry } from './observers.js'
+import { matchUriTemplate } from './uri-template.js'
 
 // Lazy accessor — avoids importing the registry eagerly so the global
 // singleton is always the one on `globalThis`, even across SSR re-eval.
@@ -27,26 +28,7 @@ function getMcpObservers(): McpObserverRegistry | null {
   return _mcpObs
 }
 
-/**
- * Match a URI against a template pattern like `weather://location/{city}`.
- * Returns extracted params or null if no match.
- */
-function matchUriTemplate(template: string, uri: string): Record<string, string> | null {
-  // Convert `weather://location/{city}` → regex `^weather://location/(?<city>[^/]+)$`
-  const paramNames: string[] = []
-  const regexStr = template.replace(/\{(\w+)\}/g, (_, name: string) => {
-    paramNames.push(name)
-    return '([^/]+)'
-  })
-  const match = uri.match(new RegExp(`^${regexStr}$`))
-  if (!match) return null
-  const params: Record<string, string> = {}
-  for (let i = 0; i < paramNames.length; i++) {
-    params[paramNames[i]!] = decodeURIComponent(match[i + 1]!)
-  }
-  return params
-}
-
+// @internal — to be replaced by McpServer._tools()/_resources()/_prompts() accessors in PR C of the mcp-quality-audit arc.
 function getProtected<T>(server: McpServer, key: string, fallback: T): T {
   return ((server as unknown as Record<string, T>)[key]) ?? fallback
 }
@@ -401,6 +383,29 @@ export interface HttpTransportOptions {
  * - POST — JSON-RPC messages (initialization + ongoing)
  * - GET  — SSE stream for server-initiated notifications
  * - DELETE — session termination
+ *
+ * ### Session lifecycle
+ *
+ * **Stateless mode** (`sessionIdGenerator: undefined`) — one transport + SDK
+ * pair is created lazily on the first request and reused for the lifetime of
+ * the route. `server.attachSdk(sdk)` is called once and never detached.
+ *
+ * **Stateful mode** (default — `crypto.randomUUID`) — each new client gets a
+ * fresh transport + SDK pair. The pair is stored in `sessions` only after the
+ * SDK fires `onsessioninitialized` (i.e., the client's initialize handshake
+ * succeeded). On `onsessionclosed`, both the session entry and the SDK's
+ * notification attachment are torn down. The `detach` closure exists so the
+ * `onsessionclosed` callback can release the attached SDK without holding a
+ * stale reference — `let detach = () => {}` reads as a placeholder because we
+ * can only obtain the real detacher after `attachSdk` has been called on the
+ * already-constructed transport.
+ *
+ * ### Circular-dep avoidance
+ *
+ * `@rudderjs/core` and `@rudderjs/router` are imported dynamically. The
+ * package's `peerDependenciesMeta` marks both as optional, and the runtime
+ * import is what keeps `@rudderjs/mcp` consumable in non-server environments
+ * (tests, CLI tooling, the inspector itself).
  */
 export async function mountHttpTransport(
   server: McpServer,

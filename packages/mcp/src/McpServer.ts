@@ -50,6 +50,21 @@ export abstract class McpServer {
     return () => { this._attached?.delete(target) }
   }
 
+  /** @internal — runtime/inspector/testing only. Exposes the protected tool classes array. */
+  _tools(): (new () => McpTool)[] {
+    return this.tools
+  }
+
+  /** @internal — runtime/inspector/testing only. Exposes the protected resource classes array. */
+  _resources(): (new () => McpResource)[] {
+    return this.resources
+  }
+
+  /** @internal — runtime/inspector/testing only. Exposes the protected prompt classes array. */
+  _prompts(): (new () => McpPrompt)[] {
+    return this.prompts
+  }
+
   /** @internal — exposed for tests; counts active notification targets. */
   attachedCount(): number {
     return this._attached?.size ?? 0
