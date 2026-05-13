@@ -27,7 +27,7 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
 
-  if (!clientHelpers.hasGrantType(client as any, 'client_credentials')) {
+  if (!clientHelpers.hasGrantType(client, 'client_credentials')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for client_credentials grant.')
   }
 

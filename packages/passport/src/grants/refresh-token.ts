@@ -72,7 +72,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     }
     throw new OAuthError('invalid_grant', 'Refresh token has been revoked.')
   }
-  if (refreshTokenHelpers.isExpired(refreshToken as any)) {
+  if (refreshTokenHelpers.isExpired(refreshToken)) {
     throw new OAuthError('invalid_grant', 'Refresh token has expired.')
   }
 
@@ -86,7 +86,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Determine scopes — can only narrow, not widen
-  const originalScopes = accessTokenHelpers.getScopes(accessToken as any)
+  const originalScopes = accessTokenHelpers.getScopes(accessToken)
   let scopes = originalScopes
   if (params.scope) {
     const requested = params.scope.split(' ').filter(Boolean)

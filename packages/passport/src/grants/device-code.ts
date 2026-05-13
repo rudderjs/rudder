@@ -44,7 +44,7 @@ export async function requestDeviceCode(params: {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
 
-  if (!clientHelpers.hasGrantType(client as any, 'urn:ietf:params:oauth:grant-type:device_code')) {
+  if (!clientHelpers.hasGrantType(client, 'urn:ietf:params:oauth:grant-type:device_code')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for device authorization grant.')
   }
 
@@ -101,17 +101,17 @@ export async function approveDeviceCode(userCode: string, userId: string, approv
   if (!device) {
     throw new OAuthError('invalid_request', 'Device code not found.')
   }
-  if (deviceCodeHelpers.isExpired(device as any)) {
+  if (deviceCodeHelpers.isExpired(device)) {
     throw new OAuthError('expired_token', 'Device code has expired.')
   }
-  if (!deviceCodeHelpers.isPending(device as any)) {
+  if (!deviceCodeHelpers.isPending(device)) {
     throw new OAuthError('invalid_request', 'Device code has already been used.')
   }
 
   await DeviceCodeCls.update(device.id, {
     userId,
     approved,
-  } as any)
+  } as Record<string, unknown>)
 }
 
 // ─── Device Token Polling ─────────────────────────────────
@@ -152,7 +152,7 @@ export async function pollDeviceCode(params: {
   if (device.clientId !== params.clientId) {
     throw new OAuthError('invalid_grant', 'Device code was not issued to this client.')
   }
-  if (deviceCodeHelpers.isExpired(device as any)) {
+  if (deviceCodeHelpers.isExpired(device)) {
     return { status: 'expired_token' }
   }
 
@@ -164,7 +164,7 @@ export async function pollDeviceCode(params: {
     if (elapsed < device.interval * 1000) {
       const nextInterval = Math.min(device.interval + 5, Passport.deviceMaxIntervalSeconds())
       if (nextInterval !== device.interval) {
-        await DeviceCodeCls.update(device.id, { interval: nextInterval } as any)
+        await DeviceCodeCls.update(device.id, { interval: nextInterval } as Record<string, unknown>)
       }
       return { status: 'slow_down', interval: nextInterval }
     }
@@ -173,13 +173,13 @@ export async function pollDeviceCode(params: {
   // Update last polled time
   await DeviceCodeCls.update(device.id, {
     lastPolledAt: new Date(),
-  } as any)
+  } as Record<string, unknown>)
 
-  if (deviceCodeHelpers.isPending(device as any)) {
+  if (deviceCodeHelpers.isPending(device)) {
     return { status: 'authorization_pending' }
   }
 
-  if (deviceCodeHelpers.isDenied(device as any)) {
+  if (deviceCodeHelpers.isDenied(device)) {
     return { status: 'access_denied' }
   }
 
@@ -187,7 +187,7 @@ export async function pollDeviceCode(params: {
   const tokens = await issueTokens({
     userId:   device.userId,
     clientId: params.clientId,
-    scopes:   deviceCodeHelpers.getScopes(device as any),
+    scopes:   deviceCodeHelpers.getScopes(device),
     includeRefresh: true,
   })
 

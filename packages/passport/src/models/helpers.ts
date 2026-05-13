@@ -1,18 +1,27 @@
-// Helper functions that operate on plain OAuth records — both Model instances
+// Helper functions that operate on OAuth records — both Model instances
 // (returned from the ORM read paths since PR #111 on 2026-04-30) and raw rows
-// (cached JSON, fixtures, adapter-level snapshots). The Model classes expose
-// equivalent instance methods (`OAuthClient.getRedirectUris()`,
-// `AccessToken.can()`, etc.) and prefer those when you already hold a Model
-// instance — these helpers stay around for the raw-record case and to keep
-// the grants' read paths legible while they migrate over.
+// (cached JSON, fixtures, adapter-level snapshots). JSON-encoded columns are
+// typed as `unknown` here because the runtime parser (`parseJsonArray`)
+// already accepts both the wire shape (`string` JSON) and the hydrated shape
+// (`string[]` from `@Cast('json')` on the Models). Same helper, same return
+// type, no `as any` at the call site needed to bridge between the two.
+//
+// The Model classes also expose equivalent instance methods
+// (`OAuthClient.hasGrantType()`, `AccessToken.can()`, `DeviceCode.isExpired()`)
+// — those are the more direct API once you already hold a Model instance.
+// These helpers stay for callers that genuinely have raw records (cached
+// JSON, fixtures, the corrupt-JSON fail-closed test path).
 
 export interface OAuthClientRecord {
   id:           string
   name:         string
   secret:       string | null
-  redirectUris: string
-  grantTypes:   string
-  scopes:       string
+  /** JSON-encoded array on the wire; `string[]` after `@Cast('json')` hydration. */
+  redirectUris: unknown
+  /** JSON-encoded array on the wire; `string[]` after `@Cast('json')` hydration. */
+  grantTypes:   unknown
+  /** JSON-encoded array on the wire; `string[]` after `@Cast('json')` hydration. */
+  scopes:       unknown
   confidential: boolean
   revoked:      boolean
 }
@@ -22,10 +31,17 @@ export interface AccessTokenRecord {
   userId:    string | null
   clientId:  string
   name:      string | null
-  scopes:    string
+  /**
+   * JSON-encoded array on the wire; `string[]` if a future `@Cast('json')`
+   * hydrates it. Optional in the type because `AccessToken` doesn't `declare`
+   * it (the Model carries it as an untyped DB-only column today); the runtime
+   * parser fail-closes to `[]` if missing.
+   */
+  scopes?:   unknown
   revoked:   boolean
   expiresAt: Date
-  createdAt: Date
+  /** Populated by the ORM; not declared on the Model. */
+  createdAt?: Date
 }
 
 export interface RefreshTokenRecord {
@@ -44,7 +60,12 @@ export interface AuthCodeRecord {
   tokenHash:           string
   userId:              string
   clientId:            string
-  scopes:              string
+  /**
+   * JSON-encoded array on the wire; `string[]` if a future `@Cast('json')`
+   * hydrates it. Optional because `AuthCode` doesn't `declare` it; the
+   * runtime parser fail-closes to `[]` if missing.
+   */
+  scopes?:             unknown
   revoked:             boolean
   expiresAt:           Date
   redirectUri:         string | null
@@ -55,9 +76,12 @@ export interface AuthCodeRecord {
 export interface DeviceCodeRecord {
   id:           string
   clientId:     string
-  userCode:     string
-  deviceCode:   string
-  scopes:       string
+  /**
+   * JSON-encoded array on the wire; `string[]` if a future `@Cast('json')`
+   * hydrates it. Optional because `DeviceCode` doesn't `declare` it; the
+   * runtime parser fail-closes to `[]` if missing.
+   */
+  scopes?:      unknown
   userId:       string | null
   approved:     boolean | null
   expiresAt:    Date

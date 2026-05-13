@@ -38,7 +38,7 @@ async function validateClientRedirect(clientId: unknown, redirectUri: unknown): 
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
-  if (!clientHelpers.hasRedirectUri(client as any, redirectUri)) {
+  if (!clientHelpers.hasRedirectUri(client, redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
   }
   return client

@@ -136,7 +136,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
     tokenCan(scope: string): boolean {
       const token = (this as any).__passport_token as AccessToken | undefined
       if (!token) return false
-      return accessTokenHelpers.can(token as any, scope)
+      return accessTokenHelpers.can(token, scope)
     }
   }
 
