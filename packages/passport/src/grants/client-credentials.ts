@@ -1,9 +1,10 @@
 import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
-import { verifyClientSecret } from '../client-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError, validateScopes } from './authorization-code.js'
+import { parseScopes } from './parse-scopes.js'
+import { verifyConfidentialCredentials } from './verify-client.js'
 
 export interface ClientCredentialsRequest {
   grantType:    string
@@ -31,25 +32,9 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('unauthorized_client', 'Client is not authorized for client_credentials grant.')
   }
 
-  if (!client.confidential) {
-    throw new OAuthError('invalid_client', 'Client credentials grant requires a confidential client.')
-  }
+  await verifyConfidentialCredentials(client, params.clientSecret, { requireConfidential: true })
 
-  // Schema allows `client.secret` to be null (public clients), but reaching
-  // this branch with a confidential client should always have a hashed secret
-  // on file. Catching the null case explicitly prevents a future refactor
-  // from masking `secret = null` as authenticating against
-  // `verifyClientSecret(_, null)` (which fails closed today, but the guard
-  // makes the contract obvious to readers and hardens against drift).
-  if (client.secret == null) {
-    throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
-  }
-
-  if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
-    throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
-  }
-
-  const scopes = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  const scopes = parseScopes(params.scope)
   validateScopes(client, scopes)
 
   return issueTokens({

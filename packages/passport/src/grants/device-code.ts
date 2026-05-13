@@ -5,6 +5,7 @@ import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { hashDeviceSecret } from '../device-code-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError, validateScopes } from './authorization-code.js'
+import { parseScopes } from './parse-scopes.js'
 
 /**
  * Initial polling interval for new device-code rows (RFC 8628 §3.5).
@@ -48,7 +49,7 @@ export async function requestDeviceCode(params: {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for device authorization grant.')
   }
 
-  const scopes     = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  const scopes     = parseScopes(params.scope)
   validateScopes(client, scopes)
 
   const { randomBytes } = await import('node:crypto')

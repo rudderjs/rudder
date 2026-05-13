@@ -16,7 +16,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
   - `device-code.ts` — Device authorization flow
   - `issue-tokens.ts` — Shared token issuance (DB + JWT)
 - `src/models/` — ORM models: `OAuthClient`, `AccessToken`, `RefreshToken`, `AuthCode`, `DeviceCode`
-- `src/middleware/bearer.ts` — `BearerMiddleware()`, `RequireBearer()`
+- `src/middleware/bearer.ts` — `BearerMiddleware()`, `RequireBearer()` (both share an internal `authenticateBearer()` that returns a discriminated outcome; the middlewares only diverge on the failure-handler branches)
 - `src/middleware/scope.ts` — `scope('read', 'write')` enforcement
 - `src/commands/` — `generateKeys()`, `createClient()`, `purgeTokens()`
 - `src/client-secret.ts` — `hashClientSecret()` / `verifyClientSecret()` (HMAC-SHA256 with `APP_KEY` pepper, plain-SHA-256 fallback)
@@ -45,7 +45,16 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - **`revoked` is NOT mass-assignable** — `AccessToken`, `RefreshToken`, and `AuthCode` keep `revoked` out of `fillable`. Lifecycle flips happen through `instance.revoke()` (token models) or `QueryBuilder.where(...).updateAll({ revoked: true })` (grants); both bypass the mass-assignment filter. Defense-in-depth so a future caller-controlled `Model.create()` payload can't pre-mark a row as revoked.
 - **`AccessToken.userId` and `clientId` are `@Hidden`** — `toJSON()` strips them by default so `user.tokens()` exposed over an API can't accidentally leak the user/client mapping. Privileged routes (admin views) opt in via `instance.makeVisible(['userId', 'clientId'])`.
 - **`OAuthClient` JSON columns hydrate as arrays** — `redirectUris`, `grantTypes`, `scopes` carry `@Cast('json')`. Read paths (and `getRedirectUris()`/`getGrantTypes()`/`getScopes()` accessors) return `string[]`. Existing `JSON.stringify([...])` callsites continue to work — `castSet('json')` returns string inputs verbatim.
-- **Confidential client secret presence is asserted at the token endpoint** — every grant that authenticates via `verifyClientSecret` first checks `client.secret == null` and throws `invalid_client` ("Confidential client has no secret on file"). Catches a future refactor that could otherwise mask `secret = null` as authenticating against an empty string.
+- **Confidential client secret presence is asserted at the token endpoint** — every grant that authenticates via `verifyClientSecret` first checks `client.secret == null` and throws `invalid_client` ("Confidential client has no secret on file"). Catches a future refactor that could otherwise mask `secret = null` as authenticating against an empty string. The four checks (require-confidential, missing-secret, null-on-row, hash-mismatch) live in one place — `grants/verify-client.ts` — so each grant's call site reads `await verifyConfidentialCredentials(client, params.clientSecret, opts?)` and the four invariants can't drift apart per grant.
+
+## Hidden Contracts
+
+These invariants aren't enforced by the type system but must hold for the package to behave correctly. New code touching bearer / personal-access-tokens / route helpers needs to keep them intact.
+
+- **The `__rjs_user` / `__passport_token` raw-bag stamp pattern.** `BearerMiddleware` / `RequireBearer` write four keys onto `req.raw` when authentication succeeds: `__passport_token` (the `AccessToken` row), `__passport_scopes` (string[] from JWT), `__passport_user_id` (the JWT `sub`), and — when the user resolves through `auth.manager` — a plain copy of the user under `__rjs_user`. The plain copy strips functions and the `password` field; consumers reading `req.user` over an API can't accidentally leak the hash. **`req.user.tokenCan(...)` does NOT work** because the plain copy is a flat object — call `tokenCan(...)` on a fresh `User` Model instance (e.g. after `await User.find(req.user.id)` or `manager.guard().user()`). Readers of the raw bag are `routes/helpers.ts::requesterIdFrom()` and `personal-access-tokens.ts::HasApiTokens.tokenCan()` (via the resolved user instance, not the plain copy on `req.user`).
+- **`HasApiTokens` assumes `id: string` on the mixin's Base.** The mixin reads `this.id` through a private `HasApiTokensThis` interface — every `@rudderjs/orm` Model exposes `id` by convention. If a future user model overrides the primary key column type, the mixin breaks silently — `userId` will be `undefined` and `where('userId', undefined)` returns every row.
+- **`parseJsonArray` (in `models/helpers.ts`) fail-closes corrupt JSON to `[]` with a `console.warn`.** A token row whose `scopes` column doesn't parse silently authorizes nothing — the safe default — and the warning surfaces persistent corruption so it isn't a mystery later. Don't replace the warn with a silent return; don't throw either (would 500 the request instead of 403'ing it).
+- **`grants/verify-client.ts` is the single authority on confidential-client verification at the token endpoint.** All grants that authenticate a client at `/oauth/token` route through `verifyConfidentialCredentials(client, secret, opts?)`. Don't re-inline the four invariants — they're written once so they can't drift across grants.
 
 ## Why we don't store hashed access tokens
 

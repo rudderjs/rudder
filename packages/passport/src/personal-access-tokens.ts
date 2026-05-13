@@ -35,6 +35,21 @@ export interface HasApiTokensInstance {
   tokenCan(scope: string): boolean
 }
 
+/**
+ * Shape of `this` inside the mixin: the `id` from the user model (every
+ * `@rudderjs/orm` Model exposes it) plus an optional `__passport_token`
+ * stamped onto the resolved user instance by `BearerMiddleware` /
+ * `RequireBearer` when a request comes in with a valid bearer JWT.
+ *
+ * `__passport_token` is undefined outside a bearer-authenticated request
+ * (e.g. during `createToken()` from a CLI script) — `tokenCan()` fail-closes
+ * in that case, since there is no current bearer scope to consult.
+ */
+interface HasApiTokensThis {
+  id: string
+  __passport_token?: AccessToken
+}
+
 export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
   Base: T,
 ): T & (new (...args: any[]) => HasApiTokensInstance) {
@@ -44,7 +59,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
      * Returns the JWT (shown once) and the persisted record.
      */
     async createToken(name: string, scopes: string[] = ['*'], expiresInMs?: number): Promise<NewPersonalAccessToken> {
-      const userId = (this as any).id as string
+      const userId = (this as unknown as HasApiTokensThis).id
       const lifetime = expiresInMs ?? Passport.personalTokenLifetime()
       const expiresAt = new Date(Date.now() + lifetime)
 
@@ -96,7 +111,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
      * implicit in the mixin.
      */
     async tokens(): Promise<AccessToken[]> {
-      const userId = (this as any).id as string
+      const userId = (this as unknown as HasApiTokensThis).id
       const AccessTokenCls = await Passport.tokenModel()
       const personalClientId = await getPersonalAccessClientId()
       return AccessTokenCls
@@ -117,7 +132,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
       // Single bulk QueryBuilder.updateAll() — bypasses mass-assignment
       // (`revoked` is no longer in `fillable`) and replaces the prior
       // read-then-N+1-update loop with one round-trip.
-      const userId = (this as any).id as string
+      const userId = (this as unknown as HasApiTokensThis).id
       const AccessTokenCls = await Passport.tokenModel()
       const personalClientId = await getPersonalAccessClientId()
       return AccessTokenCls
@@ -134,7 +149,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
      * propagates onto `req.user` via the plain-copy step.
      */
     tokenCan(scope: string): boolean {
-      const token = (this as any).__passport_token as AccessToken | undefined
+      const token = (this as unknown as HasApiTokensThis).__passport_token
       if (!token) return false
       return accessTokenHelpers.can(token, scope)
     }

@@ -3,9 +3,10 @@ import type { OAuthClient } from '../models/OAuthClient.js'
 import type { AuthCode }    from '../models/AuthCode.js'
 import { clientHelpers, authCodeHelpers } from '../models/helpers.js'
 import { safeCompare } from './safe-compare.js'
-import { verifyClientSecret } from '../client-secret.js'
 import { hashOpaqueToken, newOpaqueToken } from '../opaque-token.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
+import { parseScopes } from './parse-scopes.js'
+import { verifyConfidentialCredentials } from './verify-client.js'
 
 // ─── Authorization Request Validation ─────────────────────
 
@@ -70,7 +71,7 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('invalid_request', 'Public clients must use PKCE (code_challenge required).')
   }
 
-  const scopes = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  const scopes = parseScopes(params.scope)
   validateScopes(client, scopes)
 
   const result: ValidatedAuthRequest = {
@@ -157,21 +158,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
 
-  // Confidential clients must provide a valid secret
-  if (client.confidential) {
-    if (!params.clientSecret) {
-      throw new OAuthError('invalid_client', 'Client secret required.', 401)
-    }
-    // Schema allows `client.secret` to be null; explicit guard so a future
-    // refactor can't mask `secret = null` as authenticating. See
-    // `client-credentials.ts` for the longer-form rationale.
-    if (client.secret == null) {
-      throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
-    }
-    if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
-      throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
-    }
-  }
+  await verifyConfidentialCredentials(client, params.clientSecret)
 
   // Validate auth code by hashed plaintext (M5/P6) — the row's `id` is no
   // longer the bearer secret. Pre-migration codes won't match because their
