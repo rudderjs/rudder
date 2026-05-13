@@ -12,19 +12,9 @@ export class McpTestClient {
 
   constructor(ServerClass: new () => McpServer) {
     const server = new ServerClass()
-    const record = server as unknown as Record<string, unknown>
-
-    this.tools = (
-      (record['tools'] as Array<new () => McpTool> | undefined) ?? []
-    ).map((T) => new T())
-
-    this.resources = (
-      (record['resources'] as Array<new () => McpResource> | undefined) ?? []
-    ).map((R) => new R())
-
-    this.prompts = (
-      (record['prompts'] as Array<new () => McpPrompt> | undefined) ?? []
-    ).map((P) => new P())
+    this.tools     = server._tools().map((T) => new T())
+    this.resources = server._resources().map((R) => new R())
+    this.prompts   = server._prompts().map((P) => new P())
   }
 
   /**

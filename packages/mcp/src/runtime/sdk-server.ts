@@ -20,11 +20,6 @@ import { getMcpObservers } from './observers-accessor.js'
 import { consumeToolReturn } from './consume-tool-return.js'
 import { resolveOrConstruct, resolveHandleDeps, isRegistered, filterRegistered } from './handle-deps.js'
 
-// @internal — to be replaced by McpServer._tools()/_resources()/_prompts() accessors in PR C of the mcp-quality-audit arc.
-function getProtected<T>(server: McpServer, key: string, fallback: T): T {
-  return ((server as unknown as Record<string, T>)[key]) ?? fallback
-}
-
 export function createSdkServer(server: McpServer): Server {
   const meta = server.metadata()
   const sdk = new Server(
@@ -32,13 +27,9 @@ export function createSdkServer(server: McpServer): Server {
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   )
 
-  const toolClasses = getProtected<(new (...args: any[]) => McpTool)[]>(server, 'tools', [])
-  const resourceClasses = getProtected<(new (...args: any[]) => McpResource)[]>(server, 'resources', [])
-  const promptClasses = getProtected<(new (...args: any[]) => McpPrompt)[]>(server, 'prompts', [])
-
-  const tools: McpTool[] = toolClasses.map((T) => resolveOrConstruct(T))
-  const resources: McpResource[] = resourceClasses.map((R) => resolveOrConstruct(R))
-  const prompts: McpPrompt[] = promptClasses.map((P) => resolveOrConstruct(P))
+  const tools: McpTool[] = server._tools().map((T) => resolveOrConstruct(T))
+  const resources: McpResource[] = server._resources().map((R) => resolveOrConstruct(R))
+  const prompts: McpPrompt[] = server._prompts().map((P) => resolveOrConstruct(P))
 
   // ── Tools ────────────────────────────────────────────────
   sdk.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -191,7 +182,15 @@ export function createSdkServer(server: McpServer): Server {
         kind: 'prompt.rendered', serverName: meta.name, name: prompt.name(),
         input: args, output: messages, duration: performance.now() - start,
       })
-      return { messages }
+      // The MCP wire format requires `content` to be a structured object
+      // (`{ type: 'text', text: string }`); McpPrompt's public API still
+      // returns `content: string` for ergonomics, so we adapt on the way out.
+      return {
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: { type: 'text' as const, text: m.content },
+        })),
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       getMcpObservers()?.emit({

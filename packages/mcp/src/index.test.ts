@@ -1048,3 +1048,279 @@ describe('McpObserverRegistry', () => {
     } finally { off() }
   })
 })
+
+// ─── createSdkServer — end-to-end via InMemoryTransport ──
+//
+// Drives the SDK's request handlers (ListTools/CallTool/ReadResource/etc.)
+// through a real Client ↔ Server roundtrip using the SDK's InMemoryTransport
+// pair. This exercises the wiring that McpTestClient skips.
+
+describe('createSdkServer — SDK handlers', () => {
+  async function connect(ServerClass: new () => McpServer) {
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { createSdkServer } = await import('./runtime.js')
+
+    const sdk = createSdkServer(new ServerClass())
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair()
+    await sdk.connect(serverT)
+
+    const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} })
+    await client.connect(clientT)
+    return { sdk, client }
+  }
+
+  class EchoTool extends McpTool {
+    schema() { return z.object({ message: z.string() }) }
+    async handle(input: Record<string, unknown>) {
+      return McpResponse.text(String(input['message']))
+    }
+  }
+  class BoomTool extends McpTool {
+    schema() { return z.object({}) }
+    async handle(): Promise<never> { throw new Error('boom') }
+  }
+  class StaticResource extends McpResource {
+    uri() { return 'info://version' }
+    async handle() { return '1.0.0' }
+  }
+  class WeatherResource extends McpResource {
+    uri() { return 'weather://location/{city}' }
+    async handle(params?: Record<string, string>) { return `Weather in ${params?.['city'] ?? '?'}: sunny` }
+  }
+  class GreetPrompt extends McpPrompt {
+    arguments() { return z.object({ name: z.string() }) }
+    async handle(args: Record<string, unknown>) {
+      return [{ role: 'user' as const, content: `Hello ${String(args['name'])}` }]
+    }
+  }
+  class TestServer extends McpServer {
+    protected tools = [EchoTool, BoomTool]
+    protected resources = [StaticResource, WeatherResource]
+    protected prompts = [GreetPrompt]
+  }
+
+  it('tools/list returns name + description + inputSchema', async () => {
+    const { client } = await connect(TestServer)
+    const list = await client.listTools()
+    assert.equal(list.tools.length, 2)
+    const echo = list.tools.find((t) => t.name === 'echo')!
+    assert.ok(echo.inputSchema)
+    const inputSchema = echo.inputSchema as unknown as { properties: { message: unknown } }
+    assert.ok(inputSchema.properties.message)
+  })
+
+  it('tools/call happy path returns content', async () => {
+    const { client } = await connect(TestServer)
+    const result = await client.callTool({ name: 'echo', arguments: { message: 'hi' } })
+    const content = result.content as Array<{ type: string; text: string }>
+    assert.equal(content[0]!.text, 'hi')
+    assert.equal(result.isError, undefined)
+  })
+
+  it('tools/call on unknown tool returns isError + "Unknown tool"', async () => {
+    const { client } = await connect(TestServer)
+    const result = await client.callTool({ name: 'missing', arguments: {} })
+    assert.equal(result.isError, true)
+    const content = result.content as Array<{ type: string; text: string }>
+    assert.ok(content[0]!.text.includes('Unknown tool'))
+  })
+
+  it('tools/call failure returns isError + emits tool.failed observer event', async () => {
+    const { mcpObservers } = await import('./observers.js')
+    const seen: Array<{ kind: string; name: string; error?: string }> = []
+    const off = mcpObservers.subscribe((e) => {
+      if (e.name === 'boom') seen.push({ kind: e.kind, name: e.name, ...(e.error ? { error: e.error } : {}) })
+    })
+    try {
+      const { client } = await connect(TestServer)
+      const result = await client.callTool({ name: 'boom', arguments: {} })
+      assert.equal(result.isError, true)
+      const content = result.content as Array<{ type: string; text: string }>
+      assert.ok(content[0]!.text.includes('Error: boom'))
+      assert.equal(seen.length, 1)
+      assert.equal(seen[0]!.kind, 'tool.failed')
+      assert.equal(seen[0]!.error, 'boom')
+    } finally { off() }
+  })
+
+  it('resources/read on a static URI returns content', async () => {
+    const { client } = await connect(TestServer)
+    const result = await client.readResource({ uri: 'info://version' })
+    const c0 = result.contents[0] as { uri: string; text: string }
+    assert.equal(c0.text, '1.0.0')
+    assert.equal(c0.uri, 'info://version')
+  })
+
+  it('resources/read on a template URI extracts params and forwards', async () => {
+    const { client } = await connect(TestServer)
+    const result = await client.readResource({ uri: 'weather://location/paris' })
+    const c0 = result.contents[0] as { text: string }
+    assert.equal(c0.text, 'Weather in paris: sunny')
+  })
+
+  it('resources/read on unknown URI surfaces the SDK error', async () => {
+    const { client } = await connect(TestServer)
+    await assert.rejects(
+      () => client.readResource({ uri: 'missing://x' }),
+      /Unknown resource/,
+    )
+  })
+
+  it('prompts/list returns name + description + arguments', async () => {
+    const { client } = await connect(TestServer)
+    const list = await client.listPrompts()
+    assert.equal(list.prompts.length, 1)
+    assert.equal(list.prompts[0]!.name, 'greet')
+    const args = list.prompts[0]!.arguments as Array<{ name: string; required: boolean }>
+    assert.equal(args[0]!.name, 'name')
+  })
+
+  it('prompts/get returns messages', async () => {
+    const { client } = await connect(TestServer)
+    const result = await client.getPrompt({ name: 'greet', arguments: { name: 'World' } })
+    assert.equal(result.messages.length, 1)
+    assert.equal((result.messages[0] as { content: { text?: string; type: string } }).content.text, 'Hello World')
+  })
+})
+
+// ─── oauth2McpMiddleware — happy paths via test-only seam ──
+
+describe('oauth2McpMiddleware — happy paths', () => {
+  function mockRes() {
+    const calls: { status?: number; body?: unknown; headers: Record<string, string> } = { headers: {} }
+    const res = {
+      status(code: number) { calls.status = code; return res },
+      header(key: string, value: string) { calls.headers[key.toLowerCase()] = value; return res },
+      json(data: unknown) { calls.body = data },
+      raw: {},
+    }
+    return { res, calls }
+  }
+
+  function mockReq(authHeader?: string) {
+    return {
+      headers: { ...(authHeader ? { authorization: authHeader } : {}), host: 'app.test' },
+      raw: {},
+    }
+  }
+
+  function fakePassport(opts: {
+    scopes?: string[]
+    revoked?: boolean
+    sub?: string
+  } = {}): import('./auth/oauth2.js').PassportModule {
+    return {
+      verifyToken: async () => ({
+        jti: 'tok-1',
+        sub: opts.sub ?? 'user-1',
+        ...(opts.scopes ? { scopes: opts.scopes } : {}),
+      }),
+      AccessToken: {
+        query: () => ({
+          where: () => ({
+            first: async () => ({ id: 'tok-1', revoked: opts.revoked ?? false }),
+          }),
+        }),
+      },
+    }
+  }
+
+  let restore: (() => void) | null = null
+  beforeEach(() => {
+    if (restore) { restore(); restore = null }
+  })
+
+  async function withPassport(p: import('./auth/oauth2.js').PassportModule) {
+    const oauth2 = await import('./auth/oauth2.js')
+    restore = oauth2._setPassportForTest(p)
+    return oauth2
+  }
+
+  it('valid token with no scope requirement calls next() and writes passport state', async () => {
+    const { oauth2McpMiddleware } = await withPassport(fakePassport({ scopes: ['mcp.read'] }))
+    const mw = oauth2McpMiddleware('/mcp/secure')
+    const { res } = mockRes()
+    const req = mockReq('Bearer abc')
+    let nextCalled = false
+    await mw(req as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+    const raw = req.raw as Record<string, unknown>
+    assert.deepStrictEqual(raw['__passport_token'], { id: 'tok-1', revoked: false })
+    assert.deepStrictEqual(raw['__passport_scopes'], ['mcp.read'])
+    assert.equal(raw['__passport_user_id'], 'user-1')
+  })
+
+  it('valid token with present required scope calls next()', async () => {
+    const { oauth2McpMiddleware } = await withPassport(fakePassport({ scopes: ['mcp.read', 'mcp.write'] }))
+    const mw = oauth2McpMiddleware('/mcp/secure', { scopes: ['mcp.read'] })
+    const { res } = mockRes()
+    let nextCalled = false
+    await mw(mockReq('Bearer abc') as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+  })
+
+  it('valid token missing required scope returns 403 insufficient_scope', async () => {
+    const { oauth2McpMiddleware } = await withPassport(fakePassport({ scopes: ['mcp.read'] }))
+    const mw = oauth2McpMiddleware('/mcp/secure', { scopes: ['mcp.admin'] })
+    const { res, calls } = mockRes()
+    let nextCalled = false
+    await mw(mockReq('Bearer abc') as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(calls.status, 403)
+    assert.ok(calls.headers['www-authenticate']?.includes('insufficient_scope'))
+    assert.ok(calls.headers['www-authenticate']?.includes('scope="mcp.admin"'))
+    assert.equal((calls.body as { error: string }).error, 'insufficient_scope')
+  })
+
+  it('valid token with wildcard scope `*` bypasses scope check', async () => {
+    const { oauth2McpMiddleware } = await withPassport(fakePassport({ scopes: ['*'] }))
+    const mw = oauth2McpMiddleware('/mcp/secure', { scopes: ['mcp.admin'] })
+    const { res } = mockRes()
+    let nextCalled = false
+    await mw(mockReq('Bearer abc') as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+  })
+
+  it('revoked token returns 401 invalid_token', async () => {
+    const { oauth2McpMiddleware } = await withPassport(fakePassport({ scopes: ['mcp.read'], revoked: true }))
+    const mw = oauth2McpMiddleware('/mcp/secure')
+    const { res, calls } = mockRes()
+    let nextCalled = false
+    await mw(mockReq('Bearer abc') as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(calls.status, 401)
+    assert.ok(calls.headers['www-authenticate']?.includes('invalid_token'))
+    assert.ok(calls.headers['www-authenticate']?.includes('revoked'))
+  })
+})
+
+describe('registerOAuth2Metadata', () => {
+  it('emits RFC 9728 protected-resource metadata document', async () => {
+    const { registerOAuth2Metadata } = await import('./auth/oauth2.js')
+    type Handler = (req: unknown, res: unknown) => unknown
+    let registeredPath: string | null = null
+    let registeredHandler: Handler | null = null
+    const router = {
+      get(path: string, handler: Handler) {
+        registeredPath = path
+        registeredHandler = handler
+      },
+    }
+    registerOAuth2Metadata(router, '/mcp/secure', { scopesSupported: ['mcp.read', 'mcp.write'] })
+
+    assert.equal(registeredPath, '/.well-known/oauth-protected-resource/mcp/secure')
+
+    let body: Record<string, unknown> | null = null
+    const req = { headers: { host: 'app.test' } }
+    const res = { json: (data: Record<string, unknown>) => { body = data } }
+    ;(registeredHandler as unknown as Handler)(req, res)
+
+    assert.ok(body)
+    const b = body as Record<string, unknown>
+    assert.equal(b['resource'], 'http://app.test/mcp/secure')
+    assert.deepStrictEqual(b['authorization_servers'], ['http://app.test'])
+    assert.deepStrictEqual(b['bearer_methods_supported'], ['header'])
+    assert.deepStrictEqual(b['scopes_supported'], ['mcp.read', 'mcp.write'])
+  })
+})

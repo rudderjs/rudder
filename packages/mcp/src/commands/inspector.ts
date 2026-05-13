@@ -100,15 +100,23 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
 }
 
 // ─── registry access ─────────────────────────────────────
+//
+// The helpers below are pure dispatch logic for the inspector's HTTP API.
+// They're exported with `@internal` JSDoc so the test suite can exercise the
+// dispatch surface without spinning a real HTTP socket. The file itself isn't
+// in `package.json#exports`, so these aren't reachable from app code via
+// `@rudderjs/mcp`.
 
-type ServerEntry = {
+/** @internal */
+export type ServerEntry = {
   key:    string
   kind:   'web' | 'local'
   label:  string
   Server: new () => McpServer
 }
 
-function listServers(): { web: ServerEntry[]; local: ServerEntry[] } {
+/** @internal */
+export function listServers(): { web: ServerEntry[]; local: ServerEntry[] } {
   const web: ServerEntry[] = []
   for (const [path, { server }] of Mcp.getWebServers()) {
     web.push({ key: `web:${path}`, kind: 'web', label: `${server.name} (${path})`, Server: server })
@@ -123,7 +131,8 @@ function listServers(): { web: ServerEntry[]; local: ServerEntry[] } {
   }
 }
 
-function resolveServer(key: string): ServerEntry | undefined {
+/** @internal */
+export function resolveServer(key: string): ServerEntry | undefined {
   if (key.startsWith('web:')) {
     const path = key.slice(4)
     const entry = Mcp.getWebServers().get(path)
@@ -137,10 +146,6 @@ function resolveServer(key: string): ServerEntry | undefined {
     return { key, kind: 'local', label: `${Server.name} (${name})`, Server }
   }
   return undefined
-}
-
-function getProtected<T>(server: McpServer, key: string, fallback: T): T {
-  return ((server as unknown as Record<string, T>)[key]) ?? fallback
 }
 
 /**
@@ -159,13 +164,14 @@ function instantiateServer(entry: ServerEntry): {
   prompts:   McpPrompt[]
 } {
   const server = new entry.Server()
-  const tools     = getProtected<(new () => McpTool)[]>(server, 'tools', []).map((T) => new T())
-  const resources = getProtected<(new () => McpResource)[]>(server, 'resources', []).map((R) => new R())
-  const prompts   = getProtected<(new () => McpPrompt)[]>(server, 'prompts', []).map((P) => new P())
+  const tools     = server._tools().map((T) => new T())
+  const resources = server._resources().map((R) => new R())
+  const prompts   = server._prompts().map((P) => new P())
   return { server, tools, resources, prompts }
 }
 
-function describeServer(entry: ServerEntry): unknown {
+/** @internal */
+export function describeServer(entry: ServerEntry): unknown {
   const { server, tools, resources, prompts } = instantiateServer(entry)
   const meta = server.metadata()
   return {
@@ -195,7 +201,8 @@ function describeServer(entry: ServerEntry): unknown {
   }
 }
 
-async function callTool(entry: ServerEntry, name: string, input: Record<string, unknown>): Promise<unknown> {
+/** @internal */
+export async function callTool(entry: ServerEntry, name: string, input: Record<string, unknown>): Promise<unknown> {
   const { tools } = instantiateServer(entry)
   const tool = tools.find((t) => t.name() === name)
   if (!tool) throw new Error(`Tool "${name}" not found on ${entry.label}`)
@@ -208,7 +215,8 @@ async function callTool(entry: ServerEntry, name: string, input: Record<string, 
   return consumeToolReturn(ret, undefined, undefined)
 }
 
-async function readResource(entry: ServerEntry, uri: string): Promise<unknown> {
+/** @internal */
+export async function readResource(entry: ServerEntry, uri: string): Promise<unknown> {
   const { resources } = instantiateServer(entry)
   const exact = resources.find((r) => !r.isTemplate() && r.uri() === uri)
   if (exact) {
@@ -227,7 +235,8 @@ async function readResource(entry: ServerEntry, uri: string): Promise<unknown> {
   throw new Error(`Resource "${uri}" not found`)
 }
 
-async function getPrompt(entry: ServerEntry, name: string, args: Record<string, unknown>): Promise<unknown> {
+/** @internal */
+export async function getPrompt(entry: ServerEntry, name: string, args: Record<string, unknown>): Promise<unknown> {
   const { prompts } = instantiateServer(entry)
   const prompt = prompts.find((p) => p.name() === name)
   if (!prompt) throw new Error(`Prompt "${name}" not found on ${entry.label}`)
