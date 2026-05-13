@@ -1,5 +1,32 @@
 # @rudderjs/passport
 
+## 1.1.2
+
+### Patch Changes
+
+- 552b105: refactor: document hidden contracts; collapse grant + bearer duplication; tighten 5 mixin casts
+
+  - Extract `parseScopes()` (used by all 4 grants) and `verifyConfidentialCredentials()` (used by auth-code, client-credentials, refresh-token) into shared helpers under `grants/`. The four-step confidential-secret check (require-confidential, missing-secret, null-on-row, hash-mismatch) now lives in one place and can't drift across grants.
+  - Refactor `bearer.ts`: extract `authenticateBearer()` returning a discriminated outcome (`authenticated` / `no-bearer` / `revoked` / `invalid`). `BearerMiddleware` and `RequireBearer` now share the verify-and-stamp path and only diverge on the failure handler. Eliminates ~75 lines of near-identical duplication and adds a typed `RawAuthBag` so the raw-request cast is no longer `Record<string, unknown>`.
+  - Tighten 5 `(this as any)` casts in `personal-access-tokens.ts` to a narrow `HasApiTokensThis` interface (`id: string`, optional `__passport_token`).
+  - Document four hidden contracts in `packages/passport/CLAUDE.md`: the `__rjs_user` / `__passport_token` raw-bag stamp pattern (and the subtlety that `req.user.tokenCan()` doesn't work because the plain copy drops mixin methods), the `id: string` assumption on `HasApiTokens`'s Base, the `parseJsonArray` fail-closed-with-warn behavior, and the single-authority status of `grants/verify-client.ts`.
+
+  No public-API change.
+
+- 624d410: Internal cleanup: split `src/routes.ts` (657 LOC) into a thin orchestrator + six cohesive siblings under `src/routes/`. The public subpath export `@rudderjs/passport/routes` is unchanged — `routes.ts` itself drops to 94 LOC and re-exports the same three public functions (`registerPassportRoutes`, `registerPassportWebRoutes`, `registerPassportApiRoutes`) plus the two public types. New layout:
+
+  - `routes/types.ts` — `PassportRouteGroup`, `PassportRouteOptions`, internal `Router` + `RouteHandler`
+  - `routes/helpers.ts` — `validateClientRedirect`, `resolveClientCredentials`, `resolveVerificationUri`, `authErrorResponse`, `asMiddlewareArray`, and a new `requesterIdFrom(req)` helper collapsing 3 repeated `(req.raw as any)?.__rjs_user?.id ?? (req as any).user?.id` reads
+  - `routes/authorize.ts` — `GET/POST/DELETE /oauth/authorize`
+  - `routes/token.ts` — `POST /oauth/token`
+  - `routes/revoke.ts` — `DELETE /oauth/tokens/:id`
+  - `routes/scopes.ts` — `GET /oauth/scopes`
+  - `routes/device.ts` — `POST /oauth/device/code` + `POST /oauth/device/approve`
+
+  Source casts: `as any` 6 → 0 inside routes (handled by the new `requesterIdFrom` helper); lint warnings 40 → 34. No public API or behavior change.
+
+- 1b30a5c: Internal cleanup: drop the `as any` bridge casts on every `*Helpers` call site (grants + routes + personal-access-tokens) by broadening the `*Record` interfaces in `models/helpers.ts` to accept the Model-instance shape. JSON-encoded columns (`redirectUris`, `grantTypes`, `scopes`) are now typed as `unknown` because the runtime parser already handles both `string` (wire shape) and `string[]` (`@Cast('json')` hydrated shape). Token-record `scopes`/`createdAt` are marked optional to match the Models, which don't `declare` them as typed fields today. Source casts: 31 → 9 (net -22). No public API or behavior change — `helpers.ts` stays internal, the only exported surface unaffected.
+
 ## 1.1.1
 
 ### Patch Changes

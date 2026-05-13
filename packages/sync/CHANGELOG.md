@@ -1,5 +1,53 @@
 # @rudderjs/live
 
+## 1.1.0
+
+### Minor Changes
+
+- aba6076: feat(sync): SSR hydration primitives + onFirstConnect lifecycle hook
+
+  Adds awaitable read accessors that wait for persistence load before returning, and a server-side seeding hook that fires once per document per process after the first WebSocket client attaches.
+
+  **New `Sync` facade methods (async siblings of existing sync ones):**
+
+  - `Sync.snapshotAsync(docName): Promise<Uint8Array>` — awaits `room.ready`, then encodes. SSR-safe replacement for `snapshot()`, which returns the empty in-process doc on cold reads.
+  - `Sync.readMapAsync(docName, mapName): Promise<Record<string, unknown>>` — async sibling of `readMap()`.
+  - `Sync.readText(docName, textName): Promise<string>` — read a `Y.Text` as a plain string. Returns `''` for never-written texts.
+  - `Sync.load(docName): Promise<Y.Doc>` — return the underlying doc after `room.ready` resolves. Power-user escape hatch for materializing multiple fields off one doc in one await.
+
+  **New `SyncConfig.onFirstConnect` hook:**
+
+  - Signature: `(docName, doc, ctx: { firstClient, persistence }) => void | Promise<void>`
+  - Fires exactly once per docName per process, after the first WebSocket client attaches AND `room.ready` resolves.
+  - Use case: seeding empty Y.Texts / Y.Maps from a DB of record without racing client-side seeding (fixes the SSR-vs-WS hydration flicker on collab-enabled pages).
+  - Best-effort: throws un-mark the docName so the next connection retries; the WebSocket itself is unaffected. Errors emit via `syncObservers.emit({ kind: 'sync.error', ... })`.
+  - Optional: omitting `onFirstConnect` from config leaves behavior unchanged.
+
+  The existing `Sync.snapshot()` / `Sync.readMap()` continue to work and remain sync — kept for back-compat with telescope, docs examples, and any in-the-wild callers. A future minor will mark them `@deprecated`.
+
+  No breaking changes.
+
+### Patch Changes
+
+- 4c08da4: Internal cleanup of `@rudderjs/sync`. No public API changes.
+
+  - Centralize the rooms-map globalThis access behind `getRoomsMap()` / `ensureRoomsMap()` helpers — collapses 5 inline `g[KEY] as Map<string, Room>` reads (sync:docs, sync:clear, Sync.clearDocument, Sync.getClientCount, getOrCreateRoom) into one structural cast inside the helper. `getOrCreateRoom` is restructured to early-return on the cache-hit path so it no longer needs a `rooms.get(docName) as Room` non-null cast.
+  - Centralize the per-WebSocket client-id property bag behind `readTaggedId()` / `writeTaggedId()` helpers — keeps the `(ws as unknown as Record<...>)['__syncClientId']` cast in one spot instead of two inline at the callsite.
+  - Centralize commander-style argv reads behind `readDocArg()` — drops the duplicated `(args as unknown as Record<string, unknown>)['doc'] as string` pattern from the two `sync:*` commands.
+  - Add a named `DeltaItem` shape for `Y.XmlText.toDelta()` results (yjs types `toDelta` as `Array<any>`) and use it across the `sync:inspect` command's three call sites. Replaces three inline `as { insert: unknown; attributes?: Record<string, unknown> }` casts. Lexical adapter (`@rudderjs/sync/lexical`) still has its own toDelta casts — left for a follow-up sweep to keep this PR focused.
+  - `sync:inspect` outer/inner loops switched from `for (let i = 0; ...) { const entry = delta[i]! }` to `for (const [i, entry] of delta.entries())` — eliminates the per-iteration non-null assertion that the index-based form needed under `noUncheckedIndexedAccess`.
+
+- c7ef815: Internal cleanup of the `@rudderjs/sync/lexical` adapter — deferred follow-up from the previous sync cleanup. No public API changes.
+
+  - Standardize on the existing `InnerDeltaItem` type alias from `lexical/types.ts` everywhere a `Y.XmlText.toDelta()` result is consumed. Replaces 7 inline `as Array<{ insert: unknown }>` casts across `text.ts` and `lexical/index.test.ts`.
+  - Drop redundant `as Y.XmlText` / `as Y.XmlElement` post-`instanceof` casts in `text.ts` and the test file (4 casts) — TypeScript already narrows `entry.insert` to the matched type inside the `instanceof` branch.
+  - Drop two unused `// eslint-disable-next-line @typescript-eslint/no-explicit-any` directives in `blocks.ts` — the underlying casts use `unknown`, not `any`, so the rule never fired.
+  - Restructure `rewriteText` in `text.ts` to merge the two passes over `rootDelta` (paragraph-nodes + per-paragraph offsets) into one — collects `{ node, offset }` pairs, then iterates `existing.slice(newParagraphs.length).reverse()` for truncation and `newParagraphs.slice(existing.length)` for extension. Eliminates 3 non-null assertions (`existingNodes[i]!` / `newParagraphs[i]!` / `offsets[i]!`).
+  - Replace `paragraphOffsets[pIdx]!` in `insertBlock` with `paragraphOffsets[pIdx] ?? totalLen`. The explicit `>= paragraphCount` guard above already covers OOB, but the `??` keeps `noUncheckedIndexedAccess` happy without the lint-flagged non-null assertion.
+  - Test helper: `rooms()` accessor for the 4 repeated `G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>` reads.
+
+  `@rudderjs/sync` package-wide lint warnings: 7 → 0 (lexical/ adapter).
+
 ## 1.0.1
 
 ### Patch Changes

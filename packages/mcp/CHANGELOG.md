@@ -1,5 +1,17 @@
 # @rudderjs/mcp
 
+## 5.1.2
+
+### Patch Changes
+
+- 5f38ac6: `mcp:inspector` now correctly consumes streaming tools (`async *handle()`). Previously, calling a streaming tool through the inspector returned an empty `{}` because `tool.handle()` was JSON-serialized as the iterator object instead of being drained. The inspector now runs the same `consumeToolReturn` path as the SDK and test client — progress yields are dropped (the inspector is a synchronous UI), and the final result is returned.
+
+  Also deduplicates the URI-template matcher between the SDK runtime and inspector (previously two near-identical copies in `runtime.ts` and `commands/inspector.ts`) by extracting it to `src/uri-template.ts`.
+
+- fa8cc27: `prompts/get` responses now emit structured content objects (`{ type: 'text', text: string }`) on the wire, matching the MCP spec's `PromptMessageSchema`. Previously the SDK handler forwarded `McpPromptMessage.content` as a raw string, which the MCP TypeScript SDK rejected with a Zod validation error on the client side. Prompts authored against the framework's `McpPrompt` interface are unaffected — the adapter only transforms on the way out, so user code still returns `{ role, content: string }`.
+
+  Surfaced while writing end-to-end SDK-handler tests (mcp-quality-audit PR C).
+
 ## 5.1.1
 
 ### Patch Changes
