@@ -27,29 +27,56 @@ function parseStack(stack: string): StackFrame[] {
   })
 }
 
+/** Matches `throw ` / `throw new …` / `abort(` anywhere in a trimmed line. */
+const ERROR_TRIGGER = /(?:^|[\s.;{}(])(?:throw\s|abort\s*\()/
+
 /**
- * tsx source maps can report an off line number (e.g. an empty line).
- * Scan forward from the reported line to find the actual throw/error statement.
+ * @internal — exposed for tests.
+ *
+ * Resolve the reported error line to the actual throw / abort site.
+ *
+ * Both `tsx` and Vite SSR's Module Runner report inaccurate line numbers in
+ * dev: `new Function()`-evaluated modules don't honor `--enable-source-maps`,
+ * and `ssr.sourcemap: 'inline'` is silently ignored by Vite. In practice the
+ * offset is anywhere from a few lines (tsx) to ~90+ lines (Vite SSR on a
+ * playground route file).
+ *
+ * Strategy:
+ *   1. If the reported line is a real code statement (non-empty, not a
+ *      comment), trust it. The frame may point at a call site whose callee
+ *      throws — line is still meaningful for the developer.
+ *   2. Otherwise scan forward up to 150 lines for a `throw `/`abort(` line.
+ *      150 chosen to cover observed Vite SSR offsets without overshooting a
+ *      typical multi-route file.
+ *   3. If nothing matches, return `null` so the renderer drops the
+ *      source-context section entirely — better than misleading the reader
+ *      with an unrelated comment block, which is what the previous "first
+ *      non-empty line" fallback produced (see #442 follow-up).
  */
-function resolveErrorLine(lines: string[], reported: number): number {
-  const reported0 = reported - 1 // 0-indexed
-  // If the reported line is non-empty, trust it
-  if (lines[reported0]?.trim()) return reported
-  // Scan forward up to 20 lines for a throw statement
-  for (let i = reported0 + 1; i < Math.min(lines.length, reported0 + 20); i++) {
-    if (lines[i]?.trimStart().startsWith('throw ')) return i + 1
+export function resolveErrorLine(lines: string[], reported: number): number | null {
+  const reported0 = reported - 1
+  const trimmed = lines[reported0]?.trim() ?? ''
+
+  // Real code on the reported line: trust it. Skip empty + comment-only.
+  if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('*') && !trimmed.startsWith('/*')) {
+    return reported
   }
-  // Fallback: first non-empty line
-  for (let i = reported0 + 1; i < Math.min(lines.length, reported0 + 20); i++) {
-    if (lines[i]?.trim()) return i + 1
+
+  const WINDOW = 150
+  for (let i = reported0 + 1; i < Math.min(lines.length, reported0 + WINDOW); i++) {
+    const t = lines[i]?.trim() ?? ''
+    if (!t || t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) continue
+    if (ERROR_TRIGGER.test(t)) return i + 1
   }
-  return reported
+
+  return null
 }
 
 function sourceContext(file: string, reportedLine: number): Array<{ n: number; code: string; isError: boolean }> | null {
   try {
-    const lines    = fs.readFileSync(file, 'utf-8').split('\n')
+    const lines     = fs.readFileSync(file, 'utf-8').split('\n')
     const errorLine = resolveErrorLine(lines, reportedLine)
+    if (errorLine === null) return null
     const start    = Math.max(0, errorLine - 6)
     const end      = Math.min(lines.length, errorLine + 4)
     return lines.slice(start, end).map((code, i) => ({

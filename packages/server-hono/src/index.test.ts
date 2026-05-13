@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { hono } from './index.js'
-import { renderErrorPage, buildErrorMarkdown } from './error-page.js'
+import { renderErrorPage, buildErrorMarkdown, resolveErrorLine } from './error-page.js'
 
 // ─── hono() factory ─────────────────────────────────────────
 
@@ -449,6 +449,65 @@ describe('buildErrorMarkdown()', () => {
     const md = buildErrorMarkdown(new Error('no-stack'), req, noFrame)
     assert.ok(!md.includes('## Source'), 'no source section')
     assert.ok(!md.includes('## Stack'),  'no stack section')
+  })
+})
+
+// ─── resolveErrorLine() — Vite SSR offset compensation ────────────
+
+describe('resolveErrorLine()', () => {
+  it('trusts the reported line when it has real code', () => {
+    const lines = ['const x = 1', 'throw new Error("boom")', 'const z = 3']
+    assert.strictEqual(resolveErrorLine(lines, 2), 2, 'throw on reported line is preserved')
+  })
+
+  it('trusts a non-throw, non-comment statement (call-site frames are still useful)', () => {
+    const lines = ['function caller() {', '  riskyCall()', '}']
+    assert.strictEqual(resolveErrorLine(lines, 2), 2)
+  })
+
+  it('scans forward to the next throw when reported line is blank', () => {
+    const lines = ['function f() {', '', '', '', 'throw new Error("x")', '}']
+    // Reported = 2 (blank). Throw is at line 5.
+    assert.strictEqual(resolveErrorLine(lines, 2), 5)
+  })
+
+  it('skips comment lines and finds the next throw', () => {
+    const lines = [
+      'function f() {',
+      '// a comment',
+      '// another comment',
+      '/* block start',
+      ' * still inside */',
+      'throw new Error("x")',
+    ]
+    // Reported = 2 (comment). Should skip past 3-5 and find throw at line 6.
+    assert.strictEqual(resolveErrorLine(lines, 2), 6)
+  })
+
+  it('finds a throw 90+ lines forward — covers Vite SSR module-runner offset', () => {
+    const lines: string[] = []
+    lines.push('// line 1')
+    for (let i = 2; i <= 119; i++) lines.push('')        // 118 blank lines
+    lines.push('throw new Error("vite-ssr-offset")')     // line 120
+    // Reported = 1 (a comment in the existing logic). The fix scans 150 forward.
+    assert.strictEqual(resolveErrorLine(lines, 1), 120)
+  })
+
+  it('matches abort() calls in addition to throw statements', () => {
+    const lines = ['function notFound() {', '', '  abort(404, "Missing")', '}']
+    assert.strictEqual(resolveErrorLine(lines, 2), 3)
+  })
+
+  it('matches `throw new ...` mid-line via the boundary regex', () => {
+    const lines = ['function f() {', '', 'if (broken) { throw new Error("x") }']
+    assert.strictEqual(resolveErrorLine(lines, 2), 3)
+  })
+
+  it('returns null when no throw / abort is found within the 150-line window', () => {
+    const lines = ['', 'const a = 1', 'const b = 2', '// just data, no error trigger']
+    // Reported = 1 (blank). No throw/abort anywhere → null so the renderer
+    // can drop the source section rather than mislead with an unrelated line.
+    assert.strictEqual(resolveErrorLine(lines, 1), null)
   })
 })
 
