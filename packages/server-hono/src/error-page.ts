@@ -208,7 +208,8 @@ body{background:#0d0d0f;color:#d4d4d4;font-family:ui-sans-serif,system-ui,-apple
 .top-bar{display:flex;align-items:center;gap:8px;padding:12px 24px;background:#18181b;border-bottom:1px solid #27272a;color:#ef4444;font-weight:600;font-size:13px}
 .dot{width:8px;height:8px;background:#ef4444;border-radius:50%;flex-shrink:0}
 .container{max-width:1100px;margin:0 auto;padding:40px 24px}
-h1{font-size:28px;font-weight:700;color:#f4f4f5;margin-bottom:4px}
+h1{font-size:28px;font-weight:700;color:#f4f4f5;margin:0}
+.title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:4px}
 .location{font-size:13px;color:#71717a;margin-bottom:12px;font-family:ui-monospace,monospace}
 .message{font-size:17px;color:#a1a1aa;margin-bottom:24px}
 .badges{display:flex;gap:8px;margin-bottom:32px;flex-wrap:wrap}
@@ -249,7 +250,6 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
 .copy-btn:active{background:#18181b}
 .copy-btn.copied{background:#064e3b;border-color:#10b981;color:#a7f3d0}
 .copy-btn-icon{width:14px;height:14px;flex-shrink:0}
-.actions-row{display:flex;justify-content:flex-end;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -260,11 +260,8 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
 </div>
 
 <div class="container">
-  <h1>${esc(error.name)}</h1>
-  ${topFrame ? `<div class="location">${esc(rel(topFrame.file))}:${topFrame.line}</div>` : ''}
-  <div class="message">${esc(error.message)}</div>
-
-  <div class="actions-row">
+  <div class="title-row">
+    <h1>${esc(error.name)}</h1>
     <button class="copy-btn" id="rjs-copy-md" type="button" title="Copy error context as Markdown — paste into an AI chat for debugging">
       <svg class="copy-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -273,6 +270,8 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
       <span>Copy as Markdown</span>
     </button>
   </div>
+  ${topFrame ? `<div class="location">${esc(rel(topFrame.file))}:${topFrame.line}</div>` : ''}
+  <div class="message">${esc(error.message)}</div>
 
   <div class="badges">
     <span class="badge badge-gray">NODE ${esc(nodeVersion)}</span>
