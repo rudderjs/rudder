@@ -25,12 +25,12 @@ export function readText(doc: Y.Doc): string {
   if (root.length === 0) return ''
 
   const parts: string[]   = []
-  const rootDelta         = root.toDelta() as Array<{ insert: unknown }>
+  const rootDelta         = root.toDelta() as InnerDeltaItem[]
 
   for (const entry of rootDelta) {
     if (!(entry.insert instanceof Y.XmlText)) continue
-    const child       = entry.insert as Y.XmlText
-    const innerDelta  = child.toDelta() as Array<{ insert: unknown }>
+    const child       = entry.insert
+    const innerDelta  = child.toDelta() as InnerDeltaItem[]
     const lineParts: string[] = []
 
     for (const item of innerDelta) {
@@ -38,7 +38,7 @@ export function readText(doc: Y.Doc): string {
         lineParts.push(item.insert)
       } else if (item.insert instanceof Y.XmlElement) {
         // Block (DecoratorNode) — include as inline marker so AI can see it
-        const elem      = item.insert as Y.XmlElement
+        const elem      = item.insert
         const blockType = elem.getAttribute('__blockType')
         if (blockType) {
           const blockData = elem.getAttribute('__blockData')
@@ -127,12 +127,19 @@ export function rewriteText(
   const newParagraphs = newText.split('\n').filter(p => p.trim())
 
   doc.transact(() => {
-    // Collect existing paragraph nodes from root delta
+    // Collect existing paragraph nodes + their root-relative offsets in a
+    // single pass — pairs `{ node, offset }` so the truncation loop below
+    // doesn't need a parallel offsets array (and the index-bounded reads
+    // that come with it).
     const rootDelta = root.toDelta() as InnerDeltaItem[]
-    const existingNodes: Y.XmlText[] = []
-    for (const entry of rootDelta) {
-      if (entry.insert instanceof Y.XmlText) {
-        existingNodes.push(entry.insert as Y.XmlText)
+    const existing: Array<{ node: Y.XmlText; offset: number }> = []
+    {
+      let walked = 0
+      for (const entry of rootDelta) {
+        if (entry.insert instanceof Y.XmlText) {
+          existing.push({ node: entry.insert, offset: walked })
+        }
+        walked += 1
       }
     }
 
@@ -169,32 +176,25 @@ export function rewriteText(
     }
 
     // Rewrite existing paragraphs with new text
-    const reusable = Math.min(existingNodes.length, newParagraphs.length)
-    for (let i = 0; i < reusable; i++) {
-      replaceNodeText(existingNodes[i]!, newParagraphs[i]!)
+    const reusableCount = Math.min(existing.length, newParagraphs.length)
+    for (let i = 0; i < reusableCount; i++) {
+      const item = existing[i]
+      const text = newParagraphs[i]
+      if (item && text !== undefined) replaceNodeText(item.node, text)
     }
 
-    // Remove extra old paragraphs (from the end to avoid offset shifts)
-    if (existingNodes.length > newParagraphs.length) {
-      let offset = 0
-      const offsets: number[] = []
-      for (const entry of rootDelta) {
-        if (entry.insert instanceof Y.XmlText) offsets.push(offset)
-        offset += 1
-      }
-      for (let i = existingNodes.length - 1; i >= newParagraphs.length; i--) {
-        root.delete(offsets[i]!, 1)
-      }
+    // Remove extra old paragraphs (from the end to avoid offset shifts).
+    // Reverse-iterate the tail slice so we delete the highest offsets first.
+    for (const { offset } of existing.slice(newParagraphs.length).reverse()) {
+      root.delete(offset, 1)
     }
 
     // Add new paragraphs if we have more than existed
-    if (newParagraphs.length > existingNodes.length) {
-      for (let i = existingNodes.length; i < newParagraphs.length; i++) {
-        const pNode = new Y.XmlText()
-        pNode.setAttribute('__type', 'paragraph')
-        pNode.insert(0, newParagraphs[i]!)
-        root.insertEmbed(root.length, pNode)
-      }
+    for (const text of newParagraphs.slice(existing.length)) {
+      const pNode = new Y.XmlText()
+      pNode.setAttribute('__type', 'paragraph')
+      pNode.insert(0, text)
+      root.insertEmbed(root.length, pNode)
     }
   }, SERVER_ORIGIN)
 
@@ -203,7 +203,7 @@ export function rewriteText(
     const postDelta = root.toDelta() as InnerDeltaItem[]
     for (const entry of postDelta) {
       if (entry.insert instanceof Y.XmlText) {
-        const node       = entry.insert as Y.XmlText
+        const node       = entry.insert
         const innerDelta = node.toDelta() as InnerDeltaItem[]
         let textLen = 0
         for (const item of innerDelta) {
