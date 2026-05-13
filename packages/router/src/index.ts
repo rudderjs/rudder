@@ -1,13 +1,5 @@
 import 'reflect-metadata'
 
-// Lazy-load node:crypto to avoid bundling it into the client.
-// Only used by Url (signed URLs) and ValidateSignature — server-only features.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _crypto: { createHmac: any; timingSafeEqual: any } | undefined
-// Fire-and-forget: preload on server, no-op in browser
-if (typeof globalThis.process !== 'undefined') {
-  import(/* @vite-ignore */ 'node:crypto').then(m => { _crypto = m }).catch(() => {})
-}
 import type {
   ServerAdapter,
   RouteDefinition,
@@ -15,7 +7,6 @@ import type {
   MiddlewareHandler,
   HttpMethod,
   RouteGroup,
-  AppRequest,
 } from '@rudderjs/contracts'
 
 // ─── Route Group Context ──────────────────────────────────
@@ -184,7 +175,8 @@ function consumeBraceBlock(path: string, i: number): number {
  * `where*()` regex constraint segments before scanning the path for `:param`
  * names.
  */
-function stripRegexSegments(path: string): string {
+/** @internal — exported so sibling modules (binding-middleware) can reuse. */
+export function stripRegexSegments(path: string): string {
   let out = ''
   let i = 0
   while (i < path.length) {
@@ -365,57 +357,14 @@ export interface RouteGroupOptions {
 
 // ─── Route Model Binding ───────────────────────────────────
 
-/**
- * Duck-typed contract for any object that resolves a string route parameter
- * into a value (typically a Model instance, but the router doesn't depend on
- * `@rudderjs/orm` — anything with a static `findForRoute` method works).
- *
- * Returning `null` signals "not found" — the router maps that to a thrown
- * `RouteModelNotFoundError`, which the framework's HTTP layer renders as a 404.
- */
-export interface RouteResolver {
-  /** Owning class name — used for error messages only. */
-  name: string
-  /** Resolve the raw param value. Return `null` for not-found. */
-  findForRoute(value: string): Promise<unknown | null> | unknown | null
-}
-
-export interface RouteBindingOptions {
-  /**
-   * When `true`, an absent or unresolvable param value silently sets
-   * `req.bound[name] = null` instead of throwing. Useful for shared routes
-   * that may or may not have a logged-in subject.
-   */
-  optional?: boolean
-}
-
-interface RouteBinding {
-  resolver: RouteResolver
-  optional: boolean
-}
-
-/**
- * Thrown by route binding middleware when a required `{param}` cannot be
- * resolved into a model instance. `@rudderjs/core` picks up the duck-typed
- * `httpStatus` and renders this as an HTTP 404; apps can catch it explicitly
- * to render a custom not-found page.
- */
-export class RouteModelNotFoundError extends Error {
-  readonly model: string
-  readonly param: string
-  readonly value: string
-
-  /** Duck-typed signal to `@rudderjs/core`'s exception handler. */
-  readonly httpStatus = 404
-
-  constructor(model: string, param: string, value: string) {
-    super(`[RudderJS] No ${model} matched route parameter "${param}" with value "${value}".`)
-    this.name = 'RouteModelNotFoundError'
-    this.model = model
-    this.param = param
-    this.value = value
-  }
-}
+import {
+  buildBindingMiddleware,
+  type RouteResolver,
+  type RouteBindingOptions,
+  type RouteBinding,
+} from './binding-middleware.js'
+export { RouteModelNotFoundError } from './binding-middleware.js'
+export type { RouteResolver, RouteBindingOptions } from './binding-middleware.js'
 
 // ─── Router ────────────────────────────────────────────────
 
@@ -581,60 +530,7 @@ export class Router {
    * `def.missing` — the per-route 404 customisation set via `RouteBuilder.missing()`.
    */
   private _buildBindingMiddleware(def: RouteDefinition): MiddlewareHandler | null {
-    // Strip `{regex}` constraint segments from `where*()` before scanning for
-    // param names — otherwise a `:` inside a custom pattern could be misread
-    // as a route param. Uses balanced-brace stripping to support nested `{n}`
-    // quantifiers (e.g. UUID's `[0-9a-f]{8}-...`).
-    const stripped = stripRegexSegments(def.path)
-    const paramNames = [...stripped.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)\??/g)].map(m => m[1] as string)
-    const matches: Array<[string, RouteBinding]> = []
-    for (const name of paramNames) {
-      const binding = this.bindings.get(name)
-      if (binding) matches.push([name, binding])
-    }
-    if (matches.length === 0) return null
-
-    return async (req, res, next) => {
-      // Lazy-init bound bag so handlers always see an object.
-      const bound = (req as unknown as { bound?: Record<string, unknown> }).bound ?? {}
-      ;(req as unknown as { bound: Record<string, unknown> }).bound = bound
-
-      for (const [name, binding] of matches) {
-        const raw = req.params[name]
-        let err: RouteModelNotFoundError | null = null
-
-        if (raw === undefined || raw === '') {
-          if (binding.optional) { bound[name] = null; continue }
-          err = new RouteModelNotFoundError(binding.resolver.name, name, '')
-        } else {
-          const resolved = await binding.resolver.findForRoute(raw)
-          if (resolved === null || resolved === undefined) {
-            if (binding.optional) { bound[name] = null; continue }
-            err = new RouteModelNotFoundError(binding.resolver.name, name, raw)
-          } else {
-            bound[name] = resolved
-          }
-        }
-
-        if (err) {
-          if (def.missing) {
-            // Route opted into a custom 404 — dispatch the result the same
-            // way registerRoute() handles a route handler's return value.
-            const result = await def.missing(req, err)
-            if (result instanceof Response) {
-              ;(res.raw as { res?: Response }).res = result
-              return
-            }
-            if (typeof result === 'string') { res.send(result); return }
-            if (result !== undefined && result !== null) { res.json(result); return }
-            // undefined → callback wrote to res directly; trust that.
-            return
-          }
-          throw err
-        }
-      }
-      await next()
-    }
+    return buildBindingMiddleware(this.bindings, def)
   }
 
   /** Manually register a route. Returns `this` for bulk registration. */
@@ -846,126 +742,18 @@ export class Router {
 
 // ─── Resource verb tables / helpers ────────────────────────
 
-/** The seven canonical RESTful verbs Laravel's `Route::resource` exposes. */
-export type ResourceVerb = 'index' | 'create' | 'store' | 'show' | 'edit' | 'update' | 'destroy'
-
-interface ResourceVerbSpec {
-  verb:       ResourceVerb
-  method:     HttpMethod
-  path:       (name: string, param: string) => string
-  nameSuffix: string
-}
-
-const RESOURCE_VERBS: readonly ResourceVerbSpec[] = [
-  { verb: 'index',   method: 'GET',    path: (n)    => `/${n}`,            nameSuffix: 'index'   },
-  { verb: 'create',  method: 'GET',    path: (n)    => `/${n}/create`,     nameSuffix: 'create'  },
-  { verb: 'store',   method: 'POST',   path: (n)    => `/${n}`,            nameSuffix: 'store'   },
-  { verb: 'show',    method: 'GET',    path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'show'    },
-  { verb: 'edit',    method: 'GET',    path: (n, p) => `/${n}/:${p}/edit`, nameSuffix: 'edit'    },
-  { verb: 'update',  method: 'PUT',    path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'update'  },
-  { verb: 'destroy', method: 'DELETE', path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'destroy' },
-]
-
-const SINGLETON_VERBS: readonly ResourceVerbSpec[] = [
-  { verb: 'show',   method: 'GET', path: (n) => `/${n}`,       nameSuffix: 'show'   },
-  { verb: 'edit',   method: 'GET', path: (n) => `/${n}/edit`,  nameSuffix: 'edit'   },
-  { verb: 'update', method: 'PUT', path: (n) => `/${n}`,       nameSuffix: 'update' },
-]
-
-const SINGLETON_CREATE_VERBS: readonly ResourceVerbSpec[] = [
-  { verb: 'create', method: 'GET',  path: (n) => `/${n}/create`, nameSuffix: 'create' },
-  { verb: 'store',  method: 'POST', path: (n) => `/${n}`,        nameSuffix: 'store'  },
-]
-
-const SINGLETON_DESTROY_VERBS: readonly ResourceVerbSpec[] = [
-  { verb: 'destroy', method: 'DELETE', path: (n) => `/${n}`, nameSuffix: 'destroy' },
-]
-
-function filterVerbs(table: readonly ResourceVerbSpec[], opts: ResourceOptions): readonly ResourceVerbSpec[] {
-  let verbs = table
-  if (opts.only)   { const allow = new Set(opts.only);   verbs = verbs.filter(v => allow.has(v.verb)) }
-  if (opts.except) { const deny  = new Set(opts.except); verbs = verbs.filter(v => !deny.has(v.verb)) }
-  return verbs
-}
-
-/**
- * Naive English singularizer for the default resource param name. Handles the
- * three patterns Laravel users hit constantly (`posts → post`,
- * `categories → category`, `boxes → box`). Anything irregular — `people`,
- * `data`, etc. — should be overridden via the `parameters` option, exactly
- * as in Laravel.
- */
-function singularize(name: string): string {
-  if (/[^aeiou]ies$/i.test(name))     return name.slice(0, -3) + 'y'   // categories → category
-  if (/(s|x|z|ch|sh)es$/i.test(name)) return name.slice(0, -2)         // boxes → box
-  if (/s$/i.test(name) && !/ss$/i.test(name)) return name.slice(0, -1) // posts → post
-  return name
-}
-
-// ─── Resource options + registrations ──────────────────────
-
-/**
- * Options accepted by `router.resource`/`apiResource`/`singleton`.
- *
- * - `only`/`except` — restrict the verbs registered.
- * - `parameters` — override the `:param` segment name for a given resource
- *   (e.g. `{ posts: 'article' }` → `/posts/:article`).
- * - `names` — override the generated route names per verb.
- * - `middleware` — applied to every route registered by the resource.
- */
-export interface ResourceOptions {
-  only?:       readonly ResourceVerb[]
-  except?:     readonly ResourceVerb[]
-  parameters?: Record<string, string>
-  names?:      Partial<Record<ResourceVerb, string>>
-  middleware?: MiddlewareHandler[]
-}
-
-/**
- * Returned by `router.resource()`/`apiResource()`. The `builders` array holds
- * one `RouteBuilder` per registered route in declaration order — apply
- * `where*()`, additional middleware, or rename individual routes by indexing
- * directly. The `update` PATCH alias is included as a separate builder
- * immediately after its PUT counterpart.
- */
-export class ResourceRegistration {
-  constructor(public readonly builders: RouteBuilder[]) {}
-}
-
-/**
- * Returned by `router.singleton()`. Adds two opt-in helpers on top of
- * `ResourceRegistration` for resources that also expose a creation flow
- * (`.creatable()`) or deletion flow (`.destroyable()`).
- */
-export class SingletonRegistration extends ResourceRegistration {
-  constructor(
-    builders: RouteBuilder[],
-    private readonly _router: Router,
-    private readonly _name: string,
-    private readonly _Ctrl: new () => object,
-    private readonly _opts: ResourceOptions,
-  ) { super(builders) }
-
-  /**
-   * Add `GET /<name>/create` and `POST /<name>` — the create/store half of a
-   * full resource. Skipped for any verb the controller doesn't implement.
-   */
-  creatable(): this {
-    const reg = this._router._registerResource(this._name, this._Ctrl, SINGLETON_CREATE_VERBS, this._opts)
-    this.builders.push(...reg.builders)
-    return this
-  }
-
-  /**
-   * Add `DELETE /<name>` — the destroy half of a full resource. Skipped if
-   * the controller doesn't implement `destroy()`.
-   */
-  destroyable(): this {
-    const reg = this._router._registerResource(this._name, this._Ctrl, SINGLETON_DESTROY_VERBS, this._opts)
-    this.builders.push(...reg.builders)
-    return this
-  }
-}
+import {
+  RESOURCE_VERBS,
+  SINGLETON_VERBS,
+  filterVerbs,
+  singularize,
+  ResourceRegistration,
+  SingletonRegistration,
+  type ResourceOptions,
+  type ResourceVerbSpec,
+} from './resource.js'
+export type { ResourceVerb, ResourceOptions } from './resource.js'
+export { ResourceRegistration, SingletonRegistration } from './resource.js'
 
 // ─── Global router instance ────────────────────────────────
 
@@ -1018,146 +806,6 @@ export function route(name: string, params: Record<string, string | number> = {}
   return result
 }
 
-// ─── Url ───────────────────────────────────────────────────
+// ─── URL signing ───────────────────────────────────────────
 
-let _urlKey = ''
-
-function _getSigningKey(): string {
-  const key = _urlKey || process.env['APP_KEY'] || ''
-  if (!key) throw new Error('[RudderJS] No signing key configured. Set APP_KEY in your .env or call Url.setKey().')
-  return key
-}
-
-function _splitPath(path: string): [string, string] {
-  const idx = path.indexOf('?')
-  return idx === -1 ? [path, ''] : [path.slice(0, idx), path.slice(idx + 1)]
-}
-
-function _computeSignature(pathname: string, params: URLSearchParams): string {
-  // Sort params for deterministic signing (exclude 'signature' itself)
-  const sorted = new URLSearchParams(
-    [...params.entries()]
-      .filter(([k]) => k !== 'signature')
-      .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-  )
-  const toSign = sorted.size > 0 ? `${pathname}?${sorted.toString()}` : pathname
-  if (!_crypto) throw new Error('[RudderJS Router] node:crypto not available — Url signing requires a server environment.')
-  return _crypto.createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
-}
-
-export class Url {
-  /**
-   * Override the HMAC signing key used for signed URLs.
-   * Falls back to `process.env.APP_KEY`.
-   */
-  static setKey(key: string): void {
-    _urlKey = key
-  }
-
-  /** The full URL of the current request. */
-  static current(req: AppRequest): string {
-    return req.url
-  }
-
-  /** The previous URL from the `Referer` header, or `fallback`. */
-  static previous(req: AppRequest, fallback = '/'): string {
-    return req.headers['referer'] ?? fallback
-  }
-
-  /**
-   * Generate a signed URL for a named route.
-   *
-   * @example
-   * Url.signedRoute('invoice.download', { id: 42 })
-   * // → '/invoice/42?signature=abc123'
-   */
-  static signedRoute(
-    name: string,
-    params: Record<string, string | number> = {},
-    expiresAt?: Date,
-  ): string {
-    return Url.sign(route(name, params), expiresAt)
-  }
-
-  /**
-   * Generate a signed URL that expires after `seconds` seconds.
-   *
-   * @example
-   * Url.temporarySignedRoute('invoice.download', 3600, { id: 42 })
-   * // → '/invoice/42?expires=1234567890&signature=abc123'
-   */
-  static temporarySignedRoute(
-    name: string,
-    seconds: number,
-    params: Record<string, string | number> = {},
-  ): string {
-    return Url.signedRoute(name, params, new Date(Date.now() + seconds * 1000))
-  }
-
-  /**
-   * Sign an arbitrary path string.
-   * Appends `?signature=...` (and `?expires=...` if `expiresAt` given).
-   */
-  static sign(path: string, expiresAt?: Date): string {
-    const [pathname, search] = _splitPath(path)
-    const params = new URLSearchParams(search)
-
-    if (expiresAt) {
-      params.set('expires', String(Math.floor(expiresAt.getTime() / 1000)))
-    }
-
-    const sig = _computeSignature(pathname, params)
-    params.set('signature', sig)
-
-    return `${pathname}?${params.toString()}`
-  }
-
-  /**
-   * Return `true` if the request has a valid (and non-expired) signature.
-   */
-  static isValidSignature(req: AppRequest): boolean {
-    // `req.url` may be a full URL (Hono adapter populates protocol+host+path+query)
-    // or a bare path. `Url.sign(path)` only ever signs the pathname, so verification
-    // must hash the same shape. Use the URL parser so both forms collapse to a
-    // pathname + searchParams pair.
-    const u = new URL(req.url, 'http://placeholder.local')
-    const pathname = u.pathname
-    const params = u.searchParams
-
-    const signature = params.get('signature')
-    if (!signature) return false
-
-    // Check expiry before touching the signature
-    const expires = params.get('expires')
-    if (expires !== null) {
-      const expiry = parseInt(expires, 10)
-      if (isNaN(expiry) || Date.now() / 1000 > expiry) return false
-    }
-
-    const expected = _computeSignature(pathname, params)
-
-    if (!_crypto) return signature === expected
-    const sigBuf = Buffer.from(signature)
-    const expBuf = Buffer.from(expected)
-    if (sigBuf.length !== expBuf.length) return false
-    return _crypto.timingSafeEqual(sigBuf, expBuf)
-  }
-}
-
-// ─── ValidateSignature middleware ───────────────────────────
-
-/**
- * Middleware that verifies a signed URL signature.
- * Responds with 403 if the signature is missing, invalid, or expired.
- *
- * @example
- * router.get('/invoice/:id/download', handler, [ValidateSignature()])
- */
-export function ValidateSignature(): MiddlewareHandler {
-  return async (req, res, next) => {
-    if (!Url.isValidSignature(req)) {
-      return res.status(403).json({ message: 'Invalid or expired URL signature.' })
-    }
-    await next()
-  }
-}
+export { Url, ValidateSignature } from './url-signing.js'
