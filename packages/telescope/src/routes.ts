@@ -1,5 +1,6 @@
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import type { TelescopeStorage, TelescopeConfig, EntryType } from './types.js'
+import { toApiSlug } from './types.js'
 import { Dashboard, EntryList, pages } from './views/vanilla/index.js'
 import { DetailLayout, detailViews, NotFoundPage, BatchPage } from './views/vanilla/details/index.js'
 import { listEntries, showEntry, overview, prune, listBatch, getRecording, toggleRecording, authMiddleware } from './api/routes.js'
@@ -135,13 +136,9 @@ export async function registerTelescopeRoutes(
   }, middleware)
 
   // ── API: list + show per entry type ──────────────────────
+  // Slug mapping is shared with EntryList.ts via `toApiSlug` (see types.ts).
   for (const type of ENTRY_TYPES) {
-    const apiPath = type === 'query' ? 'queries'
-      : type === 'http' ? 'http'
-      : type === 'ai'  ? 'ai'
-      : type === 'mcp' ? 'mcp'
-      : type === 'view' ? 'views'
-      : `${type}s`
+    const apiPath = toApiSlug(type)
     router.get(
       `${apiPrefix}/${apiPath}`,
       (req: AppRequest, res: AppResponse) => listEntries(storage, type, req, res),

@@ -7,6 +7,31 @@ import { setBatchId } from '../batch-context.js'
 const DEFAULT_HIDE_HEADERS = ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key']
 const DEFAULT_HIDE_FIELDS  = ['password', 'password_confirmation', 'token', 'secret']
 
+// ─── Raw-bag access ────────────────────────────────────────
+//
+// `AppRequest`/`AppResponse` are framework-narrowed types; the request
+// collector needs to read fields the framework doesn't declare
+// (`__telescopeBatchId`, `statusCode`, `ip`). Centralize the structural
+// cast here so call sites stay readable. Same shape as sanctum #427 /
+// session #428 / sync #429.
+
+type Bag = Record<string, unknown>
+const bag = (v: unknown): Bag => v as Bag
+
+const BATCH_KEY = '__telescopeBatchId'
+
+function attachBatchId(req: AppRequest, batchId: string): void {
+  bag(req)[BATCH_KEY] = batchId
+}
+
+function readStatus(res: AppResponse): number | undefined {
+  return bag(res)['statusCode'] as number | undefined
+}
+
+function readRequestIp(req: AppRequest): string | undefined {
+  return bag(req)['ip'] as string | undefined
+}
+
 /**
  * Records HTTP requests — method, URL, status, duration, headers, payload,
  * response status, IP, user-agent.
@@ -43,7 +68,7 @@ export class RequestCollector implements Collector {
       const batchId = crypto.randomUUID()
 
       // Stash batchId on the raw request for other collectors to correlate
-      ;(req as unknown as Record<string, unknown>)['__telescopeBatchId'] = batchId
+      attachBatchId(req, batchId)
 
       // Set batch context so collectors (query, cache, model) can correlate
       setBatchId(batchId)
@@ -61,13 +86,12 @@ export class RequestCollector implements Collector {
       // (so redirect() calls that bypass res.status() still report accurately)
       // and fall back to the normalized res.statusCode.
       const finalRes = (res.raw as { res?: Response } | undefined)?.res
-      const status = (finalRes?.status
-        ?? ((res as unknown as Record<string, unknown>)['statusCode'] as number | undefined))
+      const status = finalRes?.status ?? readStatus(res)
       if (status && status >= 400) tags.push('error')
 
       // Extract IP and user-agent from request headers
       const headers = req.headers as Record<string, unknown>
-      const rawIp = (req as unknown as Record<string, unknown>)['ip'] as string | undefined
+      const rawIp = readRequestIp(req)
       const ip = rawIp === '::1' || rawIp === '::ffff:127.0.0.1' ? '127.0.0.1' : rawIp
       const userAgent = headers['user-agent'] as string | undefined
       const hostname  = headers['host'] as string | undefined
