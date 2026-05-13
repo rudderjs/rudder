@@ -31,6 +31,13 @@ interface PassportModule {
 
 let passportPromise: Promise<PassportModule> | null = null
 
+/**
+ * Lazy-load `@rudderjs/passport` once per process. The result is memoised in
+ * `passportPromise` so concurrent first calls share the same in-flight import.
+ * On failure, the slot is cleared so the next caller retries — useful in tests
+ * where passport is installed mid-run, and harmless in production (the
+ * resolveOptionalPeer call is itself cached).
+ */
 function loadPassport(): Promise<PassportModule> {
   if (!passportPromise) {
     passportPromise = (async () => {

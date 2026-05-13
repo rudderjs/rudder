@@ -5,7 +5,8 @@ import type { McpTool } from '../McpTool.js'
 import type { McpResource } from '../McpResource.js'
 import type { McpPrompt } from '../McpPrompt.js'
 import { zodToJsonSchema } from '../zod-to-json-schema.js'
-import { resolveHandleDeps } from '../runtime.js'
+import { resolveHandleDeps, consumeToolReturn } from '../runtime.js'
+import { matchUriTemplate } from '../uri-template.js'
 import { INSPECTOR_HTML } from './inspector-ui.js'
 
 export interface InspectorOptions {
@@ -142,6 +143,15 @@ function getProtected<T>(server: McpServer, key: string, fallback: T): T {
   return ((server as unknown as Record<string, T>)[key]) ?? fallback
 }
 
+/**
+ * Spin up a fresh server + tool/resource/prompt instances for one request.
+ *
+ * Called once per inspector API call (describe / call-tool / read-resource /
+ * get-prompt each instantiate independently). Stateful primitives that rely on
+ * instance fields persisting across calls will NOT see that state through the
+ * inspector — every call gets a new instance. The runtime + test client behave
+ * the same way today; if that ever changes, this helper needs to follow.
+ */
 function instantiateServer(entry: ServerEntry): {
   server:    McpServer
   tools:     McpTool[]
@@ -190,7 +200,12 @@ async function callTool(entry: ServerEntry, name: string, input: Record<string, 
   const tool = tools.find((t) => t.name() === name)
   if (!tool) throw new Error(`Tool "${name}" not found on ${entry.label}`)
   const extras = resolveHandleDeps(tool, 'handle')
-  return tool.handle(input, ...extras as [])
+  // Streaming tools return an AsyncGenerator. Consume via the runtime helper so
+  // the inspector returns the final result, not the iterator object (which
+  // serializes to `{}`). Progress yields are dropped — the inspector is a
+  // synchronous UI, not a streaming client.
+  const ret = tool.handle(input, ...extras as [])
+  return consumeToolReturn(ret, undefined, undefined)
 }
 
 async function readResource(entry: ServerEntry, uri: string): Promise<unknown> {
@@ -203,26 +218,13 @@ async function readResource(entry: ServerEntry, uri: string): Promise<unknown> {
 
   // Try template resources
   for (const tmpl of resources.filter((r) => r.isTemplate())) {
-    const params = matchTemplate(tmpl.uri(), uri)
+    const params = matchUriTemplate(tmpl.uri(), uri)
     if (params) {
       const extras = resolveHandleDeps(tmpl, 'handle')
       return { uri, content: await tmpl.handle(params, ...extras as []), mimeType: tmpl.mimeType() }
     }
   }
   throw new Error(`Resource "${uri}" not found`)
-}
-
-function matchTemplate(template: string, uri: string): Record<string, string> | null {
-  const names: string[] = []
-  const regex = template.replace(/\{(\w+)\}/g, (_, name: string) => {
-    names.push(name)
-    return '([^/]+)'
-  })
-  const match = uri.match(new RegExp(`^${regex}$`))
-  if (!match) return null
-  const out: Record<string, string> = {}
-  for (let i = 0; i < names.length; i++) out[names[i]!] = decodeURIComponent(match[i + 1]!)
-  return out
 }
 
 async function getPrompt(entry: ServerEntry, name: string, args: Record<string, unknown>): Promise<unknown> {
