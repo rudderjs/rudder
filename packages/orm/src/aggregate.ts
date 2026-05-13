@@ -12,16 +12,20 @@ import type { Model, RelationDefinition } from './index.js'
 
 /**
  * Constraint callback for the map form of `withCount` / `withExists`. Receives
- * an {@link AggregateConstraintBuilder} for narrow `where`/`orWhere`/`as`
- * recording. Larger surface (`orderBy`, `limit`, terminals) is intentionally
- * out of scope — the only ambiguous semantics in an aggregate context.
+ * an {@link AggregateConstraintBuilder} for narrow `where`/`as` recording.
+ * Larger surface (`orWhere`, `orderBy`, `limit`, terminals) is intentionally
+ * out of scope — those have ambiguous semantics in an aggregate context.
  */
 export type AggregateConstraint = (q: AggregateConstraintBuilder) => AggregateConstraintBuilder
 
 /**
- * `where`/`orWhere`/`as` recorder passed to {@link AggregateConstraint}
- * callbacks. Captures clauses for the adapter to AND into the aggregate
- * subquery, plus an optional alias prefix override (`.as('publishedPosts')`).
+ * `where`/`as` recorder passed to {@link AggregateConstraint} callbacks.
+ * Captures clauses for the adapter to AND into the aggregate subquery, plus
+ * an optional alias prefix override (`.as('publishedPosts')`).
+ *
+ * **OR semantics are not supported.** Multiple `.where(...)` calls compose
+ * with AND. To branch, split the aggregate into separate `withCount` calls
+ * with distinct `.as(...)` aliases and combine in app code.
  */
 export class AggregateConstraintBuilder {
   /** @internal */
@@ -38,13 +42,17 @@ export class AggregateConstraintBuilder {
     return this
   }
 
-  orWhere(column: string, valueOrOperator: unknown, maybeValue?: unknown): this {
-    if (maybeValue === undefined) {
-      this._wheres.push({ column, operator: '=', value: valueOrOperator })
-    } else {
-      this._wheres.push({ column, operator: valueOrOperator as WhereOperator, value: maybeValue })
-    }
-    return this
+  /**
+   * Not supported — aggregate constraints AND together. Documented as a
+   * throw rather than silently dropping the OR semantics (which the
+   * underlying {@link WhereClause} can't carry).
+   */
+  orWhere(_column: string, _valueOrOperator: unknown, _maybeValue?: unknown): this {
+    throw new Error(
+      '[RudderJS ORM] orWhere is not supported inside a withCount/withSum/withExists constraint — ' +
+      'aggregate predicates compose with AND. Split into separate aggregates with distinct .as(...) ' +
+      'aliases and combine in app code.'
+    )
   }
 
   /**
