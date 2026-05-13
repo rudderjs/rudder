@@ -74,6 +74,88 @@ function rel(file: string): string {
   return file.replace(process.cwd() + '/', '').replace(process.env['HOME'] ?? '', '~')
 }
 
+/**
+ * Render the error context as a Markdown string suitable for pasting into an
+ * AI chat. Mirrors the visible page sections (header, source context, stack,
+ * request) but in a format LLMs ingest without parsing HTML.
+ *
+ * Headers are kept as-is — the user explicitly chose to copy, and the visible
+ * page shows them too. If pasting into a public chat, review the Headers
+ * section before sending.
+ */
+export function buildErrorMarkdown(
+  error: Error,
+  req:   { method: string; url: string; headers: Record<string, string> },
+  parts: {
+    frames:        StackFrame[]
+    appFrames:     StackFrame[]
+    topFrame?:     StackFrame
+    source:        Array<{ n: number; code: string; isError: boolean }> | null
+    nodeVersion:   string
+    rudderjsVersion: string
+  },
+): string {
+  const lines: string[] = []
+  lines.push(`# ${error.name}: ${error.message}`)
+  lines.push('')
+  if (parts.topFrame) {
+    lines.push(`**Location**: \`${rel(parts.topFrame.file)}:${parts.topFrame.line}\``)
+  }
+  lines.push(`**Request**: \`${req.method} ${req.url}\``)
+  lines.push(`**Versions**: Node ${parts.nodeVersion} · RudderJS ${parts.rudderjsVersion}`)
+
+  if (parts.source && parts.topFrame) {
+    lines.push('')
+    lines.push('## Source')
+    lines.push('')
+    lines.push(`\`${rel(parts.topFrame.file)}\``)
+    lines.push('')
+    lines.push('```ts')
+    for (const l of parts.source) {
+      const marker = l.isError ? '>' : ' '
+      lines.push(`${marker} ${String(l.n).padStart(4)} | ${l.code}`)
+    }
+    lines.push('```')
+  }
+
+  if (parts.appFrames.length > 0) {
+    lines.push('')
+    lines.push('## Stack')
+    lines.push('')
+    lines.push('```')
+    for (const f of parts.appFrames) {
+      lines.push(`at ${f.func} (${rel(f.file)}:${f.line}:${f.col})`)
+    }
+    lines.push('```')
+  }
+
+  const vendorFrames = parts.frames.filter(f => f.isVendor)
+  if (vendorFrames.length > 0) {
+    lines.push('')
+    lines.push(`<details><summary>${vendorFrames.length} vendor frames</summary>`)
+    lines.push('')
+    lines.push('```')
+    for (const f of vendorFrames) {
+      lines.push(`at ${f.func} (${rel(f.file)}:${f.line}:${f.col})`)
+    }
+    lines.push('```')
+    lines.push('')
+    lines.push('</details>')
+  }
+
+  const headerEntries = Object.entries(req.headers)
+  if (headerEntries.length > 0) {
+    lines.push('')
+    lines.push('## Request Headers')
+    lines.push('')
+    for (const [k, v] of headerEntries) {
+      lines.push(`- \`${k}\`: ${v}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 export function renderErrorPage(
   error: Error,
   req: { method: string; url: string; headers: Record<string, string> },
@@ -90,6 +172,23 @@ export function renderErrorPage(
     const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')) as { version?: string }
     rudderjsVersion = pkg.version ?? '1.x'
   } catch { /* ok */ }
+
+  // Pre-render the Markdown copy so the client-side button just reads a
+  // server-rendered string — no DOM-parsing or formatting in the browser.
+  // Two-step escape:
+  //   1. JSON.stringify handles quotes / backslashes / control chars.
+  //   2. Replace `<`, `>`, `&`, U+2028, U+2029 with their \uXXXX escapes so
+  //      an attacker-controlled `</script>` in error.message can't close the
+  //      inline script block. The escape sequences survive JSON.parse and
+  //      decode back to `<`/`>`/etc when the button writes to clipboard.
+  const markdownPayload = JSON.stringify(buildErrorMarkdown(error, req, {
+    frames,
+    appFrames,
+    ...(topFrame ? { topFrame } : {}),
+    source,
+    nodeVersion,
+    rudderjsVersion,
+  })).replace(/[<>&\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
 
   const frameRow = (f: StackFrame, isApp: boolean) => `
     <div class="frame${isApp ? ' app' : ''}">
@@ -145,6 +244,12 @@ table tr{border-bottom:1px solid #27272a}
 table tr:last-child{border-bottom:none}
 table th{text-align:left;padding:8px 16px;color:#52525b;font-weight:500;width:200px;font-size:12px;font-family:ui-monospace,monospace}
 table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;color:#a1a1aa;word-break:break-all}
+.copy-btn{display:inline-flex;align-items:center;gap:6px;background:#27272a;color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;padding:6px 12px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:background .12s,border-color .12s}
+.copy-btn:hover{background:#3f3f46;border-color:#52525b}
+.copy-btn:active{background:#18181b}
+.copy-btn.copied{background:#064e3b;border-color:#10b981;color:#a7f3d0}
+.copy-btn-icon{width:14px;height:14px;flex-shrink:0}
+.actions-row{display:flex;justify-content:flex-end;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -158,6 +263,16 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
   <h1>${esc(error.name)}</h1>
   ${topFrame ? `<div class="location">${esc(rel(topFrame.file))}:${topFrame.line}</div>` : ''}
   <div class="message">${esc(error.message)}</div>
+
+  <div class="actions-row">
+    <button class="copy-btn" id="rjs-copy-md" type="button" title="Copy error context as Markdown — paste into an AI chat for debugging">
+      <svg class="copy-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span>Copy as Markdown</span>
+    </button>
+  </div>
 
   <div class="badges">
     <span class="badge badge-gray">NODE ${esc(nodeVersion)}</span>
@@ -202,6 +317,34 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
     </div>
   </div>
 </div>
+
+<script>
+(function(){
+  var btn = document.getElementById('rjs-copy-md');
+  if (!btn) return;
+  var md = ${markdownPayload};
+  var labelEl = btn.querySelector('span');
+  var defaultLabel = labelEl ? labelEl.textContent : 'Copy as Markdown';
+  btn.addEventListener('click', async function () {
+    try {
+      // Clipboard API requires a secure context (https or localhost);
+      // both are true for the dev error page, so no fallback needed.
+      await navigator.clipboard.writeText(md);
+      btn.classList.add('copied');
+      if (labelEl) labelEl.textContent = 'Copied!';
+      setTimeout(function () {
+        btn.classList.remove('copied');
+        if (labelEl) labelEl.textContent = defaultLabel;
+      }, 1600);
+    } catch (err) {
+      // Surface the failure inline so the user isn't left wondering why
+      // nothing happened — common cause is the tab not being focused.
+      if (labelEl) labelEl.textContent = 'Copy failed — focus the tab and retry';
+      setTimeout(function () { if (labelEl) labelEl.textContent = defaultLabel }, 2400);
+    }
+  });
+})();
+</script>
 
 </body>
 </html>`
