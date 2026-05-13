@@ -1,9 +1,17 @@
 # Framework code-quality cleanup — core, router, queue, auth, server-hono
 
-> **Status:** ready
+> **Status:** shipped 2026-05-13 — all four PRs merged: #418 (A), #419 (B), #420 (C), #421 (D).
 > **Date:** 2026-05-13
 > **Scope:** internal cleanup across 5 packages following the ORM #413–#417 pattern. No public API breaks. One behavior change (auth password-broker secret hardening) gated behind production check.
-> **Companion:** audit findings synthesized from 5 parallel Explore passes; PR sequencing mirrors the ORM cadence.
+> **Companion:** audit findings synthesized from 5 parallel Explore passes; PR sequencing mirrored the ORM cadence.
+>
+> **Actual deltas (vs. plan estimates):**
+> - `router/src/index.ts`: 1162 → 810 LOC (−30%; plan said ~700)
+> - `core/src/application.ts`: 699 → 337 LOC (−52%; plan said ~200)
+> - Removed `as unknown as`: 9 across the 5 packages (plan said 3 confirmed; D4's `stash(c)` helper added 6 more wins by consolidating Hono context casts)
+> - New test files: 2 (`queue/batch.test.ts`, `queue/chain.test.ts`); +2 tests inline in `server-hono/index.test.ts`. Net +14 tests.
+>
+> **Deferred follow-ups still parked** — see the bottom section.
 
 ---
 
