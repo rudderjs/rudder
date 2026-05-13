@@ -13,7 +13,7 @@ import {
   type AggregateConstraint,
   type AggregateSumSpec,
 } from './aggregate.js'
-import { camelHead, attrEqual } from './utils.js'
+import { camelHead, attrEqual, readField, writeField, deleteField } from './utils.js'
 import {
   resolveBelongsToManyMeta,
   resolveMorphToManyMeta,
@@ -45,7 +45,6 @@ import {
   type BelongsToManyAccessor,
   type MorphToManyAccessor,
   type MorphedByManyAccessor,
-  type AttachInput,
 } from './relations/pivot-accessors.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
@@ -423,6 +422,32 @@ export function Cast(type: CastDefinition) {
   }
 }
 
+// ─── Hydrating QueryBuilder ────────────────────────────────
+
+/**
+ * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
+ * `with()` etc. actually return. Extends the adapter contract with the
+ * ORM-side sugars added by the hydrating Proxy: relation predicates
+ * (`whereHas` and friends) and the eager-aggregate methods (`withCount`,
+ * `withExists`, `withSum`, `withMin`, `withMax`, `withAvg`).
+ *
+ * Adapters don't implement these — the proxy at `Model._hydratingQb` does.
+ * Keeping them off the adapter contract avoids forcing every adapter to
+ * stub them.
+ */
+export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
+  whereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  whereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  withWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  whereBelongsTo(parent: Model, relation?: string): this
+  withCount(arg: string | readonly string[] | Record<string, AggregateConstraint>): this
+  withExists(arg: string | readonly string[]): this
+  withSum(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+  withMin(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+  withMax(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+  withAvg(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+}
+
 // ─── Model Base Class ──────────────────────────────────────
 
 export abstract class Model {
@@ -499,7 +524,7 @@ export abstract class Model {
    * `exactOptionalPropertyTypes`.
    */
   static async findForRoute(value: string): Promise<Model | null> {
-    return Model._q(this as unknown as typeof Model).where(this.routeKey, value).first() as Promise<Model | null>
+    return Model._q(this).where(this.routeKey, value).first() as Promise<Model | null>
   }
 
   /**
@@ -677,11 +702,9 @@ export abstract class Model {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static async _fireEvent(event: ModelEvent, ...args: any[]): Promise<any> {
     if (Object.prototype.hasOwnProperty.call(this, '_eventsMuted') && this._eventsMuted) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return args[0]
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let result = args[0]
 
     const observers = Object.prototype.hasOwnProperty.call(this, '_observers') ? this._observers : []
@@ -698,7 +721,6 @@ export abstract class Model {
       ? (this._listeners.get(event) ?? [])
       : []
     for (const fn of listeners) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const ret = await fn(...args)
       if (ret === false) return false
       if (ret !== undefined && ret !== null && typeof ret === 'object') result = ret
@@ -740,12 +762,12 @@ export abstract class Model {
     const Ctor = this as unknown as new () => InstanceType<T>
     const instance = new Ctor()
     Object.assign(instance, record)
-    ;(instance as unknown as { _syncOriginal(): void })._syncOriginal()
+    instance._syncOriginal()
     return instance
   }
 
   /** @internal — wrap a QueryBuilder so its read methods return Model instances. */
-  private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>): QueryBuilder<InstanceType<T>> {
+  private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> {
     const ModelClass  = self as typeof Model
     /** Aliases stamped onto rows by the adapter for any aggregates registered
      *  on this QB. Tagged on each hydrated instance via `aggregateKeysOf` so
@@ -767,7 +789,11 @@ export abstract class Model {
       ;(qb as QueryBuilder<unknown>).withAggregate(reqs)
     }
 
-    const proxy: QueryBuilder<InstanceType<T>> = new Proxy(qb as object, {
+    // The Proxy's `get` handler implements the extra `HydratingQueryBuilder`
+    // methods at runtime (whereHas / withCount / etc.). TS can't verify that
+    // through the Proxy constructor, so we assert here — the assertion is
+    // contained to this one site instead of leaking to every call site.
+    const proxy = new Proxy(qb as object, {
       get(target, prop, receiver): unknown {
         // ORM-side chainables that don't exist on the adapter QB itself —
         // intercept before the existence check below, since `whereHas` etc.
@@ -869,25 +895,24 @@ export abstract class Model {
             // Chainable methods (where/orderBy/with/...) typically return `target` —
             // re-wrap so `Model.where('a', 1).first()` keeps hydrating.
             return (...args: unknown[]): unknown => {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
               const result = (value as (...a: unknown[]) => unknown).apply(target, args)
               return result === target ? proxy : result
             }
         }
       },
-    }) as QueryBuilder<InstanceType<T>>
+    }) as HydratingQueryBuilder<InstanceType<T>>
 
     return proxy
   }
 
-  static query<T extends typeof Model>(this: T): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } {
-    ModelRegistry.register(this as unknown as typeof Model)
+  static query<T extends typeof Model>(this: T): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } {
+    ModelRegistry.register(this)
     const modelClass = this as typeof Model
     const localScopes = modelClass.scopes
     const globalScopes = modelClass.globalScopes
     const excludedScopes = new Set<string>()
 
-    const buildScoped = (): QueryBuilder<InstanceType<T>> => {
+    const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
       let raw = ModelRegistry.getAdapter().query<InstanceType<T>>(modelClass.getTable())
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -901,7 +926,7 @@ export abstract class Model {
       return Model._hydratingQb(this, raw)
     }
 
-    const enhance = (q: QueryBuilder<InstanceType<T>>): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } => {
+    const enhance = (q: HydratingQueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const enhanced = q as any
       enhanced.scope = (name: string, ...args: unknown[]) => {
@@ -913,15 +938,14 @@ export abstract class Model {
         excludedScopes.add(name)
         return enhance(buildScoped())
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return enhanced
     }
 
     return enhance(buildScoped())
   }
 
-  private static _q<T extends typeof Model>(self: T): QueryBuilder<InstanceType<T>> {
-    ModelRegistry.register(self as unknown as typeof Model)
+  private static _q<T extends typeof Model>(self: T): HydratingQueryBuilder<InstanceType<T>> {
+    ModelRegistry.register(self)
     const ModelClass = self as typeof Model
     let q = ModelRegistry.getAdapter().query<InstanceType<T>>(ModelClass.getTable())
     if (ModelClass.softDeletes) {
@@ -1082,7 +1106,7 @@ export abstract class Model {
     this: T,
     arg:  string | readonly string[] | Record<string, AggregateConstraint>,
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withCount: (a: typeof arg) => QueryBuilder<InstanceType<T>> }).withCount(arg)
+    return Model._q(this).withCount(arg)
   }
 
   /**
@@ -1095,7 +1119,7 @@ export abstract class Model {
     this: T,
     arg:  string | readonly string[],
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withExists: (a: typeof arg) => QueryBuilder<InstanceType<T>> }).withExists(arg)
+    return Model._q(this).withExists(arg)
   }
 
   /**
@@ -1116,7 +1140,7 @@ export abstract class Model {
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withSum: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withSum(arg1, column)
+    return Model._q(this).withSum(arg1, column)
   }
 
   /** Min of a column across the related rows. Stamps `<relation>Min<Column>`. */
@@ -1125,7 +1149,7 @@ export abstract class Model {
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withMin: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withMin(arg1, column)
+    return Model._q(this).withMin(arg1, column)
   }
 
   /** Max of a column across the related rows. Stamps `<relation>Max<Column>`. */
@@ -1134,7 +1158,7 @@ export abstract class Model {
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withMax: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withMax(arg1, column)
+    return Model._q(this).withMax(arg1, column)
   }
 
   /** Average of a column across the related rows. Stamps `<relation>Avg<Column>`. */
@@ -1143,7 +1167,7 @@ export abstract class Model {
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
   ): QueryBuilder<InstanceType<T>> {
-    return (Model._q(this) as unknown as { withAvg: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withAvg(arg1, column)
+    return Model._q(this).withAvg(arg1, column)
   }
 
   /**
@@ -1359,7 +1383,7 @@ export abstract class Model {
   /** @internal — pull the primary-key value from this instance, or `undefined` if unset. */
   private _getKey(): string | number | undefined {
     const ctor = this.constructor as typeof Model
-    const value = (this as unknown as Record<string, unknown>)[ctor.primaryKey]
+    const value = readField(this, ctor.primaryKey)
     if (value === undefined || value === null) return undefined
     return value as string | number
   }
@@ -1463,7 +1487,7 @@ export abstract class Model {
     const fresh = await (ctor as typeof Model & { find(i: string | number): Promise<Model | null> }).find(id)
     if (!fresh) throw new ModelNotFoundError(ctor.name, id)
     for (const k of Object.keys(this)) {
-      if (!k.startsWith('_')) delete (this as unknown as Record<string, unknown>)[k]
+      if (!k.startsWith('_')) deleteField(this, k)
     }
     Object.assign(this, fresh)
     this.#changes = {}
@@ -1487,7 +1511,7 @@ export abstract class Model {
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
     if (ctor.softDeletes) {
-      ;(this as unknown as { deletedAt: Date }).deletedAt = new Date()
+      writeField(this, 'deletedAt', new Date())
       this._syncOriginal()
     }
   }
@@ -1667,7 +1691,7 @@ export abstract class Model {
     }
     for (const [k, v] of Object.entries(this)) {
       if (k.startsWith('_') || exclude.has(k) || v === undefined) continue
-      ;(clone as unknown as Record<string, unknown>)[k] = v
+      writeField(clone, k, v)
     }
     return clone
   }
@@ -1734,7 +1758,7 @@ export abstract class Model {
     const there = other.constructor as typeof Model
     if (here.getTable() !== there.getTable()) return false
     const a = this._getKey()
-    const b = (other as unknown as { _getKey(): string | number | undefined })._getKey()
+    const b = other._getKey()
     return a !== undefined && a === b
   }
 
@@ -1745,7 +1769,7 @@ export abstract class Model {
 
   /** True when this instance has been soft-deleted (its `deletedAt` is set). */
   trashed(): boolean {
-    const v = (this as unknown as Record<string, unknown>)['deletedAt']
+    const v = readField(this, 'deletedAt')
     return v !== null && v !== undefined
   }
 
@@ -1780,8 +1804,8 @@ export abstract class Model {
     if (def.type === 'morphTo') {
       const idCol   = `${def.morphName}Id`
       const typeCol = `${def.morphName}Type`
-      const idVal   = (this as unknown as Record<string, unknown>)[idCol]
-      const typeVal = (this as unknown as Record<string, unknown>)[typeCol]
+      const idVal   = readField(this, idCol)
+      const typeVal = readField(this, typeCol)
       if (idVal === undefined || idVal === null || typeVal === undefined || typeVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} unset.`)
       }
@@ -1822,7 +1846,7 @@ export abstract class Model {
 
     if (def.type === 'belongsToMany') {
       const meta = resolveBelongsToManyMeta(ctor, Related, def)
-      const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
+      const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
@@ -1831,7 +1855,7 @@ export abstract class Model {
 
     if (def.type === 'morphToMany') {
       const meta = resolveMorphToManyMeta(ctor, Related, def)
-      const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
+      const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
@@ -1840,7 +1864,7 @@ export abstract class Model {
 
     if (def.type === 'morphedByMany') {
       const meta = resolveMorphedByManyMeta(ctor, Related, def)
-      const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
+      const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
@@ -1851,7 +1875,7 @@ export abstract class Model {
       // This model holds the FK; query the related model's PK.
       const fk        = def.foreignKey ?? `${fkCamel(Related.name)}Id`
       const localCol  = def.localKey   ?? fk
-      const localVal  = (this as unknown as Record<string, unknown>)[localCol]
+      const localVal  = readField(this, localCol)
       if (localVal === undefined || localVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is unset.`)
       }
@@ -1861,7 +1885,7 @@ export abstract class Model {
     // hasOne / hasMany — related model holds the FK pointing back to us.
     const fk       = def.foreignKey ?? `${fkCamel(ctor.name)}Id`
     const localCol = def.localKey   ?? ctor.primaryKey
-    const localVal = (this as unknown as Record<string, unknown>)[localCol]
+    const localVal = readField(this, localCol)
     if (localVal === undefined || localVal === null) {
       throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
     }
@@ -1898,7 +1922,7 @@ export abstract class Model {
     }
     const Related = def.model() as typeof Model
     const meta = resolveBelongsToManyMeta(ctor, Related, def)
-    const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
+    const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use belongsToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
@@ -1933,7 +1957,7 @@ export abstract class Model {
     }
     const Related = def.model() as typeof Model
     const meta = resolveMorphToManyMeta(ctor, Related, def)
-    const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
+    const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use morphToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
@@ -1967,7 +1991,7 @@ export abstract class Model {
     }
     const Related = def.model() as typeof Model
     const meta = resolveMorphedByManyMeta(ctor, Related, def)
-    const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
+    const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use morphedByMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
@@ -1990,7 +2014,7 @@ export abstract class Model {
    */
   static morph(name: string, parent: Model): Record<string, unknown> {
     const ctor = parent.constructor as typeof Model
-    const pk   = (parent as unknown as Record<string, unknown>)[ctor.primaryKey]
+    const pk   = readField(parent, ctor.primaryKey)
     if (pk === undefined || pk === null) {
       throw new Error(`[RudderJS ORM] Model.morph("${name}", parent): parent.${ctor.primaryKey} is unset — save the parent first.`)
     }
@@ -2145,6 +2169,5 @@ export abstract class Model {
 // `ModelLike` so they don't need to depend on `@rudderjs/orm` directly.
 // This line will fail to compile if a future change to Model breaks
 // that contract.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _modelSatisfiesContract: ModelLike = Model
 void _modelSatisfiesContract
