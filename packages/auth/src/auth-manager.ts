@@ -27,7 +27,7 @@ export interface AuthConfig {
 
 export class AuthManager {
   constructor(
-    private readonly config: AuthConfig,
+    public readonly config: AuthConfig,
     private readonly hashCheck: (plain: string, hashed: string) => Promise<boolean>,
     private readonly getSession: () => SessionStore,
   ) {}

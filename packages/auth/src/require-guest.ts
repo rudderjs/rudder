@@ -1,7 +1,6 @@
 import { app } from '@rudderjs/core'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, runWithAuth, Auth } from './auth-manager.js'
-import type { AuthConfig } from './auth-manager.js'
 
 /**
  * Middleware that blocks authenticated users from guest-only pages
@@ -15,7 +14,7 @@ export function RequireGuest(redirectTo = '/', guardName?: string): MiddlewareHa
     const manager = app().make<AuthManager>('auth.manager')
     let user: unknown = null
     await runWithAuth(manager, async () => {
-      const guard = Auth.guard(guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard)
+      const guard = Auth.guard(guardName ?? manager.config.defaults.guard)
       user = await guard.user()
     })
     if (user) {

@@ -33,7 +33,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/job-middleware.test.js dist-test/unique.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/job-middleware.test.js dist-test/unique.test.js dist-test/batch.test.js dist-test/chain.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
     "clean": "rm -rf dist"
   },
   "dependencies": {

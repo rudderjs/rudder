@@ -20,7 +20,7 @@ export interface BootConfig {
 export type ProviderClass = new (app: Application) => ServiceProvider
 
 export class Application {
-  private static instance: Application
+  private static instance: Application | undefined
   readonly container: Container
   private providers: ServiceProvider[] = []
   private booted = false
@@ -254,7 +254,7 @@ export class Application {
 
   /** @internal — testing only */
   static resetForTesting(): void {
-    ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
+    Application.instance = undefined
     ;(globalThis as Record<string, unknown>)['__rudderjs_app__'] = undefined
   }
 }

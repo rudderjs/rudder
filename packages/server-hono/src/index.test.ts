@@ -349,3 +349,88 @@ describe('renderErrorPage()', () => {
     assert.ok(html.includes('500'))
   })
 })
+
+// ─── normalizeRequest getter persistence ────────────────────
+//
+// The framework relies on the contract that `req.body`/`session`/`user`/`token`
+// are getters reading from the Hono context, so values set during middleware
+// (which has its own `req` instance) are visible to the route handler (which
+// has another `req` instance, but the same underlying `c`). If this contract
+// breaks, AuthMiddleware will appear to "set" `req.user` and the route handler
+// will see `undefined`.
+
+describe('HonoAdapter — req getter persistence across middleware/route', () => {
+  it('value stashed on req.raw is visible via req.user getter in the route handler', async () => {
+    const adapter = hono().create()
+    let observedUser: unknown = undefined
+
+    adapter.applyMiddleware(async (req, _res, next) => {
+      // Pattern used by AuthMiddleware — write directly to the context stash.
+      ;(req.raw as Record<string, unknown>)['__rjs_user'] = { id: 'u-1', name: 'Ada' }
+      await next()
+    })
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/whoami',
+      handler: async (req, res) => {
+        // `req.user` is added by @rudderjs/auth via module augmentation; in
+        // this isolated package test we just read the property via index access.
+        observedUser = (req as unknown as Record<string, unknown>)['user']
+        return res.json({ ok: true })
+      },
+      middleware: [],
+    })
+
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const res = await app.fetch(new Request('http://localhost/whoami'))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(observedUser, { id: 'u-1', name: 'Ada' })
+  })
+
+})
+
+// ─── multi-value Set-Cookie ─────────────────────────────────
+//
+// Cooperative cookie writers (CsrfMiddleware + SessionMiddleware is the
+// canonical pair) append directly to `c.res.headers` after the handler has
+// finalized the Response. The pattern relies on `headers.append('Set-Cookie',
+// value)` keeping multi-value Set-Cookie distinct — `new Response(body, {
+// headers })` collapses them under Node's undici-backed fetch.
+
+describe('HonoAdapter — multi-value Set-Cookie', () => {
+  it('middleware appending to c.res.headers preserves multiple Set-Cookie headers', async () => {
+    const adapter = hono().create()
+
+    // Two middleware each append a Set-Cookie after the handler returns —
+    // mirrors how @rudderjs/session writes cookies post-next().
+    adapter.applyMiddleware(async (req, _res, next) => {
+      await next()
+      const c = req.raw as { res: Response | undefined }
+      if (c.res) c.res.headers.append('Set-Cookie', 'csrf=abc; Path=/; HttpOnly')
+    })
+    adapter.applyMiddleware(async (req, _res, next) => {
+      await next()
+      const c = req.raw as { res: Response | undefined }
+      if (c.res) c.res.headers.append('Set-Cookie', 'session=xyz; Path=/; HttpOnly')
+    })
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/cookies',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const res = await app.fetch(new Request('http://localhost/cookies'))
+
+    // Headers.getSetCookie() returns each Set-Cookie as a separate string. If
+    // the implementation collapsed them into one comma-joined header, this
+    // would return a single entry — that's the bug the dedicated cookies
+    // array in normalizeResponse exists to prevent.
+    const setCookies = res.headers.getSetCookie()
+    assert.ok(setCookies.length >= 2,
+      `expected >= 2 separate Set-Cookie headers, got ${setCookies.length}: ${JSON.stringify(setCookies)}`)
+    assert.ok(setCookies.some(c => c.startsWith('csrf=abc')), 'expected csrf cookie')
+    assert.ok(setCookies.some(c => c.startsWith('session=xyz')), 'expected session cookie')
+  })
+})

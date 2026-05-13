@@ -65,6 +65,20 @@ export interface HonoConfig {
   }
 }
 
+// ─── Hono Context stash ────────────────────────────────────
+//
+// Per-request augmentations (`__rjs_body`, `__rjs_session`, `__rjs_user`,
+// `__rjs_token`, `__rjs_host_params`, `__rjs_response_body`,
+// `__rjs_merge_pending`) live on the Hono `Context` so the same value is
+// visible across the two normalizeRequest(c) calls (applyMiddleware ↔
+// registerRoute). Hono's typed Context doesn't expose these custom keys, so
+// reads/writes go through this typed view.
+
+type HonoCtxStash = Context & Record<string, unknown>
+
+/** @internal — one place to do the structural widening from Context. */
+const stash = (c: Context): HonoCtxStash => c as HonoCtxStash
+
 // ─── Request Normalizer ────────────────────────────────────
 
 function normalizeIp(ip: string): string {
@@ -121,7 +135,7 @@ function normalizeRequest(c: Context, trustProxy = false): AppRequest {
   // bindings, view props, and handlers see them alongside path params. Path
   // params win on collision (an explicit `:tenant` segment in the path
   // overrides a subdomain-captured `:tenant`).
-  const hostParams = (c as unknown as Record<string, unknown>)['__rjs_host_params'] as
+  const hostParams = stash(c)['__rjs_host_params'] as
     | Record<string, string>
     | undefined
   const pathParams = c.req.param() ?? {}
@@ -141,7 +155,7 @@ function normalizeRequest(c: Context, trustProxy = false): AppRequest {
   // Forward per-request augmentations stored on c by middleware (e.g. session, user).
   // Both applyMiddleware and registerRoute call normalizeRequest(c) with the same
   // Hono context, so getters ensure the route handler always sees what was set.
-  const ctx = c as unknown as Record<string, unknown>
+  const ctx = stash(c)
   // Body lives on ctx so the outer applyMiddleware req (e.g. telescope's
   // request collector) sees the same parsed body as the route handler req.
   Object.defineProperty(req, 'body', {
@@ -212,7 +226,7 @@ function normalizeResponse(c: Context): AppResponse {
     for (const cookie of cookies) res.headers.append('Set-Cookie', cookie)
     return res
   }
-  ;(c as unknown as Record<string, unknown>)['__rjs_merge_pending'] = mergeInto
+  stash(c)['__rjs_merge_pending'] = mergeInto
 
   return {
     raw: c,
@@ -236,7 +250,7 @@ function normalizeResponse(c: Context): AppResponse {
       c.status(statusCode as StatusCode)
       // Stash parsed body for observability (telescope) — avoids having to
       // re-read the Response stream after finalization.
-      ;(c as unknown as Record<string, unknown>)['__rjs_response_body'] = data
+      stash(c)['__rjs_response_body'] = data
       // Hono v4: c.json() returns a Response but does NOT set c.res automatically.
       // We must set c.res explicitly so Hono/srvx always has a valid response to send.
       c.res = c.json(data)
@@ -422,7 +436,7 @@ class HonoAdapter implements ServerAdapter {
       if (route.host) {
         const m = matchHost(route.host, c.req.header('host') ?? '')
         if (!m) return c.notFound()
-        ;(c as unknown as Record<string, unknown>)['__rjs_host_params'] = m.params
+        stash(c)['__rjs_host_params'] = m.params
       }
 
       const req = normalizeRequest(c, this._trustProxy)
@@ -501,7 +515,7 @@ class HonoAdapter implements ServerAdapter {
             meta['__rjs_view'] = { id: v.id, props: Object.keys(v.props ?? {}) }
             // Stash response envelope for the Response tab (full prop values,
             // not just keys — matches Laravel Telescope's Inertia rendering).
-            ;(c as unknown as Record<string, unknown>)['__rjs_response_body'] = {
+            stash(c)['__rjs_response_body'] = {
               view:  v.id,
               props: v.props ?? {},
             }
@@ -517,7 +531,7 @@ class HonoAdapter implements ServerAdapter {
           // their applyHeaders() never fires — without this step, anything
           // CsrfMiddleware (or other middleware using res.header()) wrote to
           // the wrapper would silently drop on the floor.
-          const merge = (c as unknown as Record<string, unknown>)['__rjs_merge_pending'] as
+          const merge = stash(c)['__rjs_merge_pending'] as
             ((r: Response) => Response) | undefined
           if (merge && c.res) c.res = merge(c.res)
         }
