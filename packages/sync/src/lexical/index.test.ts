@@ -3,6 +3,7 @@ import assert                       from 'node:assert/strict'
 import * as Y                       from 'yjs'
 import { MemoryPersistence, Sync }  from '../index.js'
 import { insertBlock, removeBlock } from './index.js'
+import type { InnerDeltaItem }      from './types.js'
 
 // ─── insertBlock / removeBlock ───────────────────────────────
 //
@@ -16,6 +17,13 @@ import { insertBlock, removeBlock } from './index.js'
 const G           = globalThis as Record<string, unknown>
 const PERSIST_KEY = '__rudderjs_live_persistence__'
 const ROOMS_KEY   = '__rudderjs_live__'
+
+/** Read the rooms map directly out of the globalThis slot the sync runtime
+ *  populates. Centralizes the structural cast so individual tests don't
+ *  repeat it. Asserts non-empty since every caller has already seeded a room. */
+function rooms(): Map<string, { doc: Y.Doc }> {
+  return G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>
+}
 
 function freshSyncState(): MemoryPersistence {
   const persistence = new MemoryPersistence()
@@ -52,8 +60,7 @@ function buildParagraph(opts: {
 function seedLexicalRoot(docName: string, paragraphs: Y.XmlText[]): void {
   // Touch Sync so the room is created via the same getOrCreateRoom path.
   Sync.snapshot(docName)
-  const rooms = G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>
-  const room  = rooms.get(docName)!
+  const room  = rooms().get(docName)!
   const root  = room.doc.get('root', Y.XmlText)
   room.doc.transact(() => {
     for (const p of paragraphs) root.insertEmbed(root.length, p)
@@ -62,15 +69,14 @@ function seedLexicalRoot(docName: string, paragraphs: Y.XmlText[]): void {
 
 /** Walk the root and return blocks in document order with their paragraph index. */
 function listBlocks(docName: string): Array<{ pIdx: number; type: string; data: Record<string, unknown> }> {
-  const rooms = G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>
-  const root  = rooms.get(docName)!.doc.get('root', Y.XmlText)
+  const root  = rooms().get(docName)!.doc.get('root', Y.XmlText)
   const out: Array<{ pIdx: number; type: string; data: Record<string, unknown> }> = []
-  const delta = root.toDelta() as Array<{ insert: unknown }>
+  const delta = root.toDelta() as InnerDeltaItem[]
   let pIdx = 0
   for (const entry of delta) {
     if (!(entry.insert instanceof Y.XmlText)) continue
-    const child = entry.insert as Y.XmlText
-    const inner = child.toDelta() as Array<{ insert: unknown }>
+    const child = entry.insert
+    const inner = child.toDelta() as InnerDeltaItem[]
     for (const item of inner) {
       if (!(item.insert instanceof Y.XmlElement)) continue
       const elem = item.insert
@@ -86,9 +92,8 @@ function listBlocks(docName: string): Array<{ pIdx: number; type: string; data: 
 }
 
 function paragraphCount(docName: string): number {
-  const rooms = G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>
-  const root  = rooms.get(docName)!.doc.get('root', Y.XmlText)
-  const delta = root.toDelta() as Array<{ insert: unknown }>
+  const root  = rooms().get(docName)!.doc.get('root', Y.XmlText)
+  const delta = root.toDelta() as InnerDeltaItem[]
   let n = 0
   for (const entry of delta) if (entry.insert instanceof Y.XmlText) n++
   return n
@@ -163,14 +168,13 @@ describe('insertBlock', () => {
     seedLexicalRoot('shape-doc', [buildParagraph({ text: 'x' })])
     insertBlock(Sync.document('shape-doc'), 'callToAction', { title: 'Hi', buttonText: 'Click' })
 
-    const rooms = G[ROOMS_KEY] as Map<string, { doc: Y.Doc }>
-    const root  = rooms.get('shape-doc')!.doc.get('root', Y.XmlText)
-    const delta = root.toDelta() as Array<{ insert: unknown }>
+    const root  = rooms().get('shape-doc')!.doc.get('root', Y.XmlText)
+    const delta = root.toDelta() as InnerDeltaItem[]
 
     let found: Y.XmlElement | null = null
     for (const entry of delta) {
       if (!(entry.insert instanceof Y.XmlText)) continue
-      const inner = (entry.insert as Y.XmlText).toDelta() as Array<{ insert: unknown }>
+      const inner = entry.insert.toDelta() as InnerDeltaItem[]
       for (const item of inner) {
         if (item.insert instanceof Y.XmlElement) { found = item.insert; break }
       }

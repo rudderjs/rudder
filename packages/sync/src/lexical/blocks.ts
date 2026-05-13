@@ -34,13 +34,14 @@ export function editBlock(
 
   doc.transact(() => {
     // __blockData is stored as a raw object by the Lexical-Yjs binding
-    // (via CollabDecoratorNode.syncPropertiesFromLexical → setAttribute)
+    // (via CollabDecoratorNode.syncPropertiesFromLexical → setAttribute).
+    // Yjs's setAttribute is typed `(k, v: string) => void` but the binding
+    // passes raw objects through at runtime, so we widen the value param.
     const existing = elem.getAttribute('__blockData')
     const data: Record<string, unknown> = existing && typeof existing === 'object'
       ? { ...(existing as Record<string, unknown>) }
       : {}
     data[field] = value
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical-Yjs stores __blockData as raw object, Yjs types expect string
     ;(elem.setAttribute as (k: string, v: unknown) => void)('__blockData', data)
   }, SERVER_ORIGIN)
 
@@ -85,8 +86,8 @@ export function insertBlock(
     const customBlock = new Y.XmlElement()
     customBlock.setAttribute('__type', 'custom-block')
     customBlock.setAttribute('__blockType', blockType)
-    // __blockData is a raw object; cast to bypass Yjs's string-typed setAttribute signature.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical-Yjs binding stores raw objects
+    // __blockData is a raw object; widen the value param to bypass Yjs's
+    // string-typed setAttribute signature (see editBlock for context).
     ;(customBlock.setAttribute as (k: string, v: unknown) => void)('__blockData', blockData)
 
     paragraph.insertEmbed(0, customBlock)
@@ -108,11 +109,10 @@ export function insertBlock(
     } else {
       let pIdx = position < 0 ? paragraphCount + position : position
       if (pIdx < 0) pIdx = 0
-      if (pIdx >= paragraphCount) {
-        insertOffset = totalLen
-      } else {
-        insertOffset = paragraphOffsets[pIdx]!
-      }
+      // Fall back to totalLen for OOB pIdx — paragraphOffsets[pIdx] is
+      // `number | undefined` under noUncheckedIndexedAccess even though
+      // the explicit `>= paragraphCount` check above also covers it.
+      insertOffset = paragraphOffsets[pIdx] ?? totalLen
     }
 
     root.insertEmbed(insertOffset, paragraph)
