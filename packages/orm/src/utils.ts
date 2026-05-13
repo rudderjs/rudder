@@ -16,6 +16,33 @@ export function capitalize(s: string): string {
 }
 
 /**
+ * Read a dynamic property by string key from a Model instance (or any
+ * object with typed fields). Encapsulates the unsafe-cast that TS otherwise
+ * forces at every dynamic-field-access site. Returns `unknown` — the caller
+ * is responsible for whatever narrowing is appropriate.
+ */
+export function readField(obj: object, key: string): unknown {
+  return (obj as Record<string, unknown>)[key]
+}
+
+/**
+ * Write a dynamic property by string key onto a Model instance (or any
+ * object with typed fields). Mirror of {@link readField}.
+ */
+export function writeField(obj: object, key: string, value: unknown): void {
+  (obj as Record<string, unknown>)[key] = value
+}
+
+/**
+ * Delete a dynamic property by string key on a Model instance.
+ * Mirror of {@link readField}. Used by `instance.refresh()` when pruning
+ * stale fields before re-reading the row.
+ */
+export function deleteField(obj: object, key: string): void {
+  delete (obj as Record<string, unknown>)[key]
+}
+
+/**
  * Loose attribute equality used by dirty tracking and relation predicates.
  * Handles primitives, nulls, Dates (by getTime), and plain objects (by JSON
  * round-trip). Returns false for objects that don't round-trip cleanly.
