@@ -217,7 +217,7 @@ describe('Model.query().withCount — single string', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as { withCount: (n: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withCount('posts').get()
 
     const reqs = latest().aggregates
@@ -243,7 +243,7 @@ describe('Model.query().withCount — array form', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as { withCount: (n: readonly string[]) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withCount(['posts', 'roles']).get()
 
     const reqs = latest().aggregates
@@ -268,10 +268,8 @@ describe('Model.query().withCount — map form with constraint', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as {
-      withCount: (m: Record<string, (q: unknown) => unknown>) => { get: () => Promise<unknown[]> }
-    }).withCount({
-      posts: (q) => (q as { where: (c: string, v: unknown) => unknown }).where('published', true),
+    await User.query().withCount({
+      posts: (q) => q.where('published', true),
     }).get()
 
     const r = latest().aggregates[0]!
@@ -285,11 +283,8 @@ describe('Model.query().withCount — map form with constraint', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as {
-      withCount: (m: Record<string, (q: unknown) => unknown>) => { get: () => Promise<unknown[]> }
-    }).withCount({
-      posts: (q) => (q as { where: (c: string, v: unknown) => { as: (n: string) => unknown } })
-        .where('published', true).as('publishedPosts'),
+    await User.query().withCount({
+      posts: (q) => q.where('published', true).as('publishedPosts'),
     }).get()
 
     const r = latest().aggregates[0]!
@@ -302,10 +297,8 @@ describe('Model.query().withCount — map form with constraint', () => {
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => (User.query() as unknown as {
-        withCount: (m: Record<string, (q: unknown) => unknown>) => unknown
-      }).withCount({
-        posts: (q) => (q as { orWhere: (c: string, v: unknown) => unknown }).orWhere('published', true),
+      () => User.query().withCount({
+        posts: (q) => q.orWhere('published', true),
       }),
       /orWhere is not supported inside a withCount\/withSum\/withExists constraint/,
     )
@@ -321,7 +314,7 @@ describe('Model.query().withSum — string + column', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as { withSum: (r: string, c: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withSum('posts', 'views').get()
 
     const r = latest().aggregates[0]!
@@ -335,7 +328,7 @@ describe('Model.query().withSum — string + column', () => {
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => (User.query() as unknown as { withSum: (r: string) => unknown }).withSum('posts'),
+      () => User.query().withSum('posts'),
       /requires a column argument/,
     )
   })
@@ -348,11 +341,11 @@ describe('Model.query() — withMin / withMax / withAvg suffixes', () => {
     const { adapter, all } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as { withMin: (r: string, c: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withMin('posts', 'views').get()
-    await (User.query() as unknown as { withMax: (r: string, c: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withMax('posts', 'views').get()
-    await (User.query() as unknown as { withAvg: (r: string, c: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withAvg('posts', 'views').get()
 
     const recs = all()
@@ -372,10 +365,8 @@ describe('Model.query().withSum — map form with constraint', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as {
-      withSum: (m: Record<string, { column: string; constraint?: (q: unknown) => unknown }>) => { get: () => Promise<unknown[]> }
-    }).withSum({
-      posts: { column: 'views', constraint: (q) => (q as { where: (c: string, v: unknown) => unknown }).where('published', true) },
+    await User.query().withSum({
+      posts: { column: 'views', constraint: (q) => q.where('published', true) },
     }).get()
 
     const r = latest().aggregates[0]!
@@ -395,7 +386,7 @@ describe('Model.query().withExists', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as { withExists: (n: string) => { get: () => Promise<unknown[]> } })
+    await User.query()
       .withExists('posts').get()
 
     const r = latest().aggregates[0]!
@@ -413,7 +404,7 @@ describe('withCount on morphMany — extraEquals on joinShape', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (Article.query() as unknown as { withCount: (n: string) => { get: () => Promise<unknown[]> } })
+    await Article.query()
       .withCount('images').get()
 
     const r = latest().aggregates[0]!
@@ -429,7 +420,7 @@ describe('withCount on morphToMany — through + extraEquals', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (Article.query() as unknown as { withCount: (n: string) => { get: () => Promise<unknown[]> } })
+    await Article.query()
       .withCount('tags').get()
 
     const r = latest().aggregates[0]!
@@ -451,7 +442,7 @@ describe('joinShape.softDeletes = true when related Model.softDeletes', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (UserSD.query() as unknown as { withCount: (n: string) => { get: () => Promise<unknown[]> } })
+    await UserSD.query()
       .withCount('posts').get()
 
     const r = latest().aggregates[0]!
@@ -469,7 +460,7 @@ describe('withCount — error paths', () => {
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => (User.query() as unknown as { withCount: (n: string) => unknown }).withCount('nope'),
+      () => User.query().withCount('nope'),
       /Relation "nope" is not defined on User/,
     )
   })
@@ -479,7 +470,7 @@ describe('withCount — error paths', () => {
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => (User.query() as unknown as { withCount: (n: string) => unknown }).withCount('team'),
+      () => User.query().withCount('team'),
       /withCount on belongsTo "team" is ambiguous/,
     )
   })
@@ -489,7 +480,7 @@ describe('withCount — error paths', () => {
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => (Comment.query() as unknown as { withCount: (n: string) => unknown }).withCount('target'),
+      () => Comment.query().withCount('target'),
       /withCount\(\) on morphTo "target" is not supported/,
     )
   })
@@ -520,7 +511,7 @@ describe('hydration — aggregate keys land on the instance and are tagged', () 
     ModelRegistry.set(adapter)
     setRows('users', [{ id: 1, teamId: 7, postsCount: 5 }])
 
-    const u = await (User.query() as unknown as { withCount: (n: string) => { first: () => Promise<User | null> } })
+    const u = await User.query()
       .withCount('posts').first()
 
     assert.ok(u, 'user hydrated')
@@ -542,7 +533,7 @@ describe('aggregate-stamped keys — _toData skips, toJSON keeps', () => {
     ModelRegistry.set(adapter)
     setRows('users', [{ id: 1, teamId: 7, postsCount: 3 }])
 
-    const u = await (User.query() as unknown as { withCount: (n: string) => { first: () => Promise<User | null> } })
+    const u = await User.query()
       .withCount('posts').first()
     assert.ok(u)
 
@@ -551,7 +542,8 @@ describe('aggregate-stamped keys — _toData skips, toJSON keeps', () => {
     assert.equal(json['postsCount'], 3)
 
     // _toData drops postsCount so Prisma writes won't reject on the unknown column.
-    const data = (u as unknown as { _toData: () => Record<string, unknown> })._toData()
+    // Cast through `unknown` — `_toData` is private; tests reach in deliberately.
+    const data = (u as unknown as { _toData(): Record<string, unknown> })._toData()
     assert.equal('postsCount' in data, false)
     assert.equal(data['id'],      1)
     assert.equal(data['teamId'],  7)
@@ -665,7 +657,7 @@ describe('Chainable withCount via QueryBuilder', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.where('teamId', 7) as unknown as { withCount: (n: string) => { get: () => Promise<unknown[]> } })
+    await User.where('teamId', 7)
       .withCount('posts').get()
 
     const rec = latest()
@@ -684,9 +676,7 @@ describe('Multiple aggregates accumulate in order', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.query() as unknown as {
-      withCount:  (n: string) => { withSum: (r: string, c: string) => { withExists: (n: string) => { get: () => Promise<unknown[]> } } }
-    }).withCount('posts').withSum('posts', 'views').withExists('posts').get()
+    await User.query().withCount('posts').withSum('posts', 'views').withExists('posts').get()
 
     const reqs = latest().aggregates
     assert.equal(reqs.length, 3)

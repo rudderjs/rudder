@@ -920,7 +920,7 @@ export abstract class Model {
       }
       for (const [scopeName, scopeFn] of Object.entries(globalScopes)) {
         if (!excludedScopes.has(scopeName)) {
-          raw = scopeFn(raw) as QueryBuilder<InstanceType<T>>
+          raw = scopeFn(raw) as HydratingQueryBuilder<InstanceType<T>>
         }
       }
       return Model._hydratingQb(this, raw)
@@ -953,7 +953,7 @@ export abstract class Model {
       (q as any)._enableSoftDeletes?.()
     }
     for (const [, scopeFn] of Object.entries(ModelClass.globalScopes)) {
-      q = scopeFn(q) as QueryBuilder<InstanceType<T>>
+      q = scopeFn(q) as HydratingQueryBuilder<InstanceType<T>>
     }
     return Model._hydratingQb(self, q)
   }
@@ -1004,7 +1004,7 @@ export abstract class Model {
     return result
   }
 
-  static where<T extends typeof Model>(this: T, column: string, value: unknown): QueryBuilder<InstanceType<T>> {
+  static where<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).where(column, value)
   }
 
@@ -1030,8 +1030,8 @@ export abstract class Model {
     this:      T,
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
-  ): QueryBuilder<InstanceType<T>> {
-    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as QueryBuilder<InstanceType<T>>
+  ): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1044,8 +1044,8 @@ export abstract class Model {
     this:      T,
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
-  ): QueryBuilder<InstanceType<T>> {
-    return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as QueryBuilder<InstanceType<T>>
+  ): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1059,8 +1059,8 @@ export abstract class Model {
     this:      T,
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
-  ): QueryBuilder<InstanceType<T>> {
-    return attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as QueryBuilder<InstanceType<T>>
+  ): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1078,8 +1078,8 @@ export abstract class Model {
     this:      T,
     parent:    Model,
     relation?: string,
-  ): QueryBuilder<InstanceType<T>> {
-    return attachWhereBelongsTo(this as typeof Model, Model._q(this), parent, relation) as QueryBuilder<InstanceType<T>>
+  ): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereBelongsTo(this as typeof Model, Model._q(this), parent, relation) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1105,7 +1105,7 @@ export abstract class Model {
   static withCount<T extends typeof Model>(
     this: T,
     arg:  string | readonly string[] | Record<string, AggregateConstraint>,
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withCount(arg)
   }
 
@@ -1118,7 +1118,7 @@ export abstract class Model {
   static withExists<T extends typeof Model>(
     this: T,
     arg:  string | readonly string[],
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withExists(arg)
   }
 
@@ -1139,7 +1139,7 @@ export abstract class Model {
     this:    T,
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withSum(arg1, column)
   }
 
@@ -1148,7 +1148,7 @@ export abstract class Model {
     this:    T,
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withMin(arg1, column)
   }
 
@@ -1157,7 +1157,7 @@ export abstract class Model {
     this:    T,
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withMax(arg1, column)
   }
 
@@ -1166,7 +1166,7 @@ export abstract class Model {
     this:    T,
     arg1:    string | Record<string, AggregateSumSpec>,
     column?: string,
-  ): QueryBuilder<InstanceType<T>> {
+  ): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withAvg(arg1, column)
   }
 
@@ -1283,7 +1283,7 @@ export abstract class Model {
     return record
   }
 
-  static with<T extends typeof Model>(this: T, ...relations: string[]): QueryBuilder<InstanceType<T>> {
+  static with<T extends typeof Model>(this: T, ...relations: string[]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).with(...relations)
   }
 

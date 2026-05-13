@@ -341,7 +341,7 @@ describe('Model.whereHas — nested whereHas inside callback', () => {
 
     assert.throws(
       () => User.whereHas('posts', (q) => {
-        (q as unknown as { whereHas: (r: string) => unknown }).whereHas('author')
+        (q as unknown as { whereHas: (r: string) => void }).whereHas('author')
       }),
       /Nested whereHas inside a whereHas constrain callback is deferred to v2/,
     )
@@ -354,7 +354,7 @@ describe('Model.whereHas — nested whereHas inside callback', () => {
     assert.throws(
       () => User.whereHas('posts', (q) => {
         q.where('approved', true)
-        ;(q as unknown as { orWhere: (c: string, v: unknown) => unknown }).orWhere('featured', true)
+        ;q.orWhere('featured', true)
       }),
       /orWhere inside a whereHas constrain callback is not supported in v1/,
     )
@@ -461,7 +461,7 @@ describe('Chainable whereHas via QueryBuilder', () => {
     const { adapter, latest } = recordingAdapter()
     ModelRegistry.set(adapter)
 
-    await (User.where('teamId', 7) as unknown as { whereHas: (r: string) => { get: () => Promise<unknown[]> } }).whereHas('posts').get()
+    await User.where('teamId', 7).whereHas('posts').get()
 
     const rec = latest()
     assert.deepEqual(rec.wheres, [['teamId', '=', 7]])
