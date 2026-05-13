@@ -49,16 +49,74 @@ type DrizzleDb = {
 
 // ─── Global Table Registry ─────────────────────────────────
 
+/**
+ * Global name → Drizzle table schema map.
+ *
+ * The Drizzle adapter resolves related-table schemas by name (e.g. for
+ * `whereHas('comments', ...)` it needs the `comments` table to build the
+ * EXISTS subquery). Apps register their schemas via the `tables` option on
+ * `drizzle({ tables: { posts, comments, ... } })`, which proxies into this
+ * registry. Library code that needs to register tables outside the
+ * adapter's normal init path can call `DrizzleTableRegistry.register()`
+ * directly.
+ *
+ * **Required for `whereHas` / `withAggregate` on Drizzle.** Without a
+ * registered schema the adapter throws a clear "no table schema registered
+ * for X" error. Prisma's adapter discovers schemas via the generated client
+ * and needs no registry — this is Drizzle-specific.
+ *
+ * @example
+ * import { drizzle, DrizzleTableRegistry } from '@rudderjs/orm-drizzle'
+ * import { posts, comments } from './schema.js'
+ *
+ * // Typical: register at adapter init
+ * drizzle({ tables: { posts, comments } })
+ *
+ * // Or imperatively (e.g. tests, dynamic registration)
+ * DrizzleTableRegistry.register('comments', comments)
+ */
 export class DrizzleTableRegistry {
   private static tables: Map<string, unknown> = new Map()
 
+  /** Register a Drizzle table schema by name. Idempotent — last write wins. */
   static register(name: string, table: unknown): void {
     this.tables.set(name, table)
   }
 
+  /** Look up a previously-registered table schema by name. */
   static get(name: string): unknown | undefined {
     return this.tables.get(name)
   }
+}
+
+/**
+ * @internal — type-erase a Drizzle query builder.
+ *
+ * Drizzle's query builders are thenable: chaining `.select().from().where()`
+ * returns a builder that resolves to row results when awaited. The builder
+ * type carries the full chained shape, which is incompatible with our
+ * `Promise<T[]>` adapter contract. Rather than peppering every CRUD method
+ * with `as unknown as Promise<T[]>`, route every await through `exec<R>(q)`
+ * — one cast site, one place to update if Drizzle's API tightens.
+ */
+function exec<R>(q: unknown): Promise<R> {
+  return q as Promise<R>
+}
+
+/**
+ * @internal — for batch UPDATE/DELETE queries: invoke `.returning()` when the
+ * driver supports it (Postgres, SQLite), else await the bare query.
+ *
+ * Used by `deleteAll()` / `updateAll()` to report row counts via the returned
+ * array length. MySQL drivers ignore `.returning()` and silently return zero
+ * — adapter consumers needing precise MySQL counts should switch to a
+ * Postgres or SQLite Drizzle driver until we surface driver capability flags.
+ */
+async function awaitReturningOrPlain(q: unknown): Promise<unknown[]> {
+  const r = (q as { returning?: () => unknown }).returning
+  const target = typeof r === 'function' ? r.call(q) : q
+  const result = await (target as Promise<unknown[]>)
+  return Array.isArray(result) ? result : []
 }
 
 /** @internal — combine SQL exprs with AND. Single-element returns as-is so
@@ -410,7 +468,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     let q = this.db.select({ value: valueExpr }).from(this.table)
     if (cond) q = q.where(cond)
 
-    const result = await (q as unknown as Promise<Array<{ value: unknown }>>)
+    const result = await exec<Array<{ value: unknown }>>(q)
     const raw = result[0]?.value
     if (fn === 'count') return Number(raw ?? 0)
     if (fn === 'exists') return Number(raw ?? 0) > 0
@@ -588,7 +646,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
 
-    const result = await (q as unknown as Promise<T[]>)
+    const result = await exec<T[]>(q)
     return result[0] ?? null
   }
 
@@ -601,9 +659,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const fields   = this.buildAggregateSelectFields()
 
     const sel = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
-    const result = await (sel
-      .where(cond)
-      .limit(1) as unknown as Promise<T[]>)
+    const result = await exec<T[]>(sel.where(cond).limit(1))
     return result[0] ?? null
   }
 
@@ -620,7 +676,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
 
-    return q as unknown as Promise<T[]>
+    return exec<T[]>(q)
   }
 
   async all(): Promise<T[]> {
@@ -640,7 +696,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     let q = this.db.select({ value: sqlCount() }).from(this.table)
     if (cond) q = q.where(cond)
 
-    const result: Array<{ value: number | string | bigint }> = await (q as unknown as Promise<Array<{ value: number | string | bigint }>>)
+    const result = await exec<Array<{ value: number | string | bigint }>>(q)
     return Number(result[0]?.value ?? 0)
   }
 
@@ -773,10 +829,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async create(data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
-    const result = await (this.db
+    const result = await exec<T[]>(this.db
       .insert(this.table)
       .values(data)
-      .returning() as unknown as Promise<T[]>)
+      .returning())
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] create() returned no rows.')
     return result[0]
   }
@@ -784,11 +840,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await (this.db
+    const result = await exec<T[]>(this.db
       .update(this.table)
       .set(data)
       .where(eq(pkCol, id))
-      .returning() as unknown as Promise<T[]>)
+      .returning())
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] update() returned no rows.')
     return result[0]
   }
@@ -797,37 +853,37 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     if (this._softDeletes) {
-      await (this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)) as unknown as Promise<void>)
+      await exec<void>(this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)))
       return
     }
-    await (this.db
+    await exec<void>(this.db
       .delete(this.table)
-      .where(eq(pkCol, id)) as unknown as Promise<void>)
+      .where(eq(pkCol, id)))
   }
 
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await (this.db
+    const result = await exec<T[]>(this.db
       .update(this.table)
       .set({ deletedAt: null })
       .where(eq(pkCol, id))
-      .returning() as unknown as Promise<T[]>)
+      .returning())
     return result[0] as T
   }
 
   async forceDelete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    await (this.db
+    await exec<void>(this.db
       .delete(this.table)
-      .where(eq(pkCol, id)) as unknown as Promise<void>)
+      .where(eq(pkCol, id)))
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
     this._assertNotSubBuilder()
     if (rows.length === 0) return
-    await (this.db.insert(this.table).values(rows) as unknown as Promise<void>)
+    await exec<void>(this.db.insert(this.table).values(rows))
   }
 
   async deleteAll(): Promise<number> {
@@ -835,34 +891,25 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond = this.buildConditions()
     let q = this.db.delete(this.table)
     if (cond) q = q.where(cond)
-    // .returning() lets us count rows deleted across SQLite/Postgres without
-    // a driver-specific RowsAffected hop. MySQL drivers ignore .returning()
-    // and the count comes back zero — adapter consumers needing precise MySQL
-    // counts should switch to a Postgres or SQLite Drizzle driver until we
-    // surface driver capability flags.
-    const result = await ((q as unknown as { returning?: () => DrizzleQB }).returning?.() ?? q) as unknown as Array<unknown>
-    return Array.isArray(result) ? result.length : 0
+    return (await awaitReturningOrPlain(q)).length
   }
 
   async updateAll(data: Partial<T>): Promise<number> {
     const cond = this.buildConditions()
     let q = this.db.update(this.table).set(data)
     if (cond) q = q.where(cond)
-    // Same .returning() rationale as deleteAll — count via returning where the
-    // driver supports it (Postgres/SQLite). MySQL returns zero.
-    const result = await ((q as unknown as { returning?: () => DrizzleQB }).returning?.() ?? q) as unknown as Array<unknown>
-    return Array.isArray(result) ? result.length : 0
+    return (await awaitReturningOrPlain(q)).length
   }
 
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column
-    const result = await (this.db
+    const result = await exec<T[]>(this.db
       .update(this.table)
       .set({ [column]: sql`${col} + ${amount}`, ...extra })
       .where(eq(pkCol, id))
-      .returning() as unknown as Promise<T[]>)
+      .returning())
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] increment() returned no rows.')
     return result[0]
   }
@@ -871,11 +918,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column
-    const result = await (this.db
+    const result = await exec<T[]>(this.db
       .update(this.table)
       .set({ [column]: sql`${col} - ${amount}`, ...extra })
       .where(eq(pkCol, id))
-      .returning() as unknown as Promise<T[]>)
+      .returning())
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] decrement() returned no rows.')
     return result[0]
   }
@@ -897,8 +944,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
 
     const [data, countResult] = await Promise.all([
-      pageQ as unknown as Promise<T[]>,
-      cntQ  as unknown as Promise<Array<{ value: number | string | bigint }>>,
+      exec<T[]>(pageQ),
+      exec<Array<{ value: number | string | bigint }>>(cntQ),
     ])
 
     const total    = Number(countResult[0]?.value ?? 0)
@@ -993,12 +1040,44 @@ export interface DrizzleConfig {
   driver?: 'sqlite' | 'postgresql' | 'libsql'
   /** Connection URL. Falls back to DATABASE_URL env var */
   url?: string
-  /** Map of table name → drizzle table schema object */
+  /**
+   * Map of table name → Drizzle table schema. Required for any table
+   * referenced through a relation traversal — `whereHas('comments', ...)`,
+   * `withAggregate({ countComments: ... })`, etc. — because the adapter
+   * resolves related schemas by name at query-build time. Tables you only
+   * query directly (via `from(comments)`) do not need to appear here.
+   *
+   * Equivalent to calling `DrizzleTableRegistry.register(name, schema)` for
+   * each entry. Missing entries surface as a clear "no table schema
+   * registered for X" error.
+   */
   tables?: Record<string, unknown>
   /** Primary key column name. Defaults to 'id' */
   primaryKey?: string
 }
 
+/**
+ * Build the Drizzle ORM adapter provider.
+ *
+ * **Null-value reminder.** Drizzle's `eq(col, null)` never matches — SQL
+ * requires `IS NULL` semantics, not equality. When writing custom Drizzle
+ * predicates in your app code, use `isNull(col)` / `isNotNull(col)` from
+ * `drizzle-orm`. The adapter itself routes null comparisons through the
+ * correct operators internally.
+ *
+ * @example
+ * import { posts, comments } from './schema.js'
+ *
+ * database({
+ *   default: 'main',
+ *   connections: {
+ *     main: drizzle({
+ *       driver: 'postgresql',
+ *       tables: { posts, comments },
+ *     }),
+ *   },
+ * })
+ */
 export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
   return {
     async create(): Promise<OrmAdapter> {
