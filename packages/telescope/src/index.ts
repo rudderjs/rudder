@@ -155,6 +155,8 @@ export class TelescopeProvider extends ServiceProvider {
     hideRequestHeaders:  merged.hideRequestHeaders  ?? defaultConfig.hideRequestHeaders,
     hideRequestFields:   merged.hideRequestFields   ?? defaultConfig.hideRequestFields,
     auth:                merged.auth                ?? defaultConfig.auth,
+    updates:             merged.updates             ?? defaultConfig.updates,
+    pollInterval:        merged.pollInterval        ?? defaultConfig.pollInterval,
     }
 
     if (!resolved.enabled) return
@@ -223,8 +225,10 @@ export class TelescopeProvider extends ServiceProvider {
 
     // ── Register UI + API routes ──────────────────────────
     const routeOpts: Parameters<typeof registerTelescopeRoutes>[1] = {}
-    if (resolved.path) routeOpts.path = resolved.path
-    if (resolved.auth) routeOpts.auth = resolved.auth
+    if (resolved.path)         routeOpts.path         = resolved.path
+    if (resolved.auth)         routeOpts.auth         = resolved.auth
+    if (resolved.updates)      routeOpts.updates      = resolved.updates
+    if (resolved.pollInterval) routeOpts.pollInterval = resolved.pollInterval
     await registerTelescopeRoutes(storage, routeOpts)
   }
 }

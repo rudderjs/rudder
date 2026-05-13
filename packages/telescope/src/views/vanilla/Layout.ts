@@ -219,7 +219,8 @@ export function Layout(props: LayoutProps): string {
         _isPopState: false,
 
         stopPageTimers() {
-          // Clear any auto-refresh intervals from EntryList pages
+          // Tear down any per-page auto-refresh timers and open SSE
+          // connections from the previous EntryList before swapping <main>.
           const mainEl = document.getElementById('telescope-main')
           if (mainEl) {
             mainEl.querySelectorAll('[x-data]').forEach(el => {
@@ -228,6 +229,10 @@ export function Layout(props: LayoutProps): string {
                   if (data._refreshTimer) {
                     clearInterval(data._refreshTimer)
                     data._refreshTimer = null
+                  }
+                  if (data._eventSource) {
+                    data._eventSource.close()
+                    data._eventSource = null
                   }
                 }
               }

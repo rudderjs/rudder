@@ -9,7 +9,8 @@ Debug dashboard — 18 collectors recording requests, queries, jobs, exceptions,
 - `src/storage.ts` — `MemoryStorage` (bounded, default) and `SqliteStorage` (persistent via better-sqlite3)
 - `src/batch-context.ts` — Correlates entries within a request lifecycle via `batchId`
 - `src/redact.ts` — Sensitive data redaction (headers, fields) at collection time
-- `src/routes.ts` — Dashboard + API route registration
+- `src/routes.ts` — Dashboard + API route registration (incl. SSE stream route when `updates: 'stream'`)
+- `src/stream.ts` — SSE push channel: subscriber registry on `globalThis`, `notifySubscribers()` fan-out, `createStreamResponse()` factory
 - `src/collectors/` — 18 collectors: request, query, job, exception, log, mail, notification, event, cache, schedule, model, command, broadcast, live, http, gate, dump, ai
 - `src/views/vanilla/` — Dashboard UI (HTML + Alpine.js + Tailwind, framework-agnostic)
 
@@ -25,6 +26,10 @@ Debug dashboard — 18 collectors recording requests, queries, jobs, exceptions,
 - **Universal Context + Auth User cards**: `details/Layout.ts:renderRequestContext()` renders Hostname + "View Request" link + Authenticated User on every detail page (sourced from the related Request entry by `batchId`). Skipped on the Request entry itself. Don't duplicate these into per-watcher views.
 - **List slug parity**: `EntryList.ts:apiPath` MUST match the slug logic in `routes.ts:apiPath`. `http`/`ai`/`mcp` stay singular, `view` → `views`, `query` → `queries`, everything else gets `s`. Mismatch silently 404s the listing API and the table renders empty.
 - **Smoke tests**: every collector has a `/test/<name>` route in `playground/routes/web.ts` (request-triggered) plus CLI/scheduler tests via `pnpm rudder greet "Bob"` / `pnpm rudder schedule:run`. Treat these as the canonical end-to-end fixtures when adding or refactoring a collector.
+- **Dashboard updates transport**: `config.telescope.updates` is `'polling'` (default) or `'stream'`. Polling re-fetches `<apiPrefix>/<type-slug>` every `pollInterval` ms when Live is on. Stream registers `<apiPrefix>/stream` (SSE) and the dashboard opens an `EventSource` to it instead. Pure HTTP, no peer deps. Both share the same auth gate and recording toggle.
+- **SSE subscriber registry**: lives on `globalThis['__rudderjs_telescope_subscribers__']` so it survives Vite SSR module re-evaluation (same pattern as the recording slot). Each `createStreamResponse()` call adds one `Subscriber` to the set; `cancel()` on the stream (client disconnect) removes it. Subscribers whose `write()` throws are silently dropped — never let a closed controller crash the fan-out.
+- **Notify before store**: `Telescope.record()` calls `notifySubscribers(entry)` *before* `storage.store()`. Dashboard latency tracks the in-process emit, not however long persistence takes. Recording-toggle check still runs first so paused state suppresses both.
+- **SSE keepalive**: `: keepalive\n\n` comment frame every 30s, below common 60s proxy idle timeouts. `X-Accel-Buffering: no` header disables nginx proxy buffering — without it, entries pile server-side until the buffer fills and dashboards look frozen. Don't strip these "cleanup" headers without re-reading this note.
 
 ## Commands
 

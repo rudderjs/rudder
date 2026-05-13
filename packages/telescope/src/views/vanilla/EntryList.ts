@@ -18,6 +18,14 @@ export interface EntryListProps {
   pageKey:   string
   title:     string
   columns:   Column[]
+  /**
+   * Live-update transport. `'polling'` re-fetches the list endpoint every
+   * `pollInterval` ms; `'stream'` opens an SSE connection to
+   * `<apiPrefix>/stream?type=<type>` and prepends entries as they arrive.
+   */
+  updates:      'polling' | 'stream'
+  /** Poll cadence in ms when `updates === 'polling'`. */
+  pollInterval: number
 }
 
 /**
@@ -30,7 +38,7 @@ export interface EntryListProps {
  * Phase 2b added the `?tag=` filter and tag pill column.
  */
 export function EntryList(props: EntryListProps): string {
-  const { basePath, apiPrefix, type, pageKey, title, columns } = props
+  const { basePath, apiPrefix, type, pageKey, title, columns, updates, pollInterval } = props
 
   const colHeaders = columns.map(c => {
     const align = c.className?.includes('text-right') ? 'text-right' : 'text-left'
@@ -59,11 +67,11 @@ export function EntryList(props: EntryListProps): string {
       <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <h2 class="text-xl font-bold">${title}</h2>
         <div class="flex gap-2 items-center">
-          <button @click="toggleAutoRefresh()" :title="autoRefresh ? 'Auto-refresh on (click to disable)' : 'Auto-refresh off (click to enable)'"
+          <button @click="toggleAutoRefresh()" :title="autoRefresh ? (transport === 'stream' ? 'Streaming (click to disable)' : 'Polling (click to disable)') : 'Live off (click to enable)'"
                   class="text-xs border rounded-lg px-3 py-1.5 transition flex items-center gap-1.5"
                   :class="autoRefresh ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400' : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'">
             <span class="w-2 h-2 rounded-full" :class="autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'"></span>
-            <span x-text="autoRefresh ? 'Live' : 'Live'"></span>
+            <span x-text="autoRefresh ? (transport === 'stream' ? 'Live · stream' : 'Live') : 'Live'"></span>
           </button>
           <input type="text" x-model="search" @input.debounce.300ms="load()"
                  placeholder="Search..." class="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
@@ -132,14 +140,17 @@ export function EntryList(props: EntryListProps): string {
           search: '',
           tag: new URLSearchParams(window.location.search).get('tag') || '',
           autoRefresh: localStorage.getItem('telescope.autoRefresh') === 'true',
+          transport: '${updates}',
           _refreshTimer: null,
+          _eventSource: null,
+          _perPage: 50,
 
           init() {
             if (this.autoRefresh) this.startAutoRefresh()
           },
 
           async load() {
-            const params = new URLSearchParams({ page: this.page, per_page: 50 })
+            const params = new URLSearchParams({ page: this.page, per_page: this._perPage })
             if (this.search) params.set('search', this.search)
             if (this.tag)    params.set('tag', this.tag)
             const data = await fetch('${apiPrefix}/${apiPath}?' + params).then(r => r.json())
@@ -155,15 +166,64 @@ export function EntryList(props: EntryListProps): string {
           },
 
           startAutoRefresh() {
-            if (this._refreshTimer) return
-            this._refreshTimer = setInterval(() => this.load(), 2000)
+            if (this.transport === 'stream') this.startStream()
+            else                             this.startPolling()
           },
 
           stopAutoRefresh() {
+            this.stopStream()
+            this.stopPolling()
+          },
+
+          startPolling() {
+            if (this._refreshTimer) return
+            this._refreshTimer = setInterval(() => this.load(), ${pollInterval})
+          },
+
+          stopPolling() {
             if (this._refreshTimer) {
               clearInterval(this._refreshTimer)
               this._refreshTimer = null
             }
+          },
+
+          startStream() {
+            if (this._eventSource) return
+            const url = '${apiPrefix}/stream' + (${JSON.stringify(type)} ? '?type=' + ${JSON.stringify(type)} : '')
+            const es = new EventSource(url)
+            es.addEventListener('entry', (e) => this.onStreamEntry(e))
+            this._eventSource = es
+          },
+
+          stopStream() {
+            if (this._eventSource) {
+              this._eventSource.close()
+              this._eventSource = null
+            }
+          },
+
+          onStreamEntry(e) {
+            // New entries belong on page 1. While the user is paginating
+            // through history, suppress live prepends so their position
+            // doesn't shift under them.
+            if (this.page > 1) return
+
+            let entry
+            try { entry = JSON.parse(e.data) } catch { return }
+
+            // Client-side filter parity with the polling endpoint's server
+            // filters: search matches any string field in tags; tag filter
+            // matches exactly.
+            if (this.tag && !(entry.tags || []).includes(this.tag)) return
+            if (this.search) {
+              const hay = JSON.stringify(entry).toLowerCase()
+              if (!hay.includes(this.search.toLowerCase())) return
+            }
+
+            this.entries.unshift(entry)
+            if (this.entries.length > this._perPage) this.entries.pop()
+            this.meta.total = (this.meta.total || 0) + 1
+            this.meta.last_page = Math.max(1, Math.ceil(this.meta.total / this._perPage))
           },
 
           goTo(id) {

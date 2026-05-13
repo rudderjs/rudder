@@ -125,6 +125,23 @@ export interface TelescopeConfig {
    */
   hideRequestFields?:    string[] | undefined
   auth?:                 null | ((req: unknown) => boolean | Promise<boolean>) | undefined
+  /**
+   * How the dashboard receives new entries.
+   *
+   * - `'polling'` (default): the entry list re-fetches every `pollInterval` ms
+   *   when "Live" is toggled on. Works through any HTTP proxy, no extra wire
+   *   protocol.
+   * - `'stream'`: the dashboard subscribes to a Server-Sent Events endpoint
+   *   (`<path>/api/stream`) and the server pushes new entries as they're
+   *   recorded. Lower latency, no spinning request count. Half-duplex —
+   *   one connection per dashboard tab.
+   *
+   * Stream mode is pure HTTP (no peer deps); the recording toggle and auth
+   * gate still apply.
+   */
+  updates?:              'polling' | 'stream' | undefined
+  /** Poll interval in ms when `updates === 'polling'`. Default `2000`. Ignored in stream mode. */
+  pollInterval?:         number | undefined
 }
 
 export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'>> & { auth: TelescopeConfig['auth']; sqlitePath: string } = {
@@ -162,4 +179,6 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   hideRequestHeaders:   ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key', 'x-real-ip'],
   hideRequestFields:    ['password', 'password_confirmation', 'token', 'secret'],
   auth:                 null,
+  updates:              'polling',
+  pollInterval:         2000,
 }
