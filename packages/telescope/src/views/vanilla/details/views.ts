@@ -440,7 +440,11 @@ const BroadcastView: ViewFn = (entry) => {
 
 function renderToolCalls(toolCalls: unknown[]): SafeString {
   if (toolCalls.length === 0) return html``
-  const items = toolCalls.map((tc) => {
+  // `html\`\`` natively renders SafeString[] — `.map(...).join('')` was the
+  // legacy footgun shape (each SafeString.toString() returns its raw value,
+  // then raw() re-wraps). Pass the array directly so a future copy of this
+  // code doesn't re-introduce the join-then-re-escape bug elsewhere.
+  return html`${toolCalls.map((tc) => {
     const t = tc as Record<string, unknown>
     const name      = String(t['name'] ?? t['toolName'] ?? '—')
     const duration  = t['duration'] != null ? `${t['duration']}ms` : null
@@ -474,13 +478,12 @@ function renderToolCalls(toolCalls: unknown[]): SafeString {
         ` : ''}
       </div>
     `
-  }).join('')
-  return raw(items)
+  })}`
 }
 
 function renderSteps(steps: unknown[]): SafeString {
   if (steps.length <= 1) return html``
-  const items = steps.map((s, i) => {
+  return html`${steps.map((s, i) => {
     const step = s as Record<string, unknown>
     const usage = step['usage'] as Record<string, unknown> | undefined
     const tokens = usage ? (usage['totalTokens'] ?? usage['total_tokens']) : undefined
@@ -497,8 +500,7 @@ function renderSteps(steps: unknown[]): SafeString {
         }))}
       </div>
     `
-  }).join('')
-  return raw(items)
+  })}`
 }
 
 const AiView: ViewFn = (entry) => {

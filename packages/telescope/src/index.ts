@@ -51,6 +51,22 @@ export { McpCollector } from './collectors/mcp.js'
 const _g = globalThis as Record<string, unknown>
 const _recKey = '__rudderjs_telescope_recording__'
 
+/**
+ * Process-wide registry holding the active `TelescopeStorage` and the
+ * recording on/off flag.
+ *
+ * **Recording state lives on `globalThis`, not as a static class field.**
+ * Telescope is loaded under Vite's SSR module runner in dev — every HMR
+ * cycle re-evaluates the module, which would re-initialize a static field
+ * to `true` and silently lose the dashboard's "Paused" state. The
+ * `globalThis['__rudderjs_telescope_recording__']` slot survives module
+ * re-eval; the recording API in `api/routes.ts` reads/writes the same
+ * key directly (never via `require('../index.js')` — ESM-only). The SSE
+ * stream subscriber registry follows the same pattern; see `stream.ts`.
+ *
+ * `storage.store()` (in `storage.ts`) checks `isRecording()` centrally
+ * before persisting — callers don't need to gate writes themselves.
+ */
 export class TelescopeRegistry {
   private static storage: TelescopeStorage | null = null
 
@@ -59,8 +75,10 @@ export class TelescopeRegistry {
   /** @internal — clears the registered storage. Used for testing. */
   static reset(): void                         { this.storage = null }
 
+  /** Whether collectors are currently recording. Defaults to `true`. */
   static get recording(): boolean       { return (_g[_recKey] as boolean | undefined) ?? true }
   static set recording(v: boolean)      { _g[_recKey] = v }
+  /** Toggle and return the new recording state. */
   static toggleRecording(): boolean     { const v = !this.recording; _g[_recKey] = v; return v }
 }
 

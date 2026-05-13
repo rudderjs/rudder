@@ -1,4 +1,5 @@
 import { Layout } from './Layout.js'
+import { toApiSlug, type EntryType } from '../../types.js'
 
 export interface Column {
   label:      string
@@ -56,11 +57,9 @@ export function EntryList(props: EntryListProps): string {
   }).join('\n                ')
 
   const activePath = `/${pageKey}`
-  // Must match the slug logic in routes.ts:apiPath
-  const apiPath = type === 'query' ? 'queries'
-    : type === 'http' || type === 'ai' || type === 'mcp' ? type
-    : type === 'view' ? 'views'
-    : `${type}s`
+  // Slug mapping is shared with routes.ts via `toApiSlug` (see types.ts).
+  // The resolved string is inlined into the rendered Alpine script below.
+  const apiPath = toApiSlug(type as EntryType)
 
   const body = `
     <div x-data="entryList()" x-init="load()" x-cloak>

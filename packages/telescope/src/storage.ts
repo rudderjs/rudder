@@ -104,6 +104,34 @@ export class MemoryStorage implements TelescopeStorage {
 
 // ─── SQLite Storage ────────────────────────────────────────
 
+type BetterSqliteCtor = new (path: string) => import('better-sqlite3').Database
+
+/**
+ * SQLite-backed telescope storage — persistent across restarts, shared
+ * across the dev server and CLI processes.
+ *
+ * **Peer resolution** — `better-sqlite3` is loaded via
+ * `createRequire(import.meta.url)` rather than a top-level `import`.
+ * Two reasons:
+ *   1. better-sqlite3 ships native bindings; bundlers (Vite SSR, Webpack,
+ *      esbuild) can't statically resolve them. createRequire pushes the
+ *      lookup to runtime where Node's loader handles `.node` files.
+ *   2. Telescope's package.json lists `better-sqlite3` under
+ *      `optionalDependencies`. Apps that pick `storage: 'memory'` never
+ *      need it; we shouldn't force its install.
+ *
+ * The `globalThis.__betterSqlite3` escape hatch is for bundled
+ * environments where `createRequire` can't reach the module (e.g. when
+ * telescope is pre-bundled into a single file). Pre-stash the module
+ * there and the loader will pick it up. If neither path resolves, the
+ * constructor throws loudly — it does NOT silently fall back to memory.
+ *
+ * **WAL mode** — enabled in `migrate()`. Without it, `pnpm rudder ...`
+ * commands hit "database is locked" while `pnpm dev` is running. WAL
+ * (Write-Ahead Logging) lets the dev server and CLI processes read/write
+ * concurrently. `synchronous = NORMAL` is paired with WAL for the
+ * standard "durable on commit, fast on crash recovery" tradeoff.
+ */
 export class SqliteStorage implements TelescopeStorage {
   private db: import('better-sqlite3').Database | null = null
 
@@ -111,9 +139,6 @@ export class SqliteStorage implements TelescopeStorage {
 
   private getDb(): import('better-sqlite3').Database {
     if (!this.db) {
-      // Load better-sqlite3 via createRequire so native bindings work under
-      // ESM + Vite SSR. Allow consumers to pre-stash the module on globalThis
-      // (e.g. when bundling) as an escape hatch.
       let Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
       if (!Database) {
         try {
@@ -127,7 +152,7 @@ export class SqliteStorage implements TelescopeStorage {
           )
         }
       }
-      this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(this.dbPath)
+      this.db = new (Database as BetterSqliteCtor)(this.dbPath)
       this.migrate()
     }
     return this.db
@@ -135,8 +160,6 @@ export class SqliteStorage implements TelescopeStorage {
 
   private migrate(): void {
     const db = this.db!
-    // WAL mode lets the dev server + CLI processes read/write the same file
-    // concurrently without "database is locked" errors.
     db.pragma('journal_mode = WAL')
     db.pragma('synchronous = NORMAL')
     db.exec(`

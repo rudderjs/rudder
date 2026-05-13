@@ -22,6 +22,24 @@ export type EntryType =
   | 'mcp'
   | 'view'
 
+/**
+ * Map an `EntryType` to the URL slug used by the dashboard list API.
+ *
+ * Shared between the server (`routes.ts` registers `${apiPrefix}/${slug}`)
+ * and the client (`EntryList.ts` fetches `${apiPrefix}/${slug}?...`). A
+ * drift between the two sites silently 404s the listing API and the table
+ * renders empty — historically a recurring footgun.
+ *
+ * Both sites must call this helper rather than inlining the slug logic.
+ * Adding a new `EntryType` means updating this function in lockstep.
+ */
+export function toApiSlug(type: EntryType): string {
+  if (type === 'query') return 'queries'
+  if (type === 'view')  return 'views'
+  if (type === 'http' || type === 'ai' || type === 'mcp') return type
+  return `${type}s`
+}
+
 export interface TelescopeEntry {
   id:         string
   batchId:    string | null
