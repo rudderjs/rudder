@@ -43,6 +43,12 @@ function makeReqRes(cookieHeader = ''): {
   return { req, res, setCookies }
 }
 
+/** Read the session that sessionMiddleware stashed on req.raw. Centralizes
+ *  the property-bag cast for tests so individual cases don't repeat it. */
+function readSession(req: AppRequest): SessionInstance {
+  return (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
+}
+
 /** Run one fake request and return the session instance + Set-Cookie value */
 async function runRequest(
   cookieHeader = '',
@@ -52,7 +58,7 @@ async function runRequest(
   const { req, res, setCookies } = makeReqRes(cookieHeader)
   let captured!: SessionInstance
   await mw(req, res, async () => {
-    captured = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
+    captured = readSession(req)
     await fn(captured)
   })
   return { session: captured, setCookie: setCookies[0] }
@@ -234,7 +240,7 @@ describe('sessionMiddleware', () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes()
     await mw(req, res, async () => {
-      assert.ok((req.raw as Record<string, unknown>)['__rjs_session'] instanceof SessionInstance)
+      assert.ok(readSession(req) instanceof SessionInstance)
     })
   })
 
@@ -268,8 +274,7 @@ describe('sessionMiddleware', () => {
     const { req, res } = makeReqRes('rjs_sess=tampered.invalidsig')
     let sessionId!: string
     await mw(req, res, async () => {
-      const s = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
-      sessionId = s.id()
+      sessionId = readSession(req).id()
     })
     assert.ok(sessionId.length > 0) // fresh session created
   })
@@ -336,16 +341,33 @@ describe('Session facade', () => {
   })
 
   it('regenerate() changes session ID', async () => {
-    await run(async () => {
-      const _s = (Session as unknown as { current(): SessionInstance }).current?.() ?? null
-      // Test via instance
-    })
-    // Test through the middleware directly
     const { session: s } = await runRequest()
     const oldId = s.id()
     await s.regenerate()
-    const newId = s.id()
-    assert.notStrictEqual(oldId, newId)
+    assert.notStrictEqual(s.id(), oldId)
+  })
+
+  it('maybeCurrent() returns null outside an ALS context', () => {
+    assert.strictEqual(Session.maybeCurrent(), null)
+  })
+
+  it('maybeCurrent() returns the instance inside an ALS context', async () => {
+    await run(async () => {
+      const s = Session.maybeCurrent()
+      assert.ok(s instanceof SessionInstance)
+    })
+  })
+
+  it('active() reflects ALS context presence', async () => {
+    assert.strictEqual(Session.active(), false)
+    await run(async () => {
+      assert.strictEqual(Session.active(), true)
+    })
+    assert.strictEqual(Session.active(), false)
+  })
+
+  it('allFlash() returns {} outside an ALS context (no throw)', () => {
+    assert.deepStrictEqual(Session.allFlash(), {})
   })
 })
 
@@ -371,10 +393,21 @@ function fakeRedisClient(): {
   }
 }
 
+/** Reach into RedisDriver's private clientPromise slot to inject a fake.
+ *  Centralizes the structural cast so individual tests don't repeat the
+ *  `as unknown as { clientPromise }` dance. */
+function injectClient(driver: RedisDriver, value: Promise<unknown>): void {
+  ;(driver as unknown as { clientPromise: Promise<unknown> }).clientPromise = value
+}
+
+function readClientPromise(driver: RedisDriver): Promise<unknown> {
+  return (driver as unknown as { clientPromise: Promise<unknown> }).clientPromise
+}
+
 function makeRedisDriver(secret = 'test-secret-32-chars-exactly!!xx'): { driver: RedisDriver; client: ReturnType<typeof fakeRedisClient> } {
   const driver = new RedisDriver({ prefix: 'session:' }, secret)
   const client = fakeRedisClient()
-  ;(driver as unknown as { clientPromise: Promise<unknown> }).clientPromise = Promise.resolve(client)
+  injectClient(driver, Promise.resolve(client))
   return { driver, client }
 }
 
@@ -411,7 +444,7 @@ describe('RedisDriver — S1: HMAC signing', () => {
   it('load() rejects a value with a different secret and returns a fresh session', async () => {
     const { driver } = makeRedisDriver('secret-A')
     const otherDriver = new RedisDriver({ prefix: 'session:' }, 'secret-B')
-    ;(otherDriver as unknown as { clientPromise: Promise<unknown> }).clientPromise = (driver as unknown as { clientPromise: Promise<unknown> }).clientPromise
+    injectClient(otherDriver, readClientPromise(driver))
     const cookieFromB = await otherDriver.persist({ id: 'cross', data: {}, flash_next: {} }, 60)
     const loaded = await driver.load(cookieFromB)
     assert.notStrictEqual(loaded.id, 'cross')
@@ -438,6 +471,33 @@ describe('RedisDriver — S2: cache miss does not fixate on cookie id', () => {
     assert.deepStrictEqual(loaded.data, {})
     assert.deepStrictEqual(loaded.flash_next, {})
   })
+
+  it('valid signature but malformed JSON in redis → fresh session', async () => {
+    // Exercises the parsePayload() catch branch shared by both drivers.
+    // An attacker who can write to redis (or a corrupt entry) must not
+    // crash the request — the driver should fall back to a fresh session.
+    const { driver, client } = makeRedisDriver()
+    const id = 'corrupt-id'
+    const cookieValue = await driver.persist({ id, data: { real: true }, flash_next: {} }, 60)
+    client.store.set(`session:${id}`, '{ not valid json')
+    const loaded = await driver.load(cookieValue)
+    assert.notStrictEqual(loaded.id, id)
+    assert.deepStrictEqual(loaded.data, {})
+  })
+
+  it('valid signature but payload missing string id → fresh session', async () => {
+    // parsePayload rejects payloads where `id` isn't a string — guards
+    // against a partial / attacker-controlled redis write that would
+    // otherwise leak into SessionInstance with a non-string id.
+    const { driver, client } = makeRedisDriver()
+    const id = 'shape-id'
+    const cookieValue = await driver.persist({ id, data: {}, flash_next: {} }, 60)
+    client.store.set(`session:${id}`, JSON.stringify({ id: 42, data: { admin: true } }))
+    const loaded = await driver.load(cookieValue)
+    assert.strictEqual(typeof loaded.id, 'string')
+    assert.notStrictEqual(loaded.id, id, 'must mint a fresh id, not reuse the cookie id')
+    assert.deepStrictEqual(loaded.data, {})
+  })
 })
 
 // ─── S3: Set-Cookie preserved when next() throws ──────────────────────────────
@@ -449,8 +509,7 @@ describe('sessionMiddleware — S3: save on error', () => {
     const boom = new Error('handler exploded')
     await assert.rejects(
       async () => mw(req, res, async () => {
-        const s = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
-        s.flash('notice', 'goodbye')  // marks dirty so save() actually writes
+        readSession(req).flash('notice', 'goodbye')  // marks dirty so save() actually writes
         throw boom
       }),
       (err: unknown) => err === boom,
@@ -463,8 +522,7 @@ describe('sessionMiddleware — S3: save on error', () => {
     const { req: req1, res: res1, setCookies } = makeReqRes()
     await assert.rejects(
       async () => mw(req1, res1, async () => {
-        const s = (req1.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
-        s.flash('error', 'something broke')
+        readSession(req1).flash('error', 'something broke')
         throw new Error('boom')
       }),
     )
@@ -502,8 +560,8 @@ describe('RedisDriver — S4: cached client promise', () => {
   it('caches a Promise<Client>, not a raw client (concurrent first-call safety)', () => {
     const driver = new RedisDriver({ prefix: 'session:' }, 'secret')
     const client = fakeRedisClient()
-    ;(driver as unknown as { clientPromise: Promise<unknown> }).clientPromise = Promise.resolve(client)
-    const stored = (driver as unknown as { clientPromise: unknown }).clientPromise
+    injectClient(driver, Promise.resolve(client))
+    const stored = readClientPromise(driver)
     assert.ok(stored instanceof Promise, 'clientPromise must be a Promise so concurrent callers await the same connect')
   })
 })

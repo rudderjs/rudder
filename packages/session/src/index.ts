@@ -56,6 +56,25 @@ interface InternalDriver {
   destroy(id: string): Promise<void>
 }
 
+// ─── Internal: Hono context + req.raw bag helpers ──────────
+
+/** Narrow shape of `res.raw` — Hono's `c`. We only use header() and the
+ *  optional finalized Response so we can append Set-Cookie in place. */
+interface HonoContextLike {
+  header(k: string, v: string): void
+  res?: Response
+}
+
+const SESSION_KEY = '__rjs_session'
+
+/** Stash the per-request SessionInstance on the underlying server context
+ *  (req.raw = Hono's `c`) so a later normalizeRequest(c) in registerRoute
+ *  sees the same instance. Centralized so the property bag cast lives in
+ *  exactly one place. */
+function attachSession(req: AppRequest, session: SessionInstance): void {
+  ;(req.raw as Record<string, unknown>)[SESSION_KEY] = session
+}
+
 // ─── SessionInstance ───────────────────────────────────────
 
 export class SessionInstance {
@@ -167,7 +186,7 @@ export class SessionInstance {
     const ttl         = this._config.lifetime * 60
     const cookieValue = await this._driver.persist(payload, ttl)
     const cookieStr   = buildCookieHeader(this._config.cookie.name, cookieValue, this._config)
-    const c = res.raw as Record<string, unknown> & { header(k: string, v: string): void; res?: Response }
+    const c = res.raw as HonoContextLike
     if (c.res) {
       // Response already finalized — append to its headers in place. Mutating
       // c.res.headers preserves multi-value Set-Cookie; cloning via
@@ -280,14 +299,22 @@ function signPayload(payload: SessionPayload, secret: string): string {
   return sign(Buffer.from(JSON.stringify(payload)).toString('base64url'), secret)
 }
 
+/** Parse a JSON-encoded payload with minimal shape narrowing. Returns null
+ *  for malformed JSON or any payload missing a string `id`. Shared by both
+ *  drivers so the structural cast lives in one place; `SessionInstance`'s
+ *  constructor still defends against missing `data`/`flash_next`. */
+function parsePayload(raw: string): SessionPayload | null {
+  let obj: unknown
+  try { obj = JSON.parse(raw) } catch { return null }
+  if (obj === null || typeof obj !== 'object') return null
+  const r = obj as Record<string, unknown>
+  return typeof r['id'] === 'string' ? (r as unknown as SessionPayload) : null
+}
+
 function verifyPayload(cookieValue: string, secret: string): SessionPayload | null {
   const b64 = verify(cookieValue, secret)
   if (b64 === null) return null
-  try {
-    return JSON.parse(Buffer.from(b64, 'base64url').toString('utf8')) as SessionPayload
-  } catch {
-    return null
-  }
+  return parsePayload(Buffer.from(b64, 'base64url').toString('utf8'))
 }
 
 class CookieDriver implements InternalDriver {
@@ -343,11 +370,12 @@ export class RedisDriver implements InternalDriver {
   private getClient(): Promise<RedisClient> {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { Redis } = await import('ioredis') as any
+        const mod = await import('ioredis') as unknown as {
+          Redis: new (opts: string | { host?: string; port?: number; password?: string | undefined }) => RedisClient
+        }
         return this.redisConfig.url
-          ? new Redis(this.redisConfig.url)
-          : new Redis({
+          ? new mod.Redis(this.redisConfig.url)
+          : new mod.Redis({
               host:     this.redisConfig.host     ?? '127.0.0.1',
               port:     this.redisConfig.port     ?? 6379,
               password: this.redisConfig.password,
@@ -374,7 +402,7 @@ export class RedisDriver implements InternalDriver {
       const client = await this.getClient()
       const raw    = await client.get(this.key(id))
       if (!raw) return this.empty()
-      return JSON.parse(raw) as SessionPayload
+      return parsePayload(raw) ?? this.empty()
     } catch {
       return this.empty()
     }
@@ -435,7 +463,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
   const driver = makeDriver(config)
 
   return async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
-    const cookieHeader = (req.headers['cookie'] as string | undefined) ?? ''
+    const cookieHeader = req.headers['cookie'] ?? ''
     const cookieValue  = parseCookie(cookieHeader, config.cookie.name)
     const payload      = await driver.load(cookieValue)
     const session      = new SessionInstance(payload, driver, config)
@@ -444,7 +472,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
 
     // Store on the underlying server context (req.raw = Hono's c) so that any
     // normalizeRequest(c) call — including the one in registerRoute — sees it.
-    ;(req.raw as Record<string, unknown>)['__rjs_session'] = session
+    attachSession(req, session)
 
     // Persist regardless of whether next() throws — flash messages on error
     // redirects, new sessions on error responses, and regenerate() must
