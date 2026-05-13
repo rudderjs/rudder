@@ -265,19 +265,29 @@ export class TokenGuard implements Guard {
 
 // ─── Middleware ────────────────────────────────────────────
 
+// `AppRequest.raw` is typed `unknown` because it's whichever native request the
+// adapter is built around (Hono Context, Node IncomingMessage, etc). We stash
+// `__rjs_user` and `__rjs_token` on it so every layer behind the middleware can
+// read the same record without re-validating. Centralizing the cast here keeps
+// the `as Record<string, unknown>` to one site.
+function rawBag(req: AppRequest): Record<string, unknown> {
+  return req.raw as Record<string, unknown>
+}
+
 function attachUserAndToken(req: AppRequest, user: Authenticatable, token: PersonalAccessToken): void {
   // Use the shared serializer so sanctum and `@rudderjs/auth` agree on which
   // columns are sensitive (password, remember_token, plus anything the user
   // model lists via `getHidden()`).
   const plain = userToPlain(user)
-  const raw = req.raw as Record<string, unknown>
-  raw['__rjs_user']  = plain
-  raw['__rjs_token'] = token
+  const bag = rawBag(req)
+  bag['__rjs_user']  = plain
+  bag['__rjs_token'] = token
   // Direct property set is a fallback for adapters that don't install a getter
   // for `req.user` / `req.token`. server-hono installs both getters in
-  // normalizeRequest(), so this branch is a no-op there.
-  try { (req as unknown as Record<string, unknown>)['user']  = plain } catch { /* read-only */ }
-  try { (req as unknown as Record<string, unknown>)['token'] = token } catch { /* read-only */ }
+  // normalizeRequest(), so this branch is a no-op there. The try/catch handles
+  // adapters that expose these as read-only getters.
+  try { req.user  = plain } catch { /* read-only */ }
+  try { req.token = token } catch { /* read-only */ }
 }
 
 /**
@@ -287,7 +297,7 @@ function attachUserAndToken(req: AppRequest, user: Authenticatable, token: Perso
 export function SanctumMiddleware(): MiddlewareHandler {
   return async function SanctumMiddleware(req, res, next) {
     const sanctum = app().make<Sanctum>('sanctum')
-    const authHeader = req.headers['authorization'] as string | undefined
+    const authHeader = req.headers['authorization']
     if (authHeader) {
       const result = await sanctum.validateToken(authHeader)
       if (result) attachUserAndToken(req, result.user, result.token)
@@ -303,7 +313,7 @@ export function SanctumMiddleware(): MiddlewareHandler {
 export function RequireToken(...abilities: string[]): MiddlewareHandler {
   return async function RequireToken(req, res, next) {
     const sanctum = app().make<Sanctum>('sanctum')
-    const authHeader = req.headers['authorization'] as string | undefined
+    const authHeader = req.headers['authorization']
 
     if (!authHeader) {
       res.status(401).json({ message: 'Unauthenticated.' })
@@ -315,8 +325,7 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
     // run validateToken() twice — and each call writes lastUsedAt, doubling
     // every authenticated request's DB writes. The Bearer header is the same
     // for both middlewares, so trusting the prior result is safe.
-    const raw = req.raw as Record<string, unknown>
-    let token = raw['__rjs_token'] as PersonalAccessToken | undefined
+    let token = rawBag(req)['__rjs_token'] as PersonalAccessToken | undefined
 
     if (!token) {
       const result = await sanctum.validateToken(authHeader)
