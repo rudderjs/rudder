@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { hono } from './index.js'
-import { renderErrorPage } from './error-page.js'
+import { renderErrorPage, buildErrorMarkdown } from './error-page.js'
 
 // ─── hono() factory ─────────────────────────────────────────
 
@@ -315,15 +315,32 @@ describe('renderErrorPage()', () => {
   it('HTML-escapes special characters in error message', () => {
     const err = new Error('<script>alert("xss")</script>')
     const html = renderErrorPage(err, req)
-    assert.ok(!html.includes('<script>'))
-    assert.ok(html.includes('&lt;script&gt;'))
+    // The visible page renders the message HTML-escaped.
+    assert.ok(html.includes('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'),
+      'visible page must HTML-escape the error message')
+    // No raw injection: the attacker payload must NOT appear as a literal
+    // <script>alert(...)</script> tag anywhere in the document (i.e. cannot
+    // execute as injected HTML). The legitimate copy-button <script> block
+    // is a fixed string and contains no user-controlled values.
+    assert.ok(!html.includes('<script>alert'),
+      'attacker-controlled <script>alert must not appear unescaped')
+    // The embedded clipboard payload escapes `<` to < so the same XSS
+    // payload can't break out of the JS string literal either.
+    assert.ok(html.includes('\\u003cscript\\u003ealert'),
+      'embedded markdown payload escapes < as \\u003c so attacker can\'t close the inline script tag')
   })
 
   it('HTML-escapes the request URL', () => {
     const xssReq = { method: 'GET', url: 'http://localhost/<evil>', headers: {} }
     const html = renderErrorPage(new Error('test'), xssReq)
-    assert.ok(!html.includes('<evil>'))
-    assert.ok(html.includes('&lt;evil&gt;'))
+    // Visible page: URL HTML-escaped.
+    assert.ok(html.includes('http://localhost/&lt;evil&gt;'),
+      'visible page must HTML-escape the request URL')
+    // The raw `<evil>` substring must not appear anywhere — the embedded
+    // markdown also unicode-escapes `<` so the URL can't break out of the
+    // <script> string literal.
+    assert.ok(!html.includes('<evil>'),
+      '<evil> must not appear unescaped anywhere in the document')
   })
 
   it('includes request headers in the output', () => {
@@ -347,6 +364,91 @@ describe('renderErrorPage()', () => {
   it('includes the status 500 badge', () => {
     const html = renderErrorPage(new Error('oops'), req)
     assert.ok(html.includes('500'))
+  })
+
+  it('renders the Copy-as-Markdown button + embedded markdown script', () => {
+    const html = renderErrorPage(new Error('copyable'), req)
+    assert.ok(html.includes('id="rjs-copy-md"'), 'button must be present')
+    assert.ok(html.includes('Copy as Markdown'), 'button label must be present')
+    assert.ok(html.includes('navigator.clipboard.writeText'), 'click handler must wire to the clipboard API')
+    // The markdown payload is embedded via JSON.stringify so the error name
+    // ('Error') and message ('copyable') survive into the script literal.
+    assert.ok(html.includes('# Error: copyable'), 'embedded markdown must include the heading')
+  })
+})
+
+// ─── buildErrorMarkdown() ──────────────────────────────────
+
+describe('buildErrorMarkdown()', () => {
+  const req = { method: 'GET', url: 'http://localhost/demo', headers: { accept: 'text/html', host: 'localhost' } }
+  const parts = {
+    frames:    [],
+    appFrames: [{ func: 'doStuff', file: '/app/src/foo.ts',          line: 42, col: 9, isVendor: false }],
+    topFrame:  { func: 'doStuff', file: '/app/src/foo.ts',           line: 42, col: 9, isVendor: false },
+    source:    [
+      { n: 41, code: 'function doStuff() {', isError: false },
+      { n: 42, code: '  throw new Error(\'boom\')', isError: true },
+      { n: 43, code: '}', isError: false },
+    ],
+    nodeVersion:     'v22.14.0',
+    rudderjsVersion: '1.2.3',
+  }
+
+  it('starts with `# {errorName}: {message}`', () => {
+    const md = buildErrorMarkdown(new TypeError('bad type'), req, parts)
+    assert.ok(md.startsWith('# TypeError: bad type'), 'first line should be the H1 header')
+  })
+
+  it('includes location, request, and versions metadata', () => {
+    const md = buildErrorMarkdown(new Error('e'), req, parts)
+    assert.ok(md.includes('**Location**:'), 'location label')
+    assert.ok(md.includes(':42'),          'line number from topFrame')
+    assert.ok(md.includes('**Request**: `GET http://localhost/demo`'), 'request line')
+    assert.ok(md.includes('Node v22.14.0'),  'node version')
+    assert.ok(md.includes('RudderJS 1.2.3'), 'rudderjs version')
+  })
+
+  it('renders source with `>` marker on the error line', () => {
+    const md = buildErrorMarkdown(new Error('e'), req, parts)
+    assert.ok(md.includes('## Source'),                  'source section header')
+    assert.ok(md.includes('>   42 |   throw new Error'), 'error line marked with `>` and aligned line number')
+    assert.ok(md.includes('   41 | function doStuff'),  'non-error line uses a space prefix')
+  })
+
+  it('renders an app-frames Stack section as fenced code', () => {
+    const md = buildErrorMarkdown(new Error('e'), req, parts)
+    assert.ok(md.includes('## Stack'), 'stack section header')
+    assert.ok(md.includes('at doStuff (/app/src/foo.ts:42:9)'.replace('/app', '~/app').replace(process.env['HOME'] ?? '___none___', '~')) ||
+              md.includes('at doStuff (/app/src/foo.ts:42:9)'),
+              'stack frame line — exact path may be tilde-relative depending on HOME')
+  })
+
+  it('wraps vendor frames in <details> when present', () => {
+    const withVendor = {
+      ...parts,
+      frames: [
+        ...parts.appFrames,
+        { func: 'compose', file: '/path/node_modules/hono/dist/compose.js', line: 22, col: 17, isVendor: true },
+      ],
+    }
+    const md = buildErrorMarkdown(new Error('e'), req, withVendor)
+    assert.ok(md.includes('<details><summary>1 vendor frames</summary>'), 'details opener with count')
+    assert.ok(md.includes('at compose (')        , 'vendor frame is listed')
+    assert.ok(md.includes('</details>'),           'details closer')
+  })
+
+  it('renders Request Headers as a bullet list', () => {
+    const md = buildErrorMarkdown(new Error('e'), req, parts)
+    assert.ok(md.includes('## Request Headers'), 'headers section header')
+    assert.ok(md.includes('- `accept`: text/html'), 'accept header entry')
+    assert.ok(md.includes('- `host`: localhost'),   'host header entry')
+  })
+
+  it('omits Source section when no top frame is available', () => {
+    const noFrame = { ...parts, topFrame: undefined as never, source: null, appFrames: [] }
+    const md = buildErrorMarkdown(new Error('no-stack'), req, noFrame)
+    assert.ok(!md.includes('## Source'), 'no source section')
+    assert.ok(!md.includes('## Stack'),  'no stack section')
   })
 })
 
