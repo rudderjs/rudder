@@ -18,12 +18,23 @@ export class SessionGuard implements Guard {
     private readonly session: SessionStore,
   ) {}
 
+  /**
+   * Resolve the authenticated user, or `null` if none.
+   *
+   * **Soft-fails** when called outside an ALS-bound session context (api
+   * route without session middleware, CLI/worker call, observer dispatched
+   * out-of-band): returns `null` rather than throwing. Matches Laravel's
+   * `Auth::user()` semantics — "unauthenticated" and "no session" both
+   * collapse to the same null result, so api handlers can safely reference
+   * `req.user` without crashing.
+   *
+   * Result is memoized per-guard-instance. The framework constructs a fresh
+   * `SessionGuard` per request (no caching on `AuthManager`), so memoization
+   * does not leak across requests.
+   */
   async user(): Promise<Authenticatable | null> {
     if (this._user !== undefined) return this._user
 
-    // Soft-fail when no session is in context (e.g. api route without
-    // session middleware, or a CLI / worker call). Matches Laravel's
-    // Auth::user() semantics — unauthenticated, not a hard error.
     let id: string | undefined
     try {
       id = this.session.get<string>('auth_user_id')

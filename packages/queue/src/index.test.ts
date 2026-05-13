@@ -183,6 +183,25 @@ describe('SyncAdapter', () => {
     await assert.rejects(async () => { await adapter.dispatch(new BareJob()) })
   })
 
+  it('dispatch() propagates the original error when failed() hook throws', async () => {
+    class HookThrowsJob extends Job {
+      async handle(): Promise<void> { throw new Error('original') }
+      async failed(_e: unknown): Promise<void> { throw new Error('hook-error') }
+    }
+    const originalErrorFn = console.error
+    let logged: unknown = null
+    console.error = (...args: unknown[]) => { logged = args }
+    try {
+      await assert.rejects(
+        async () => adapter.dispatch(new HookThrowsJob()),
+        /original/,
+      )
+    } finally {
+      console.error = originalErrorFn
+    }
+    assert.ok(logged, 'expected console.error to be called when hook throws')
+  })
+
   it('dispatch() accepts options without using them (sync runs immediately)', async () => {
     const job = new SimpleJob()
     await adapter.dispatch(job, { delay: 0, queue: 'default' })

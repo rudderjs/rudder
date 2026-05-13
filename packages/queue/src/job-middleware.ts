@@ -40,6 +40,12 @@ export async function runJobMiddleware(job: Job, middlewares: JobMiddleware[]): 
  * Rate-limit job execution. If the limit is exceeded, the job is released
  * back to the queue (by throwing a retriable error).
  *
+ * **Requires `@rudderjs/cache`.** When no cache adapter is registered this
+ * middleware **fails open** — every invocation runs as if under the limit.
+ * Asymmetric to `WithoutOverlapping`, which fails closed (throws) without a
+ * cache. Install and register `@rudderjs/cache` in any environment that
+ * needs the limit enforced.
+ *
  * @example
  * middleware() { return [new RateLimited('api-calls', 60)] }
  */
@@ -118,6 +124,11 @@ export class WithoutOverlapping implements JobMiddleware {
 /**
  * If the job throws, wait before retrying. Useful for external APIs
  * that return temporary errors.
+ *
+ * **Requires `@rudderjs/cache`.** When no cache adapter is registered the
+ * throttle is a no-op — every exception passes through unthrottled. Install
+ * and register `@rudderjs/cache` in any environment where you want backoff
+ * to take effect.
  *
  * @example
  * middleware() { return [new ThrottlesExceptions(3, 5)] }

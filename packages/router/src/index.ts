@@ -34,6 +34,23 @@ import type {
 
 let _currentGroup: RouteGroup | undefined
 
+/**
+ * Tag every route registered while `fn` runs with `group` ('web' | 'api').
+ *
+ * **Synchronous bodies are the supported case.** Route loaders call
+ * `Route.get/post/...` at module-evaluation time — those calls complete
+ * before `fn` resolves, even when `fn` is `async`. The implementation
+ * supports an async `fn` (restoring the previous group in a `.finally()`),
+ * but two concurrent `runWithGroup` invocations on the same module instance
+ * will clobber each other: this is a single module-level variable, not an
+ * AsyncLocalStorage scope. Callers must run loaders **serially** — see
+ * `@rudderjs/core`'s `withRouting()` which sequentially `await`s each
+ * loader.
+ *
+ * Outside any `runWithGroup` scope, routes register without a group tag and
+ * receive only global `m.use(...)` middleware (no `m.web(...)` / `m.api(...)`
+ * stack).
+ */
 export function runWithGroup<R>(group: RouteGroup, fn: () => R | Promise<R>): R | Promise<R> {
   const prev = _currentGroup
   _currentGroup = group
@@ -50,6 +67,11 @@ export function runWithGroup<R>(group: RouteGroup, fn: () => R | Promise<R>): R 
   }
 }
 
+/**
+ * Read the current group tag. Reads the module-level slot directly; returns
+ * `undefined` outside any `runWithGroup(...)` block. Called by route
+ * decorators to stamp each `RouteDefinition` with its group.
+ */
 export function currentGroup(): RouteGroup | undefined {
   return _currentGroup
 }
