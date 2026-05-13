@@ -82,6 +82,28 @@ export interface SyncConfig {
    * Useful for indexing, webhooks, or audit logs.
    */
   onChange?: (docName: string, update: Uint8Array) => void | Promise<void>
+  /**
+   * Fires once per docName per process, after the first WebSocket client
+   * attaches AND the persistence layer has hydrated the room. Use for
+   * server-side seeding of empty Y.Texts / Y.Maps from a database of record
+   * without racing against client-side seeding.
+   *
+   * The hook still fires when the doc is already populated from persistence —
+   * the consumer is responsible for guarding (typically:
+   * `if (doc.getText('title').length === 0) doc.getText('title').insert(0, dbRow.title)`).
+   *
+   * Wrap seed mutations in `doc.transact(() => { ... })` so partial writes
+   * aren't visible to a second concurrent client mid-handshake.
+   *
+   * On throw the hook un-marks the docName so the next connection retries —
+   * does NOT kill the WebSocket. Errors surface via `syncObservers.emit({
+   * kind: 'sync.error', ... })`.
+   */
+  onFirstConnect?: (
+    docName: string,
+    doc:     Y.Doc,
+    ctx:     { firstClient: WsSocket; persistence: SyncPersistence },
+  ) => void | Promise<void>
 }
 
 // ─── Memory Persistence (built-in) ──────────────────────────
@@ -286,6 +308,23 @@ interface Room {
 const g       = globalThis as Record<string, unknown>
 const KEY     = '__rudderjs_live__'
 const PERSIST_KEY = '__rudderjs_live_persistence__'
+const FIRST_CONNECT_KEY = '__rudderjs_sync_first_connect__'
+
+/**
+ * docNames whose `onFirstConnect` hook has already fired in this process.
+ * Lives on globalThis so it survives Vite SSR module re-evaluation in dev —
+ * without that, the hook would re-fire on every HMR reload even though the
+ * room's persisted state is unchanged. Process restart clears it (the in-memory
+ * map is fresh), which is correct: persistence may have been cleared too.
+ */
+function firstConnectFired(): Set<string> {
+  let s = g[FIRST_CONNECT_KEY] as Set<string> | undefined
+  if (!s) {
+    s = new Set<string>()
+    g[FIRST_CONNECT_KEY] = s
+  }
+  return s
+}
 
 /** Transaction origin used by server-side mutations (Sync.updateMap, etc.) */
 const SERVER_ORIGIN = 'rudderjs:server'
@@ -408,10 +447,11 @@ function encodeSyncMsg(subType: number, data: Uint8Array): Uint8Array {
 }
 
 async function handleConnection(
-  ws:          WsSocket,
-  req:         IncomingMessage,
-  persistence: SyncPersistence,
-  onChange?:   SyncConfig['onChange'],
+  ws:              WsSocket,
+  req:             IncomingMessage,
+  persistence:     SyncPersistence,
+  onChange?:       SyncConfig['onChange'],
+  onFirstConnect?: SyncConfig['onFirstConnect'],
 ): Promise<void> {
   // Extract document name from URL path: /ws-sync/my-doc → my-doc
   const docName  = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
@@ -425,6 +465,34 @@ async function handleConnection(
     clientId,
     clientCount: room.clients.size,
   })
+
+  // Wait for persistence load before running the first-connect hook or
+  // sending the initial state vector. Otherwise the hook would see an empty
+  // doc (since persistence is async) and the client would receive an
+  // up-front state vector that doesn't include hook-written seed data.
+  await room.ready
+
+  // Fire the first-connect hook exactly once per docName per process. The
+  // Set is shared across the function via globalThis (survives HMR). On
+  // throw we un-mark so the next connection retries — the hook is
+  // best-effort and shouldn't kill the WebSocket.
+  if (onFirstConnect) {
+    const fired = firstConnectFired()
+    if (!fired.has(docName)) {
+      fired.add(docName)
+      try {
+        await onFirstConnect(docName, room.doc, { firstClient: ws, persistence })
+      } catch (err) {
+        fired.delete(docName)
+        syncObservers.emit({
+          kind:    'sync.error',
+          docName,
+          clientId,
+          error:   err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+  }
 
   // ── Step 1: send server state vector ──────────────────────
   ws.send(encodeSyncMsg(syncStep1, Y.encodeStateVector(room.doc)))
@@ -525,6 +593,14 @@ async function handleConnection(
 
 export const SYNC_UPGRADE_KEY = '__rudderjs_sync_upgrade__'
 
+/** @internal — exposed for tests; do not use in application code. */
+export const _handleConnection = handleConnection
+/** @internal — exposed for tests; clears the `firstConnectFired` Set so each
+ *  test case starts with a fresh process-wide "no hook has fired" state. */
+export function _resetFirstConnectFired(): void {
+  firstConnectFired().clear()
+}
+
 export { syncObservers, SyncObserverRegistry }      from './observers.js'
 export type { SyncEvent, SyncObserver }             from './observers.js'
 
@@ -574,7 +650,7 @@ export class SyncProvider extends ServiceProvider {
       const wss = new WebSocketServer({ noServer: true })
 
       wss.on('connection', (ws, req) => {
-        void handleConnection(ws as WsSocket, req, persistence, cfg.onChange)
+        void handleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect)
       })
 
       // Chain into the broadcast-specific handler (not the combined handler)
@@ -767,6 +843,12 @@ export const Sync = {
   /**
    * Return the current full state of a ydoc as a snapshot (Uint8Array).
    * Purely a read operation — does not modify persistence.
+   *
+   * **Sync read; does NOT await persistence load.** Suitable when the doc is
+   * already warm (post-first-connect) — first call after a cold start returns
+   * an empty snapshot because `getYDoc()` is still resolving. For SSR-from-DB
+   * style reads (where the caller needs the persisted state), use
+   * `snapshotAsync()` instead.
    */
   snapshot(docName: string): Uint8Array {
     const persistence = this.persistence()
@@ -775,7 +857,22 @@ export const Sync = {
   },
 
   /**
+   * Async sibling of `snapshot()` — awaits `room.ready` before encoding so
+   * the snapshot reflects persisted state on cold reads. Use during SSR to
+   * eliminate the DB → Y.Doc value flicker on hydration.
+   */
+  async snapshotAsync(docName: string): Promise<Uint8Array> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready
+    return Y.encodeStateAsUpdate(room.doc)
+  },
+
+  /**
    * Read a Y.Map from a ydoc as a plain JS object.
+   *
+   * **Sync read; does NOT await persistence load.** See `snapshot()` caveat
+   * about cold reads. For SSR use `readMapAsync()`.
    *
    * @example
    * const fields = Sync.readMap('panel:articles:42', 'fields')
@@ -788,6 +885,56 @@ export const Sync = {
     const result: Record<string, unknown> = {}
     ymap.forEach((val, key) => { result[key] = val })
     return result
+  },
+
+  /**
+   * Async sibling of `readMap()` — awaits `room.ready` so the map reflects
+   * persisted state on cold reads. SSR-safe.
+   */
+  async readMapAsync(docName: string, mapName: string): Promise<Record<string, unknown>> {
+    const persistence = this.persistence()
+    const room   = getOrCreateRoom(docName, persistence)
+    await room.ready
+    const ymap   = room.doc.getMap(mapName)
+    const result: Record<string, unknown> = {}
+    ymap.forEach((val, key) => { result[key] = val })
+    return result
+  },
+
+  /**
+   * Read a `Y.Text` from a ydoc as a plain string. SSR-safe — awaits
+   * `room.ready` so the returned string reflects persisted state on cold
+   * reads. Returns `''` if the named text has never been written.
+   *
+   * Symmetric to `readMapAsync()` for the text type used by rich-text fields
+   * (Lexical, Tiptap, etc.) where the editor binds to a `Y.Text` rather than
+   * a `Y.Map` entry.
+   *
+   * @example
+   * const body = await Sync.readText('panel:articles:42:richcontent:body', 'body')
+   */
+  async readText(docName: string, textName: string): Promise<string> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready
+    return room.doc.getText(textName).toString()
+  },
+
+  /**
+   * Return the underlying `Y.Doc` AFTER `room.ready` resolves. Escape hatch
+   * for consumers that need to materialize multiple fields off one doc in
+   * one await, or want direct access to the doc post-hydration.
+   *
+   * Server-originated mutations on the returned doc should run inside
+   * `doc.transact(() => { ... }, 'rudderjs:server')` so the WS layer
+   * broadcasts them to connected clients — same convention as
+   * `document()` (which is sync and does not await).
+   */
+  async load(docName: string): Promise<Y.Doc> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready
+    return room.doc
   },
 
   /**
