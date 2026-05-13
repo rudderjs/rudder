@@ -3,10 +3,11 @@ import type { OAuthClient }  from '../models/OAuthClient.js'
 import type { AccessToken }  from '../models/AccessToken.js'
 import type { RefreshToken } from '../models/RefreshToken.js'
 import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
-import { verifyClientSecret } from '../client-secret.js'
 import { hashOpaqueToken } from '../opaque-token.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
+import { parseScopes } from './parse-scopes.js'
+import { verifyConfidentialCredentials } from './verify-client.js'
 
 export interface RefreshTokenRequest {
   grantType:    string
@@ -35,21 +36,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
 
-  // Confidential clients must provide a valid secret
-  if (client.confidential) {
-    if (!params.clientSecret) {
-      throw new OAuthError('invalid_client', 'Client secret required.', 401)
-    }
-    // Schema allows `client.secret` to be null; explicit guard so a future
-    // refactor can't mask `secret = null` as authenticating. See
-    // `client-credentials.ts` for the longer-form rationale.
-    if (client.secret == null) {
-      throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
-    }
-    if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
-      throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
-    }
-  }
+  await verifyConfidentialCredentials(client, params.clientSecret)
 
   // Find refresh token by hashed plaintext (M5/P6) — the row's `id` is no
   // longer the bearer secret, so a DB read leak doesn't yield usable tokens.
@@ -88,8 +75,8 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   // Determine scopes — can only narrow, not widen
   const originalScopes = accessTokenHelpers.getScopes(accessToken)
   let scopes = originalScopes
-  if (params.scope) {
-    const requested = params.scope.split(' ').filter(Boolean)
+  const requested = parseScopes(params.scope)
+  if (requested.length > 0) {
     const invalid = requested.filter(s => !originalScopes.includes(s) && !originalScopes.includes('*'))
     if (invalid.length > 0) {
       throw new OAuthError('invalid_scope', `Cannot request scopes not in original token: ${invalid.join(', ')}`)
