@@ -209,7 +209,7 @@ interface CacheLike {
 
 async function _getCache(): Promise<CacheLike | null> {
   try {
-    const mod = await import('@rudderjs/cache') as unknown as { CacheRegistry?: { get(): CacheLike | null } }
+    const mod = await import('@rudderjs/cache')
     return mod.CacheRegistry?.get() ?? null
   } catch {
     return null
