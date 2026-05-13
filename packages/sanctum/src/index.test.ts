@@ -9,6 +9,7 @@ import {
   sanctum,
   type PersonalAccessToken,
   type SanctumConfig,
+  type TokenRepository,
 } from './index.js'
 import {
   AuthManager,
@@ -154,6 +155,24 @@ describe('Sanctum.validateToken', () => {
     assert.strictEqual(await sanctum.validateToken(plainTextToken), null)
   })
 
+  it('never expires a token whose expiresAt is null', async () => {
+    // Regression for the expiry short-circuit: a token created without an
+    // `expiresAt` must remain valid no matter how far Date.now() advances.
+    // Without the `if (token.expiresAt && ...)` short-circuit, the strictly-
+    // less-than-now comparison would silently drop these tokens.
+    const { sanctum } = makeSanctum()
+    const { plainTextToken, accessToken } = await sanctum.createToken('1', 'no-expiry')
+    assert.strictEqual(accessToken.expiresAt, null)
+
+    const realNow = Date.now
+    Date.now = () => realNow() + 365 * 24 * 60 * 60 * 1000 // 1 year forward
+    try {
+      assert.ok(await sanctum.validateToken(plainTextToken))
+    } finally {
+      Date.now = realNow
+    }
+  })
+
   it('rejects a token whose expiresAt equals "now" (boundary, T3)', async () => {
     const { sanctum, repo } = makeSanctum()
     const plain = Sanctum.generateToken()
@@ -185,11 +204,12 @@ describe('Sanctum.validateToken', () => {
   })
 
   it('returns null when user not found', async () => {
-    const { sanctum } = makeSanctum([]) // no users
-    // Create a token for user '1' who doesn't exist in the model
+    // `makeSanctum([])` returns a sanctum + the SAME repo it was constructed with,
+    // so we can seed a token for user '1' (who doesn't exist in the model)
+    // without poking at private fields.
+    const { sanctum, repo } = makeSanctum([])
     const plain = Sanctum.generateToken()
     const hashed = Sanctum.hashToken(plain)
-    const repo = (sanctum as unknown as { tokens: MemoryTokenRepository }).tokens
     const token = await repo.create({ userId: '1', name: 'test', token: hashed })
     assert.strictEqual(await sanctum.validateToken(`${token.id}|${plain}`), null)
   })
@@ -239,6 +259,16 @@ describe('Sanctum.tokenCan', () => {
     const { sanctum } = makeSanctum()
     const { accessToken } = await sanctum.createToken('1', 'test', ['*'])
     assert.strictEqual(sanctum.tokenCan(accessToken, 'anything'), true)
+  })
+
+  it('empty abilities array rejects everything', async () => {
+    // `null` means "all access"; `[]` means "no abilities" — these are distinct
+    // states. The `!token.abilities` short-circuit must NOT catch the empty
+    // array, otherwise `createToken(..., [])` would silently grant full access.
+    const { sanctum } = makeSanctum()
+    const { accessToken } = await sanctum.createToken('1', 'test', [])
+    assert.strictEqual(sanctum.tokenCan(accessToken, 'anything'), false)
+    assert.strictEqual(sanctum.tokenCan(accessToken, 'read'), false)
   })
 })
 
@@ -406,18 +436,33 @@ class SpyRepo extends MemoryTokenRepository {
   }
 }
 
-function fakeReqRes(authHeader?: string): {
-  req: { headers: Record<string, string>; raw: Record<string, unknown> }
-  res: { statusCode: number; body: unknown; status(c: number): typeof res; json(d: unknown): void }
-} {
+/**
+ * Local fake matching the slice of `AppRequest` / `AppResponse` the middlewares
+ * touch. Including `user?` / `token?` here lets tests read the direct-property
+ * fallback (`req.user`, `req.token`) without `as unknown as { ... }` casts.
+ */
+type FakeReq = {
+  headers: Record<string, string>
+  raw:     Record<string, unknown>
+  user?:   Record<string, unknown>
+  token?:  PersonalAccessToken
+}
+type FakeRes = {
+  statusCode: number
+  body:       unknown
+  status(c: number): FakeRes
+  json(d: unknown): void
+}
+
+function fakeReqRes(authHeader?: string): { req: FakeReq; res: FakeRes } {
   const raw: Record<string, unknown> = {}
-  const req = {
+  const req: FakeReq = {
     headers: authHeader ? { authorization: authHeader } : {},
     raw,
   }
-  const res = {
+  const res: FakeRes = {
     statusCode: 200,
-    body: undefined as unknown,
+    body:       undefined,
     status(code: number) { this.statusCode = code; return this },
     json(data: unknown) { this.body = data },
   }
@@ -456,7 +501,26 @@ describe('SanctumMiddleware behavior', () => {
       await SanctumMiddleware()(req as never, res as never, async () => {})
       assert.ok(req.raw['__rjs_token'])
       // Direct-property fallback path (server-hono's getter is the production path)
-      assert.ok((req as unknown as { token?: PersonalAccessToken }).token)
+      assert.ok(req.token)
+    })
+  })
+
+  it('attaches user to req.raw["__rjs_user"] AND req.user (direct property)', async () => {
+    // Mirror of the token-wiring test for `req.user`. Adapters that don't
+    // install a getter rely on this direct assignment so `req.user` is
+    // populated for downstream handlers.
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test')
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      await SanctumMiddleware()(req as never, res as never, async () => {})
+      assert.ok(req.raw['__rjs_user'])
+      assert.ok(req.user)
+      assert.strictEqual(req.user['id'], '1')
     })
   })
 
@@ -617,6 +681,20 @@ const noopSession = () => ({ get: () => undefined, put: () => {}, forget: () => 
 // so test assertions don't have to deal with the `boot?:` signature.
 type Bootable = { boot(): Promise<void> }
 
+/**
+ * Build and instantiate a SanctumServiceProvider for testing. Centralises the
+ * `sanctum(...) -> new Provider(app as never) -> as unknown as Bootable` chain
+ * so individual test bodies don't repeat the casts four times over.
+ */
+function instantiateSanctumProvider(
+  app: unknown,
+  config?: SanctumConfig,
+  repo?: TokenRepository,
+): Bootable {
+  const Provider = sanctum(config ?? {}, repo)
+  return new Provider(app as never) as unknown as Bootable
+}
+
 describe('sanctum() provider', () => {
   it('is a function that returns a constructor', () => {
     const Provider = sanctum()
@@ -639,8 +717,7 @@ describe('sanctum() provider', () => {
     const manager = new AuthManager(config, noopHash, noopSession)
     const { app, store } = fakeApp({ 'auth.manager': manager })
 
-    const Provider = sanctum({ provider: 'tokens' })
-    const provider = new Provider(app as never) as unknown as Bootable
+    const provider = instantiateSanctumProvider(app, { provider: 'tokens' })
     await provider.boot()
 
     const sanctumInstance = store['sanctum'] as Sanctum
@@ -656,8 +733,7 @@ describe('sanctum() provider', () => {
     const manager = new AuthManager(config, noopHash, noopSession)
     const { app, store } = fakeApp({ 'auth.manager': manager })
 
-    const Provider = sanctum() // no provider override
-    const provider = new Provider(app as never) as unknown as Bootable
+    const provider = instantiateSanctumProvider(app)
     await provider.boot()
 
     assert.ok(store['sanctum'] instanceof Sanctum)
@@ -665,8 +741,7 @@ describe('sanctum() provider', () => {
 
   it('boot() throws "No auth manager found" only when binding is missing', async () => {
     const { app } = fakeApp({}) // no auth.manager binding
-    const Provider = sanctum()
-    const provider = new Provider(app as never) as unknown as Bootable
+    const provider = instantiateSanctumProvider(app)
 
     await assert.rejects(provider.boot(), /No auth manager found/)
   })
@@ -680,8 +755,7 @@ describe('sanctum() provider', () => {
     const manager = new AuthManager(config, noopHash, noopSession)
     const { app } = fakeApp({ 'auth.manager': manager })
 
-    const Provider = sanctum()
-    const provider = new Provider(app as never) as unknown as Bootable
+    const provider = instantiateSanctumProvider(app)
     await assert.rejects(provider.boot(),/User provider "users" is not defined/)
   })
 })
