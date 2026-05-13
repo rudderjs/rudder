@@ -1,5 +1,16 @@
 # @rudderjs/auth
 
+## 5.1.1
+
+### Patch Changes
+
+- 79eadf7: `PasswordBroker` now throws on construction when `auth.passwords.secret` is unset and `NODE_ENV === 'production'`. Previously it silently used a hardcoded fallback (`'password-reset'`), which made stored token hashes predictable across deployments. Dev and test still boot — they get a one-time `console.warn` and the hardcoded fallback.
+
+  Apps already setting `auth.passwords.secret` (typically derived from `APP_KEY`) are unaffected. Apps relying on the silent fallback in production must set the secret before upgrading.
+
+- Updated dependencies [690fa00]
+  - @rudderjs/session@1.1.1
+
 ## 5.1.0
 
 ### Minor Changes

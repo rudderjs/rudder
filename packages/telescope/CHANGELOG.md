@@ -1,5 +1,37 @@
 # @rudderjs/telescope
 
+## 13.1.0
+
+### Minor Changes
+
+- a8906da: Add opt-in real-time dashboard updates over Server-Sent Events.
+
+  Set `updates: 'stream'` in `config/telescope.ts` and the per-watcher list pages subscribe to a new `<path>/api/stream` endpoint via `EventSource`. New entries appear the moment they're recorded — no polling, no peer dependencies, no WebSocket upgrade. Pure HTTP; the existing recording toggle and auth gate still apply.
+
+  Default stays `updates: 'polling'` (no behavior change for existing apps). A new `pollInterval` config knob (default `2000` ms) replaces the previously hardcoded interval.
+
+### Patch Changes
+
+- 0a08776: Internal cleanup: document hidden contracts in JSDoc, tighten 4 casts (`as unknown as` 12→8), collapse the duplicated list-slug logic between `routes.ts` and `EntryList.ts` into a shared `toApiSlug()` helper, and replace the `.map(...).join('')` SafeString footgun in `renderToolCalls`/`renderSteps` with idiomatic `html` template interpolation.
+
+  No public API or behavior change. The remaining 8 casts are peer-bridge casts in collectors (`ai`, `mcp`, `model`, `notification`, `query`, `schedule`, `mail`) — load-bearing because telescope is downstream of those packages; documented in `CLAUDE.md` so the next audit doesn't relitigate.
+
+- c7328f3: Internal cleanup: add regression coverage for the list-slug parity contract, file integration tests for `SqliteStorage`, snapshot-shape tests for the three largest detail views (`RequestView` / `HttpView` / `AiView`), and unit tests for the `ai` / `job` / `mcp` collectors. Glob the `pnpm test` script so future test files auto-run.
+
+  No API change. Test count `@rudderjs/telescope`: 52 → 115.
+
+- Updated dependencies [9624f24]
+- Updated dependencies [79eadf7]
+- Updated dependencies [5f38ac6]
+- Updated dependencies [fa8cc27]
+- Updated dependencies [4c08da4]
+- Updated dependencies [c7ef815]
+- Updated dependencies [aba6076]
+  - @rudderjs/ai@1.6.2
+  - @rudderjs/auth@5.1.1
+  - @rudderjs/mcp@5.1.2
+  - @rudderjs/sync@1.1.0
+
 ## 13.0.2
 
 ### Patch Changes
