@@ -14,7 +14,8 @@ export interface OAuth2McpOptions {
   scopesSupported?: string[]
 }
 
-interface PassportModule {
+/** @internal — exported for the oauth2 test seam. */
+export interface PassportModule {
   verifyToken: (jwt: string) => Promise<{
     jti: string
     sub?: string
@@ -30,6 +31,18 @@ interface PassportModule {
 }
 
 let passportPromise: Promise<PassportModule> | null = null
+
+/**
+ * @internal — test-only seam. Replaces the memoised passport module with the
+ * provided fake. Returns a restore function. Tests call this in `beforeEach`
+ * to inject a controlled passport (happy paths, scope variations, revoked
+ * tokens) without standing up a real Passport installation.
+ */
+export function _setPassportForTest(m: PassportModule | null): () => void {
+  const prev = passportPromise
+  passportPromise = m ? Promise.resolve(m) : null
+  return () => { passportPromise = prev }
+}
 
 /**
  * Lazy-load `@rudderjs/passport` once per process. The result is memoised in

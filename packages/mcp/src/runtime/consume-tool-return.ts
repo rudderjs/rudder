@@ -6,6 +6,18 @@ export type SdkRequestExtra = {
 }
 
 /**
+ * Type guard distinguishing the streaming variant of `McpToolReturn` (an async
+ * generator) from a plain `Promise<McpToolResult>`. Plain Promises don't have
+ * `Symbol.asyncIterator`, so the presence of both `.next` and the
+ * `Symbol.asyncIterator` method narrows reliably.
+ */
+function isAsyncGen(v: McpToolReturn): v is AsyncGenerator<McpToolProgress, McpToolResult, unknown> {
+  const maybe = v as { next?: unknown; [Symbol.asyncIterator]?: unknown }
+  return typeof maybe.next === 'function'
+    && typeof maybe[Symbol.asyncIterator] === 'function'
+}
+
+/**
  * Run a tool's `handle()` return value to completion.
  *
  * - Plain `Promise<McpToolResult>` → just await it.
@@ -21,20 +33,13 @@ export async function consumeToolReturn(
   extra: SdkRequestExtra | undefined,
   meta: Record<string, unknown> | undefined,
 ): Promise<McpToolResult> {
-  // Detect an async generator. Plain Promises don't have Symbol.asyncIterator.
-  const maybeIter = ret as unknown as { [Symbol.asyncIterator]?: unknown; next?: unknown }
-  const isGenerator = maybeIter
-    && typeof maybeIter.next === 'function'
-    && typeof maybeIter[Symbol.asyncIterator] === 'function'
+  if (!isAsyncGen(ret)) return await ret
 
-  if (!isGenerator) return await (ret as Promise<McpToolResult>)
-
-  const iter = ret as AsyncGenerator<McpToolProgress, McpToolResult, unknown>
   const progressToken = meta?.['progressToken']
   const sendNotification = extra?.sendNotification
 
   while (true) {
-    const next = await iter.next()
+    const next = await ret.next()
     if (next.done) return next.value
     if (progressToken !== undefined && sendNotification) {
       await sendNotification({
