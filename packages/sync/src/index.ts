@@ -10,15 +10,27 @@ import { syncObservers }                               from './observers.js'
 // connecting socket so observers (e.g. telescope's SyncCollector) can group
 // events by client and present a coherent timeline per connection.
 
+const CLIENT_ID_KEY = '__syncClientId'
+
+/** Read the id we stamped on this socket; undefined on a fresh connection. */
+function readTaggedId(ws: import('ws').WebSocket): string | undefined {
+  return (ws as unknown as Record<string, string | undefined>)[CLIENT_ID_KEY]
+}
+
+/** Stamp a generated id on the socket so subsequent reads stay stable. */
+function writeTaggedId(ws: import('ws').WebSocket, id: string): void {
+  ;(ws as unknown as Record<string, string>)[CLIENT_ID_KEY] = id
+}
+
 let _clientCounter = 0
 function nextClientId(): string {
   return `lv${++_clientCounter}${Math.random().toString(36).slice(2, 6)}`
 }
 function getClientId(ws: import('ws').WebSocket): string {
-  const tagged = (ws as unknown as Record<string, string | undefined>)['__syncClientId']
+  const tagged = readTaggedId(ws)
   if (tagged) return tagged
   const id = nextClientId()
-  ;(ws as unknown as Record<string, string>)['__syncClientId'] = id
+  writeTaggedId(ws, id)
   return id
 }
 
@@ -278,49 +290,75 @@ const PERSIST_KEY = '__rudderjs_live_persistence__'
 /** Transaction origin used by server-side mutations (Sync.updateMap, etc.) */
 const SERVER_ORIGIN = 'rudderjs:server'
 
-function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
-  const rooms = g[KEY] as Map<string, Room> ?? new Map<string, Room>()
-  g[KEY] = rooms
-  if (!rooms.has(docName)) {
-    const doc = new Y.Doc()
-    const loadStart = Date.now()
-    const ready = persistence.getYDoc(docName).then(persisted => {
-      const sv     = Y.encodeStateVector(doc)
-      const update = Y.encodeStateAsUpdate(persisted, sv)
-      if (update.length > 2) Y.applyUpdate(doc, update)
-      syncObservers.emit({
-        kind:       'persistence.load',
-        docName,
-        durationMs: Date.now() - loadStart,
-        byteSize:   update.length,
-      })
-    }).catch((e: unknown) => {
-      syncObservers.emit({
-        kind:    'sync.error',
-        docName,
-        error:   e instanceof Error ? e.message : String(e),
-      })
-    })
-    const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
-    rooms.set(docName, room)
+/** Read-only access to the rooms map; undefined when no room has ever been
+ *  created in this process. Centralizes the structural cast so individual
+ *  callers don't repeat it. */
+function getRoomsMap(): Map<string, Room> | undefined {
+  return g[KEY] as Map<string, Room> | undefined
+}
 
-    // Observe server-side mutations and broadcast to all connected WebSocket clients.
-    // Client-originated updates are already forwarded by the message handler,
-    // so we only broadcast updates with the SERVER_ORIGIN transaction origin.
-    doc.on('update', (update: Uint8Array, origin: unknown) => {
-      if (origin === SERVER_ORIGIN) {
-        const fwd = encodeSyncMsg(syncUpdate, update)
-        for (const client of room.clients) {
-          if (client.readyState === 1 /* OPEN */) {
-            client.send(fwd)
-          }
-        }
-        void persistence.storeUpdate(docName, update)
-      }
+/** Shape returned by `Y.XmlText.toDelta()` — yjs types the return as
+ *  `Array<any>`, so call sites that need to walk the delta cast to this. */
+interface DeltaItem { insert: unknown; attributes?: Record<string, unknown> }
+
+/** Commander-style command args are typed as `unknown`; reach into the
+ *  positional `<doc>` slot in one place so the structural cast doesn't
+ *  repeat across every sync:* command. */
+function readDocArg(args: unknown): string {
+  return (args as unknown as Record<string, unknown>)['doc'] as string
+}
+
+/** Get-or-create variant — guarantees a Map is present on globalThis. */
+function ensureRoomsMap(): Map<string, Room> {
+  const existing = getRoomsMap()
+  if (existing) return existing
+  const created = new Map<string, Room>()
+  g[KEY] = created
+  return created
+}
+
+function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
+  const rooms   = ensureRoomsMap()
+  const cached  = rooms.get(docName)
+  if (cached) return cached
+
+  const doc       = new Y.Doc()
+  const loadStart = Date.now()
+  const ready = persistence.getYDoc(docName).then(persisted => {
+    const sv     = Y.encodeStateVector(doc)
+    const update = Y.encodeStateAsUpdate(persisted, sv)
+    if (update.length > 2) Y.applyUpdate(doc, update)
+    syncObservers.emit({
+      kind:       'persistence.load',
+      docName,
+      durationMs: Date.now() - loadStart,
+      byteSize:   update.length,
     })
-  }
-  // rooms.get() is guaranteed non-null: key was inserted above if missing
-  return rooms.get(docName) as Room
+  }).catch((e: unknown) => {
+    syncObservers.emit({
+      kind:    'sync.error',
+      docName,
+      error:   e instanceof Error ? e.message : String(e),
+    })
+  })
+  const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
+  rooms.set(docName, room)
+
+  // Observe server-side mutations and broadcast to all connected WebSocket clients.
+  // Client-originated updates are already forwarded by the message handler,
+  // so we only broadcast updates with the SERVER_ORIGIN transaction origin.
+  doc.on('update', (update: Uint8Array, origin: unknown) => {
+    if (origin === SERVER_ORIGIN) {
+      const fwd = encodeSyncMsg(syncUpdate, update)
+      for (const client of room.clients) {
+        if (client.readyState === 1 /* OPEN */) {
+          client.send(fwd)
+        }
+      }
+      void persistence.storeUpdate(docName, update)
+    }
+  })
+  return room
 }
 
 // ─── WebSocket connection handler ────────────────────────────
@@ -560,7 +598,7 @@ export class SyncProvider extends ServiceProvider {
       g['__rudderjs_ws_upgrade__'] = g[SYNC_UPGRADE_KEY]
 
       rudder.command('sync:docs', async () => {
-        const rooms = g[KEY] as Map<string, Room> | undefined
+        const rooms = getRoomsMap()
         if (!rooms || rooms.size === 0) {
           console.log('\n  No active documents.\n')
           return
@@ -573,15 +611,14 @@ export class SyncProvider extends ServiceProvider {
       }).description('List active Sync documents and connected clients')
 
       rudder.command('sync:clear <doc>', async (args) => {
-        const docName = (args as unknown as Record<string, unknown>)['doc'] as string
+        const docName = readDocArg(args)
         await persistence.clearDocument(docName)
-        const rooms = g[KEY] as Map<string, Room> | undefined
-        rooms?.delete(docName)
+        getRoomsMap()?.delete(docName)
         console.log(`\n  Cleared document: ${docName}\n`)
       }).description('Clear a Sync document from persistence')
 
       rudder.command('sync:inspect <doc>', async (args) => {
-        const docName = (args as unknown as Record<string, unknown>)['doc'] as string
+        const docName = readDocArg(args)
         const room = getOrCreateRoom(docName, persistence)
         await room.ready
 
@@ -604,9 +641,8 @@ export class SyncProvider extends ServiceProvider {
         // Dump the Y.XmlText tree structure
         if (root.length > 0) {
           console.log('  ── Y.XmlText "root" tree ──')
-          const delta = root.toDelta()
-          for (let i = 0; i < delta.length; i++) {
-            const entry = delta[i] as { insert: unknown; attributes?: Record<string, unknown> }
+          const delta = root.toDelta() as DeltaItem[]
+          for (const [i, entry] of delta.entries()) {
             if (typeof entry.insert === 'string') {
               console.log(`    [${i}] text: ${JSON.stringify(entry.insert.slice(0, 100))}`)
             } else if (entry.insert instanceof Y.XmlElement) {
@@ -624,9 +660,8 @@ export class SyncProvider extends ServiceProvider {
               // Dump inner delta for text elements
               if (elem.length > 0) {
                 try {
-                  const innerDelta = (elem as unknown as Y.XmlText).toDelta()
-                  for (let j = 0; j < innerDelta.length; j++) {
-                    const inner = innerDelta[j] as { insert: unknown; attributes?: Record<string, unknown> }
+                  const innerDelta = (elem as unknown as Y.XmlText).toDelta() as DeltaItem[]
+                  for (const [j, inner] of innerDelta.entries()) {
                     if (typeof inner.insert === 'string') {
                       console.log(`          [${j}] inner text: ${JSON.stringify(inner.insert.slice(0, 80))}${inner.attributes ? ` attrs=${JSON.stringify(inner.attributes)}` : ''}`)
                     } else {
@@ -644,9 +679,8 @@ export class SyncProvider extends ServiceProvider {
                 .join(' ')
               console.log(`    [${i}] YXmlText ${attrParts}`)
               try {
-                const innerDelta = child.toDelta() as Array<{ insert: unknown; attributes?: Record<string, unknown> }>
-                for (let j = 0; j < innerDelta.length; j++) {
-                  const inner = innerDelta[j]!
+                const innerDelta = child.toDelta() as DeltaItem[]
+                for (const [j, inner] of innerDelta.entries()) {
                   if (typeof inner.insert === 'string') {
                     console.log(`          [${j}] text: ${JSON.stringify(inner.insert.slice(0, 80))}${inner.attributes ? ` attrs=${JSON.stringify(inner.attributes)}` : ''}`)
                   } else if (inner.insert instanceof Y.XmlElement) {
@@ -763,7 +797,7 @@ export const Sync = {
   async clearDocument(docName: string): Promise<void> {
     const persistence = this.persistence()
     await persistence.clearDocument(docName)
-    const rooms = g[KEY] as Map<string, Room> | undefined
+    const rooms = getRoomsMap()
     const room = rooms?.get(docName)
     if (room) {
       // Close all connected WebSocket clients — prevents stale Y.Doc re-sync
@@ -778,8 +812,7 @@ export const Sync = {
 
   /** Get the number of active WebSocket clients for a document room. Returns 0 if the room doesn't exist. */
   getClientCount(docName: string): number {
-    const rooms = g[KEY] as Map<string, Room> | undefined
-    return rooms?.get(docName)?.clients.size ?? 0
+    return getRoomsMap()?.get(docName)?.clients.size ?? 0
   },
 
   /**
