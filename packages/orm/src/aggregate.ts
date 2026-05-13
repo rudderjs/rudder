@@ -7,6 +7,7 @@ import type {
   QueryBuilder,
 } from '@rudderjs/contracts'
 import type { Model, RelationDefinition } from './index.js'
+import { camelHead, capitalize } from './utils.js'
 
 // ─── Public types ──────────────────────────────────────────
 
@@ -106,11 +107,6 @@ export function aggregateKeysOf(instance: object): Set<string> {
 
 // ─── Alias suffix ──────────────────────────────────────────
 
-function _capitalize(s: string): string {
-  if (s.length === 0) return s
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
 /**
  * The verb suffix that distinguishes which aggregate is stamped on the parent.
  * Combined with the relation name (or `.as(...)` override) to produce the
@@ -121,10 +117,10 @@ export function aggregateSuffix(fn: AggregateFn, column?: string): string {
   switch (fn) {
     case 'count':  return 'Count'
     case 'exists': return 'Exists'
-    case 'sum':    return 'Sum' + _capitalize(column ?? '')
-    case 'min':    return 'Min' + _capitalize(column ?? '')
-    case 'max':    return 'Max' + _capitalize(column ?? '')
-    case 'avg':    return 'Avg' + _capitalize(column ?? '')
+    case 'sum':    return 'Sum' + capitalize(column ?? '')
+    case 'min':    return 'Min' + capitalize(column ?? '')
+    case 'max':    return 'Max' + capitalize(column ?? '')
+    case 'avg':    return 'Avg' + capitalize(column ?? '')
   }
 }
 
@@ -133,10 +129,6 @@ export function aggregateAlias(fn: AggregateFn, baseAlias: string, column?: stri
 }
 
 // ─── Join-shape resolution ─────────────────────────────────
-
-function _camelHead(s: string): string {
-  return s.charAt(0).toLowerCase() + s.slice(1)
-}
 
 /**
  * Build the {@link AggregateJoinShape} for a relation declared on `Parent`.
@@ -156,8 +148,8 @@ export function buildAggregateJoinShape(
   if (def.type === 'belongsToMany') {
     const parentKey       = def.parentKey       ?? Parent.primaryKey
     const relatedKey      = def.relatedKey      ?? Related.primaryKey
-    const foreignPivotKey = def.foreignPivotKey ?? `${_camelHead(Parent.name)}Id`
-    const relatedPivotKey = def.relatedPivotKey ?? `${_camelHead(Related.name)}Id`
+    const foreignPivotKey = def.foreignPivotKey ?? `${camelHead(Parent.name)}Id`
+    const relatedPivotKey = def.relatedPivotKey ?? `${camelHead(Related.name)}Id`
     return {
       relatedTable:  Related.getTable(),
       parentColumn:  parentKey,
@@ -177,7 +169,7 @@ export function buildAggregateJoinShape(
     const foreignPivotKey = `${def.morphName}Id`
     const morphTypeKey    = `${def.morphName}Type`
     const morphTypeValue  = def.morphType ?? Parent.morphAlias ?? Parent.name
-    const relatedPivotKey = def.relatedPivotKey ?? `${_camelHead(Related.name)}Id`
+    const relatedPivotKey = def.relatedPivotKey ?? `${camelHead(Related.name)}Id`
     return {
       relatedTable:  Related.getTable(),
       parentColumn:  parentKey,
@@ -195,7 +187,7 @@ export function buildAggregateJoinShape(
   if (def.type === 'morphedByMany') {
     const parentKey       = def.parentKey       ?? Parent.primaryKey
     const relatedKey      = def.relatedKey      ?? Related.primaryKey
-    const foreignPivotKey = def.foreignPivotKey ?? `${_camelHead(Parent.name)}Id`
+    const foreignPivotKey = def.foreignPivotKey ?? `${camelHead(Parent.name)}Id`
     const morphTypeKey    = `${def.morphName}Type`
     const morphTypeValue  = def.morphType ?? Related.morphAlias ?? Related.name
     const relatedPivotKey = `${def.morphName}Id`
@@ -228,7 +220,7 @@ export function buildAggregateJoinShape(
   }
 
   // hasOne / hasMany — related table holds the FK pointing back to Parent.
-  const fk       = def.foreignKey ?? `${_camelHead(Parent.name)}Id`
+  const fk       = def.foreignKey ?? `${camelHead(Parent.name)}Id`
   const localCol = def.localKey   ?? Parent.primaryKey
   return {
     relatedTable:  Related.getTable(),
@@ -347,7 +339,7 @@ export function normalizeWithNumericAggregate(
 ): AggregateRequest[] {
   if (typeof arg1 === 'string') {
     if (arg2 === undefined) {
-      throw new Error(`[RudderJS ORM] with${_capitalize(fn)}("${arg1}") requires a column argument.`)
+      throw new Error(`[RudderJS ORM] with${capitalize(fn)}("${arg1}") requires a column argument.`)
     }
     return [_buildRequest(Parent, arg1, fn, arg2, undefined)]
   }

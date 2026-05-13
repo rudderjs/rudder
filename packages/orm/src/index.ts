@@ -13,6 +13,40 @@ import {
   type AggregateConstraint,
   type AggregateSumSpec,
 } from './aggregate.js'
+import { camelHead, attrEqual } from './utils.js'
+import {
+  resolveBelongsToManyMeta,
+  resolveMorphToManyMeta,
+  resolveMorphedByManyMeta,
+  type BelongsToManyMeta,
+  type MorphToManyMeta,
+  type MorphedByManyMeta,
+  type BelongsToManyDef,
+  type MorphToManyDef,
+  type MorphedByManyDef,
+} from './relations/pivot-meta.js'
+import {
+  attachWhereHas,
+  attachWithWhereHas,
+  attachWhereBelongsTo,
+} from './relations/where-has.js'
+import {
+  morphParentQuery,
+  belongsToManyDeferredQb,
+  morphToManyDeferredQb,
+  morphedByManyDeferredQb,
+} from './relations/pivot-deferred.js'
+import {
+  makeBelongsToManyAccessor,
+  makeMorphToManyAccessor,
+  makeMorphedByManyAccessor,
+  installBelongsToManyMethods,
+  installMorphPivotMethods,
+  type BelongsToManyAccessor,
+  type MorphToManyAccessor,
+  type MorphedByManyAccessor,
+  type AttachInput,
+} from './relations/pivot-accessors.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
@@ -32,6 +66,7 @@ export { AggregateConstraintBuilder, AGGREGATES_SYMBOL }    from './aggregate.js
 export type { AggregateConstraint, AggregateSumSpec } from './aggregate.js'
 export { pruneModels }                              from './prune.js'
 export type { PruneOptions, PruneReport }           from './prune.js'
+export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -70,8 +105,8 @@ export class ModelRegistry {
     const name = ModelClass.name
     if (!name || this.models.has(name)) return
     this.models.set(name, ModelClass)
-    _installBelongsToManyMethods(ModelClass)
-    _installMorphPivotMethods(ModelClass)
+    installBelongsToManyMethods(ModelClass)
+    installMorphPivotMethods(ModelClass)
     for (const listener of this.listeners) listener(name, ModelClass)
   }
 
@@ -739,25 +774,25 @@ export abstract class Model {
         // are added by this proxy, not by the adapter.
         if (prop === 'whereHas') {
           return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
-            _attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain)
+            attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain)
             return proxy
           }
         }
         if (prop === 'whereDoesntHave') {
           return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
-            _attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain)
+            attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain)
             return proxy
           }
         }
         if (prop === 'withWhereHas') {
           return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
-            _attachWithWhereHas(ModelClass, target as QueryBuilder<Model>, relation, constrain)
+            attachWithWhereHas(ModelClass, target as QueryBuilder<Model>, relation, constrain)
             return proxy
           }
         }
         if (prop === 'whereBelongsTo') {
           return (parent: Model, relation?: string): QueryBuilder<InstanceType<T>> => {
-            _attachWhereBelongsTo(ModelClass, target as QueryBuilder<Model>, parent, relation)
+            attachWhereBelongsTo(ModelClass, target as QueryBuilder<Model>, parent, relation)
             return proxy
           }
         }
@@ -972,7 +1007,7 @@ export abstract class Model {
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
   ): QueryBuilder<InstanceType<T>> {
-    return _attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as QueryBuilder<InstanceType<T>>
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as QueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -986,7 +1021,7 @@ export abstract class Model {
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
   ): QueryBuilder<InstanceType<T>> {
-    return _attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as QueryBuilder<InstanceType<T>>
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as QueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1001,7 +1036,7 @@ export abstract class Model {
     relation:  string,
     constrain?: (q: QueryBuilder<Model>) => void,
   ): QueryBuilder<InstanceType<T>> {
-    return _attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as QueryBuilder<InstanceType<T>>
+    return attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as QueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1020,7 +1055,7 @@ export abstract class Model {
     parent:    Model,
     relation?: string,
   ): QueryBuilder<InstanceType<T>> {
-    return _attachWhereBelongsTo(this as typeof Model, Model._q(this), parent, relation) as QueryBuilder<InstanceType<T>>
+    return attachWhereBelongsTo(this as typeof Model, Model._q(this), parent, relation) as QueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1383,7 +1418,7 @@ export abstract class Model {
     const next: Record<string, unknown> = this._currentAttrs()
     const diff: Record<string, unknown> = {}
     for (const k of new Set([...Object.keys(next), ...Object.keys(this.#original)])) {
-      if (!_attrEqual(next[k], this.#original[k])) diff[k] = next[k]
+      if (!attrEqual(next[k], this.#original[k])) diff[k] = next[k]
     }
     this.#changes  = diff
     this.#original = next
@@ -1684,7 +1719,7 @@ export abstract class Model {
     const out: Record<string, unknown> = {}
     const current = this._currentAttrs()
     for (const k of new Set([...Object.keys(current), ...Object.keys(this.#original)])) {
-      if (!_attrEqual(current[k], this.#original[k])) out[k] = current[k]
+      if (!attrEqual(current[k], this.#original[k])) out[k] = current[k]
     }
     return out
   }
@@ -1776,40 +1811,40 @@ export abstract class Model {
     // expectation (`first()` vs `get()`). Split into two ifs so TS can narrow
     // each tag literal out of the union for the fall-through branches below.
     if (def.type === 'morphMany') {
-      return _morphParentQuery(this, ctor, def, name)
+      return morphParentQuery(this, ctor, def, name)
     }
     if (def.type === 'morphOne') {
-      return _morphParentQuery(this, ctor, def, name)
+      return morphParentQuery(this, ctor, def, name)
     }
 
     const Related = def.model() as typeof Model
     const fkCamel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1)
 
     if (def.type === 'belongsToMany') {
-      const meta = _resolveBelongsToManyMeta(ctor, Related, def)
+      const meta = resolveBelongsToManyMeta(ctor, Related, def)
       const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
-      return _belongsToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
+      return belongsToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
 
     if (def.type === 'morphToMany') {
-      const meta = _resolveMorphToManyMeta(ctor, Related, def)
+      const meta = resolveMorphToManyMeta(ctor, Related, def)
       const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
-      return _morphToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
+      return morphToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
 
     if (def.type === 'morphedByMany') {
-      const meta = _resolveMorphedByManyMeta(ctor, Related, def)
+      const meta = resolveMorphedByManyMeta(ctor, Related, def)
       const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
       if (parentVal === undefined || parentVal === null) {
         throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
       }
-      return _morphedByManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
+      return morphedByManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
 
     if (def.type === 'belongsTo') {
@@ -1862,15 +1897,15 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "belongsToMany".`)
     }
     const Related = def.model() as typeof Model
-    const meta = _resolveBelongsToManyMeta(ctor, Related, def)
+    const meta = resolveBelongsToManyMeta(ctor, Related, def)
     const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use belongsToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
     // Belt-and-suspenders: make sure the auto-method is installed even
     // for instances constructed before any query against this class.
-    _installBelongsToManyMethods(ctor)
-    return _makeBelongsToManyAccessor(ctor, Related, def, parentVal)
+    installBelongsToManyMethods(ctor)
+    return makeBelongsToManyAccessor(ctor, Related, def, parentVal)
   }
 
   /**
@@ -1897,13 +1932,13 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphToMany".`)
     }
     const Related = def.model() as typeof Model
-    const meta = _resolveMorphToManyMeta(ctor, Related, def)
+    const meta = resolveMorphToManyMeta(ctor, Related, def)
     const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use morphToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
-    _installMorphPivotMethods(ctor)
-    return _makeMorphToManyAccessor(ctor, Related, def, parentVal)
+    installMorphPivotMethods(ctor)
+    return makeMorphToManyAccessor(ctor, Related, def, parentVal)
   }
 
   /**
@@ -1931,13 +1966,13 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphedByMany".`)
     }
     const Related = def.model() as typeof Model
-    const meta = _resolveMorphedByManyMeta(ctor, Related, def)
+    const meta = resolveMorphedByManyMeta(ctor, Related, def)
     const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
     if (parentVal === undefined || parentVal === null) {
       throw new Error(`[RudderJS ORM] Cannot use morphedByMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
-    _installMorphPivotMethods(ctor)
-    return _makeMorphedByManyAccessor(ctor, Related, def, parentVal)
+    installMorphPivotMethods(ctor)
+    return makeMorphedByManyAccessor(ctor, Related, def, parentVal)
   }
 
   /**
@@ -2102,1161 +2137,6 @@ export abstract class Model {
   }
 }
 
-// ─── Dirty tracking equality ───────────────────────────────
-
-/**
- * @internal — value equality used by dirty tracking. Mirrors Eloquent's
- * `originalIsEquivalent`: strict for primitives, `getTime()` for Date,
- * structural-by-JSON for arrays / plain objects (covers `json` / `array`
- * casts), null/undefined collapsed.
- *
- * Caveat: JSON.stringify is key-order sensitive, so `{a:1,b:2}` vs
- * `{b:2,a:1}` compares unequal. Same posture Laravel takes — documented
- * in the Dirty Tracking section of the orm README.
- */
-function _attrEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (a == null && b == null) return true
-  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime()
-  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
-    try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
-  }
-  return false
-}
-
-// ─── belongsToMany internals ───────────────────────────────
-
-interface BelongsToManyMeta {
-  pivotTable:      string
-  foreignPivotKey: string
-  relatedPivotKey: string
-  parentKey:       string
-  relatedKey:      string
-}
-
-type BelongsToManyDef = Extract<RelationDefinition, { type: 'belongsToMany' }>
-type MorphParentDef = Extract<RelationDefinition, { type: 'morphMany' | 'morphOne' }>
-
-function _camelHead(s: string): string {
-  return s.charAt(0).toLowerCase() + s.slice(1)
-}
-
-function _morphParentQuery(
-  self:  Model,
-  ctor:  typeof Model,
-  def:   MorphParentDef,
-  name:  string,
-): QueryBuilder<Model> {
-  const Related  = def.model() as typeof Model
-  const idCol    = `${def.morphName}Id`
-  const typeCol  = `${def.morphName}Type`
-  const localCol = def.localKey ?? ctor.primaryKey
-  const localVal = (self as unknown as Record<string, unknown>)[localCol]
-  const typeVal  = def.morphType ?? ctor.morphAlias ?? ctor.name
-  if (localVal === undefined || localVal === null) {
-    throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
-  }
-  return Related.where(idCol, localVal).where(typeCol, typeVal) as QueryBuilder<Model>
-}
-
-function _resolveBelongsToManyMeta(
-  Parent:  typeof Model,
-  Related: typeof Model,
-  def:     BelongsToManyDef,
-): BelongsToManyMeta {
-  return {
-    pivotTable:      def.pivotTable,
-    foreignPivotKey: def.foreignPivotKey ?? `${_camelHead(Parent.name)}Id`,
-    relatedPivotKey: def.relatedPivotKey ?? `${_camelHead(Related.name)}Id`,
-    parentKey:       def.parentKey       ?? Parent.primaryKey,
-    relatedKey:      def.relatedKey      ?? Related.primaryKey,
-  }
-}
-
-type MorphToManyDef    = Extract<RelationDefinition, { type: 'morphToMany' }>
-type MorphedByManyDef  = Extract<RelationDefinition, { type: 'morphedByMany' }>
-
-interface MorphToManyMeta {
-  pivotTable:      string
-  /** `{morphName}Id` — pivot column for the parent (the polymorphic side). */
-  foreignPivotKey: string
-  /** `{morphName}Type` — discriminator column on the pivot. */
-  morphTypeKey:    string
-  /** Discriminator value to write/match for the parent class. */
-  morphTypeValue:  string
-  /** Pivot column for the related (strong) row. */
-  relatedPivotKey: string
-  parentKey:       string
-  relatedKey:      string
-}
-
-interface MorphedByManyMeta {
-  pivotTable:      string
-  /** `{morphName}Id` — pivot column for the related (polymorphic-side) row. */
-  relatedPivotKey: string
-  /** `{morphName}Type` — discriminator column on the pivot. */
-  morphTypeKey:    string
-  /** Discriminator value used to match rows that point at Related. */
-  morphTypeValue:  string
-  /** Pivot column for the parent (strong) row. */
-  foreignPivotKey: string
-  parentKey:       string
-  relatedKey:      string
-}
-
-function _resolveMorphToManyMeta(
-  Parent:  typeof Model,
-  Related: typeof Model,
-  def:     MorphToManyDef,
-): MorphToManyMeta {
-  return {
-    pivotTable:      def.pivotTable,
-    foreignPivotKey: `${def.morphName}Id`,
-    morphTypeKey:    `${def.morphName}Type`,
-    morphTypeValue:  def.morphType ?? Parent.morphAlias ?? Parent.name,
-    relatedPivotKey: def.relatedPivotKey ?? `${_camelHead(Related.name)}Id`,
-    parentKey:       def.parentKey       ?? Parent.primaryKey,
-    relatedKey:      def.relatedKey      ?? Related.primaryKey,
-  }
-}
-
-function _resolveMorphedByManyMeta(
-  Parent:  typeof Model,
-  Related: typeof Model,
-  def:     MorphedByManyDef,
-): MorphedByManyMeta {
-  return {
-    pivotTable:      def.pivotTable,
-    relatedPivotKey: `${def.morphName}Id`,
-    morphTypeKey:    `${def.morphName}Type`,
-    morphTypeValue:  def.morphType ?? Related.morphAlias ?? Related.name,
-    foreignPivotKey: def.foreignPivotKey ?? `${_camelHead(Parent.name)}Id`,
-    parentKey:       def.parentKey       ?? Parent.primaryKey,
-    relatedKey:      def.relatedKey      ?? Related.primaryKey,
-  }
-}
-
-// ─── whereHas internals ────────────────────────────────────
-
-/**
- * Run the constrain callback against a recording-only QueryBuilder that
- * captures `.where()` calls into a flat `WhereClause[]` and treats every
- * other chainable method as a no-op. Nested `whereHas` inside the callback
- * throws — recursive predicates are deferred to v2.
- */
-function _captureConstraintWheres(
-  constrain: (q: QueryBuilder<Model>) => void,
-): WhereClause[] {
-  const wheres: WhereClause[] = []
-  const recorder: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
-    get(_t, prop): unknown {
-      const name = String(prop)
-      if (name === 'where') {
-        return (col: string, opOrVal: unknown, maybeVal?: unknown): QueryBuilder<Model> => {
-          if (maybeVal === undefined) {
-            wheres.push({ column: col, operator: '=', value: opOrVal })
-          } else {
-            wheres.push({ column: col, operator: opOrVal as WhereOperator, value: maybeVal })
-          }
-          return recorder
-        }
-      }
-      if (name === 'whereHas' || name === 'whereDoesntHave' || name === 'withWhereHas') {
-        return (): QueryBuilder<Model> => {
-          throw new Error(
-            `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is deferred to v2. ` +
-            `Filter on flat columns inside the callback for now.`,
-          )
-        }
-      }
-      if (name === 'orWhere') {
-        return (): QueryBuilder<Model> => {
-          throw new Error(
-            `[RudderJS ORM] orWhere inside a whereHas constrain callback is not supported in v1 — ` +
-            `the WhereClause contract has no boolean flag, so the OR semantic can't round-trip to the adapter. ` +
-            `Compose the predicate with where() (AND), or run two queries and merge in app code.`,
-          )
-        }
-      }
-      // All other chainable methods record nothing and return the recorder so
-      // `q.orderBy('x').limit(1)` chains through silently. Terminal methods
-      // (find/get/etc.) don't make sense in a constrain callback — they'd
-      // execute mid-build — but we don't intercept them here; they'd just
-      // return the recorder which then fails downstream. Keep the contract
-      // simple.
-      return (): QueryBuilder<Model> => recorder
-    },
-  })
-  constrain(recorder)
-  return wheres
-}
-
-/**
- * Variant shape of `RelationDefinition` for `hasOne | hasMany | belongsTo`.
- * Those three live in a single union member with a literal-union `type`
- * field, so `Extract<RelationDefinition, { type: 'belongsTo' }>` evaluates
- * to `never` (the wider literal union doesn't extend the narrower one). We
- * model the merged variant explicitly and runtime-check `type === 'belongsTo'`.
- */
-type _HasOrBelongsToDef = Exclude<RelationDefinition, { type: 'belongsToMany' | 'morphMany' | 'morphOne' | 'morphTo' | 'morphToMany' | 'morphedByMany' }>
-
-/**
- * Resolve the `belongsTo` relation declaration on `Self` that points at
- * `ParentCtor`. When `relation` is given, looks it up directly. Otherwise
- * scans `Self.relations` for a single `belongsTo` whose `model()` resolves
- * to `ParentCtor` — throws on zero or multiple candidates.
- */
-function _resolveBelongsToFor(
-  Self:        typeof Model,
-  ParentCtor:  typeof Model,
-  relation?:   string,
-): _HasOrBelongsToDef {
-  if (relation !== undefined) {
-    const def = Self.relations[relation]
-    if (!def) throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Self.name}.`)
-    if (def.type !== 'belongsTo') {
-      throw new Error(`[RudderJS ORM] Relation "${relation}" on ${Self.name} is "${def.type}", not "belongsTo".`)
-    }
-    return def as _HasOrBelongsToDef
-  }
-  const candidates: Array<[string, _HasOrBelongsToDef]> = []
-  for (const [name, def] of Object.entries(Self.relations)) {
-    if (def.type !== 'belongsTo') continue
-    const btDef = def as _HasOrBelongsToDef
-    if (btDef.model() === ParentCtor) candidates.push([name, btDef])
-  }
-  if (candidates.length === 0) {
-    throw new Error(
-      `[RudderJS ORM] whereBelongsTo: ${Self.name} has no belongsTo relation pointing at ${ParentCtor.name}. ` +
-      `Pass a relation name explicitly.`,
-    )
-  }
-  if (candidates.length > 1) {
-    const names = candidates.map(([n]) => n).join(', ')
-    throw new Error(
-      `[RudderJS ORM] whereBelongsTo: ${Self.name} has multiple belongsTo relations pointing at ${ParentCtor.name} (${names}). ` +
-      `Pass the relation name explicitly.`,
-    )
-  }
-  return candidates[0]![1]
-}
-
-/**
- * Build the {@link RelationExistencePredicate} for a relation declared on
- * `Parent` by `relation` and dispatch it to the adapter via
- * `q.whereRelationExists(predicate)`. Returns the same QueryBuilder for
- * chaining (the adapter mutates in place).
- *
- * `morphTo` throws — the related table isn't statically known so a single
- * EXISTS subquery can't represent it. Filter on the discriminator + id
- * columns directly when you need that semantic.
- */
-function _attachWhereHas<TQ>(
-  Parent:    typeof Model,
-  q:         QueryBuilder<TQ>,
-  relation:  string,
-  exists:    boolean,
-  constrain?: (q: QueryBuilder<Model>) => void,
-): QueryBuilder<TQ> {
-  const def = Parent.relations[relation]
-  if (!def) {
-    throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
-  }
-  if (def.type === 'morphTo') {
-    throw new Error(
-      `[RudderJS ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
-      `Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
-    )
-  }
-
-  const constraintWheres = constrain ? _captureConstraintWheres(constrain) : []
-  const predicate        = _buildRelationPredicate(Parent, relation, def, exists, constraintWheres)
-  return q.whereRelationExists(predicate)
-}
-
-function _buildRelationPredicate(
-  Parent:           typeof Model,
-  relation:         string,
-  def:              Exclude<RelationDefinition, { type: 'morphTo' }>,
-  exists:           boolean,
-  constraintWheres: WhereClause[],
-): RelationExistencePredicate {
-  const Related = def.model() as typeof Model
-
-  if (def.type === 'belongsToMany') {
-    const meta = _resolveBelongsToManyMeta(Parent, Related, def)
-    return {
-      relation,
-      exists,
-      relatedTable:  Related.getTable(),
-      parentColumn:  meta.parentKey,
-      relatedColumn: meta.relatedKey,
-      constraintWheres,
-      through: {
-        pivotTable:      meta.pivotTable,
-        foreignPivotKey: meta.foreignPivotKey,
-        relatedPivotKey: meta.relatedPivotKey,
-      },
-    }
-  }
-
-  if (def.type === 'morphToMany') {
-    const meta = _resolveMorphToManyMeta(Parent, Related, def)
-    return {
-      relation,
-      exists,
-      relatedTable:  Related.getTable(),
-      parentColumn:  meta.parentKey,
-      relatedColumn: meta.relatedKey,
-      constraintWheres,
-      extraEquals:  { [meta.morphTypeKey]: meta.morphTypeValue },
-      through: {
-        pivotTable:      meta.pivotTable,
-        foreignPivotKey: meta.foreignPivotKey,
-        relatedPivotKey: meta.relatedPivotKey,
-      },
-    }
-  }
-
-  if (def.type === 'morphedByMany') {
-    const meta = _resolveMorphedByManyMeta(Parent, Related, def)
-    return {
-      relation,
-      exists,
-      relatedTable:  Related.getTable(),
-      parentColumn:  meta.parentKey,
-      relatedColumn: meta.relatedKey,
-      constraintWheres,
-      extraEquals:  { [meta.morphTypeKey]: meta.morphTypeValue },
-      through: {
-        pivotTable:      meta.pivotTable,
-        foreignPivotKey: meta.foreignPivotKey,
-        relatedPivotKey: meta.relatedPivotKey,
-      },
-    }
-  }
-
-  if (def.type === 'morphMany' || def.type === 'morphOne') {
-    const idCol    = `${def.morphName}Id`
-    const typeCol  = `${def.morphName}Type`
-    const localCol = def.localKey ?? Parent.primaryKey
-    const typeVal  = def.morphType ?? Parent.morphAlias ?? Parent.name
-    return {
-      relation,
-      exists,
-      relatedTable:  Related.getTable(),
-      parentColumn:  localCol,
-      relatedColumn: idCol,
-      constraintWheres,
-      extraEquals: { [typeCol]: typeVal },
-    }
-  }
-
-  if (def.type === 'belongsTo') {
-    const fk       = def.foreignKey ?? `${_camelHead(Related.name)}Id`
-    const localCol = def.localKey   ?? fk
-    return {
-      relation,
-      exists,
-      relatedTable:  Related.getTable(),
-      parentColumn:  localCol,
-      relatedColumn: Related.primaryKey,
-      constraintWheres,
-    }
-  }
-
-  // hasOne / hasMany — related table holds the FK pointing back to Parent.
-  const fk       = def.foreignKey ?? `${_camelHead(Parent.name)}Id`
-  const localCol = def.localKey   ?? Parent.primaryKey
-  return {
-    relation,
-    exists,
-    relatedTable:  Related.getTable(),
-    parentColumn:  localCol,
-    relatedColumn: fk,
-    constraintWheres,
-  }
-}
-
-/**
- * `withWhereHas` — run `whereHas` AND eager-load the relation under the
- * same constraint when the adapter implements `withConstrained`. Adapters
- * without it fall back to plain `with(relation)` (constraint applies only
- * to the parent filter, not the eagerly loaded children).
- */
-function _attachWithWhereHas<TQ>(
-  Parent:    typeof Model,
-  q:         QueryBuilder<TQ>,
-  relation:  string,
-  constrain?: (q: QueryBuilder<Model>) => void,
-): QueryBuilder<TQ> {
-  const constraintWheres = constrain ? _captureConstraintWheres(constrain) : []
-  // Reuse _attachWhereHas for the parent-side filter — it re-runs the
-  // constrain callback against a fresh recorder, so the WhereClause[] we
-  // capture above and the one captured inside _attachWhereHas come from
-  // distinct recorder instances. That's intentional: each captures the
-  // same constraint independently and neither is mutated by the adapter.
-  _attachWhereHas(Parent, q, relation, true, constrain)
-  const withConstrained = (q as unknown as { withConstrained?: (rel: string, ws: WhereClause[]) => QueryBuilder<TQ> }).withConstrained
-  if (constraintWheres.length > 0 && typeof withConstrained === 'function') {
-    return withConstrained.call(q, relation, constraintWheres)
-  }
-  return q.with(relation)
-}
-
-function _attachWhereBelongsTo<TQ>(
-  Self:      typeof Model,
-  q:         QueryBuilder<TQ>,
-  parent:    Model,
-  relation?: string,
-): QueryBuilder<TQ> {
-  const ParentCtor = parent.constructor as typeof Model
-  const def        = _resolveBelongsToFor(Self, ParentCtor, relation)
-  const Related    = def.model() as typeof Model
-  const fk         = def.foreignKey ?? `${_camelHead(Related.name)}Id`
-  const localCol   = def.localKey   ?? fk
-  const parentVal  = (parent as unknown as Record<string, unknown>)[ParentCtor.primaryKey]
-  if (parentVal === undefined || parentVal === null) {
-    throw new Error(
-      `[RudderJS ORM] whereBelongsTo: parent.${ParentCtor.primaryKey} is unset on ${ParentCtor.name}.`,
-    )
-  }
-  return q.where(localCol, parentVal)
-}
-
-const _CHAIN_METHODS = new Set([
-  'where', 'orWhere', 'orderBy', 'limit', 'offset', 'with', 'withTrashed', 'onlyTrashed',
-])
-const _TERMINAL_METHODS = new Set([
-  'first', 'find', 'get', 'all', 'count', 'paginate',
-])
-const _UNSUPPORTED_TERMINALS = new Set([
-  'create', 'update', 'delete', 'restore', 'forceDelete', 'increment', 'decrement', 'insertMany', 'deleteAll', 'updateAll',
-])
-
-/**
- * Build a deferred QueryBuilder that runs the pivot lookup on terminal
- * evaluation. Chain methods (where/orderBy/etc.) are recorded and replayed
- * against `Related.where(relatedKey, 'IN', ids)` once ids are resolved.
- *
- * Mutations (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw —
- * write the pivot via `belongsToMany().attach/detach/sync` and write the
- * related rows via the related model directly.
- */
-type QbAsDict = Record<string, ((...a: unknown[]) => unknown) | undefined>
-
-function _replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, unknown[]]>): QueryBuilder<Model> {
-  let cur = q
-  for (const [m, args] of recorded) {
-    const fn = (cur as unknown as QbAsDict)[m]
-    if (fn) cur = fn.apply(cur, args) as QueryBuilder<Model>
-  }
-  return cur
-}
-
-interface DeferredProxyHooks {
-  /** Called when `withPivot(...cols)` is invoked. Throws when no cols are
-   *  provided (mirrors the contract). The implementation captures the column
-   *  list into the deferred-QB closure for post-terminal stamping. */
-  onWithPivot?(columns: string[]): void
-  /** Called after a terminal returns a result. Lets the deferred-QB stamp
-   *  `pivot` onto each row using the in-memory pivot rows from the lookup. */
-  postProcess?<R>(result: R, terminal: string): R
-}
-
-function _makeDeferredProxy(
-  buildResolved: () => Promise<QueryBuilder<Model>>,
-  recorded:      Array<[string, unknown[]]>,
-  relationKind:  'belongsToMany' | 'morphToMany' | 'morphedByMany',
-  hooks:         DeferredProxyHooks = {},
-): QueryBuilder<Model> {
-  const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
-    get(_t, prop): unknown {
-      const name = String(prop)
-      if (name === 'withPivot') {
-        return (...cols: string[]) => {
-          if (cols.length === 0) {
-            throw new Error('[RudderJS ORM] withPivot() requires at least one column name.')
-          }
-          hooks.onWithPivot?.(cols)
-          return proxy
-        }
-      }
-      if (_CHAIN_METHODS.has(name)) {
-        return (...args: unknown[]) => {
-          recorded.push([name, args])
-          return proxy
-        }
-      }
-      if (_TERMINAL_METHODS.has(name)) {
-        return async (...args: unknown[]) => {
-          const q = await buildResolved()
-          const fn = (q as unknown as QbAsDict)[name]
-          const raw = fn ? await fn.apply(q, args) : undefined
-          return hooks.postProcess ? hooks.postProcess(raw, name) : raw
-        }
-      }
-      if (_UNSUPPORTED_TERMINALS.has(name)) {
-        return () => {
-          throw new Error(
-            `[RudderJS ORM] "${name}" is not supported on a ${relationKind} lazy-fetch query. ` +
-            `Use Model.${relationKind}(parent, name) for pivot mutations or call methods on the related Model directly.`,
-          )
-        }
-      }
-      return undefined
-    },
-  })
-  return proxy
-}
-
-/**
- * Stamp `row.pivot = { col: value, ... }` for every row in `rows` whose
- * `relatedKey` matches a pivot row. Used by the three deferred QBs after the
- * second-step `Related` query resolves. Mutates rows in place; rows whose
- * pivot row is absent are left untouched (`pivot` stays undefined).
- */
-function _stampPivotOnRows(
-  rows:               ReadonlyArray<Record<string, unknown>>,
-  relatedKey:         string,
-  pivotRows:          ReadonlyArray<Record<string, unknown>>,
-  relatedPivotKey:    string,
-  pivotColumns:       ReadonlyArray<string>,
-): void {
-  if (pivotColumns.length === 0) return
-  const byId = new Map<unknown, Record<string, unknown>>()
-  for (const p of pivotRows) byId.set(p[relatedPivotKey], p)
-  for (const row of rows) {
-    if (row === null || row === undefined) continue
-    const pivot = byId.get(row[relatedKey])
-    if (!pivot) continue
-    const projected: Record<string, unknown> = {}
-    for (const col of pivotColumns) projected[col] = pivot[col]
-    ;(row as Record<string, unknown>)['pivot'] = projected
-  }
-}
-
-/**
- * Stamp `pivot` onto a single result (object or array). Used by the deferred
- * proxy's `postProcess` hook — the terminal name (`first` / `find` / `get` /
- * `all` / `paginate`) determines whether to walk the result.
- */
-function _stampPivotOnResult(
-  result:          unknown,
-  terminal:        string,
-  relatedKey:      string,
-  pivotRows:       ReadonlyArray<Record<string, unknown>>,
-  relatedPivotKey: string,
-  pivotColumns:    ReadonlyArray<string>,
-): unknown {
-  if (pivotColumns.length === 0) return result
-  if (result === null || result === undefined) return result
-  if (terminal === 'first' || terminal === 'find') {
-    _stampPivotOnRows([result as Record<string, unknown>], relatedKey, pivotRows, relatedPivotKey, pivotColumns)
-    return result
-  }
-  if (terminal === 'get' || terminal === 'all') {
-    _stampPivotOnRows(result as ReadonlyArray<Record<string, unknown>>, relatedKey, pivotRows, relatedPivotKey, pivotColumns)
-    return result
-  }
-  if (terminal === 'paginate') {
-    const page = result as { data: ReadonlyArray<Record<string, unknown>> }
-    _stampPivotOnRows(page.data, relatedKey, pivotRows, relatedPivotKey, pivotColumns)
-    return result
-  }
-  return result
-}
-
-function _belongsToManyDeferredQb(
-  Related:    typeof Model,
-  _def:       BelongsToManyDef,
-  meta:       BelongsToManyMeta,
-  parentVal:  unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
-
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
-    const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .get()
-    lastPivotRows = pivotRows
-    const ids = pivotRows.map(r => r[meta.relatedPivotKey])
-    // Empty IN list — short-circuit with a guaranteed-empty query so
-    // adapters don't have to handle the edge case.
-    const q = (Related.query() as unknown as QueryBuilder<Model>)
-      .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return _replayChain(q, recorded)
-  }
-
-  return _makeDeferredProxy(buildResolved, recorded, 'belongsToMany', {
-    onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
-    },
-  })
-}
-
-function _morphToManyDeferredQb(
-  Related:    typeof Model,
-  _def:       MorphToManyDef,
-  meta:       MorphToManyMeta,
-  parentVal:  unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
-
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
-    const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .get()
-    lastPivotRows = pivotRows
-    const ids = pivotRows.map(r => r[meta.relatedPivotKey])
-    const q = (Related.query() as unknown as QueryBuilder<Model>)
-      .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return _replayChain(q, recorded)
-  }
-
-  return _makeDeferredProxy(buildResolved, recorded, 'morphToMany', {
-    onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
-    },
-  })
-}
-
-function _morphedByManyDeferredQb(
-  Related:    typeof Model,
-  _def:       MorphedByManyDef,
-  meta:       MorphedByManyMeta,
-  parentVal:  unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
-
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
-    const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .get()
-    lastPivotRows = pivotRows
-    const ids = pivotRows.map(r => r[meta.relatedPivotKey])
-    const q = (Related.query() as unknown as QueryBuilder<Model>)
-      .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return _replayChain(q, recorded)
-  }
-
-  return _makeDeferredProxy(buildResolved, recorded, 'morphedByMany', {
-    onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
-    },
-  })
-}
-
-/**
- * Helper for `Model.belongsToMany` — accepts both flat pivot data
- * (same row written for every id) and a per-id map.
- *
- * Flat:    `attach([1, 2, 3], { addedBy: 'admin' })`
- * Per-id:  `attach({ 1: { addedBy: 'admin' }, 2: { addedBy: 'system' } })`
- */
-type AttachInput = ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>
-
-function _normalizeAttachInput(
-  input:           AttachInput,
-  foreignPivotKey: string,
-  parentVal:       unknown,
-  relatedPivotKey: string,
-  flatPivot?:      Record<string, unknown>,
-): Array<Record<string, unknown>> {
-  const rows: Array<Record<string, unknown>> = []
-  if (Array.isArray(input)) {
-    for (const id of input) {
-      rows.push({
-        ...(flatPivot ?? {}),
-        [foreignPivotKey]: parentVal,
-        [relatedPivotKey]: id,
-      })
-    }
-  } else {
-    for (const [id, perIdPivot] of Object.entries(input as Record<string | number, Record<string, unknown>>)) {
-      // Normalize numeric-string keys back to numbers when possible — JS
-      // object keys are always strings; the pivot column may be int.
-      const idVal: unknown = /^\d+$/.test(id) ? Number(id) : id
-      rows.push({
-        ...perIdPivot,
-        [foreignPivotKey]: parentVal,
-        [relatedPivotKey]: idVal,
-      })
-    }
-  }
-  return rows
-}
-
-function _idsFromAttachInput(input: AttachInput): unknown[] {
-  if (Array.isArray(input)) return [...input]
-  return Object.keys(input).map(k => /^\d+$/.test(k) ? Number(k) : k)
-}
-
-/**
- * Per-relation accessor for a `belongsToMany` relation. Returned from
- * {@link Model.belongsToMany} and from the auto-generated prototype
- * methods.
- *
- * `attach` writes new pivot rows. `detach` removes pivot rows. `sync`
- * diffs the current pivot ids against the requested set and runs
- * `attach`/`detach` for the difference. `updatePivot` writes new
- * extras onto an existing pivot row without touching either side.
- */
-export interface BelongsToManyAccessor {
-  /**
-   * Insert pivot rows. Accepts a list of ids (with optional flat pivot data
-   * applied to every row) or a per-id map keyed by related id with that
-   * row's pivot data.
-   *
-   * Empty input is a no-op — no INSERT, no error.
-   */
-  attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
-  /**
-   * Delete pivot rows. With ids, deletes only the matching pivot rows.
-   * With no args, deletes all pivot rows for this parent.
-   */
-  detach(ids?: ReadonlyArray<number | string>): Promise<number>
-  /**
-   * Update extras on an existing pivot row without touching the parent or
-   * related row. Locates the pivot row by `(parent, relatedId)` and applies
-   * `data`. Returns the number of rows updated (0 when no match — does NOT
-   * throw; the caller decides whether absence is an error).
-   */
-  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
-  /**
-   * Diff the current pivot set against `desiredIds` — attach the missing,
-   * detach what's no longer present. Optional flat pivot data is written
-   * onto the *new* pivot rows only; existing rows are not modified.
-   *
-   * The map form (`sync({ id1: { col: val }, id2: { col: val } })`) carries
-   * per-id pivot data: `desiredIds = Object.keys(map)`, attached rows go in
-   * with their own pivot data, and ids that already exist with changed
-   * pivot data go through `updatePivot` to reconcile their extras. The
-   * `updated` array on the return value lists those reconciled ids.
-   *
-   * Returns counts of what changed.
-   */
-  sync(
-    desiredIds: ReadonlyArray<number | string>,
-    flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-  sync(
-    perIdPivot: Record<string | number, Record<string, unknown>>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-}
-
-function _makeBelongsToManyAccessor(
-  Parent:    typeof Model,
-  Related:   typeof Model,
-  def:       BelongsToManyDef,
-  parentVal: unknown,
-): BelongsToManyAccessor {
-  const meta = _resolveBelongsToManyMeta(Parent, Related, def)
-
-  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
-    return ModelRegistry.getAdapter()
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .where(meta.relatedPivotKey, relatedId)
-      .updateAll(data)
-  }
-
-  return {
-    async attach(input, flatPivot) {
-      const ids = _idsFromAttachInput(input)
-      if (ids.length === 0) return
-      const rows = _normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
-      await ModelRegistry.getAdapter()
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .insertMany(rows)
-    },
-
-    async detach(ids) {
-      const adapter = ModelRegistry.getAdapter()
-      let q = adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-      if (ids !== undefined) {
-        if (ids.length === 0) return 0
-        q = q.where(meta.relatedPivotKey, 'IN', [...ids])
-      }
-      return q.deleteAll()
-    },
-
-    updatePivot,
-
-    async sync(
-      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
-      flatPivot?: Record<string, unknown>,
-    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
-      const adapter   = ModelRegistry.getAdapter()
-      const isMap     = !Array.isArray(arg1)
-      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
-      const desiredIds: unknown[] = isMap
-        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
-        : [...(arg1 as ReadonlyArray<number | string>)]
-
-      const currentRows = await adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-        .get()
-      const current = new Set(currentRows.map(r => r[meta.relatedPivotKey]))
-      const desired = new Set<unknown>(desiredIds)
-      const attached: unknown[] = []
-      const detached: unknown[] = []
-      const updated:  unknown[] = []
-      for (const id of desired) if (!current.has(id)) attached.push(id)
-      for (const id of current) if (!desired.has(id)) detached.push(id)
-
-      if (attached.length > 0) {
-        const rows = attached.map(id => {
-          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
-          return {
-            ...(flatPivot ?? {}),
-            ...(perIdPivot ?? {}),
-            [meta.foreignPivotKey]: parentVal,
-            [meta.relatedPivotKey]: id,
-          }
-        })
-        await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
-      }
-      if (detached.length > 0) {
-        await adapter
-          .query<Record<string, unknown>>(meta.pivotTable)
-          .where(meta.foreignPivotKey, parentVal)
-          .where(meta.relatedPivotKey, 'IN', detached)
-          .deleteAll()
-      }
-      if (perIdMap) {
-        // Reconcile extras on still-present ids by overwriting with the
-        // requested pivot data — matches Filament's posture (the form
-        // value wins). Skip when the supplied pivot is empty.
-        for (const id of desired) {
-          if (!current.has(id)) continue
-          const perIdPivot = perIdMap[id as string | number]
-          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
-          await updatePivot(id as number | string, perIdPivot)
-          updated.push(id)
-        }
-      }
-
-      return { attached, detached, updated }
-    },
-  }
-}
-
-/**
- * Install per-relation prototype methods for every `belongsToMany` entry
- * declared on `static relations`. Idempotent — won't overwrite a method
- * the author already defined (typing escape hatch).
- *
- * Called on first query (via `ModelRegistry.register`) and once more
- * defensively from `Model.belongsToMany` so apps that construct instances
- * without ever querying still get the auto-method.
- */
-function _installBelongsToManyMethods(ModelClass: typeof Model): void {
-  for (const [name, def] of Object.entries(ModelClass.relations)) {
-    if (def.type !== 'belongsToMany') continue
-    if (Object.prototype.hasOwnProperty.call(ModelClass.prototype, name)) continue
-    Object.defineProperty(ModelClass.prototype, name, {
-      configurable: true,
-      writable:     true,
-      value(this: Model): BelongsToManyAccessor {
-        return Model.belongsToMany(this, name)
-      },
-    })
-  }
-}
-
-// ─── morphToMany / morphedByMany internals ─────────────────
-
-/**
- * Per-relation accessor for a `morphToMany` relation (parent is the
- * polymorphic side). Same shape as {@link BelongsToManyAccessor} — distinct
- * nominal type so user-defined `tags()` methods can be typed precisely.
- */
-export interface MorphToManyAccessor {
-  attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
-  detach(ids?: ReadonlyArray<number | string>): Promise<number>
-  /** Update extras on an existing pivot row. Same posture as
-   *  {@link BelongsToManyAccessor.updatePivot}; the morph discriminator is
-   *  implicitly included in the WHERE clause. */
-  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
-  sync(
-    desiredIds: ReadonlyArray<number | string>,
-    flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-  sync(
-    perIdPivot: Record<string | number, Record<string, unknown>>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-}
-
-/**
- * Per-relation accessor for a `morphedByMany` relation (related is the
- * polymorphic side). Identical runtime shape to `MorphToManyAccessor`.
- */
-export interface MorphedByManyAccessor {
-  attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
-  detach(ids?: ReadonlyArray<number | string>): Promise<number>
-  /** Update extras on an existing pivot row. Same posture as
-   *  {@link BelongsToManyAccessor.updatePivot}; the morph discriminator is
-   *  implicitly included in the WHERE clause. */
-  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
-  sync(
-    desiredIds: ReadonlyArray<number | string>,
-    flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-  sync(
-    perIdPivot: Record<string | number, Record<string, unknown>>,
-  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
-}
-
-function _makeMorphToManyAccessor(
-  Parent:    typeof Model,
-  Related:   typeof Model,
-  def:       MorphToManyDef,
-  parentVal: unknown,
-): MorphToManyAccessor {
-  const meta = _resolveMorphToManyMeta(Parent, Related, def)
-
-  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
-    return ModelRegistry.getAdapter()
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .where(meta.relatedPivotKey, relatedId)
-      .updateAll(data)
-  }
-
-  return {
-    async attach(input, flatPivot) {
-      const ids = _idsFromAttachInput(input)
-      if (ids.length === 0) return
-      const rows = _normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
-        .map(r => ({ ...r, [meta.morphTypeKey]: meta.morphTypeValue }))
-      await ModelRegistry.getAdapter()
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .insertMany(rows)
-    },
-
-    async detach(ids) {
-      const adapter = ModelRegistry.getAdapter()
-      let q = adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-        .where(meta.morphTypeKey,    meta.morphTypeValue)
-      if (ids !== undefined) {
-        if (ids.length === 0) return 0
-        q = q.where(meta.relatedPivotKey, 'IN', [...ids])
-      }
-      return q.deleteAll()
-    },
-
-    updatePivot,
-
-    async sync(
-      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
-      flatPivot?: Record<string, unknown>,
-    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
-      const adapter   = ModelRegistry.getAdapter()
-      const isMap     = !Array.isArray(arg1)
-      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
-      const desiredIds: unknown[] = isMap
-        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
-        : [...(arg1 as ReadonlyArray<number | string>)]
-
-      const currentRows = await adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-        .where(meta.morphTypeKey,    meta.morphTypeValue)
-        .get()
-      const current = new Set(currentRows.map(r => r[meta.relatedPivotKey]))
-      const desired = new Set<unknown>(desiredIds)
-      const attached: unknown[] = []
-      const detached: unknown[] = []
-      const updated:  unknown[] = []
-      for (const id of desired) if (!current.has(id)) attached.push(id)
-      for (const id of current) if (!desired.has(id)) detached.push(id)
-
-      if (attached.length > 0) {
-        const rows = attached.map(id => {
-          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
-          return {
-            ...(flatPivot ?? {}),
-            ...(perIdPivot ?? {}),
-            [meta.foreignPivotKey]: parentVal,
-            [meta.relatedPivotKey]: id,
-            [meta.morphTypeKey]:    meta.morphTypeValue,
-          }
-        })
-        await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
-      }
-      if (detached.length > 0) {
-        await adapter
-          .query<Record<string, unknown>>(meta.pivotTable)
-          .where(meta.foreignPivotKey, parentVal)
-          .where(meta.morphTypeKey,    meta.morphTypeValue)
-          .where(meta.relatedPivotKey, 'IN', detached)
-          .deleteAll()
-      }
-      if (perIdMap) {
-        for (const id of desired) {
-          if (!current.has(id)) continue
-          const perIdPivot = perIdMap[id as string | number]
-          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
-          await updatePivot(id as number | string, perIdPivot)
-          updated.push(id)
-        }
-      }
-
-      return { attached, detached, updated }
-    },
-  }
-}
-
-function _makeMorphedByManyAccessor(
-  Parent:    typeof Model,
-  Related:   typeof Model,
-  def:       MorphedByManyDef,
-  parentVal: unknown,
-): MorphedByManyAccessor {
-  const meta = _resolveMorphedByManyMeta(Parent, Related, def)
-
-  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
-    return ModelRegistry.getAdapter()
-      .query<Record<string, unknown>>(meta.pivotTable)
-      .where(meta.foreignPivotKey, parentVal)
-      .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .where(meta.relatedPivotKey, relatedId)
-      .updateAll(data)
-  }
-
-  return {
-    async attach(input, flatPivot) {
-      const ids = _idsFromAttachInput(input)
-      if (ids.length === 0) return
-      // Parent is the strong side, related is the polymorphic side. Each row
-      // carries: parent FK, related FK, related-class discriminator.
-      const rows = _normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
-        .map(r => ({ ...r, [meta.morphTypeKey]: meta.morphTypeValue }))
-      await ModelRegistry.getAdapter()
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .insertMany(rows)
-    },
-
-    async detach(ids) {
-      const adapter = ModelRegistry.getAdapter()
-      let q = adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-        .where(meta.morphTypeKey,    meta.morphTypeValue)
-      if (ids !== undefined) {
-        if (ids.length === 0) return 0
-        q = q.where(meta.relatedPivotKey, 'IN', [...ids])
-      }
-      return q.deleteAll()
-    },
-
-    updatePivot,
-
-    async sync(
-      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
-      flatPivot?: Record<string, unknown>,
-    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
-      const adapter   = ModelRegistry.getAdapter()
-      const isMap     = !Array.isArray(arg1)
-      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
-      const desiredIds: unknown[] = isMap
-        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
-        : [...(arg1 as ReadonlyArray<number | string>)]
-
-      const currentRows = await adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-        .where(meta.morphTypeKey,    meta.morphTypeValue)
-        .get()
-      const current = new Set(currentRows.map(r => r[meta.relatedPivotKey]))
-      const desired = new Set<unknown>(desiredIds)
-      const attached: unknown[] = []
-      const detached: unknown[] = []
-      const updated:  unknown[] = []
-      for (const id of desired) if (!current.has(id)) attached.push(id)
-      for (const id of current) if (!desired.has(id)) detached.push(id)
-
-      if (attached.length > 0) {
-        const rows = attached.map(id => {
-          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
-          return {
-            ...(flatPivot ?? {}),
-            ...(perIdPivot ?? {}),
-            [meta.foreignPivotKey]: parentVal,
-            [meta.relatedPivotKey]: id,
-            [meta.morphTypeKey]:    meta.morphTypeValue,
-          }
-        })
-        await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
-      }
-      if (detached.length > 0) {
-        await adapter
-          .query<Record<string, unknown>>(meta.pivotTable)
-          .where(meta.foreignPivotKey, parentVal)
-          .where(meta.morphTypeKey,    meta.morphTypeValue)
-          .where(meta.relatedPivotKey, 'IN', detached)
-          .deleteAll()
-      }
-      if (perIdMap) {
-        for (const id of desired) {
-          if (!current.has(id)) continue
-          const perIdPivot = perIdMap[id as string | number]
-          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
-          await updatePivot(id as number | string, perIdPivot)
-          updated.push(id)
-        }
-      }
-
-      return { attached, detached, updated }
-    },
-  }
-}
-
-/**
- * Install per-relation prototype methods for every `morphToMany` /
- * `morphedByMany` entry. Same idempotent shape as
- * {@link _installBelongsToManyMethods}.
- */
-function _installMorphPivotMethods(ModelClass: typeof Model): void {
-  for (const [name, def] of Object.entries(ModelClass.relations)) {
-    if (def.type !== 'morphToMany' && def.type !== 'morphedByMany') continue
-    if (Object.prototype.hasOwnProperty.call(ModelClass.prototype, name)) continue
-    const isOwning = def.type === 'morphToMany'
-    Object.defineProperty(ModelClass.prototype, name, {
-      configurable: true,
-      writable:     true,
-      value(this: Model): MorphToManyAccessor | MorphedByManyAccessor {
-        return isOwning
-          ? Model.morphToMany(this, name)
-          : Model.morphedByMany(this, name)
-      },
-    })
-  }
-}
 
 // ─── Compile-time contract check ───────────────────────────
 // Asserts that `Model`'s static surface conforms to the `ModelLike`
