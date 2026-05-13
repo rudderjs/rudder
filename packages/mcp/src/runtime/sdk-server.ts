@@ -1,0 +1,215 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
+import type { McpServer } from '../McpServer.js'
+import type { McpTool } from '../McpTool.js'
+import type { McpResource } from '../McpResource.js'
+import type { McpPrompt } from '../McpPrompt.js'
+import { zodToJsonSchema } from '../zod-to-json-schema.js'
+import { getToolAnnotations, getResourceAnnotations } from '../decorators.js'
+import { matchUriTemplate } from '../uri-template.js'
+import { getMcpObservers } from './observers-accessor.js'
+import { consumeToolReturn } from './consume-tool-return.js'
+import { resolveOrConstruct, resolveHandleDeps, isRegistered, filterRegistered } from './handle-deps.js'
+
+// @internal — to be replaced by McpServer._tools()/_resources()/_prompts() accessors in PR C of the mcp-quality-audit arc.
+function getProtected<T>(server: McpServer, key: string, fallback: T): T {
+  return ((server as unknown as Record<string, T>)[key]) ?? fallback
+}
+
+export function createSdkServer(server: McpServer): Server {
+  const meta = server.metadata()
+  const sdk = new Server(
+    { name: meta.name, version: meta.version },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } },
+  )
+
+  const toolClasses = getProtected<(new (...args: any[]) => McpTool)[]>(server, 'tools', [])
+  const resourceClasses = getProtected<(new (...args: any[]) => McpResource)[]>(server, 'resources', [])
+  const promptClasses = getProtected<(new (...args: any[]) => McpPrompt)[]>(server, 'prompts', [])
+
+  const tools: McpTool[] = toolClasses.map((T) => resolveOrConstruct(T))
+  const resources: McpResource[] = resourceClasses.map((R) => resolveOrConstruct(R))
+  const prompts: McpPrompt[] = promptClasses.map((P) => resolveOrConstruct(P))
+
+  // ── Tools ────────────────────────────────────────────────
+  sdk.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: (await filterRegistered(tools)).map((t) => {
+      const def: Record<string, unknown> = {
+        name: t.name(),
+        description: t.description(),
+        inputSchema: zodToJsonSchema(t.schema()),
+      }
+      if (t.outputSchema) {
+        def['outputSchema'] = zodToJsonSchema(t.outputSchema())
+      }
+      const annotations = getToolAnnotations(t.constructor)
+      if (annotations) {
+        def['annotations'] = annotations
+      }
+      return def
+    }),
+  }))
+
+  sdk.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const tool = tools.find((t) => t.name() === request.params.name)
+    if (!tool || !(await isRegistered(tool))) {
+      return { content: [{ type: 'text' as const, text: `Unknown tool: ${request.params.name}` }], isError: true }
+    }
+    const input = (request.params.arguments ?? {}) as Record<string, unknown>
+    const start = performance.now()
+    try {
+      const extras = resolveHandleDeps(tool, 'handle')
+      const ret = tool.handle(input, ...extras as [])
+      const result = await consumeToolReturn(ret, extra, request.params._meta)
+      getMcpObservers()?.emit({
+        kind: 'tool.called', serverName: meta.name, name: tool.name(),
+        input, output: result, duration: performance.now() - start,
+      })
+      return { ...result }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'tool.failed', serverName: meta.name, name: tool.name(),
+        input, output: null, duration: performance.now() - start, error: msg,
+      })
+      return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
+    }
+  })
+
+  // ── Resources ────────────────────────────────────────────
+  const staticResources = resources.filter((r) => !r.isTemplate())
+  const templateResources = resources.filter((r) => r.isTemplate())
+
+  function decorateResource(r: McpResource): Record<string, unknown> {
+    const def: Record<string, unknown> = {
+      uri: r.uri(),
+      name: r.uri(),
+      description: r.description(),
+      mimeType: r.mimeType(),
+    }
+    const annotations = getResourceAnnotations(r.constructor)
+    if (annotations) {
+      def['annotations'] = annotations
+    }
+    return def
+  }
+
+  sdk.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: (await filterRegistered(staticResources)).map(decorateResource),
+  }))
+
+  if (templateResources.length > 0) {
+    sdk.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+      resourceTemplates: (await filterRegistered(templateResources)).map((r) => {
+        const def: Record<string, unknown> = {
+          uriTemplate: r.uri(),
+          name: r.uri(),
+          description: r.description(),
+          mimeType: r.mimeType(),
+        }
+        const annotations = getResourceAnnotations(r.constructor)
+        if (annotations) {
+          def['annotations'] = annotations
+        }
+        return def
+      }),
+    }))
+  }
+
+  sdk.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params.uri
+
+    // Try exact match first (static resources)
+    let resource = staticResources.find((r) => r.uri() === uri)
+    let params: Record<string, string> | undefined
+
+    // Try template match
+    if (!resource) {
+      for (const tmpl of templateResources) {
+        const extracted = matchUriTemplate(tmpl.uri(), uri)
+        if (extracted) {
+          resource = tmpl
+          params = extracted
+          break
+        }
+      }
+    }
+
+    if (!resource || !(await isRegistered(resource))) {
+      throw new Error(`Unknown resource: ${uri}`)
+    }
+    const start = performance.now()
+    try {
+      const extras = resolveHandleDeps(resource, 'handle')
+      const text = await resource.handle(params, ...extras as [])
+      getMcpObservers()?.emit({
+        kind: 'resource.read', serverName: meta.name, name: resource.uri(),
+        input: params ?? { uri }, output: text, duration: performance.now() - start,
+      })
+      return {
+        contents: [{ uri, text, mimeType: resource.mimeType() }],
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'resource.failed', serverName: meta.name, name: resource.uri(),
+        input: params ?? { uri }, output: null, duration: performance.now() - start, error: msg,
+      })
+      throw err
+    }
+  })
+
+  // ── Prompts ──────────────────────────────────────────────
+  sdk.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: (await filterRegistered(prompts)).map((p) => ({
+      name: p.name(),
+      description: p.description(),
+      ...(p.arguments ? { arguments: Object.keys(p.arguments().shape as Record<string, unknown>).map((k) => ({ name: k, required: true })) } : {}),
+    })),
+  }))
+
+  sdk.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = prompts.find((p) => p.name() === request.params.name)
+    if (!prompt || !(await isRegistered(prompt))) {
+      throw new Error(`Unknown prompt: ${request.params.name}`)
+    }
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>
+    const start = performance.now()
+    try {
+      const extras = resolveHandleDeps(prompt, 'handle')
+      const messages = await prompt.handle(args, ...extras as [])
+      getMcpObservers()?.emit({
+        kind: 'prompt.rendered', serverName: meta.name, name: prompt.name(),
+        input: args, output: messages, duration: performance.now() - start,
+      })
+      return { messages }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'prompt.failed', serverName: meta.name, name: prompt.name(),
+        input: args, output: null, duration: performance.now() - start, error: msg,
+      })
+      throw err
+    }
+  })
+
+  return sdk
+}
+
+/** Start a server with stdio transport */
+export async function startStdio(server: McpServer): Promise<void> {
+  const sdk = createSdkServer(server)
+  const transport = new StdioServerTransport()
+  await sdk.connect(transport)
+  // Stdio is process-lifetime — no detach needed; the SDK lives until exit.
+  server.attachSdk(sdk)
+}
