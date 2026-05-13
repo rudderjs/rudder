@@ -1033,7 +1033,7 @@ export abstract class Model {
    *   - `withCount('posts')` — single relation, no constraint.
    *   - `withCount(['posts', 'comments'])` — multiple, no constraints.
    *   - `withCount({ posts: q => q.where('published', true).as('publishedPosts') })`
-   *     — map form with `where`/`orWhere` constraints + optional alias override.
+   *     — map form with `where` constraints + optional alias override.
    *
    * Closes the N+1 footgun for hot list pages. For a single instance use
    * `instance.loadCount('posts')` instead.

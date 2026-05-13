@@ -296,6 +296,20 @@ describe('Model.query().withCount — map form with constraint', () => {
     assert.equal(r.alias, 'publishedPostsCount')
     assert.equal(r.relation, 'posts')
   })
+
+  it('orWhere inside the constraint throws — AND-only by design', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    assert.throws(
+      () => (User.query() as unknown as {
+        withCount: (m: Record<string, (q: unknown) => unknown>) => unknown
+      }).withCount({
+        posts: (q) => (q as { orWhere: (c: string, v: unknown) => unknown }).orWhere('published', true),
+      }),
+      /orWhere is not supported inside a withCount\/withSum\/withExists constraint/,
+    )
+  })
 })
 
 // ─── withSum / withMin / withMax / withAvg ───────────────────────────────────

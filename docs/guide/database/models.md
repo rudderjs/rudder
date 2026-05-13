@@ -274,6 +274,70 @@ class User extends Model {
 - No `withTimestamps` — apps that want `createdAt` on the pivot can write it via `attach(ids, { createdAt: new Date() })` or schema-level defaults.
 - Mutations (`create`, `update`, `delete`, `insertMany`, `deleteAll`) on the deferred query throw — write the pivot via the accessor and write the related rows via the related model directly.
 
+### Polymorphic one-to-many (`morphTo` / `morphMany` / `morphOne`)
+
+A single related table belongs to several parent types — `Comment` on `Post` *and* `Video`, `Image` on `User` *and* `Product`, etc. The polymorphic side carries two columns: `{morphName}Id` and `{morphName}Type`, written in **camelCase** for ORM consistency (a deliberate divergence from Laravel's snake_case).
+
+```prisma
+model Comment {
+  id              Int    @id @default(autoincrement())
+  body            String
+  commentableId   Int
+  commentableType String
+}
+
+model Post  { id Int @id @default(autoincrement()); title String }
+model Video { id Int @id @default(autoincrement()); url   String }
+```
+
+```ts
+class Post  extends Model { static override table = 'post';  id!: number; title!: string }
+class Video extends Model { static override table = 'video'; id!: number; url!:   string }
+
+class Comment extends Model {
+  static override relations = {
+    commentable: {
+      type:      'morphTo',
+      morphName: 'commentable',
+      types:     () => [Post, Video],   // closed list of allowed targets
+    },
+  } as const
+  id!: number
+  body!: string
+  commentableId!: number
+  commentableType!: string
+}
+
+class Post extends Model {
+  static override relations = {
+    comments: { type: 'morphMany', model: () => Comment, morphName: 'commentable' },
+  } as const
+}
+```
+
+**Reads** route through `instance.related(name)` like any other relation:
+
+```ts
+const post     = await Post.find(1)
+const comments = await post!.related('comments').get()
+
+const comment = await Comment.find(1)
+const owner   = await comment!.related('commentable').first()   // Post or Video, resolved via commentableType
+```
+
+**Writes** to the polymorphic side use `Model.morph()` to stamp the discriminator pair from a parent instance:
+
+```ts
+await Comment.create({
+  body: 'Nice post',
+  ...Model.morph('commentable', post!),     // → { commentableId: post.id, commentableType: 'Post' }
+})
+```
+
+The discriminator stored in `{morphName}Type` defaults to the parent's `Class.name`. Override per-class with `static morphAlias = 'post'` to decouple persisted values from JS class names — useful for rename-safe storage. Treat the alias as immutable once data exists. In dev mode (`NODE_ENV !== 'production'`), `morphTo` resolution checks the `types` list for duplicate discriminators and throws if two classes resolve to the same value.
+
+`morphOne` is identical to `morphMany` except `related('image').first()` returns a single row instead of a collection.
+
 ### Polymorphic many-to-many (`morphToMany` / `morphedByMany`)
 
 A taggable system is the canonical example: `Post` and `Video` both share a single `Tag` table through one shared pivot. The pivot carries the strong-side FK (`tagId`) plus a polymorphic pair (`taggableId` + `taggableType`).
@@ -706,3 +770,4 @@ schedule.call(() => pruneModels()).daily().description('Prune stale rows')
 - **`firstOrCreate` lookup column missing on the created row.** The lookup attrs go through `create()`, which respects `fillable`. If your lookup column isn't in `fillable`, the new row will be missing it. Add it to `fillable`, or use `forceFill()` on a manual `new Model().forceFill(...).save()`. See [Mass assignment — Lookup attrs](#lookup-attrs-in-firstorcreate).
 - **Forgetting to register the adapter.** `Model.*` static methods throw `[RudderJS ORM] No adapter registered`. The database provider must boot before any model query runs — see [Database](/guide/database).
 - **`Model.query().create()` skipping observers.** Use `Model.create()` (and the other static methods) when you need observer hooks.
+- **Using the SQL table name as `static table` on Prisma.** `static table` must be the Prisma **client delegate** (singular camelCase — e.g. `user`, `blogPost`, `oAuthClient`), not the `@@map`'d SQL table (`users`, `blog_posts`, `oauth_clients`). The adapter dispatches as `prisma[Model.table]`. Wrong name surfaces as `[RudderJS ORM] Prisma has no delegate for table "<x>"`.
