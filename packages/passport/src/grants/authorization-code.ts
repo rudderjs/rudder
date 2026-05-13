@@ -43,11 +43,11 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('invalid_client', 'Client not found.')
   }
 
-  if (!clientHelpers.hasGrantType(client as any, 'authorization_code')) {
+  if (!clientHelpers.hasGrantType(client, 'authorization_code')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for authorization_code grant.')
   }
 
-  if (!clientHelpers.hasRedirectUri(client as any, params.redirectUri)) {
+  if (!clientHelpers.hasRedirectUri(client, params.redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
   }
 
@@ -62,10 +62,10 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     // authorization code is already enough to mint tokens, defeating PKCE's
     // entire purpose. Confidential clients keep the `plain` option for
     // backward-compat with non-RFC-7636-compliant integrations.
-    if (method === 'plain' && clientHelpers.isPublic(client as any)) {
+    if (method === 'plain' && clientHelpers.isPublic(client)) {
       throw new OAuthError('invalid_request', 'Public clients must use code_challenge_method=S256.')
     }
-  } else if (clientHelpers.isPublic(client as any)) {
+  } else if (clientHelpers.isPublic(client)) {
     // Public clients MUST use PKCE
     throw new OAuthError('invalid_request', 'Public clients must use PKCE (code_challenge required).')
   }
@@ -185,7 +185,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   if (authCode.revoked) {
     throw new OAuthError('invalid_grant', 'Authorization code has been revoked.')
   }
-  if (authCodeHelpers.isExpired(authCode as any)) {
+  if (authCodeHelpers.isExpired(authCode)) {
     throw new OAuthError('invalid_grant', 'Authorization code has expired.')
   }
   if (authCode.clientId !== params.clientId) {
@@ -249,7 +249,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   const consumed = await AuthCodeCls
     .where('id', authCode.id)
     .where('revoked', false)
-    .updateAll({ revoked: true } as any)
+    .updateAll({ revoked: true } as Record<string, unknown>)
   if (consumed === 0) {
     throw new OAuthError('invalid_grant', 'Authorization code has already been used.')
   }
@@ -258,7 +258,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   return issueTokens({
     userId:   authCode.userId,
     clientId: params.clientId,
-    scopes:   authCodeHelpers.getScopes(authCode as any),
+    scopes:   authCodeHelpers.getScopes(authCode),
     includeRefresh: true,
   })
 }
@@ -302,7 +302,7 @@ export function validateScopes(client: OAuthClient, requested: string[]): void {
     }
   }
 
-  const clientScopes = clientHelpers.getScopes(client as any)
+  const clientScopes = clientHelpers.getScopes(client)
   if (clientScopes.length > 0) {
     const allow = new Set(clientScopes)
     const denied = requested.filter(s => s !== '*' && !allow.has(s))
