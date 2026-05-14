@@ -1,6 +1,6 @@
 # `agent.ts` extractions — split into purpose-named siblings
 
-> **Status:** ready
+> **Status:** shipped 2026-05-13 — extraction in #410, cast-tightening follow-up in #411.
 > **Date:** 2026-05-13
 > **Scope:** internal refactor of `@rudderjs/ai`. No public API change. No changeset.
 > **Companion finding:** `check our ai package code quality` review on 2026-05-13.
