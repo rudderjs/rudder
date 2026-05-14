@@ -76,7 +76,15 @@ export type BroadcastObserver = (event: BroadcastEvent) => void
 export class BroadcastObserverRegistry {
   private observers: BroadcastObserver[] = []
 
-  /** Subscribe; returns an unsubscribe function. */
+  /**
+   * Subscribe to broadcast lifecycle events. Returns an unsubscribe function.
+   *
+   * **Error contract.** Exceptions thrown from `fn` are swallowed by
+   * `emit()` (see below). Subscribers MUST NOT rely on exceptions
+   * propagating — if your observer needs to signal failure, route it
+   * through your own error channel (logger, telemetry, etc.). The swallow
+   * is intentional: a buggy observer cannot break the WebSocket layer.
+   */
   subscribe(fn: BroadcastObserver): () => void {
     this.observers.push(fn)
     return () => { this.observers = this.observers.filter(o => o !== fn) }

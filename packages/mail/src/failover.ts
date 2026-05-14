@@ -7,6 +7,15 @@ import type { MailAdapter, SendOptions } from './index.js'
  * Tries mailers in order — if the first fails, falls back to the next.
  * All configured mailers must fail before the send is considered a failure.
  *
+ * **Retry-window contract.** A mailer that fails is marked in
+ * `_lastFailures` with the failure timestamp and skipped for the next
+ * `retryAfter` seconds **on every send**, regardless of the underlying
+ * issue resolving. Failures are not auto-cleared by a subsequent success
+ * (a different mailer succeeding doesn't reset the failed mailer's
+ * timestamp). This is intended backoff, not a bug — but it means a single
+ * transient error gates that mailer for the entire window. To force a
+ * recheck, restart the process or construct a new `FailoverAdapter`.
+ *
  * @example
  * // In config/mail.ts:
  * mailers: {

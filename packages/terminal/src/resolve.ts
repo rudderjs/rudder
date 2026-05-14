@@ -2,6 +2,15 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import type { ComponentType } from 'react'
 
+/**
+ * Candidate extensions tried in order — stop at first match.
+ *
+ * Order is deliberate: `.tsx` and `.ts` come first because Ink components
+ * are almost always written in TypeScript (IDE support, prop typing).
+ * `.js` and `.mjs` exist for runtime-only commands (rare). Future
+ * additions (`.cts`, `.mts`) should be placed after their non-`c`/`m`
+ * counterparts so the existing precedence isn't disturbed.
+ */
 const EXTENSIONS = ['.tsx', '.ts', '.js', '.mjs']
 
 /**

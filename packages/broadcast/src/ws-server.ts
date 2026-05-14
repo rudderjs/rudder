@@ -84,6 +84,18 @@ export function registerAuth(pattern: string, callback: AuthCallback): void {
   ;(g[AUTH_KEY] as Map<string, AuthCallback>).set(pattern, callback)
 }
 
+/**
+ * Match a channel name against an auth pattern containing `*` wildcards.
+ *
+ * **Wildcard semantics.** `*` matches exactly one dot-separated segment —
+ * encoded as the regex character class `[^.]+`. Not a recursive glob:
+ * - `chat.*`        matches `chat.room1`        ✓
+ * - `chat.*`        matches `chat.room1.replies` ✗ (two segments after `chat.`)
+ * - `chat.*.public` matches `chat.room1.public` ✓
+ *
+ * All other regex metacharacters (`.`, `+`, `^`, `$`, `{}`, `()`, `|`,
+ * `[]`, `\`) are escaped so they match literally.
+ */
 function matchPattern(pattern: string, channel: string): boolean {
   const re = new RegExp(
     '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^.]+') + '$'
@@ -148,6 +160,12 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) as ClientMsg }
     catch { send(ws, { type: 'error', message: 'Invalid JSON' }); return }
+    // Fire-and-forget: don't serialize message handling on the auth await.
+    // Awaiting onMessage() would block this socket's `message` event from
+    // processing the next frame until auth resolves — turning subscribe +
+    // immediate publish into a multi-RTT chain. Errors thrown inside
+    // onMessage are caught there (auth failure path) and surfaced via the
+    // observer; nothing escapes to a Node `unhandledRejection`.
     void onMessage(state, id, ws, req, msg)
   })
 

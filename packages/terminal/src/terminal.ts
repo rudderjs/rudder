@@ -17,6 +17,20 @@ export function guardTTY(isTTY: boolean | undefined): void {
 /**
  * Render a terminal view from `app/Terminal/` with controller-supplied props.
  *
+ * **Lifecycle.** Resolves when the Ink component calls `useApp().exit()` or
+ * the process receives SIGINT. Without an explicit `exit()` the command
+ * hangs until Ctrl+C — components are expected to wire `useApp().exit()`
+ * into their normal "done" path (form submitted, list selected, etc.).
+ *
+ * **Throws** in three cases:
+ * - non-TTY environment (CI, piped stdout) — re-thrown from `guardTTY()`
+ * - target file not found at any candidate extension — from `resolveComponent()`
+ * - target file exists but has no default export — from `resolveComponent()`
+ *
+ * Callers from `routes/console.ts` typically don't try/catch — the rudder
+ * CLI's top-level handler renders the error. Wrap manually when invoking
+ * from a parent flow that needs to recover.
+ *
  * @param id    Dot-notation component id (e.g. 'dashboard' → app/Terminal/Dashboard.tsx)
  * @param props Plain object passed to the Ink component as props
  */
