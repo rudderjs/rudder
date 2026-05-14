@@ -108,7 +108,16 @@ export class NotificationFake {
 
   // ─── Cleanup ─────────────────────────────────────────────
 
-  /** Restore the original Notifier.send() dispatch. */
+  /**
+   * Restore the original `Notifier.send()` dispatch.
+   *
+   * **Asymmetry.** Resets the dispatch hook but does NOT clear the
+   * `_sent` array. If a test mutates the same fake across phases, prior
+   * recordings remain visible. Either construct a fresh fake per test
+   * (preferred) or call `restore()` then `Notifier.fake()` again to start
+   * clean. We don't auto-clear because tests sometimes inspect `sent()`
+   * after `restore()` to assert no notifications fired during cleanup.
+   */
   restore(): void {
     Notifier.send = this._originalSend
   }

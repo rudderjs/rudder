@@ -30,7 +30,16 @@ export class FakeMailAdapter implements MailAdapter {
 
   // ─── Queued mail tracking ────────────────────────────────
 
-  /** Record a mailable as queued (called internally by the queue integration). */
+  /**
+   * Record a mailable as queued. **@internal** — invoked by the
+   * `dispatchMailJob` queue dispatcher (`packages/mail/src/queued.ts`) when
+   * `Mail.to(...).queue(...)` or `.later(...)` is called against an active
+   * fake. The dispatcher detects the fake via `MailRegistry.get() instanceof
+   * FakeMailAdapter` and calls this method instead of enqueueing a job.
+   *
+   * Do not call from user code — use `assertQueued()` / `queued()` to
+   * inspect what was queued, not this method.
+   */
   recordQueued(mailable: Mailable, options: SendOptions): void {
     this._queued.push({ mailable, options })
   }

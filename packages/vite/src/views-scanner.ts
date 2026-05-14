@@ -130,6 +130,17 @@ function walk(dir: string, extensions: string[], base = dir): string[] {
  */
 const ROUTE_EXPORT_RE = /(?:^|[\s;])export\s+const\s+route\s*(?::\s*string)?\s*=\s*['"`]([^'"`]+)['"`]/m
 
+/**
+ * Read the `export const route = '...'` override from a view file, if any.
+ *
+ * Returns `null` on read failure (missing file, permission error, encoding
+ * issue) so callers fall back to the id-derived URL. This swallow is
+ * intentional: a transient read error during dev rescans should not crash
+ * the scanner — the next `change` event from the watcher will retry. Real
+ * authoring mistakes (typo in the export, wrong quote style) silently fall
+ * through to the convention URL, which is the same behavior as "no override
+ * present" — surfaces as a mismatched URL the developer can see.
+ */
 function readRouteOverride(absPath: string): string | null {
   try {
     const source = fs.readFileSync(absPath, 'utf8')
@@ -339,6 +350,16 @@ function generateFrameworkHooks(pagesRoot: string): void {
 
 const ALL_PAGE_FILENAMES = ['+Page.tsx', '+Page.jsx', '+Page.vue', '+Page.ts', '+Page.js']
 
+/**
+ * Idempotent file write — read-compare-then-write. Returns `true` only when
+ * the content actually changed.
+ *
+ * Load-bearing for watch stability: Vite's HMR fires on any `fs.writeFile`
+ * to a tracked path, even if the bytes are identical. During `buildStart()`
+ * and watcher-triggered rescans the scanner re-generates every page file;
+ * without this guard, every rescan would trigger a full SSR module
+ * invalidation for unchanged pages, causing dev-mode page flicker.
+ */
 function writeIfChanged(file: string, contents: string): boolean {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   if (fs.existsSync(file)) {

@@ -98,6 +98,15 @@ export class AnonymousNotifiable implements Notifiable {
   name?: string
   private readonly _routes = new Map<string, string>()
 
+  /**
+   * Register an address for a delivery channel. Returns `this` for chaining.
+   *
+   * **Side effect.** When `channel === 'mail'`, the address is also written
+   * to `this.email` so `MailChannel.send()` (which reads `notifiable.email`,
+   * not `routeFor('mail')`) picks it up. This mirrors the Notifiable
+   * contract used by ORM-backed users (`User.email`). Other channels store
+   * the address only in `_routes` and must be retrieved via `routeFor()`.
+   */
   route(channel: string, address: string): this {
     this._routes.set(channel, address)
     if (channel === 'mail') {
@@ -120,6 +129,17 @@ export interface NotificationChannel {
 
 // ─── Channel Registry ──────────────────────────────────────
 
+/**
+ * Process-wide registry mapping channel name → handler. Populated by
+ * `NotificationProvider.boot()` (built-in channels: mail, database,
+ * broadcast). Custom channels register via `ChannelRegistry.register()`
+ * from a service provider.
+ *
+ * **Test isolation.** Static state persists across test invocations within
+ * the same process. Tests that mutate channels MUST call `reset()` in
+ * `beforeEach()` / `afterEach()` or registrations leak between tests.
+ * Production code never calls `reset()`.
+ */
 export class ChannelRegistry {
   private static channels: Map<string, NotificationChannel> = new Map()
 
@@ -135,7 +155,7 @@ export class ChannelRegistry {
     return this.channels.has(name)
   }
 
-  /** @internal — clears all registered channels. Used for testing. */
+  /** @internal — clears all registered channels. Test-only; do NOT call from production code. */
   static reset(): void {
     this.channels.clear()
   }

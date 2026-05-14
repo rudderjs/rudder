@@ -55,7 +55,20 @@ export interface ViewOptions {
 
 const VIEW_URL_PREFIX = '/__view'
 
-/** Headers we never let a view override — these belong to the framework. */
+/**
+ * Headers a view is never allowed to set — these belong to the framework's
+ * response pipeline. Silently dropped by `filterReservedHeaders()`.
+ *
+ * - `set-cookie`: session, CSRF, and auth middleware write Set-Cookie
+ *   cooperatively (multi-value append, see the `feedback_set_cookie_collapse`
+ *   note in repo memory). A view-supplied Set-Cookie would either clobber
+ *   those or get collapsed by Node's undici `Response` constructor.
+ * - `vary`: managed by server-hono / Vike based on negotiated content; a
+ *   view-supplied `Vary` would shadow caching directives the framework needs.
+ * - `x-rudderjs-*` prefix: reserved for framework-internal markers
+ *   (telescope correlation ids, view markers, etc.); a view setting these
+ *   would corrupt observability.
+ */
 const RESERVED_HEADER_PREFIXES = ['x-rudderjs-']
 const RESERVED_HEADERS = new Set(['set-cookie', 'vary'])
 
@@ -91,6 +104,22 @@ export class ViewResponse {
   /**
    * Resolve this view to an HTTP Response by calling Vike's renderPage().
    * Called by the server adapter after the route handler returns.
+   *
+   * **Vike contract this method depends on** — `renderPage()` returns a
+   * pageContext object whose shape is partly undocumented. We only read two
+   * optional fields:
+   *
+   * - `errorWhileRendering`: present (and rethrown) when a page-component
+   *   throws during SSR. Surfaced to server-hono's exception handler.
+   * - `httpResponse`: present on success — carries `statusCode`,
+   *   `contentType`, `headers`, and `getReadableWebStream()`. Absent in two
+   *   cases: an early Vike abort (e.g. `throw render(404)`) or a renderer
+   *   misconfiguration. Both fall through to the 404 fallback below.
+   *
+   * If a future Vike upgrade renames either field, the 404 fallback would
+   * silently mask the real error — re-verify these property names when
+   * bumping `vike` major. The structural casts on the destructure exist
+   * because Vike's exported `PageContextServer` type doesn't surface them.
    */
   async toResponse(ctx: ViewResolveContext): Promise<Response> {
     const { renderPage } = await import('vike/server')
@@ -220,6 +249,13 @@ export function escapeHtml(value: unknown): string {
  * from user input must go through `escapeHtml()` first.
  */
 export class SafeString {
+  /**
+   * Wraps a string as already-escaped HTML. **Does NOT escape its argument.**
+   * The caller is responsible for ensuring `value` cannot contain
+   * unsanitized user input — pass user-controlled strings through
+   * `escapeHtml()` first, or compose via the `html\`\`` tagged template
+   * (which handles escaping for you).
+   */
   constructor(public readonly value: string) {}
   toString(): string { return this.value }
 }

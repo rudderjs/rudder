@@ -43,6 +43,19 @@ export class MailRegistry {
 
 // ─── Pending Send (fluent builder) ─────────────────────────
 
+/**
+ * Fluent builder returned by `Mail.to(...)`. Configure the recipient lists
+ * and queue, then terminate with `.send()`, `.queue()`, or `.later()`.
+ *
+ * **Builder contract:**
+ * - `cc()` / `bcc()` **replace** the previous list — they do NOT accumulate.
+ *   Pass all addresses in one call: `.cc('a@x', 'b@x')`, not two separate
+ *   `.cc('a@x').cc('b@x')`.
+ * - `onQueue()` is only honored by `.queue()` and `.later()`; ignored by `.send()`.
+ * - Call order between `cc`/`bcc`/`onQueue` doesn't matter, but `send`/
+ *   `queue`/`later` must be last — they execute the operation and return a
+ *   `Promise<void>`, not the builder.
+ */
 export class MailPendingSend {
   private _cc:    string[] = []
   private _bcc:   string[] = []
@@ -50,10 +63,12 @@ export class MailPendingSend {
 
   constructor(private readonly _to: string[]) {}
 
+  /** Set the CC list. **Replaces** the previous list — pass all addresses in one call. */
   cc(...addresses: string[]):  this { this._cc  = addresses; return this }
+  /** Set the BCC list. **Replaces** the previous list — pass all addresses in one call. */
   bcc(...addresses: string[]): this { this._bcc = addresses; return this }
 
-  /** Specify which queue to use for queued mail. */
+  /** Specify which queue to use for queued mail. Honored by `queue()`/`later()`; ignored by `send()`. */
   onQueue(name: string): this { this._queue = name; return this }
 
   async send(mailable: Mailable): Promise<void> {

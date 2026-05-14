@@ -114,13 +114,27 @@ export function rudderjs(): Promise<Plugin[]> {
         name: 'rudderjs:ws',
         configureServer(server) {
           // Attach the WebSocket upgrade handler to Vite's own HTTP server.
-          // @rudderjs/broadcast and @rudderjs/sync register their handlers on
-          // globalThis['__rudderjs_ws_upgrade__'] during provider boot. We listen
-          // for 'upgrade' events and forward them to that handler.
           //
-          // Set a sentinel flag so @rudderjs/server-hono's module-load patch knows
-          // to skip — otherwise both would attach upgrade listeners and
-          // handleUpgrade() would be called twice for the same socket.
+          // GlobalThis contract for cross-package WS wiring:
+          //   __rudderjs_ws_upgrade__         — handler function. Written by
+          //                                     @rudderjs/broadcast and
+          //                                     @rudderjs/sync provider boot.
+          //                                     Read here in dev and by
+          //                                     @rudderjs/server-hono in prod.
+          //   __rudderjs_http_upgrade_patched__ — sentinel set by whichever
+          //                                     plugin/runtime claims the
+          //                                     `upgrade` event first. Both
+          //                                     this plugin AND server-hono's
+          //                                     module-load patch attach
+          //                                     upgrade listeners; without the
+          //                                     sentinel, handleUpgrade()
+          //                                     would fire twice per socket
+          //                                     (duplicate WS connection + the
+          //                                     classic "already destroyed"
+          //                                     error from `ws`).
+          //
+          // The sentinel slot is shared with @rudderjs/server-hono; renaming
+          // it requires a coordinated change in both packages.
           const _G = globalThis as Record<string, unknown>
           if (_G['__rudderjs_http_upgrade_patched__']) return
           _G['__rudderjs_http_upgrade_patched__'] = true
