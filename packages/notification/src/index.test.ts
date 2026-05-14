@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { MailRegistry, Mailable, type MailAdapter } from '@rudderjs/mail'
 import { ModelRegistry, type OrmAdapter } from '@rudderjs/orm'
 import {
+  AnonymousNotifiable,
   ChannelRegistry,
+  isQueueable,
   MailChannel,
   DatabaseChannel,
   Notifier,
@@ -12,7 +14,9 @@ import {
   NotificationProvider,
   type Notifiable,
   type NotificationChannel,
+  type ShouldQueue,
 } from './index.js'
+import { NotificationFake } from './fake.js'
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -333,6 +337,129 @@ describe('NotificationProvider', () => {
     new NotificationProvider(fakeApp).boot?.()
     assert.ok(ChannelRegistry.has('mail'))
     assert.ok(ChannelRegistry.has('database'))
+  })
+})
+
+// ─── isQueueable ──────────────────────────────────────────
+
+describe('isQueueable()', () => {
+  class PlainNotification extends Notification {
+    via() { return ['mail'] }
+  }
+
+  class QueueableNotification extends Notification implements ShouldQueue {
+    readonly shouldQueue = true as const
+    via() { return ['mail'] }
+  }
+
+  class FalseQueueableNotification extends Notification {
+    readonly shouldQueue = false
+    via() { return ['mail'] }
+  }
+
+  it('returns true for notifications with shouldQueue: true', () => {
+    assert.equal(isQueueable(new QueueableNotification()), true)
+  })
+
+  it('returns false for notifications without a shouldQueue property', () => {
+    assert.equal(isQueueable(new PlainNotification()), false)
+  })
+
+  it('returns false for notifications with shouldQueue: false', () => {
+    assert.equal(isQueueable(new FalseQueueableNotification()), false)
+  })
+})
+
+// ─── AnonymousNotifiable ──────────────────────────────────
+
+describe('AnonymousNotifiable', () => {
+  it('id is the literal "anonymous"', () => {
+    const a = new AnonymousNotifiable()
+    assert.equal(a.id, 'anonymous')
+  })
+
+  it('route("mail", addr) mirrors the address onto .email (load-bearing for MailChannel)', () => {
+    const a = new AnonymousNotifiable()
+    a.route('mail', 'guest@example.com')
+    assert.equal(a.email, 'guest@example.com')
+  })
+
+  it('route() does NOT mutate .email for non-mail channels', () => {
+    const a = new AnonymousNotifiable()
+    a.route('broadcast', 'room.42')
+    assert.equal(a.email, undefined)
+  })
+
+  it('routeFor() returns the stored address for the given channel', () => {
+    const a = new AnonymousNotifiable()
+    a.route('broadcast', 'room.42')
+    a.route('mail',      'guest@example.com')
+    assert.equal(a.routeFor('broadcast'),  'room.42')
+    assert.equal(a.routeFor('mail'),       'guest@example.com')
+    assert.equal(a.routeFor('nonexistent'), undefined)
+  })
+
+  it('supports chaining', () => {
+    const a = new AnonymousNotifiable()
+      .route('mail',      'g@example.com')
+      .route('broadcast', 'public.feed')
+    assert.equal(a.email,                 'g@example.com')
+    assert.equal(a.routeFor('broadcast'), 'public.feed')
+  })
+})
+
+// ─── NotificationFake — multi-target dispatch ─────────────
+
+describe('NotificationFake (multi-target dispatch)', () => {
+  beforeEach(() => { ChannelRegistry.reset() })
+
+  class WelcomeNotification extends Notification {
+    via() { return ['mail'] }
+  }
+
+  it('records one entry per notifiable when passed an array', async () => {
+    const fake = NotificationFake.fake()
+    try {
+      const targets: Notifiable[] = [
+        { id: 'a', email: 'a@x' },
+        { id: 'b', email: 'b@x' },
+        { id: 'c', email: 'c@x' },
+      ]
+      await Notifier.send(targets, new WelcomeNotification())
+      assert.equal(fake.sent().length, 3)
+    } finally {
+      fake.restore()
+    }
+  })
+
+  it('assertSentTo filters across multi-target batches', async () => {
+    const fake = NotificationFake.fake()
+    try {
+      await Notifier.send([
+        { id: 'a', email: 'a@x' },
+        { id: 'b', email: 'b@x' },
+      ], new WelcomeNotification())
+      fake.assertSentTo({ id: 'a' }, WelcomeNotification)
+      fake.assertSentTo({ id: 'b' }, WelcomeNotification)
+      fake.assertNotSentTo({ id: 'c' }, WelcomeNotification)
+    } finally {
+      fake.restore()
+    }
+  })
+
+  it('sent(notifiable) filters by notifiable id across multiple batches', async () => {
+    const fake = NotificationFake.fake()
+    try {
+      await Notifier.send({ id: 'a', email: 'a@x' }, new WelcomeNotification())
+      await Notifier.send([
+        { id: 'b', email: 'b@x' },
+        { id: 'a', email: 'a@x' },  // same target, separate batch
+      ], new WelcomeNotification())
+      assert.equal(fake.sent({ id: 'a' }).length, 2)
+      assert.equal(fake.sent({ id: 'b' }).length, 1)
+    } finally {
+      fake.restore()
+    }
   })
 })
 
