@@ -5,6 +5,9 @@ This file provides guidance to Claude Code when working in this repository.
 **Extended docs** (read on-demand when relevant):
 - `claude-notes/packages.md` — Full monorepo layout + package status table
 - `claude-notes/create-app.md` — create-rudder-app scaffolder details
+- `claude-notes/ai-sdk-comparison.md` — RudderJS vs Laravel AI vs Vercel AI SDK vs TanStack — feature matrix and design positioning
+- `Architecture.md` — High-level package map + dependency flow (read for orientation; not exhaustive)
+- `ROADMAP.md` — Plans 1–9 status + remaining work (Nightwatch is the only ⬜ entry left)
 
 ---
 
@@ -16,7 +19,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
-- **Status**: 1.0 graduated 2026-05-02 (every `@rudderjs/*` package on npm is 1.0.0+; zero packages on 0.x). See `docs/plans/2026-04-28-1x-graduation.md`.
+- **Status**: 1.0 graduated 2026-05-02 (every `@rudderjs/*` package on npm is 1.0.0+; zero packages on 0.x).
 
 ---
 
@@ -75,6 +78,17 @@ pnpm publish --access public --no-git-checks
 ```
 
 npm requires browser passkey auth — press Enter when prompted to open the browser.
+
+**Which PRs need a changeset:**
+
+| Prefix | Changeset? | Why |
+|---|---|---|
+| `fix:` (real user-affecting bug) | **yes** (patch) | Otherwise the fix sits on `main` without a published bump |
+| `feat:` | **yes** (minor; `feat!:` → major) | New surface |
+| `refactor:` (internal, public API unchanged) | no | No user-visible change |
+| `test:` / `docs:` / `chore:` / `ci:` | no | Not published |
+
+Watch compound prefixes — `fix+test:` on a recent PR shipped the bug fix without a changeset and had to be added retroactively. Quick check before push: `git diff --stat main..HEAD .changeset/` should show a new file for any `fix:`/`feat:` PR.
 
 ---
 
@@ -154,7 +168,8 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
-import { RateLimit } from '@rudderjs/middleware'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+import { requestIdMiddleware } from 'App/Http/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -169,7 +184,12 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    m.use(RateLimit.perMinute(60).toHandler())
+    // Global — runs on every request, regardless of group
+    m.use(requestIdMiddleware)
+
+    // Per-group — only the matching route loader's stack gets these
+    m.web(RateLimit.perMinute(60))
+    m.web(CsrfMiddleware({ exclude: ['/paddle/webhook'] }))
   })
   .create()
 ```
@@ -319,3 +339,4 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **Prisma delegate name vs SQL table name**: `static table` on a Model must be the Prisma client delegate (camelCase of the model name, e.g. `oAuthClient`), NOT the `@@map`'d SQL table (`oauth_clients`). The adapter does `this.prisma[this.table]`. Error: `[RudderJS ORM] Prisma has no delegate for table "oauth_clients"` means you used the SQL name by mistake.
 - **Package commands don't register in CLI**: Domain commands live in their owning package and register via `rudder.command()` in the provider's `boot()` (runtime commands) or via `registerMakeSpecs()` + subpath export (scaffolders). CLI's `loadPackageCommands()` eagerly imports known subpaths. If you add a new package command, add the loader entry in `packages/cli/src/index.ts` and export from a subpath like `@rudderjs/<pkg>/commands/<name>`.
 - **`AiProvider` not exported from `@rudderjs/ai`**: As of the runtime-agnostic split, `AiProvider` lives at `@rudderjs/ai/server`. The main entry is runtime-agnostic (works in RN/browser/Electron renderer); Node-only file helpers live at `@rudderjs/ai/node`. Provider auto-discovery reads `rudderjs.providerSubpath` from `package.json` to load the class from the right subpath — no manual config needed in apps.
+- **Node 22 `mock.module()` traps** (when writing tests that mock ESM imports — see [`feedback_node_mock_module_gotchas.md`](memory)): (1) Install at file/module scope, **not** inside a `before()` hook — top-level `before()` re-runs once per top-level describe in Node 22, which trips the duplicate-mock guard. (2) Node keys module mocks on the `file://` URL form, not the bare specifier — for peers loaded via `resolveOptionalPeer` (which does `createRequire().resolve()` first), mock the resolved URL, not the package name. (3) `mock.reset()` does **not** unregister module mocks — install one mock with shared capture arrays, and clear the arrays per-test instead of re-installing. Test scripts also need `--experimental-test-module-mocks` on the `node --test` invocation. Canonical example: `packages/mail/src/nodemailer-adapter.test.ts`.
