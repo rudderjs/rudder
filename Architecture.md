@@ -169,7 +169,6 @@ rudderjs/
 - `@rudderjs/cache-redis` → merged into `@rudderjs/cache`
 - `@rudderjs/mail-nodemailer` → merged into `@rudderjs/mail`
 - `@rudderjs/events` → merged into `@rudderjs/core`
-- `@rudderjs/panels`, `@rudderjs/panels-lexical`, `@rudderjs/media`, `@rudderjs/workspaces` → extracted to a separate admin/CMS-flavored project (no longer part of the framework)
 
 ---
 
