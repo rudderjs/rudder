@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { escapeHtml, html, SafeString, view, isViewResponse, ViewResponse } from './index.js'
@@ -177,5 +177,188 @@ describe('view() with options.headers', () => {
       },
     })
     assert.deepEqual(r.resolveHeaders(), { 'cache-control': 'public' })
+  })
+})
+
+// ─── ViewResponse.toResponse() ────────────────────────────
+//
+// Mocks Vike's `renderPage()` via `mock.module()` to exercise the three
+// branches: success (httpResponse → Response), errorWhileRendering (rethrow),
+// and missing httpResponse (404 fallback). Also asserts that viewProps,
+// viewHeaders, and urlOriginal are forwarded faithfully.
+
+interface FakeHttpResponse {
+  statusCode:    number
+  contentType:   string
+  headers:       [string, string][]
+  body:          string
+}
+
+interface CapturedRenderArgs {
+  urlOriginal?: string
+  viewProps?:   unknown
+  viewHeaders?: unknown
+}
+
+function installVikeMock(opts: {
+  httpResponse?:        FakeHttpResponse
+  errorWhileRendering?: unknown
+}): { calls: CapturedRenderArgs[] } {
+  const calls: CapturedRenderArgs[] = []
+  const renderPage = async (args: CapturedRenderArgs) => {
+    calls.push(args)
+    const result: Record<string, unknown> = {}
+    if (opts.httpResponse) {
+      const hr = opts.httpResponse
+      result['httpResponse'] = {
+        statusCode:           hr.statusCode,
+        contentType:          hr.contentType,
+        headers:              hr.headers,
+        getReadableWebStream() {
+          return new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(hr.body))
+              controller.close()
+            },
+          })
+        },
+      }
+    }
+    if (opts.errorWhileRendering !== undefined) {
+      result['errorWhileRendering'] = opts.errorWhileRendering
+    }
+    return result
+  }
+  mock.module('vike/server', { namedExports: { renderPage } })
+  return { calls }
+}
+
+afterEach(() => mock.reset())
+
+describe('ViewResponse.toResponse()', () => {
+  it('returns a Response built from Vike\'s httpResponse', async () => {
+    installVikeMock({
+      httpResponse: {
+        statusCode:  200,
+        contentType: 'text/html;charset=utf-8',
+        headers:     [['x-test', 'on']],
+        body:        '<html>hi</html>',
+      },
+    })
+
+    const res = await view('home', { x: 1 }).toResponse({ url: '/home' })
+    assert.ok(res instanceof Response)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('x-test'), 'on')
+    assert.equal(res.headers.get('Content-Type'), 'text/html;charset=utf-8')
+    assert.equal(await res.text(), '<html>hi</html>')
+  })
+
+  it('forwards urlOriginal, viewProps, and viewHeaders to renderPage', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+
+    const r = view('dashboard', { user: 'alice' }, {
+      headers: { 'cache-control': 'private' },
+    })
+    await r.toResponse({ url: '/dashboard?ref=test' })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]!.urlOriginal, '/dashboard?ref=test')
+    assert.deepEqual(calls[0]!.viewProps,   { user: 'alice' })
+    assert.deepEqual(calls[0]!.viewHeaders, { 'cache-control': 'private' })
+  })
+
+  it('forwards a resolved function-form viewHeaders to renderPage', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+
+    let count = 0
+    const r = view('admin', {}, { headers: () => ({ 'x-nonce': String(++count) }) })
+    await r.toResponse({ url: '/admin' })
+
+    assert.deepEqual(calls[0]!.viewHeaders, { 'x-nonce': '1' })
+  })
+
+  it('rethrows errorWhileRendering as-is', async () => {
+    const renderErr = new Error('boom-in-render')
+    installVikeMock({ errorWhileRendering: renderErr })
+
+    await assert.rejects(
+      () => view('home').toResponse({ url: '/home' }),
+      (err) => err === renderErr,
+    )
+  })
+
+  it('falls back to a 404 plain-text Response when httpResponse is missing', async () => {
+    installVikeMock({})  // no httpResponse, no errorWhileRendering
+
+    const res = await view('does-not-exist').toResponse({ url: '/does-not-exist' })
+    assert.equal(res.status, 404)
+    assert.equal(res.headers.get('Content-Type'), 'text/plain')
+    assert.match(await res.text(), /View "does-not-exist" not found/)
+  })
+
+  it('preserves the statusCode from Vike (200 → 200, 500 → 500)', async () => {
+    installVikeMock({
+      httpResponse: { statusCode: 500, contentType: 'text/html', headers: [], body: 'oops' },
+    })
+
+    const res = await view('error').toResponse({ url: '/error' })
+    assert.equal(res.status, 500)
+    assert.equal(await res.text(), 'oops')
+  })
+
+  it('uses Vike\'s contentType when no Content-Type header is supplied', async () => {
+    installVikeMock({
+      httpResponse: {
+        statusCode:  200,
+        contentType: 'application/json',
+        headers:     [],  // no Content-Type in the array
+        body:        '{}',
+      },
+    })
+
+    const res = await view('api').toResponse({ url: '/api' })
+    assert.equal(res.headers.get('Content-Type'), 'application/json')
+  })
+
+  it('does not overwrite a Content-Type already present in Vike\'s headers array', async () => {
+    installVikeMock({
+      httpResponse: {
+        statusCode:  200,
+        contentType: 'application/json',
+        headers:     [['content-type', 'text/html; charset=utf-8']],
+        body:        '<p>hi</p>',
+      },
+    })
+
+    const res = await view('mixed').toResponse({ url: '/mixed' })
+    assert.equal(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
+  })
+
+  it('passes an empty viewHeaders object when no headers option is provided', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+    await view('plain').toResponse({ url: '/plain' })
+    assert.deepEqual(calls[0]!.viewHeaders, {})
+  })
+
+  it('drops reserved headers from viewHeaders before forwarding', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+    const r = view('home', {}, {
+      headers: {
+        'cache-control':   'public',
+        'Set-Cookie':      'session=hijack',
+        'x-rudderjs-mark': 'leak',
+      },
+    })
+    await r.toResponse({ url: '/home' })
+    assert.deepEqual(calls[0]!.viewHeaders, { 'cache-control': 'public' })
   })
 })

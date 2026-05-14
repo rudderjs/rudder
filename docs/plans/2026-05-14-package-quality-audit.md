@@ -1,6 +1,6 @@
 # Package quality cleanup — view, vite, terminal, mail, notification, broadcast
 
-> **Status:** in progress 2026-05-14
+> **Status:** shipped 2026-05-14 — PR A (#445), PR B (#446), PR C (#447), peer-resolution fix + tests (#448), and the three deferred test-infra items (this PR) all merged.
 > **Date:** 2026-05-14
 > **Scope:** internal cleanup of six packages that weren't covered by the 2026-05-13 audit wave (framework #418–#421, mcp #424–#426, ai #410/#411, orm #413–#416). No public API breaks expected. No latent bugs found that warrant patch-bumps.
 >
@@ -348,3 +348,31 @@ git log --oneline main..HEAD -- packages/{view,vite,terminal,mail,notification,b
 - A is pure docs; reviewer load is *reading*, not running.
 - B touches test infrastructure but no shipped code paths. Watch for mail's test-script update — currently single-file, switching to a glob.
 - C does a public-API-stable file extraction; `mail/index.ts` re-exports must cover every previously-exported symbol from `NodemailerAdapter`. Verify via `git diff main -- packages/mail/src/index.ts | grep '^-export'`.
+
+---
+
+## Follow-up — deferred test-infra items (2026-05-14, same-day)
+
+PR B deferred three tests that needed Vike or nodemailer module-mocking infrastructure. Picked up same day after a brief investigation:
+
+- **Node 22 across CI + local** confirmed (`actions/setup-node@v4` with `node-version: 22`), so `node:test`'s `mock.module()` is viable behind `--experimental-test-module-mocks`. Verified with a smoke test before writing the real ones.
+- **`mailPreview()` does not actually touch Vike** — the original deferral memo overstated the dependency. It's a pure HTML-string handler with a stubbed `res` interface, so no module mocking is needed for that file.
+
+Test files added / extended:
+
+| Item | File | Approach |
+|---|---|---|
+| view: `ViewResponse.toResponse()` paths | `packages/view/src/index.test.ts` (+10 tests) | `mock.module('vike/server', { namedExports: { renderPage } })` |
+| mail: `mailPreview()` | `packages/mail/src/preview.test.ts` (new, 11 tests) | stub `res` recorder; no module mock |
+| mail: `NodemailerAdapter` SMTP path | `packages/mail/src/nodemailer-adapter.test.ts` (new, 18 tests) | `mock.module(<resolved file:// URL>, ...)` — keyed on the URL form because `resolveOptionalPeer` calls `createRequire().resolve()` first, and Node normalizes the cache key to the URL |
+
+Test-script updates to pass `--experimental-test-module-mocks`:
+- `packages/view/package.json` — also switched from explicit single-file `node --test dist-test/index.test.js` to a glob (no new files yet, but the script wouldn't have picked them up).
+- `packages/mail/package.json` — flag only; script was already a glob.
+
+**Gotchas learned (write to memory once shipped):**
+- `mock.module()` cannot be installed twice for the same target — "already mocked" — and `mock.reset()` does **not** unregister module mocks. Install at module scope, not inside a `before()` hook (which Node 22 runs once per top-level describe, not once per file).
+- Node normalizes import specifiers to `file://` URLs internally. Mocking the absolute path form *also* works (it's silently aliased), but mocking *both* forms throws the duplicate-mock guard — pick one.
+- For peers loaded via `resolveOptionalPeer`, the fast path is `createRequire(cwd).resolve(specifier)` → absolute path → `import()`. So a `mock.module('nodemailer', ...)` mock by bare specifier **does not** intercept; mock by resolved path/URL.
+
+All three audit packages green; pre-existing lint warnings untouched. `boost` has an unrelated flaky exit-code assertion that fails on `main` too — outside this scope.
