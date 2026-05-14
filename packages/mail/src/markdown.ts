@@ -128,7 +128,7 @@ export abstract class MarkdownMailable extends Mailable {
     const html = _wrapLayout(bodyHtml, this._theme)
 
     return {
-      subject: (this as unknown as { _subject: string })._subject,
+      subject: this.getSubject(),
       html,
       text: _stripHtml(bodyHtml),
     }

@@ -76,7 +76,8 @@ export interface ShouldQueue {
 
 /** Type guard for queueable notifications. */
 export function isQueueable(notification: Notification): notification is Notification & ShouldQueue {
-  return (notification as unknown as ShouldQueue).shouldQueue === true
+  return 'shouldQueue' in notification
+    && (notification as { shouldQueue?: unknown }).shouldQueue === true
 }
 
 // ─── AnonymousNotifiable ───────────────────────────────────

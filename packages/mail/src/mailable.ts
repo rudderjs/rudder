@@ -33,4 +33,11 @@ export abstract class Mailable {
     if (this._text !== undefined) msg.text = this._text
     return msg
   }
+
+  /**
+   * @internal — read the current subject. Used by `MarkdownMailable.compile()`
+   * which overrides `compile()` and needs to read the subject set by the
+   * subclass's `build()` without going through the closed `compile()` flow.
+   */
+  protected getSubject(): string { return this._subject }
 }
