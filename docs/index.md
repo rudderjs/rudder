@@ -25,7 +25,7 @@ features:
     details: "`return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax."
   - icon: 🧠
     title: AI-native
-    details: 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina). Agents with tools, streaming, MCP, queue-backed runs, approval gates.
+    details: 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage). Agents with tools, streaming, MCP, queue-backed runs, approval gates.
   - icon: 🔌
     title: Real-time on one port
     details: WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy, no Pusher dependency.
@@ -34,7 +34,7 @@ features:
     details: DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle) — one bootstrap file wires everything.
   - icon: 🪶
     title: Pay-as-you-go modularity
-    details: 46 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
+    details: 47 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
   - icon: 🔒
     title: TypeScript-first, strict by default
     details: "`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime."
