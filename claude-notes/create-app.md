@@ -42,7 +42,7 @@ Source of truth: `src/templates/demos/registry.ts` — exports `DEMOS: ReadonlyA
 
 `DemoSpec` shape: `{ value, label, hint?, title?, description, packages, requires?, requiresOrm? }`. `label` is the multiselect row, `title` is the optional card title (falls back to `label`), `description` is the long card text, `packages` is the `@rudderjs/*` chip list under the card.
 
-14 demos as of 2026-05-03: contact, cache (always); todos (ORM); queue, mail, notifications, localization, http, avatar, fibonacci, system-info, pennant, ws, sync (each gated on its package). Demos are silently skipped when `primary !== 'react'`.
+15 demos as of 2026-05-14: contact, cache (always); todos, polymorphic (ORM-gated); queue, mail, notifications, localization, http, avatar, fibonacci, system-info, pennant, ws, sync (each gated on its package). Demos are silently skipped when `primary !== 'react'`.
 
 The scaffolder's `app/Views/Demos/Index.tsx` is generated from `DEMOS` via `templates/demos/index-view.ts` (filtered through `shouldScaffoldDemo`). Adding a new demo = one registry entry + one per-demo template module — Index.tsx picks it up automatically.
 
@@ -169,7 +169,7 @@ cd create-rudder-app
 pnpm build
 node dist/index.js                          # launches the full interactive CLI
 
-pnpm test                                   # 169 template tests + snapshot baseline
+pnpm test                                   # template tests + snapshot baseline
 pnpm smoke                                  # default profile (Prisma + auth + react)
 pnpm smoke --profile=minimal                # ORM=none + nothing
 pnpm smoke --profile=todos                  # ORM=prisma + auth + todos demo
