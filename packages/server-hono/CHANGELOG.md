@@ -1,5 +1,50 @@
 # @rudderjs/server-hono
 
+## 1.1.0
+
+### Minor Changes
+
+- 758a89f: feat(server-hono): add Copy-as-Markdown button to the dev error page
+
+  Adds a one-click button on the Ignition-style dev error page that copies the
+  full error context as Markdown — heading, location, request, source context
+  (with `>` marker on the error line), stack frames, and headers — formatted
+  for pasting directly into an AI chat to debug. Vendor frames are wrapped in
+  a collapsed `<details>` block so the primary signal stays visible.
+
+  The Markdown is pre-rendered server-side and embedded as a JSON-stringified
+  JS literal in an inline `<script>` block. `<`, `>`, `&`, U+2028, and U+2029
+  are unicode-escaped (`<`, etc.) so an attacker-controlled error message
+  or URL can't break out of the script tag — the existing XSS regression
+  tests for the visible HTML now also cover this path. Clipboard API is used
+  directly (secure-context only — dev page already requires localhost/https).
+
+  Exports `buildErrorMarkdown(error, req, parts)` for callers that want the
+  same shape outside the rendered page (e.g. logging the markdown directly).
+
+### Patch Changes
+
+- 3190a8e: ui(server-hono): move Copy-as-Markdown button next to the H1 title
+
+  Tweak of the button position landed in #441. Previously the button lived on its own row above the badges, which felt visually disconnected from the error itself. Now it sits inline with the H1 title via a flex `title-row` container — same convention as Laravel Ignition's "Share" / "Copy as text" controls.
+
+  No behavior change. The button still copies the same Markdown payload; tests unchanged.
+
+- 68ac948: fix(server-hono): widen error-page source-line scan + skip section when no throw found
+
+  The dev error page's "Exception Source" section sometimes highlighted an unrelated line (often a comment block) when running under Vite SSR. Root cause: Vite's Module Runner evaluates SSR modules via `new Function()`, which sidesteps Node's `--enable-source-maps`, and `ssr.sourcemap: 'inline'` is silently ignored. The result is stack-trace line numbers that are off by 40–90+ lines from the actual throw site.
+
+  `resolveErrorLine()` already compensated by scanning forward for a `throw` keyword, but the window was 20 lines (too narrow for typical Vite offsets) and the fallback was "first non-empty line" — which lands on a comment when the actual throw is further out.
+
+  Fix:
+
+  - Window expanded to 150 lines.
+  - Trigger pattern broadened to match `throw `, `throw new`, and `abort(` — with a word-boundary regex so mid-line `throw new` inside an `if {...}` block matches too.
+  - Comment lines (`//`, `*`, `/*`) are skipped during the scan rather than terminating it.
+  - When no trigger is found in the window, the function now returns `null` and the renderer drops the source-context section entirely — better than misleading with an unrelated line.
+
+  `resolveErrorLine` is now exported with an `@internal` tag so the regression coverage can pin specific offset/comment/abort scenarios.
+
 ## 1.0.6
 
 ### Patch Changes
