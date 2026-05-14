@@ -159,6 +159,59 @@ server {
 
 Set `TRUST_PROXY=true` in `.env` so `req.ip` reads `x-forwarded-for` correctly. The WebSocket-upgrade headers are required for `@rudderjs/broadcast` and `@rudderjs/sync`.
 
+## Laravel Forge
+
+Forge is a popular choice in the Laravel ecosystem and works well for RudderJS — it provisions the VPS, manages PM2 + nginx, handles SSL via Let's Encrypt, and exposes a one-click deploy from GitHub. Because RudderJS is a Node SSR app, the setup leans on Forge's PM2-based site types rather than the PHP defaults.
+
+**Site type:** pick **Next.js** when creating the site. It's the closest preset — both run a long-running Node process behind nginx — but you'll override the deploy script and start command. None of Next's actual runtime is involved.
+
+**PM2 config — commit it as a file, don't generate it inline.** Forge's web deploy-script editor is brittle: heredocs whose terminator gets indented break silently (the rest of the script gets swallowed into the file), and long single lines get wrapped onto two lines, producing `syntax error` or `missing operand` failures at the activate step. The robust pattern is to commit a `pm2.config.json` at the repo root and have the deploy script just reference it.
+
+```json
+{
+  "name":      "myapp",
+  "cwd":       "/home/forge/myapp.com/current",
+  "script":    "./dist/server/index.mjs",
+  "instances": 1,
+  "exec_mode": "fork",
+  "max_memory_restart": "500M"
+}
+```
+
+**Deploy script.** Replace Forge's auto-generated `$ACTIVATE_RELEASE()` block with three short lines that read the config from the repo via the `current` symlink:
+
+```bash
+$CREATE_RELEASE()
+
+cd $FORGE_RELEASE_DIRECTORY
+
+pnpm install --frozen-lockfile || pnpm install
+pnpm build
+
+$ACTIVATE_RELEASE()
+
+CONFIG=/home/forge/myapp.com/current/pm2.config.json
+pm2 start "$CONFIG" || pm2 reload myapp --update-env
+pm2 save
+```
+
+Each line stays under ~60 characters — short enough that Forge's editor can't wrap it into a syntax error. PM2 picks up new code on every deploy because `reload` re-points at `current/dist/server/index.mjs` through the symlink.
+
+**Env vars** (Forge → Site → Environment):
+
+```
+APP_URL=https://myapp.com
+APP_ENV=production
+PORT=3000
+TRUST_PROXY=true
+```
+
+`TRUST_PROXY=true` is required whenever Forge sits behind another proxy (Cloudflare, AWS ALB, anything that rewrites `X-Forwarded-For`) — without it `req.ip` reads the upstream proxy IP instead of the real client.
+
+**Health check.** Forge → Site → Health Checks → point at `https://myapp.com/healthz` (or the on-forge.com staging URL). Forge pings post-deploy and marks the deploy failed if it doesn't return 2xx — catches the "build succeeded but the process crashed on startup" class of bugs.
+
+**Cloudflare in front of Forge** is a common combo. Use a Cloudflare **Origin Certificate** installed on Forge (15-year, set-and-forget) with Cloudflare SSL mode **Full (strict)**. Drops the Let's Encrypt renewal cycle and gets you CDN + DDoS protection at the edge for free.
+
 ## Edge runtimes
 
 The same `app.fetch` handler runs on Cloudflare Workers, Deno Deploy, and Bun. Some considerations:
