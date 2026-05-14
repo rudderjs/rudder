@@ -30,7 +30,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && node --test 'dist-test/**/*.test.js'; EXIT=$?; rm -rf dist-test; exit $EXIT",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -39,6 +39,8 @@
     "@rudderjs/orm": "workspace:^"
   },
   "devDependencies": {
+    "@rudderjs/broadcast": "workspace:*",
+    "@rudderjs/queue": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

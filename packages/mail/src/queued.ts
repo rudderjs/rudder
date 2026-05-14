@@ -20,8 +20,11 @@ export async function dispatchMailJob(
   let QueueRegistry: QueueLike
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@rudderjs/queue') as { QueueRegistry: QueueLike }
+    // Use dynamic import (not `require`) — `@rudderjs/queue` is an ESM-only
+    // package and its `exports` field lacks a `require` condition, so a
+    // synchronous require always throws "No exports main defined" even when
+    // the package is installed. Memory: `feedback_esm_only_peer_resolution`.
+    const mod = await import(/* @vite-ignore */ '@rudderjs/queue') as { QueueRegistry: QueueLike }
     QueueRegistry = mod.QueueRegistry
   } catch {
     throw new Error(

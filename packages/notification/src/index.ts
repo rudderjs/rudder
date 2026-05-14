@@ -237,8 +237,11 @@ export class BroadcastChannel implements NotificationChannel {
 
     let broadcastFn: (channel: string, event: string, data: unknown) => void
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require('@rudderjs/broadcast') as { broadcast: typeof broadcastFn }
+      // Dynamic import (not `require`) — `@rudderjs/broadcast` is ESM-only;
+      // its `exports` lacks a `require` condition, so a synchronous require
+      // always throws "No exports main defined" even when installed.
+      // Memory: `feedback_esm_only_peer_resolution`.
+      const mod = await import(/* @vite-ignore */ '@rudderjs/broadcast') as { broadcast: typeof broadcastFn }
       broadcastFn = mod.broadcast
     } catch {
       throw new Error(
@@ -306,8 +309,11 @@ export class Notifier {
     let QueueRegistry: { get(): { dispatch(job: unknown, opts?: unknown): Promise<void> } | null }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require('@rudderjs/queue') as { QueueRegistry: typeof QueueRegistry }
+      // Dynamic import (not `require`) — `@rudderjs/queue` is ESM-only and
+      // its `exports` field lacks a `require` condition, so a synchronous
+      // require always throws "No exports main defined" even when installed.
+      // Memory: `feedback_esm_only_peer_resolution`.
+      const mod = await import(/* @vite-ignore */ '@rudderjs/queue') as { QueueRegistry: typeof QueueRegistry }
       QueueRegistry = mod.QueueRegistry
     } catch {
       throw new Error(
