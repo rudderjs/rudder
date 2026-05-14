@@ -468,6 +468,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../queue
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -538,6 +541,12 @@ importers:
         specifier: workspace:^
         version: link:../orm
     devDependencies:
+      '@rudderjs/broadcast':
+        specifier: workspace:*
+        version: link:../broadcast
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../queue
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
