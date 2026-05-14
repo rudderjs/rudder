@@ -30,7 +30,7 @@ cd my-feature
 ```json
 {
   "name": "@rudderjs/my-feature",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "One-line description.",
   "type": "module",
   "main": "./dist/index.js",
@@ -362,7 +362,7 @@ The dynamic import + try/catch makes `@rudderjs/localization` an **optional peer
 // package.json
 {
   "peerDependencies": {
-    "@rudderjs/localization": "workspace:*"
+    "@rudderjs/localization": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/localization": { "optional": true }
@@ -372,6 +372,8 @@ The dynamic import + try/catch makes `@rudderjs/localization` an **optional peer
   }
 }
 ```
+
+`workspace:^` on the peer dep publishes as a `^X.Y.Z` range so consumer apps install compatible minors without spurious major bumps; the devDep stays `workspace:*` for in-monorepo type resolution.
 
 The devDep is required so TypeScript can resolve types in the workspace.
 

@@ -27,9 +27,9 @@ RudderJS refuses the tradeoff. It's batteries-included, modular, UI-agnostic, an
 | **UI framework** | React only | API only | Edge templates / Inertia | React, Vue, Solid, or none |
 | **SSR views from controllers** | N/A | ✗ | Inertia adapter | ✓ **native — no Inertia, no JSON envelope** |
 | **DI container** | None | Class-based IoC | IoC | Service Providers + ALS request scope |
-| **AI-native** | ✗ | ✗ | ✗ | ✓ 11 providers, agents, streaming, MCP |
+| **AI-native** | ✗ | ✗ | ✗ | ✓ 15 providers, agents, streaming, MCP |
 | **Real-time collab** | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
-| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 46 opt-in packages |
+| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 47 opt-in packages |
 
 The shape: one DI container, one CLI, one mental model. Routes return `view()`. Models query the database. Jobs queue work. Agents call tools. The same TypeScript ergonomics from the HTTP edge to the database row.
 

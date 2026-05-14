@@ -14,4 +14,4 @@ Pick the packages that match what you're building. Packages don't depend on each
 - **[Pulse](/packages/pulse)** — Lightweight APM dashboard at `/pulse`: pre-aggregated request / queue / cache / exception / user / server metrics with sparklines and slow-request tables. Memory or sqlite storage.
 - **[Sanctum](/packages/sanctum)** — Lightweight API token auth: opaque bearer tokens with abilities, no OAuth or JWT machinery.
 - **[Socialite](/packages/socialite)** — OAuth-based social login: built-in providers for GitHub, Google, Facebook, Apple, plus an extension point for custom OAuth providers.
-- **[Telescope](/packages/telescope)** — Debug dashboard at `/telescope`: records 17 entry types — requests, queries, jobs, exceptions, mail, events, cache, AI runs, MCP activity, `dump()`, and more.
+- **[Telescope](/packages/telescope)** — Debug dashboard at `/telescope`: records 19 entry types — requests, queries, jobs, exceptions, mail, events, cache, AI runs, MCP activity, `dump()`, and more.
