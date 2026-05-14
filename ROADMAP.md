@@ -1,8 +1,10 @@
 # RudderJS Feature Roadmap
 
-> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-03
+> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-14
 >
 > Legend: S = Small (1-2 days) | M = Medium (3-5 days) | L = Large (1-2 weeks)
+
+> **1.0 graduation, 2026-05-02** — every `@rudderjs/*` package on npm is now 1.0.0+ with zero packages on 0.x. The framework is past the "still finding shape" phase; future roadmap items are additive features, not foundational rewrites.
 
 ---
 
@@ -134,7 +136,7 @@
 
 *Production visibility — equivalent to Pulse, Telescope, Horizon, Nightwatch.*
 
-**Status**: Telescope (19 collectors), Pulse, and Horizon all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02 (Pulse + Horizon went through PRs #144 / #146 / #149 / #151 / #153 / #156 / #158 / #160 — cross-process queue collector saga, SQLite WAL storage fix, docs sweep). Nightwatch still ⬜ — open question whether to ship a self-hosted dashboard, a SaaS product, or both.
+**Status**: Telescope (19 collectors), Pulse, and Horizon all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02 (Pulse + Horizon went through PRs #144 / #146 / #149 / #151 / #153 / #156 / #158 / #160 — cross-process queue collector saga, SQLite WAL storage fix, docs sweep). Telescope dashboard gained **real-time SSE updates** in #431 (2026-05-13). Nightwatch still ⬜ — open question whether to ship a self-hosted dashboard, a SaaS product, or both.
 
 ### 7.1 — `@rudderjs/pulse` ✅
 
@@ -169,9 +171,9 @@
 - Custom card API (create your own cards)
 - Auto user resolution (name, email, avatar)
 - Gate-based authorization
-- Served at `/pulse` route within panel
+- Served at `/pulse` route (mounted by the package itself, no host-panel required)
 
-**Depends on**: panels, log, cache, orm
+**Depends on**: log, cache, orm
 
 ---
 
@@ -210,14 +212,14 @@
 - Per-watcher enable/disable via config or env vars
 
 **Dashboard:**
-- Web dashboard within panel
-- Real-time monitoring of all watched events
+- Self-mounted at `/telescope` (no host-panel required)
+- Real-time updates via SSE (#431, 2026-05-13)
 - Search and filtering by entry type + tags
 - Detailed inspection of each entry
 - Mail preview with download
 - Exception stack traces with full context
 
-**Depends on**: panels, log, orm
+**Depends on**: log, orm
 
 ---
 
@@ -261,7 +263,7 @@
 - Tag-based filtering
 - Metrics visualization (charts)
 
-**Depends on**: panels, queue-bullmq
+**Depends on**: queue-bullmq
 
 ---
 
@@ -303,15 +305,87 @@
 - Status pages
 - Incident management
 
-**Depends on**: panels, http, notification, log
+**Depends on**: http, notification, log
 
 ---
 
 ### Plan 7 Deliverables
-- [x] `@rudderjs/telescope` — debug inspector. Shipped 19 collectors (request, query, exception, job, mail, notification, cache, log, event, command, schedule, http, model, gate, ai, mcp, broadcast, sync, dump) — partial overlap with Laravel's 18, swapping Redis/View/Batch for ai/mcp/broadcast/sync. Tagging, filtering, related-entry correlation, SQLite + WAL for cross-process viewing. Verified end-to-end 2026-04-20.
+- [x] `@rudderjs/telescope` — debug inspector. Shipped 19 collectors (request, query, exception, job, mail, notification, cache, log, event, command, schedule, http, model, gate, ai, mcp, broadcast, sync, dump) — partial overlap with Laravel's 18, swapping Redis/View/Batch for ai/mcp/broadcast/sync. Tagging, filtering, related-entry correlation, SQLite + WAL for cross-process viewing. Verified end-to-end 2026-04-20. Real-time SSE dashboard added in #431 (2026-05-13).
 - [x] `@rudderjs/pulse` — performance dashboard. 7 aggregators (request, queue, cache, exception, user, query, server), period-windowed aggregates, individual-entry storage for slow events. Browser-verified 2026-05-02 (PRs #156 + #158 + #160).
 - [x] `@rudderjs/horizon` — queue monitor. Full job lifecycle, per-queue metrics, worker status, retry/delete from UI. Browser-verified 2026-05-02 across the cross-process queue collector saga (PRs #144 / #146 / #149 / #151 / #153).
-- [ ] `@rudderjs/nightwatch` — external monitoring (panel plugin first, SaaS later)
+- [ ] `@rudderjs/nightwatch` — external monitoring (self-hosted package first, SaaS later)
+
+---
+
+## Plan 8: AI, Boost & MCP ✅
+
+*Laravel AI SDK 13.x parity plus forward-looking AI features.*
+
+**Status**: Complete (Track A + Track B fully shipped 2026-05-11). Detailed per-feature plans in `docs/plans/2026-05-09-ai-roadmap.md`.
+
+### Track A — Forward-looking additions (A1–A7)
+
+| # | Item | Status |
+|---|---|---|
+| A1 | Prompt caching as a first-class API (Anthropic / OpenAI / Google in one unified declaration) | ✅ 2026-05-09 |
+| A2 | Handoffs — multi-agent control transfer with state preservation | ✅ 2026-05-10 |
+| A2.5 | `asTool()` streaming + sub-agent suspend/resume | ✅ 2026-05-10 |
+| A3 | MCP ↔ Agent bridge — agents consume MCP servers; MCP servers expose agents | ✅ 2026-05-10 |
+| A4 | User memory (Mem0-style) — in-memory → auto-inject → auto-extract → ORM backend → embedding backend | ✅ 2026-05-10 |
+| A5 | Eval framework — `ai:eval` CLI, JSON + HTML reporters, record/replay fixtures | ✅ 2026-05-10 |
+| A6 | Cost / budget enforcement — pricing catalog, `BudgetStorage`, `withBudget` middleware | ✅ 2026-05-10 |
+| A7 | Computer-use abstraction | ✅ 2026-05-11 |
+
+### Track B — Laravel parity gaps (B1–B10)
+
+| # | Item | Status |
+|---|---|---|
+| B1 | Provider failover for `Image` / `Audio` / `Transcription` | ✅ |
+| B2 | `AiFake.preventStrayPrompts()` | ✅ |
+| B3 | Auto-persist conversation behavior | ✅ |
+| B4 | Bedrock provider (Anthropic Claude on AWS) | ✅ 2026-05-10 |
+| B5 | OpenRouter provider (routing/failover aggregator) | ✅ 2026-05-10 |
+| B6 | `broadcastOnQueue()` — background AI → live UI via @rudderjs/broadcast | ✅ |
+| B7 | Vector storage in ORM + `SimilaritySearch` tool | ✅ |
+| B8 | Hosted vector stores + `fileSearch` provider tool (OpenAI hosted + pgvector fallback) | ✅ 2026-05-11 |
+| B8.5 | Gemini hosted RAG (`fileSearchStores`) | ✅ 2026-05-11 |
+| B9 | ElevenLabs provider (TTS `eleven_multilingual_v2` + STT `scribe_v1`) | ✅ 2026-05-11 |
+| B10 | VoyageAI provider (embeddings + reranking) | ✅ 2026-05-11 |
+
+### MCP — `@rudderjs/mcp`
+
+Full framework for building MCP servers as part of your app — `@McpServer` / `@Tool` / `@Resource` / `@Prompt` decorators, stdio + Streamable HTTP transports, DI integration, OAuth2 protection via `@rudderjs/passport`, MCP inspector UI (`mcp:inspector`). M1–M7 parity items in `docs/plans/2026-05-09-mcp-roadmap.md` are pick-up-as-needed rather than batch-shipped — protocol surface still evolving.
+
+### Boost — `@rudderjs/boost`
+
+MCP server that exposes the live app to AI coding assistants (Claude Code, Cursor). Tools: `app_info`, `db_schema`, `route_list`, `model_list`, `config_get`, `db_query`, `last_error`, `read_logs`, `browser_logs`, `search_docs`, `commands_list`, `command_run`, `get_absolute_url`. Per-package guideline files auto-generated from installed `@rudderjs/*` packages. CLI: `boost:install`, `boost:update`, `boost:mcp`.
+
+### Passport — `@rudderjs/passport`
+
+Full OAuth2 server: authorization-code (with PKCE), client-credentials, refresh-token, device-code grants. RSA-signed JWT bearer tokens, Personal Access Tokens, scopes, token revocation, RFC 9728 metadata endpoint. `RequireBearer()` + `scope(...)` middleware for API auth. CLI: `passport:keys`, `passport:client`, `passport:purge`. Used by `@rudderjs/mcp` for HTTP-transport authentication.
+
+### Plan 8 Deliverables
+- [x] `@rudderjs/ai` — 15 providers, agents, tools, streaming, prompt caching, memory, eval framework, budget tracking, computer-use, MCP bridge, conversation persistence. Runtime-agnostic main entry (browser/RN/Electron); Node helpers at `/node`; `AiProvider` at `/server`.
+- [x] `@rudderjs/mcp` — server toolkit (decorators, transports, OAuth2)
+- [x] `@rudderjs/boost` — project-introspection MCP server for AI coding assistants
+- [x] `@rudderjs/passport` — OAuth2 server (4 grants, PKCE, RSA-JWT)
+
+---
+
+## Plan 9: Sync ✅
+
+*Real-time collaborative document sync — no Laravel equivalent; differentiator beyond parity.*
+
+**Status**: Complete (2026-05-13). `@rudderjs/sync` ships Yjs CRDT document sync over WebSocket (`/ws-sync`), editor adapters (Lexical available, Tiptap scaffolded), SSR hydration primitives, and an `onFirstConnect` lifecycle hook (#438). Sync CLI: `sync:docs`, `sync:clear`, `sync:inspect`.
+
+| # | Feature | Status |
+|---|---|---|
+| 9.1 | Yjs CRDT engine over WebSocket (`/ws-sync`) | ✅ |
+| 9.2 | Editor adapters — Lexical (`@rudderjs/sync/lexical`) | ✅ |
+| 9.3 | Editor adapters — Tiptap (`@rudderjs/sync/tiptap`) | ◐ scaffolded; full implementation deferred until concrete demand |
+| 9.4 | Presence + awareness | ✅ |
+| 9.5 | SSR hydration primitives + `onFirstConnect` lifecycle hook | ✅ #438 |
+| 9.6 | CLI inspection tools (`sync:docs`, `sync:clear`, `sync:inspect`) | ✅ |
 
 ---
 
@@ -330,11 +404,14 @@ Phase 3 ──── Plan 4 (Auth/Mail)                                   ✅ DO
 Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ✅ DONE
               ├── context, pennant, process, concurrency, fakes
               │
-Phase 5 ──── Plan 8 (AI, Boost & MCP — Laravel Parity)            ✅ MOSTLY DONE
-              ├── ai loop parity, @rudderjs/mcp, boost guidelines + tools
+Phase 5 ──── Plan 8 (AI, Boost & MCP — Laravel Parity + beyond)   ✅ DONE
+              ├── A1–A7 + B1–B10 + B8.5 shipped; @rudderjs/mcp + boost + passport all 1.0+
               │
 Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mostly done
-              ├── @rudderjs/telescope ✅, pulse ✅, horizon ✅, nightwatch ⬜
+              ├── @rudderjs/telescope ✅ (SSE), pulse ✅, horizon ✅, nightwatch ⬜
+              │
+Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ DONE
+              ├── Yjs CRDT, Lexical adapter, SSR hydration, onFirstConnect lifecycle
 ```
 
 ---
@@ -350,11 +427,16 @@ Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mo
 | `@rudderjs/process` | 5 | Core framework | ✅ |
 | `@rudderjs/concurrency` | 5 | Core framework | ✅ |
 | `@rudderjs/testing` | 6 | Core framework | ✅ |
-| `@rudderjs/mcp` | 8 | Core framework | ✅ |
 | `@rudderjs/telescope` | 7 | Core framework | ✅ |
 | `@rudderjs/pulse` | 7 | Core framework | ✅ |
 | `@rudderjs/horizon` | 7 | Core framework | ✅ |
 | `@rudderjs/nightwatch` | 7 | Core framework / SaaS | ⬜ |
+| `@rudderjs/mcp` | 8 | Core framework | ✅ |
+| `@rudderjs/passport` | 8 | Core framework | ✅ |
+| `@rudderjs/sync` | 9 | Core framework | ✅ |
+| `@rudderjs/terminal` | — | Core framework (differentiator) | ✅ |
+| `@rudderjs/view` | — | Core framework (differentiator) | ✅ |
+| `@rudderjs/vite` | — | Core framework (build integration) | ✅ |
 
 ## Existing Package Enhancements
 
@@ -371,5 +453,5 @@ Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mo
 | `@rudderjs/mail` | 4, 6 | +queued, +markdown, +failover, +preview ✅ / +fake ✅ | ✅ |
 | `@rudderjs/notification` | 4, 6 | +queued, +broadcast channel, +on-demand ✅ / +fake ✅ | ✅ |
 | `@rudderjs/cache` | 6 | +fake | ✅ |
-| `@rudderjs/ai` | 8 | +middleware wiring, +attachments, +queue, +conversations, +providers, +image gen, +TTS/STT, +Vercel protocol | ✅ |
-| `@rudderjs/boost` | 8 | +boost:install, +guidelines, +skills, +db_query tool | ✅ |
+| `@rudderjs/ai` | 8 | 15 providers, agents, tools, streaming, prompt caching (A1), handoffs (A2), asTool streaming (A2.5), MCP bridge (A3), memory (A4), eval framework (A5), budget enforcement (A6), computer-use (A7), Bedrock (B4), OpenRouter (B5), vector storage (B7), hosted vectors + fileSearch (B8), Gemini RAG (B8.5), ElevenLabs (B9), VoyageAI (B10). Runtime-agnostic main entry. | ✅ |
+| `@rudderjs/boost` | 8 | +boost:install, +guidelines, +skills, +db_query tool, +commands_list / command_run, +SSE-friendly transport | ✅ |
