@@ -23,7 +23,7 @@
 | SSR / File routing | Vike |
 | UI | React / Vue / Solid (via vike-react, vike-vue, vike-solid) |
 | Language | TypeScript (strict, ESM, NodeNext) |
-| Runtime | Node.js 20+ / Bun |
+| Runtime | Node.js 22+ / Bun |
 | HTTP server | Hono (default) / Express / Fastify / H3 (via adapter) |
 | ORM | Prisma adapter / Drizzle adapter (swappable via `@rudderjs/orm-prisma`) |
 | Auth | Native (guards, providers, gates, policies) via `@rudderjs/auth` |
@@ -48,7 +48,7 @@ rudderjs/
 │   ├── validation/         # FormRequest, validate(), validateWith(), ValidationError, z re-export
 │   ├── console/            # CommandRegistry, Command base class, parseSignature, rudder singleton
 │   │                       #   (renamed from rudder/ in PR #97 to avoid confusion with the cli runner)
-│   ├── core/               # App bootstrapper, ServiceProvider, Forge, AppBuilder, DI container
+│   ├── core/               # Application, ServiceProvider, AppBuilder, DI container
 │   │                       #   HttpException, abort(), abort_if(), abort_unless(), report(),
 │   │                       #   ExceptionHandler, EventDispatcher, dispatch()
 │   │                       #   re-exports: di · support · contracts types · rudder
@@ -80,6 +80,10 @@ rudderjs/
 │   │                       #   verificationUrl(), handleEmailVerification()
 │   ├── sanctum/            # API tokens — Sanctum class, TokenGuard, SanctumMiddleware(),
 │   │                       #   RequireToken(), SHA-256 hashed tokens with abilities
+│   ├── passport/           # Full OAuth2 server — authorization-code (with PKCE), client-credentials,
+│   │                       #   refresh-token, device-code grants. RSA-signed JWT bearer tokens,
+│   │                       #   Personal Access Tokens, scopes, token revocation. `RequireBearer()`
+│   │                       #   + `scope(...)` for API auth. CLI: passport:keys/client/purge
 │   ├── socialite/          # OAuth — Socialite facade, SocialUser, 4 built-in providers
 │   │                       #   (GitHub, Google, Facebook, Apple), extensible
 │   ├── cashier-paddle/     # Paddle billing — Billable mixin, SubscriptionResource (cancel/swap/pause),
@@ -107,9 +111,34 @@ rudderjs/
 │   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
 │   ├── sync/               # Real-time collaborative document sync via Yjs CRDT — /ws-sync endpoint
 │   │                       #   Editor adapters under subpaths (@rudderjs/sync/lexical, /tiptap)
-│   ├── ai/                 # AI engine — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek,
-│   │                       #   xAI, Mistral, Azure text; Cohere, Jina reranking+embeddings), Agent class,
-│   │                       #   tool system, streaming, middleware, structured output, model registry
+│   ├── ai/                 # AI engine — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek,
+│   │                       #   xAI, Mistral, Bedrock, Azure text; Cohere, Jina, Voyage reranking+embeddings;
+│   │                       #   ElevenLabs TTS; OpenRouter aggregator). Agent class, tool system, streaming,
+│   │                       #   middleware, structured output, conversation persistence, eval framework,
+│   │                       #   budget tracking, computer-use, MCP bridge. Runtime-agnostic main entry
+│   │                       #   (browser/RN/Electron OK); Node helpers at `/node`; AiProvider at `/server`
+│   ├── mcp/                # MCP server framework — `@McpServer` / `@Tool` / `@Resource` / `@Prompt`
+│   │                       #   decorators, stdio + Streamable HTTP transports, OAuth2 protection
+│   │                       #   via @rudderjs/passport. mcp:start/list/inspector + make:mcp-*
+│   ├── pennant/            # Feature flags — Pennant facade, scope-aware `Feature.for(user).active(...)`,
+│   │                       #   purgable lottery results, custom drivers
+│   ├── telescope/          # Debug assistant — 19 collectors (requests, queries, models, logs, mail, jobs,
+│   │                       #   events, ai, mcp, ...), dashboard at /telescope, real-time SSE updates,
+│   │                       #   sqlite/redis storage adapters
+│   ├── pulse/              # Application metrics — 7 aggregators (slow requests, slow queries, exceptions,
+│   │                       #   cache hit-rate, user activity, ...), dashboard at /pulse
+│   ├── horizon/            # Queue dashboard — job lifecycle, worker status, throughput, wait times,
+│   │                       #   tag filtering. Dashboard at /horizon
+│   ├── concurrency/        # Process-based + worker-thread fan-out — `Concurrency.run([...fns])`
+│   ├── context/            # Request-scoped context — AsyncLocalStorage facade, propagates across
+│   │                       #   awaits/jobs/queues without manual threading
+│   ├── process/            # Async process runner — `Process.run('cmd', { ... })`, streaming output,
+│   │                       #   `.fake()` for testing
+│   ├── terminal/           # `terminal('id', props)` — Ink/React components rendered in rudder commands.
+│   │                       #   Files in `app/Terminal/<Name>.tsx`, same dot-notation as `view()`
+│   ├── vite/               # Vite + Vike integration plugin — views-scanner generates `pages/__view/*`,
+│   │                       #   `rudderjs:routes` watcher (routes/, bootstrap/, app/), `rudderjs:ws`
+│   │                       #   upgrade patch for broadcast/sync, `rudderjs:ip` dev-mode header injection
 │   ├── image/              # Fluent image processing — resize, crop, convert, optimize (wraps sharp)
 │   ├── log/                # Structured logging — channels (console, single, daily, stack, null),
 │   │                       #   RFC 5424 levels, LineFormatter/JsonFormatter, context propagation,
@@ -179,9 +208,10 @@ cd playground && pnpm dev
 
 | Plugin | Watches | Mechanism |
 |---|---|---|
-| `rudderjs:routes` | `routes/`, `bootstrap/` | Clears `__rudderjs_instance__` + `__rudderjs_app__` singletons, invalidates all SSR modules, sends `full-reload` to browser |
+| `rudderjs:routes` | `routes/`, `bootstrap/`, `app/` | Clears `__rudderjs_instance__` + `__rudderjs_app__` singletons, invalidates all SSR modules, sends `full-reload` to browser. `app/` is included because models/resources/controllers are captured in closures during provider boot. |
 | `views-scanner` | `app/Views/` | Regenerates Vike page stubs (`pages/__view/`) and triggers Vike HMR |
 | `rudderjs:ws` | — | Patches WebSocket upgrade on Vite's HTTP server for broadcast/sync |
+| `rudderjs:ip` | — | Dev-only: injects `x-real-ip` from `req.socket.remoteAddress` so `req.ip` works the same as in production |
 
 **Why route files need special handling:** `withRouting({ web: () => import('../routes/web.ts') })` uses lazy dynamic imports stored in closures — Vite never adds them to its SSR module graph, so changes are invisible to HMR. The `rudderjs:routes` plugin explicitly watches these directories and triggers a clean re-bootstrap.
 
@@ -309,6 +339,7 @@ RudderJS Framework
 │    ├── @rudderjs/crypt              AES-256-CBC encryption
 │    ├── @rudderjs/auth               Guards, Providers, Gates, PasswordBroker
 │    ├── @rudderjs/sanctum            API tokens, TokenGuard
+│    ├── @rudderjs/passport           Full OAuth2 server (4 grants, PKCE, RSA-JWT, scopes, PATs)
 │    ├── @rudderjs/socialite          OAuth (GitHub, Google, Facebook, Apple)
 │    └── @rudderjs/cashier-paddle     Paddle billing (Billable mixin, subscriptions, webhooks)
 │
@@ -324,21 +355,33 @@ RudderJS Framework
 │    ├── @rudderjs/schedule           Cron tasks, sub-minute, hooks, onOneServer
 │    ├── @rudderjs/localization       i18n, trans(), locale middleware
 │    ├── @rudderjs/image              Image processing (sharp wrapper)
+│    ├── @rudderjs/pennant            Feature flags, scoped, purgable
+│    ├── @rudderjs/context            AsyncLocalStorage facade, propagates across awaits/jobs
+│    ├── @rudderjs/concurrency        Process + worker-thread fan-out
+│    ├── @rudderjs/process            Async process runner, streaming output, Process.fake()
 │    └── @rudderjs/storage            Local + S3 file storage
 │
-├─── AI
-│    ├── @rudderjs/ai                 11 providers, Agent, tools, streaming, AiFake
-│    └── @rudderjs/boost              MCP server for AI coding assistants
+├─── AI & MCP
+│    ├── @rudderjs/ai                 15 providers, Agent, tools, streaming, memory, eval, budget
+│    │                                Runtime-agnostic main; Node helpers at /node; AiProvider at /server
+│    ├── @rudderjs/mcp                MCP server framework (decorators, stdio + Streamable HTTP, OAuth2)
+│    └── @rudderjs/boost              MCP server for AI coding assistants (exposes project to Claude Code etc.)
+│
+├─── Observability
+│    ├── @rudderjs/telescope          Debug assistant (19 collectors, SSE-driven dashboard at /telescope)
+│    ├── @rudderjs/pulse              Application metrics (7 aggregators, dashboard at /pulse)
+│    └── @rudderjs/horizon            Queue dashboard (lifecycle, workers, throughput at /horizon)
 │
 ├─── Testing
 │    └── @rudderjs/testing            TestCase, TestResponse, RefreshDatabase, WithFaker
 │
 ├─── CLI
-│    ├── @rudderjs/console             Command registry, base class
-│    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mail:*, mcp:*, passport:*, db:*, etc.
+│    ├── @rudderjs/console            Command registry, base class
+│    ├── @rudderjs/terminal           terminal('id', props) — Ink/React components in rudder commands
+│    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mcp:*, passport:*, etc.
 │
 ├─── Scaffolding
-│    └── create-rudder-app          Interactive project scaffolder
+│    └── create-rudder-app            Interactive project scaffolder
 │
 └─── Build
      └── @rudderjs/vite               Vike integration, SSR externals, WS patch, route watcher
@@ -376,7 +419,8 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
-import { RateLimit } from '@rudderjs/middleware'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+import { requestIdMiddleware } from 'App/Http/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -391,9 +435,14 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    m.use(RateLimit.perMinute(60).toHandler())
+    // Global — runs on every request, regardless of route group
+    m.use(requestIdMiddleware)
+
+    // Per-group — m.web(...) runs only on routes from web loader,
+    // m.api(...) only on routes from the api loader (Laravel-style).
+    m.web(RateLimit.perMinute(60))
+    m.web(CsrfMiddleware({ exclude: ['/paddle/webhook'] }))
   })
-  .withExceptions((_e) => {})
   .create()
 ```
 
@@ -411,27 +460,34 @@ export default [
 
 `defaultProviders()` reads `bootstrap/cache/providers.json` (generated by `pnpm rudder providers:discover` and refreshed automatically by the scaffolder on `--install`) and returns provider classes in stage + topo order: foundation → infrastructure → feature → monitoring. Opt out by skipping individual providers (`defaultProviders({ skip: ['@rudderjs/horizon'] })`) or by importing each provider class explicitly and listing them yourself. See `docs/guide/service-providers.md` for the full story.
 
+**`providerSubpath`** — packages can set `"rudderjs.providerSubpath": "./server"` in their `package.json` to tell the auto-discovery loader to import the provider class from a subpath rather than the main entry. Used by `@rudderjs/ai`: the main entry is runtime-agnostic (works in browsers/RN/Electron), so the Node-only `AiProvider` lives at `@rudderjs/ai/server`. The loader resolves to `<package>/<providerSubpath>` automatically — no app-side configuration needed.
+
 **Provider lifecycle:**
 1. All `register()` methods run first (bind into container)
 2. All `boot()` methods run after (can use container, call DB, etc.)
 
 ---
 
-### Entry Point — WinterCG
+### Entry Point — WinterCG / Vike
 
-`src/index.ts`:
+`+server.ts` (or `src/index.ts`):
 ```ts
-import forge from '../bootstrap/app.ts'
+import type { Server } from 'vike/types'
+import app from './bootstrap/app.js'
 
 export default {
-  fetch: (request: Request, env?: unknown, ctx?: unknown) =>
-    forge.handleRequest(request, env, ctx),
-}
+  fetch: app.fetch,
+} satisfies Server
 ```
+
+`Application.configure(...).create()` returns an object exposing `.fetch(request, env?, ctx?)` — the WinterCG-shaped handler that Vike's `Server` type expects. Pass it directly; no wrapper needed.
 
 ---
 
-### HTTP Routes — `routes/api.ts`
+### HTTP Routes — `routes/web.ts` & `routes/api.ts`
+
+Routes are split into two loader-tagged groups. The `web` loader is for stateful, cookie-based traffic (auth, sessions, CSRF); the `api` loader is for stateless JSON. Middleware groups (`m.web(...)` / `m.api(...)` in the bootstrap) prepend to the matching group's stack, Laravel-style.
+
 
 ```ts
 import { router, route } from '@rudderjs/router'
@@ -869,7 +925,7 @@ router.get('/invoice/:id', handler, [ValidateSignature()])
 ### CLI
 
 ```bash
-# Scaffolding
+# Scaffolding (core)
 pnpm rudder make:controller UserController
 pnpm rudder make:model Post
 pnpm rudder make:job SendWelcomeEmail
@@ -877,6 +933,18 @@ pnpm rudder make:request CreateUserRequest
 pnpm rudder make:middleware AuthMiddleware
 pnpm rudder make:provider PaymentServiceProvider
 pnpm rudder make:module Blog
+pnpm rudder make:command MyCommand
+pnpm rudder make:event UserRegistered
+pnpm rudder make:listener SendWelcomeEmail
+pnpm rudder make:mail WelcomeEmail
+
+# Scaffolding (package-owned — only available when the package is installed)
+pnpm rudder make:agent ResearchAgent            # @rudderjs/ai
+pnpm rudder make:terminal Dashboard             # @rudderjs/terminal
+pnpm rudder make:mcp-server EchoServer          # @rudderjs/mcp
+pnpm rudder make:mcp-tool MyTool                # @rudderjs/mcp
+pnpm rudder make:mcp-resource AppLog            # @rudderjs/mcp
+pnpm rudder make:mcp-prompt CodeReview          # @rudderjs/mcp
 
 # Queue
 pnpm rudder queue:work [queues=default]
@@ -890,24 +958,58 @@ pnpm rudder schedule:run
 pnpm rudder schedule:work
 pnpm rudder schedule:list
 
-# Storage
-pnpm rudder storage:link
+# Router
+pnpm rudder route:list [--json]
 
-# Module
+# MCP
+pnpm rudder mcp:start <name>
+pnpm rudder mcp:list
+pnpm rudder mcp:inspector
+
+# Passport (OAuth2 server)
+pnpm rudder passport:keys                       # generate RSA keys
+pnpm rudder passport:client                     # create a client
+pnpm rudder passport:purge                      # remove expired tokens / codes
+
+# AI
+pnpm rudder ai:eval [pattern] [--bail] [--json] [--record|--replay] [--html out.html]
+
+# Boost (AI coding-assistant integration)
+pnpm rudder boost:install [--agent=claude-code,cursor]
+pnpm rudder boost:update
+pnpm rudder boost:mcp                           # stdio MCP server
+
+# Sync
+pnpm rudder sync:docs
+pnpm rudder sync:clear <docName>
+pnpm rudder sync:inspect <docName>
+
+# Broadcast
+pnpm rudder broadcast:connections
+
+# Cashier (Paddle billing)
+pnpm rudder cashier:install
+pnpm rudder cashier:webhook
+pnpm rudder cashier:sync
+
+# Storage / Module / Vendor / Providers / Commands
+pnpm rudder storage:link
 pnpm rudder module:publish
+pnpm rudder vendor:publish --tag=<tag>
+pnpm rudder providers:discover                  # refresh bootstrap/cache/providers.json
+pnpm rudder command:list
 ```
+
+**Note on package-owned commands** — commands registered by a feature package (e.g. `make:agent` from `@rudderjs/ai`) only appear in `rudder list` when that package is installed and discovered. Run `pnpm rudder providers:discover` after installing or removing a framework package.
 
 ---
 
-### Boost — AI Developer Tools
+### Boost vs MCP — Two Distinct Packages
 
-`@rudderjs/boost` exposes project internals to AI coding assistants via MCP.
+These are often confused:
 
-```bash
-rudder boost:mcp   # starts stdio MCP server
-```
-
-Tools: `app_info`, `db_schema`, `route_list`, `model_list`, `config_get`, `last_error`.
+- **`@rudderjs/boost`** — an MCP server **about your project** that you point Claude Code / Cursor at, so the assistant can introspect the live app. Tools: `app_info`, `db_schema`, `route_list`, `model_list`, `config_get`, `db_query`, `last_error`, `read_logs`, `browser_logs`, `search_docs`, `commands_list`, `command_run`. Started with `pnpm rudder boost:mcp` (stdio).
+- **`@rudderjs/mcp`** — the framework's MCP server **toolkit**, used to build *your own* MCP servers as part of your app. `@McpServer` / `@Tool` / `@Resource` / `@Prompt` decorators, stdio + Streamable HTTP transports, OAuth2 protection via `@rudderjs/passport`.
 
 ---
 
@@ -926,12 +1028,14 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | Phase | Plan | Status |
 |-------|------|--------|
 | Phase 1 | Plan 1: Core DX Foundation (log, http, Str, Num, Collection, typed input, errors, URLs) | ✅ Complete |
-| Phase 2 | Plan 2: ORM & Data Layer (casts, accessors, resources, factories, serialization) | ✅ Complete |
+| Phase 2 | Plan 2: ORM & Data Layer (casts, accessors, resources, factories, serialization, hydration, mass assignment, atomic counters, whereHas) | ✅ Complete |
 | Phase 2 | Plan 3: Queue & Scheduling (chains, batches, unique, middleware, sub-minute, hooks) | ✅ Complete |
 | Phase 3 | Plan 4: Auth & Mail (email verification, queued mail, markdown, failover, queued notifications) | ✅ Complete |
 | Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | ✅ Complete |
 | Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | ✅ Complete |
-| Phase 5 | Plan 7: Monitoring & Observability — Telescope (19 collectors), Pulse (7 aggregators), Horizon (full job lifecycle + worker status) all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02. Nightwatch ⬜ open. | ◐ mostly done |
-| Phase 5 | Plan 8: AI, Boost & MCP — AI loop parity, MCP HTTP transport + DI, Boost guidelines & tools, Passport OAuth2 all shipped | ✅ Complete |
+| Phase 5 | Plan 7: Monitoring & Observability — Telescope (19 collectors, real-time SSE dashboard), Pulse (7 aggregators), Horizon (full job lifecycle + worker status) all shipped at 1.0+ and browser-verified end-to-end | ✅ Complete |
+| Phase 5 | Plan 8: AI, Boost & MCP — full AI roadmap A1–A7 + B1–B10 + B8.5 (15 providers, prompt caching, agents, tools, streaming, memory, eval framework, budget tracking, computer use, hosted vector stores, conversation persistence, MCP↔Agent bridge), MCP HTTP transport + DI + OAuth2, Boost guidelines & MCP server, Passport OAuth2 (4 grants, PKCE, RSA-JWT) all shipped | ✅ Complete |
+| Phase 5 | Plan 9: Sync — Yjs CRDT engine, SSR hydration primitives + onFirstConnect lifecycle hook | ✅ Complete |
 | — | Production Build Fixes (node:crypto, WS upgrade, vite externals) | ✅ Complete |
+| — | 1.0 graduation — every `@rudderjs/*` package on npm is 1.0.0+; zero packages on 0.x | ✅ 2026-05-02 |
 | — | Open-core extraction (admin/CMS packages moved to a separate project) | ✅ Complete |
