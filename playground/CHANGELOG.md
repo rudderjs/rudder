@@ -1,5 +1,13 @@
 # rudderjs-playground
 
+## 0.0.65
+
+### Patch Changes
+
+- Updated dependencies [6614596]
+  - @rudderjs/mail@1.0.2
+  - @rudderjs/notification@1.0.2
+
 ## 0.0.64
 
 ### Patch Changes
