@@ -45,10 +45,10 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 ## Highlights
 
 - **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
-- **AI-native** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina), agents with tools, streaming, MCP, queue-backed runs, approval gates.
+- **AI-native** — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage), agents with tools, streaming, MCP, queue-backed runs, approval gates.
 - **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
 - **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
-- **Pay-as-you-go** — 46 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **Pay-as-you-go** — 47 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages.
 - **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
@@ -193,7 +193,7 @@ await post.update({ title: 'Hello, RudderJS' })
 
 Same API on top of Prisma or Drizzle — swap adapters without touching model code.
 
-### 6. AI agents — 11 providers, tools, streaming
+### 6. AI agents — 15 providers, tools, streaming
 
 ```ts
 import { agent, toolDefinition } from '@rudderjs/ai'
@@ -521,9 +521,9 @@ RudderJS is the middle ground — batteries-included, modular, UI-agnostic, full
 | UI framework | React only | API only | Edge templates / Inertia | React, Vue, Solid, or none |
 | SSR views from controllers | N/A | ✗ | Inertia adapter | ✓ native — no Inertia, no JSON envelope |
 | DI container | None | Class-based IoC | IoC | Service Providers + ALS request scope |
-| AI-native | ✗ | ✗ | ✗ | ✓ 11 providers, agents, streaming, MCP |
+| AI-native | ✗ | ✗ | ✗ | ✓ 15 providers, agents, streaming, MCP |
 | Real-time collab | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
-| Modularity | All-in | All-in | Preset-based | Pay-as-you-go — 46 opt-in packages |
+| Modularity | All-in | All-in | Preset-based | Pay-as-you-go — 47 opt-in packages |
 
 ---
 
