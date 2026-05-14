@@ -1,6 +1,6 @@
 # `orm/index.ts` extractions — split relation internals into siblings
 
-> **Status:** ready
+> **Status:** shipped 2026-05-13 — extractions + bug fix + cast tightening across #413 (docs/bugs), #414 (split), #415 + #416 (casts).
 > **Date:** 2026-05-13
 > **Scope:** internal refactor of `@rudderjs/orm`. No public API change. No changeset.
 > **Companion finding:** `check orm code quality / docs improvements` review on 2026-05-13.

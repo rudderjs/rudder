@@ -1,6 +1,6 @@
 # MCP code-quality cleanup — @rudderjs/mcp
 
-> **Status:** in progress 2026-05-13
+> **Status:** shipped 2026-05-13 — all three PRs merged: #424 (A), #425 (B), #426 (C).
 > **Date:** 2026-05-13
 > **Scope:** internal cleanup of `@rudderjs/mcp` (2364 LOC). No public API breaks. One behavior fix (inspector streaming-tool serialization). Follows the ORM #413–#417 + framework #418–#421 pattern.
 >
