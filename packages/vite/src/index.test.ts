@@ -14,7 +14,7 @@ describe('@rudderjs/vite', () => {
   })
 
   it('promise has _vikeVitePluginOptions (Vike detection)', () => {
-    const result = rudderjs() as any
+    const result = rudderjs() as Promise<unknown> & { _vikeVitePluginOptions: Record<string, unknown> }
     assert.ok('_vikeVitePluginOptions' in result)
     assert.deepEqual(result._vikeVitePluginOptions, {})
   })
