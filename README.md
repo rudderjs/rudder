@@ -33,12 +33,14 @@ Route.get('/dashboard', async () => {
 
 ```tsx
 // app/Views/Dashboard.tsx
-export default function Dashboard({ users }: { users: User[] }) {
+export interface Props { users: User[] }
+
+export default function Dashboard({ users }: Props) {
   return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
 }
 ```
 
-That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation, no Inertia adapter, no JSON envelope. The same router chain serves JSON APIs, queued jobs, scheduled tasks, WebSocket channels, and AI agents.
+That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation, no Inertia adapter, no JSON envelope. Export `Props` and the `view('dashboard', ...)` call is type-checked at the controller. The same router chain serves JSON APIs, queued jobs, scheduled tasks, WebSocket channels, and AI agents.
 
 ---
 
@@ -127,13 +129,15 @@ export class UserController {
 ```
 
 ```tsx
-// app/Views/Users/Index.tsx — typed props, SSR'd through Vike
-export default function Index({ users }: { users: User[] }) {
+// app/Views/Users/Index.tsx — SSR'd through Vike, props checked at the controller
+export interface Props { users: User[] }
+
+export default function Index({ users }: Props) {
   return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
 }
 ```
 
-Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
+Decorator controllers, fluent middleware, controller-returned SSR views. Export `Props` from the view and the matching `view('id', ...)` call is type-checked — wrong shape fails tsc, not render. No Inertia adapter, no JSON envelope.
 
 ### 4. Console & Terminal — rudder commands + Ink
 
