@@ -1,5 +1,16 @@
 # @rudderjs/telescope
 
+## 15.0.0
+
+### Patch Changes
+
+- Updated dependencies [1f0e22e]
+- Updated dependencies [7d7a4ab]
+  - @rudderjs/mcp@6.0.0
+  - @rudderjs/router@1.3.0
+  - @rudderjs/contracts@1.7.0
+  - @rudderjs/core@1.1.6
+
 ## 14.0.1
 
 ### Patch Changes
