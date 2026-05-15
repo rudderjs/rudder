@@ -1,6 +1,6 @@
 # @rudderjs/vite — fix microtask race against `vike/plugin`
 
-> **Status:** open — coordinated path; awaiting upstream guidance from brillout before implementing.
+> **Status:** ✅ closed — Alt B shipped via #464 (2026-05-15). See [Outcome](#outcome-2026-05-15--alt-b-shipped).
 > **Date filed:** 2026-05-14 (pilotiq side)
 > **Last reviewed:** 2026-05-15 (rudder side — see [Assessment](#assessment-rudder-side-2026-05-15) and [Decision](#decision-2026-05-15--coordinated-path)).
 > **Scope:** `@rudderjs/vite` only — single package, single function (`rudderjs()`).
@@ -228,11 +228,52 @@ A draft GitHub-issue body for the upstream ping is held outside this plan; the g
 
 > Vike's `plugin()` IIFE reads `isOnlyResolvingUserConfig` as its first synchronous action. When a meta-framework wraps `vike/plugin` in its own `async` plugin factory (`await import('vike/plugin'); await vikeMod.default()`), the wrapper's `await import(...)` and `loadViteConfigFile`'s internal awaits race through microtasks. Decided 50/50 on Ubuntu Node 22; always loses on Node 20. Is wrapping considered supported? If not, can it be documented? If yes, would Vike consider deferring the flag check?
 
+## Outcome (2026-05-15) — Alt B shipped
+
+The coordinated path resolved cleanly within the same day.
+
+**Brillout's reply** (`vikejs/vike#3258`, closed 2026-05-15): *"If you statically import `vike/plugin`, does it fix the issue?"* — pointing at the conventional Vike pattern (Alt B). Locally verified that a scaffolded app with `import vike from 'vike/plugin'` + sync `vike()` in `vite.config.ts` boots cleanly (`Vike v0.4.259 · Vite v7.3.3 · ready in 591 ms`, no `[Bug]` failure, no "added 2 times" warning, views-scanner stubs land before Vike's pages scan).
+
+**Shipped via #464:**
+
+- **`@rudderjs/vite` major** — `rudderjs()` no longer dynamically imports `vike/plugin` or registers Vike. Returns `Plugin[]` synchronously instead of `Promise<Plugin[]>`. Drops the `_vikeVitePluginOptions` self-detection hack and the `createRequire` + dynamic-import machinery that caused the wrapper IIFE race.
+- **`create-rudder-app` major** — scaffolded `vite.config.ts` emits `import vike from 'vike/plugin'` and includes `vike()` in the plugins array. Ordering: `rudderjs()` before `vike()`, because the views-scanner writes auto-generated stubs to `pages/__view/` during plugin construction and Vike scans `pages/` during its own construction.
+- Migration for existing apps is the two-line diff documented in each changeset (and below).
+
+**Migration diff for existing apps:**
+
+```diff
+  import { defineConfig } from 'vite'
++ import vike from 'vike/plugin'
+  import rudderjs from '@rudderjs/vite'
+  // …
+
+  export default defineConfig({
+    plugins: [
+      rudderjs(),
++     vike(),
+      // …
+    ],
+  })
+```
+
+**What the alternatives turned out to be:**
+
+- *Option 1* (pilotiq's filed proposal) — never implemented. The mechanism didn't hold up under rudder-side review; brillout's reply pointed at the conventional pattern instead.
+- *Alt A* (`setImmediate` yield) — never implemented. With Alt B shipping cleanly, an interim Alt A would have been pure churn.
+- *Alt B* (synchronous `vike()` in user config) — **shipped.**
+- *Option 2 / Alt C* (Vike-side upstream change) — not needed; brillout's existing conventional pattern was already the fix.
+
+**Lesson for future filings:** when a meta-framework wraps an external Vite plugin in its own async factory, the wrapping pattern itself is the bug — not the plugin's flag check. Stay close to the upstream's conventional pattern; resist the temptation to "ergonomically bundle" plugins that have non-trivial init order.
+
 ## Cross-repo coordination
 
-Once shipped + published:
-- pilotiq-pro can revert the workflow's `node-version: '22'` → `'20'` (Node 20 was the workflow's prior pin, only bumped as a partial workaround)
-- pilotiq-pro can drop the `e2e` workflow's `cwd: '../playground'` workaround (also a partial mitigation; the root issue was the same race aggravated by the extra pnpm-filter process layer)
+Now that #464 is merged and the version-packages PR will republish `@rudderjs/vite` + `create-rudder-app` as majors:
+
+- pilotiq-pro can revert the workflow's `node-version: '22'` → `'20'` (Node 20 was the workflow's prior pin, only bumped as a partial workaround) after pulling the new `@rudderjs/vite` major and applying the two-line `vite.config.ts` migration.
+- pilotiq-pro can drop the `e2e` workflow's `cwd: '../playground'` workaround (also a partial mitigation; the root issue was the same race aggravated by the extra pnpm-filter process layer).
+- Acceptance threshold from the original plan: 20+ consecutive Ubuntu CI runs passing the Vike-startup step (raised from 5 given the ~50% flake rate). Validate post-migration.
+- Pilotiq companion memory `[[rudderjs-vite-needs-node-22]]` can be closed out.
 
 ## Companion memory
 
