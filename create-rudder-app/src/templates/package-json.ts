@@ -24,7 +24,7 @@ export function packageJson(ctx: TemplateContext): string {
   if (hasReact) {
     frameworkDeps['react']      = '^19.0.0'
     frameworkDeps['react-dom']  = '^19.0.0'
-    frameworkDeps['vike-react'] = '^0.6.20'
+    frameworkDeps['vike-react'] = '^0.6.23'
     frameworkDevDeps['@vitejs/plugin-react'] = '^4.3.4'
     frameworkDevDeps['@types/react']         = '^19.0.0'
     frameworkDevDeps['@types/react-dom']     = '^19.0.0'
