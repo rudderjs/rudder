@@ -60,9 +60,10 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-15 — add explicit `yjs` dep alongside
-  // `y-websocket` (the sync demo imports yjs directly; pnpm strict-resolution
-  // doesn't hoist the peer, so Vite's dep-scan errored).
+  // Baseline last captured 2026-05-15 — vite.config.ts template now emits
+  // `import vike from 'vike/plugin'` + `vike()` in the plugins array (after
+  // `rudderjs()` so the views-scanner writes stubs before Vike scans pages).
+  // Migration to user-side Vike registration per vikejs/vike#3258.
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -71,8 +72,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65398
-const EXPECTED_CONTENT_HASH = '666677616352947bf1487053cd3d0b55e6dd0256fe01e96e67526d7369999553'
+const EXPECTED_TOTAL_BYTES = 65441
+const EXPECTED_CONTENT_HASH = '09d649ece0621d98e63b45f83838030c01051794424de8aaabd385be082bb1a3'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
