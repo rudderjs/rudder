@@ -178,13 +178,16 @@ For Vue or Solid replace `vike-react/config` with `vike-vue/config` or `vike-sol
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
+import vike from 'vike/plugin'
 import rudderjs from '@rudderjs/vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [rudderjs(), react()],
+  plugins: [rudderjs(), vike(), react()],
 })
 ```
+
+> **Plugin order matters.** Put `rudderjs()` **before** `vike()` — the views-scanner writes auto-generated stubs to `pages/__view/` during plugin construction, and Vike scans `pages/` during its own construction, so the stubs must exist before `vike()` is called.
 
 ### 5. Environment variables
 
