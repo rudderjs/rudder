@@ -428,6 +428,7 @@ class HonoAdapter implements ServerAdapter {
     }
 
     this.app[method](route.path, async (c: Context) => {
+      const trace = process.env['RUDDER_PERF_TRACE'] === '1'
       // Subdomain gate — Hono routes by path only, so we filter on Host here.
       // Mismatch returns 404 (matches Laravel: a route scoped to a subdomain
       // simply isn't registered for other hosts). Captured `:param` segments
@@ -494,13 +495,17 @@ class HonoAdapter implements ServerAdapter {
       // (like session.save()) can modify `c.res` and their changes will be included.
       let idx = 0
 
+      const t1 = trace ? performance.now() : 0
       const next = async (): Promise<void> => {
         const fn = chain[idx++]
         if (fn) {
           await fn(req, res, next)
         } else {
           // All middleware passed — run the handler with the same res
+          if (trace) console.log(`[perf] req middleware ${(performance.now() - t1).toFixed(1)}ms`)
+          const t2 = trace ? performance.now() : 0
           const result = await route.handler(req, res)
+          if (trace) console.log(`[perf] req handler ${(performance.now() - t2).toFixed(1)}ms`)
           if (isViewResponse(result)) {
             // @rudderjs/view ViewResponse — resolve via Vike's renderPage().
             // Detected by duck-typing on the static __rudder_view__ marker so
@@ -509,7 +514,9 @@ class HonoAdapter implements ServerAdapter {
             // from Vike's client router) so toResponse() can request JSON
             // instead of HTML for SPA navigation.
             const originalUrl = c.req.header('x-rudder-original-url') ?? c.req.url
+            const tv = trace ? performance.now() : 0
             c.res = await result.toResponse({ url: originalUrl })
+            if (trace) console.log(`[perf] req view.toResponse ${(performance.now() - tv).toFixed(1)}ms`)
             // Stash view info for Telescope
             const v = result as unknown as { id?: string; props?: Record<string, unknown> }
             meta['__rjs_view'] = { id: v.id, props: Object.keys(v.props ?? {}) }
@@ -572,6 +579,28 @@ class HonoAdapter implements ServerAdapter {
 }
 
 // ─── Factory ───────────────────────────────────────────────
+
+// ─── Eager vike/server prewarm ────────────────────────────
+//
+// vike/server takes ~100 ms to first-import (its full server pipeline pulls
+// in a lot of modules). Stalling that cost until the first user request is
+// the largest first-render perf hit in a typical RudderJS app. We kick off
+// the load here as a module-load side-effect of `@rudderjs/server-hono`,
+// which runs the moment `bootstrap/app.ts` statically imports `{ hono }` —
+// roughly t=0 in the cold-boot timeline. The load then completes in
+// parallel with the rest of bootstrap and is cached by the time `view()`'s
+// `toResponse()` awaits it.
+//
+// `@rudderjs/view` is an optional peer (server-hono is usable without it
+// for pure-JSON APIs), so the specifier goes through a string variable to
+// avoid a hard TS build dep, and the chain catches the not-installed case.
+{
+  const viewModuleSpecifier = '@rudderjs/view'
+  void import(viewModuleSpecifier)
+    .then((m: { prewarmVikeServer?: () => Promise<unknown> }) =>
+      m.prewarmVikeServer?.())
+    .catch(() => { /* view not installed — fine */ })
+}
 
 export function hono(config: HonoConfig = {}): ServerAdapterProvider {
   return {

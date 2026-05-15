@@ -23,6 +23,36 @@
 // augmentation so app code can read both with full typing.
 import './types/vike.js'
 
+// Memoized lazy loader for `vike/server`. Calling `prewarmVikeServer()` at
+// boot moves the ~100 ms first-import cost off the first user-visible
+// request; otherwise the cost falls on the first `toResponse()` call.
+// Tests that mock `vike/server` via `mock.module()` must avoid prewarming —
+// they install the mock first, then trigger the load implicitly via
+// `toResponse()`.
+let cachedVikeServer: Promise<typeof import('vike/server')> | null = null
+
+/**
+ * Trigger (and cache) the `vike/server` module load. Safe to call multiple
+ * times — subsequent calls return the same in-flight Promise. Awaiting is
+ * optional; the typical pattern is fire-and-forget from a server adapter's
+ * boot path so the import resolves in parallel with the rest of bootstrap.
+ *
+ * `@rudderjs/server-hono`'s `createFetchHandler()` invokes this for you —
+ * apps using that adapter need not call it manually. Custom server adapters
+ * should call it during their own boot.
+ */
+export function prewarmVikeServer(): Promise<typeof import('vike/server')> {
+  if (!cachedVikeServer) {
+    cachedVikeServer = import('vike/server')
+  }
+  return cachedVikeServer
+}
+
+/** @internal — test-only hook to discard the cached vike/server Promise. */
+export function _resetVikeServerCacheForTests(): void {
+  cachedVikeServer = null
+}
+
 export type ViewProps = Record<string, unknown>
 
 export interface ViewResolveContext {
@@ -122,7 +152,10 @@ export class ViewResponse {
    * because Vike's exported `PageContextServer` type doesn't surface them.
    */
   async toResponse(ctx: ViewResolveContext): Promise<Response> {
-    const { renderPage } = await import('vike/server')
+    const trace = process.env['RUDDER_PERF_TRACE'] === '1'
+    const t0 = trace ? performance.now() : 0
+    const { renderPage } = await prewarmVikeServer()
+    const t1 = trace ? performance.now() : 0
 
     // Hand Vike the URL the browser actually requested. The scanner generates
     // a +route.ts file whose default export matches this URL — either derived
@@ -148,6 +181,11 @@ export class ViewResponse {
       // to the SSR response.
       viewHeaders,
     } as Parameters<typeof renderPage>[0])
+    const t2 = trace ? performance.now() : 0
+    if (trace) {
+      console.log(`[perf] req view.import-vike ${(t1 - t0).toFixed(1)}ms`)
+      console.log(`[perf] req view.renderPage ${(t2 - t1).toFixed(1)}ms`)
+    }
 
     if ((pageContext as { errorWhileRendering?: unknown }).errorWhileRendering) {
       throw (pageContext as { errorWhileRendering: unknown }).errorWhileRendering
