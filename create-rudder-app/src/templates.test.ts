@@ -981,11 +981,12 @@ describe('getTemplates() — demos', () => {
     assert.ok(files['routes/api.ts']!.includes("/api/ws/broadcast"))
   })
 
-  it('sync demo + sync → Sync view + y-websocket dep + /demos/sync route', () => {
+  it('sync demo + sync → Sync view + y-websocket + yjs dep + /demos/sync route', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['sync'] }))
     assert.ok('app/Views/Demos/Sync.tsx' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('y-websocket' in pkg.dependencies)
+    assert.ok('yjs' in pkg.dependencies)
     assert.ok(files['routes/web.ts']!.includes("view('demos.sync')"))
   })
 
@@ -1159,6 +1160,7 @@ describe('getTemplates() — demos', () => {
     assert.ok(!('src/RudderSocket.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('y-websocket' in pkg.dependencies))
+    assert.ok(!('yjs' in pkg.dependencies))
   })
 
   it('contact demo + auth → contact API uses CsrfMiddleware', () => {

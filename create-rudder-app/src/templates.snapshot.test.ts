@@ -60,9 +60,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-12 — swap `} satisfies Config` for
-  // `} as unknown as Config` in pages/+config.ts templates (workaround for
-  // vikejs/vike#3251 — extends + exactOptionalPropertyTypes incompatibility).
+  // Baseline last captured 2026-05-15 — add explicit `yjs` dep alongside
+  // `y-websocket` (the sync demo imports yjs directly; pnpm strict-resolution
+  // doesn't hoist the peer, so Vite's dep-scan errored).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65376
-const EXPECTED_CONTENT_HASH = '25b82f36909e2fe9acd2848b6b4cd916e54cece1d049e82aea40d459ed581799'
+const EXPECTED_TOTAL_BYTES = 65398
+const EXPECTED_CONTENT_HASH = '666677616352947bf1487053cd3d0b55e6dd0256fe01e96e67526d7369999553'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
