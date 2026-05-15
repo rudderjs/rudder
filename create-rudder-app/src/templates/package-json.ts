@@ -110,7 +110,13 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.notifications) deps['@rudderjs/notification'] = 'latest'
   if (ctx.packages.broadcast)     deps['@rudderjs/broadcast']    = 'latest'
   if (ctx.packages.sync)          deps['@rudderjs/sync']         = 'latest'
-  if (shouldScaffoldDemo(ctx, 'sync')) deps['y-websocket'] = '^2.0.0'
+  if (shouldScaffoldDemo(ctx, 'sync')) {
+    // yjs is a peer of y-websocket; under pnpm strict-resolution it isn't
+    // hoisted, and Vite's dep-scan errors on the explicit `import * as Y
+    // from 'yjs'` in the sync demo. Declare it explicitly.
+    deps['yjs']         = '^13.6.0'
+    deps['y-websocket'] = '^2.0.0'
+  }
   if (ctx.packages.ai)            deps['@rudderjs/ai']           = 'latest'
   if (ctx.packages.mcp)           deps['@rudderjs/mcp']          = 'latest'
   if (ctx.packages.localization)  deps['@rudderjs/localization'] = 'latest'

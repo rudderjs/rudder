@@ -23,8 +23,12 @@ import {
   Num,
   t,
   validateSerializable,
+  resolveOptionalPeer,
 } from './index.js'
 import { z } from 'zod'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 // ─── Collection ────────────────────────────────────────────
 
@@ -1384,6 +1388,126 @@ describe('Collection.unique()', () => {
 describe('Collection.splitIn() guard', () => {
   it('throws when n < 1', () => {
     assert.throws(() => new Collection([1, 2, 3]).splitIn(0), /n must be >= 1/)
+  })
+})
+
+// ─── resolveOptionalPeer ───────────────────────────────────
+
+describe('resolveOptionalPeer', () => {
+  let tempDir: string
+  let originalCwd: string
+
+  /**
+   * Build a fake package on disk that mimics an ESM-only installed dep —
+   * one with no `require` / `default` exports condition, so createRequire
+   * is forced to throw and the ESM fallback runs.
+   */
+  function writePackage(
+    name: string,
+    pkgJson: Record<string, unknown>,
+    files: Record<string, string>,
+  ): void {
+    const pkgDir = join(tempDir, 'node_modules', name)
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name, ...pkgJson }))
+    for (const [rel, contents] of Object.entries(files)) {
+      const dest = join(pkgDir, rel)
+      mkdirSync(join(dest, '..'), { recursive: true })
+      writeFileSync(dest, contents)
+    }
+  }
+
+  beforeEach(() => {
+    originalCwd = process.cwd()
+    tempDir = mkdtempSync(join(tmpdir(), 'rudder-peer-'))
+    writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'host', type: 'module' }))
+    process.chdir(tempDir)
+  })
+
+  afterEach(() => {
+    process.chdir(originalCwd)
+    rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  it('resolves the root export of an ESM-only package', async () => {
+    writePackage(
+      'esm-pkg',
+      {
+        type: 'module',
+        exports: { '.': { import: './dist/index.js', types: './dist/index.d.ts' } },
+      },
+      { 'dist/index.js': 'export const hello = "world"\n' },
+    )
+
+    const mod = await resolveOptionalPeer<{ hello: string }>('esm-pkg')
+    assert.strictEqual(mod.hello, 'world')
+  })
+
+  it('resolves a scoped-package subpath when only the `import` condition is defined', async () => {
+    // Reproduces @rudderjs/ai/server — the bug that left AiProvider unloaded
+    // even though @rudderjs/ai was installed.
+    writePackage(
+      '@scope/pkg',
+      {
+        type: 'module',
+        exports: {
+          '.':       { import: './dist/index.js' },
+          './server': { import: './dist/server/index.js' },
+        },
+      },
+      {
+        'dist/index.js':        'export const main = "main"\n',
+        'dist/server/index.js': 'export const server = "server"\n',
+      },
+    )
+
+    const mod = await resolveOptionalPeer<{ server: string }>('@scope/pkg/server')
+    assert.strictEqual(mod.server, 'server')
+  })
+
+  it('resolves an unscoped subpath import', async () => {
+    writePackage(
+      'plain-pkg',
+      {
+        type: 'module',
+        exports: {
+          '.':       { import: './dist/index.js' },
+          './extra': { import: './dist/extra.js' },
+        },
+      },
+      {
+        'dist/index.js': 'export const root = 1\n',
+        'dist/extra.js': 'export const extra = 2\n',
+      },
+    )
+
+    const mod = await resolveOptionalPeer<{ extra: number }>('plain-pkg/extra')
+    assert.strictEqual(mod.extra, 2)
+  })
+
+  it('throws a clear error when an undefined subpath is requested', async () => {
+    writePackage(
+      '@scope/pkg',
+      {
+        type: 'module',
+        exports: { '.': { import: './dist/index.js' } },
+      },
+      { 'dist/index.js': 'export const main = "main"\n' },
+    )
+
+    await assert.rejects(
+      () => resolveOptionalPeer('@scope/pkg/missing'),
+      /subpath ".\/missing" is not defined/,
+    )
+  })
+
+  it('throws a clear error when the package is not installed', async () => {
+    // createRequire surfaces the error directly here (MODULE_NOT_FOUND, not a
+    // subpath error), so the ESM fallback isn't entered.
+    await assert.rejects(
+      () => resolveOptionalPeer('@scope/not-installed'),
+      /Cannot find module '@scope\/not-installed'/,
+    )
   })
 })
 

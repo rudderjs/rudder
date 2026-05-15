@@ -238,18 +238,42 @@ export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier
   const path = await import('node:path')
   const { pathToFileURL } = await import('node:url')
 
-  const pkgInfo = await findPackageJson(specifier, process.cwd(), fs, path)
+  const { pkgName, subpath } = parseSpecifier(specifier)
+  const pkgInfo = await findPackageJson(pkgName, process.cwd(), fs, path)
   if (!pkgInfo) {
-    throw new Error(`Cannot find package "${specifier}" from ${process.cwd()}`)
+    throw new Error(`Cannot find package "${pkgName}" from ${process.cwd()}`)
   }
 
-  const entry = readImportEntry(pkgInfo.data)
+  const entry = readImportEntry(pkgInfo.data, subpath)
   if (!entry) {
-    throw new Error(`Package "${specifier}" has no resolvable ESM entry point in its exports field`)
+    throw new Error(
+      subpath === '.'
+        ? `Package "${pkgName}" has no resolvable ESM entry point in its exports field`
+        : `Package "${pkgName}" subpath "${subpath}" is not defined in its exports field`,
+    )
   }
 
   const absolute = path.resolve(path.dirname(pkgInfo.path), entry)
   return import(/* @vite-ignore */ pathToFileURL(absolute).href) as Promise<T>
+}
+
+/**
+ * Split a bare import specifier into its package name and subpath.
+ *   "foo"            → { pkgName: "foo",        subpath: "."        }
+ *   "foo/bar"        → { pkgName: "foo",        subpath: "./bar"    }
+ *   "@scope/name"    → { pkgName: "@scope/name", subpath: "."       }
+ *   "@scope/name/x"  → { pkgName: "@scope/name", subpath: "./x"     }
+ */
+function parseSpecifier(specifier: string): { pkgName: string; subpath: string } {
+  if (specifier.startsWith('@')) {
+    const parts = specifier.split('/')
+    const pkgName = parts.slice(0, 2).join('/')
+    const rest = parts.slice(2).join('/')
+    return { pkgName, subpath: rest ? `./${rest}` : '.' }
+  }
+  const slash = specifier.indexOf('/')
+  if (slash < 0) return { pkgName: specifier, subpath: '.' }
+  return { pkgName: specifier.slice(0, slash), subpath: `./${specifier.slice(slash + 1)}` }
 }
 
 async function findPackageJson(
@@ -271,23 +295,35 @@ async function findPackageJson(
   }
 }
 
-function readImportEntry(pkg: Record<string, unknown>): string | null {
+function readImportEntry(pkg: Record<string, unknown>, subpath: string): string | null {
   const exports = pkg['exports']
-  if (typeof exports === 'string') return exports
+
+  // String shorthand: only valid for the root subpath.
+  if (typeof exports === 'string') {
+    return subpath === '.' ? exports : null
+  }
 
   if (exports && typeof exports === 'object') {
-    const root = (exports as Record<string, unknown>)['.'] ?? exports
-    if (typeof root === 'string') return root
-    if (root && typeof root === 'object') {
-      const r = root as Record<string, unknown>
+    const exportsMap = exports as Record<string, unknown>
+    // Node spec: if any key starts with '.', exports is a subpath map; otherwise
+    // it's a single conditional export for the root subpath.
+    const isSubpathMap = Object.keys(exportsMap).some(k => k.startsWith('.'))
+    const entry = isSubpathMap ? exportsMap[subpath] : (subpath === '.' ? exportsMap : null)
+
+    if (typeof entry === 'string') return entry
+    if (entry && typeof entry === 'object') {
+      const r = entry as Record<string, unknown>
       const candidate = r['import'] ?? r['default'] ?? r['node']
       if (typeof candidate === 'string') return candidate
     }
   }
 
-  // Fall back to legacy `main` field
-  const main = pkg['main']
-  return typeof main === 'string' ? main : null
+  // Fall back to legacy `main` field — only for the root subpath.
+  if (subpath === '.') {
+    const main = pkg['main']
+    return typeof main === 'string' ? main : null
+  }
+  return null
 }
 
 // ─── validateSerializable ──────────────────────────────────
