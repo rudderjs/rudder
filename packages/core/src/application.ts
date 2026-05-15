@@ -239,8 +239,17 @@ export class Application {
 
   async bootstrap(): Promise<this> {
     if (this.booted) return this
+    const trace = process.env['RUDDER_PERF_TRACE'] === '1'
+    const t0 = trace ? performance.now() : 0
     this._registerAll()
+    const t1 = trace ? performance.now() : 0
     await this._bootAll()
+    if (trace) {
+      const t2 = performance.now()
+      console.log(`[perf] providers:register ${(t1 - t0).toFixed(1)}ms`)
+      console.log(`[perf] providers:boot ${(t2 - t1).toFixed(1)}ms`)
+      console.log(`[perf] application.bootstrap total ${(t2 - t0).toFixed(1)}ms`)
+    }
     return this
   }
 
