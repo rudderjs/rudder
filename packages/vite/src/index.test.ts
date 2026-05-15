@@ -8,20 +8,10 @@ describe('@rudderjs/vite', () => {
     assert.equal(typeof rudderjs, 'function')
   })
 
-  it('returns a promise', () => {
+  it('returns an array of plugins synchronously', () => {
     const result = rudderjs()
-    assert.ok(result instanceof Promise)
-  })
-
-  it('promise has _vikeVitePluginOptions (Vike detection)', () => {
-    const result = rudderjs() as Promise<unknown> & { _vikeVitePluginOptions: Record<string, unknown> }
-    assert.ok('_vikeVitePluginOptions' in result)
-    assert.deepEqual(result._vikeVitePluginOptions, {})
-  })
-
-  it('resolves to an array of plugins', async () => {
-    const plugins = await rudderjs()
-    assert.ok(Array.isArray(plugins))
+    assert.ok(Array.isArray(result))
+    assert.ok(result.length > 0)
   })
 
   it('includes rudderjs:ws plugin', async () => {
