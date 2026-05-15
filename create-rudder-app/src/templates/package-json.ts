@@ -163,6 +163,9 @@ export function packageJson(ctx: TemplateContext): string {
     version: '0.0.1',
     private: true,
     type:    'module',
+    engines: {
+      node: '^20.19.0 || >=22.12.0',
+    },
     scripts: {
       dev:               'vike dev',
       'dev:clean':       'pids=$(lsof -ti :24678 -ti :3000 2>/dev/null); if [ -n "$pids" ]; then kill -9 $pids; fi; vike dev',
