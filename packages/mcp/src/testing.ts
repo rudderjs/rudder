@@ -2,7 +2,10 @@ import type { McpServer } from './McpServer.js'
 import type { McpTool, McpToolResult, McpToolProgress } from './McpTool.js'
 import type { McpResource } from './McpResource.js'
 import type { McpPrompt, McpPromptMessage } from './McpPrompt.js'
-import { resolveHandleDeps, consumeToolReturn, isRegistered, filterRegistered } from './runtime.js'
+// Import from the cheap sibling modules directly so the test client doesn't
+// pull `@modelcontextprotocol/sdk` through the `runtime.ts` barrel.
+import { resolveHandleDeps, isRegistered, filterRegistered } from './runtime/handle-deps.js'
+import { consumeToolReturn } from './runtime/consume-tool-return.js'
 import { getToolAnnotations, getResourceAnnotations, type ToolAnnotations, type ResourceAnnotations } from './decorators.js'
 
 export class McpTestClient {
