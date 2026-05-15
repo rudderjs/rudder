@@ -41,6 +41,11 @@
       "import": "./dist/hooks/headersResponse.js",
       "default": "./dist/hooks/headersResponse.js",
       "types": "./dist/hooks/headersResponse.d.ts"
+    },
+    "./commands/view-sync": {
+      "import": "./dist/commands/view-sync.js",
+      "default": "./dist/commands/view-sync.js",
+      "types": "./dist/commands/view-sync.d.ts"
     }
   },
   "scripts": {

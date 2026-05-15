@@ -537,11 +537,53 @@ function cleanStale(generatedRoot: string, current: DiscoveredView[]): void {
  * Vite plugin that scans `app/Views/**` and emits virtual Vike pages
  * under `pages/__view/`. Watches the source directory in dev mode.
  */
+export interface ViewsSyncResult {
+  /** Whether `app/Views/` exists in the target directory. */
+  viewsRootExists: boolean
+  /** Detected framework — `null` when viewsRoot is absent (no scan ran). */
+  framework:       Framework | null
+  /** Number of views discovered. */
+  viewCount:       number
+  /** Number of views with an exported `Props` type. */
+  typedCount:      number
+}
+
+/**
+ * Synchronously regenerate `pages/__view/` from `app/Views/`.
+ *
+ * Public surface for the `rudder view:sync` CLI command and any other
+ * tooling that needs to materialize the registry / Vike stubs without
+ * starting Vite. Idempotent — read-compare-then-write semantics across
+ * every generated file (see `writeIfChanged`).
+ *
+ * Returns enough metadata for callers to print a useful summary line
+ * without re-walking the directory.
+ */
+export function syncViewsFromDisk(cwd: string = process.cwd()): ViewsSyncResult {
+  const viewsRoot     = path.join(cwd, 'app', 'Views')
+  const pagesRoot     = path.join(cwd, 'pages')
+  const generatedRoot = path.join(pagesRoot, '__view')
+
+  if (!fs.existsSync(viewsRoot)) {
+    return { viewsRootExists: false, framework: null, viewCount: 0, typedCount: 0 }
+  }
+
+  const framework = detectFramework(cwd)
+  const views     = discover(viewsRoot, pagesRoot, framework)
+  cleanStale(generatedRoot, views)
+  generate(generatedRoot, pagesRoot, views, framework)
+
+  return {
+    viewsRootExists: true,
+    framework,
+    viewCount:  views.length,
+    typedCount: views.filter(v => v.hasProps).length,
+  }
+}
+
 export function viewsScannerPlugin(): Plugin {
   const cwd            = process.cwd()
   const viewsRoot      = path.join(cwd, 'app', 'Views')
-  const pagesRoot      = path.join(cwd, 'pages')
-  const generatedRoot  = path.join(pagesRoot, '__view')
 
   // Detect the framework lazily — only when we actually need to scan views.
   // This keeps the plugin silent on projects that don't use app/Views/ at
@@ -552,24 +594,17 @@ export function viewsScannerPlugin(): Plugin {
   let framework: Framework | null = null
   const getFramework = (): Framework => framework ??= detectFramework(cwd)
 
-  const sync = (): void => {
-    const fw    = getFramework()
-    const views = discover(viewsRoot, pagesRoot, fw)
-    cleanStale(generatedRoot, views)
-    generate(generatedRoot, pagesRoot, views, fw)
-  }
-
   // Eager sync at plugin construction time — Vike scans `pages/` during its
   // own plugin init, so the generated stubs MUST exist on disk before any
   // Vite/Vike hook fires. configureServer/buildStart are too late.
-  if (fs.existsSync(viewsRoot)) sync()
+  if (fs.existsSync(viewsRoot)) syncViewsFromDisk(cwd)
 
   return {
     name: 'rudderjs:views-scanner',
     enforce: 'pre',
     buildStart() {
       if (!fs.existsSync(viewsRoot)) return
-      sync()
+      syncViewsFromDisk(cwd)
     },
     configureServer(server) {
       if (!fs.existsSync(viewsRoot)) return
@@ -578,7 +613,7 @@ export function viewsScannerPlugin(): Plugin {
         if (!file.startsWith(viewsRoot)) return
         const exts = EXTENSIONS_BY_FRAMEWORK[getFramework()]
         if (!exts.some(e => file.toLowerCase().endsWith(e))) return
-        sync()
+        syncViewsFromDisk(cwd)
       }
       server.watcher.on('add',    onChange)
       server.watcher.on('unlink', onChange)
