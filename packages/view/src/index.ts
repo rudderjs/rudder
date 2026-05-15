@@ -179,12 +179,55 @@ export class ViewResponse {
 }
 
 /**
+ * Module-augmentation registry mapping view ids → component prop types.
+ *
+ * `@rudderjs/vite`'s views scanner populates this automatically at build time
+ * by emitting `pages/__view/registry.d.ts`. App authors never write to this
+ * interface directly — they just `export interface Props` in their view
+ * component file and the scanner picks it up.
+ *
+ * Unrecognized ids fall through to the loose `view(id, props?)` overload, so
+ * call sites in apps that haven't adopted the convention keep working.
+ *
+ * Intentionally empty — module augmentation requires `interface`, not `type`,
+ * because consumers add members via `interface ViewPropsRegistry { ... }`
+ * in a `declare module '@rudderjs/view'` block.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- module-augmentation target; see comment above
+export interface ViewPropsRegistry {}
+
+/** Resolved prop type for a registered view id. */
+export type ViewPropsFor<Id extends keyof ViewPropsRegistry> = ViewPropsRegistry[Id]
+
+/**
+ * Forces the loose overload to reject ids that are already registered, so
+ * `view('typed.demo', ...)` MUST match the typed overload (or fail) — it
+ * cannot silently fall through to the loose record-typed signature.
+ *
+ * For a literal id `Id` that extends `keyof ViewPropsRegistry`, this resolves
+ * to `never`, making the loose overload's `id` parameter unassignable. For a
+ * `string`-typed variable, `string extends <known-id-union>` is false so it
+ * resolves back to `string` — dynamic call sites keep working.
+ */
+type UnknownViewId<Id extends string> = Id extends keyof ViewPropsRegistry ? never : Id
+
+/**
  * Render a view from `app/Views/` with controller-supplied props.
  *
  * @param id      Dot-notation view id (e.g. `'dashboard'` → `app/Views/Dashboard.tsx`)
  * @param props   Plain object passed to the view component as props
  * @param options Optional response options (headers, etc.)
  */
+export function view<Id extends keyof ViewPropsRegistry>(
+  id:       Id,
+  props:    ViewPropsRegistry[Id],
+  options?: ViewOptions,
+): ViewResponse
+export function view<Id extends string>(
+  id:       UnknownViewId<Id>,
+  props?:   ViewProps,
+  options?: ViewOptions,
+): ViewResponse
 export function view(id: string, props: ViewProps = {}, options: ViewOptions = {}): ViewResponse {
   return new ViewResponse(id, props, options)
 }

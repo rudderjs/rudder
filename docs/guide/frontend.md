@@ -39,6 +39,10 @@ export default function Dashboard({ title, users }: DashboardProps) {
 
 That's the whole loop. Everything else — URL routing, SSR, hydration, SPA transitions — happens automatically.
 
+::: tip Compile-time prop checks
+Export the view's `Props` interface — `view('dashboard', ...)` then type-checks the props you pass against the receiving component. See [Typed Views](/guide/typed-views).
+:::
+
 ### The id → URL convention
 
 View ids map to URLs 1:1 by default. PascalCase filenames become kebab-case ids; nested directories use dots.

@@ -97,6 +97,17 @@ Route.get('/demos/ws', async () => view('demos.ws'))
 // GET /demos/cache — Cache.get + Cache.set round-trip (@rudderjs/cache).
 Route.get('/demos/cache', async () => view('demos.cache'))
 
+// GET /demos/typed-view — `export interface Props` in the view picked up by
+// @rudderjs/vite's scanner; this `view()` call is type-checked against it.
+// Try changing the literal below — tsc fails at this line, not at render time.
+Route.get('/demos/typed-view', async () => view('demos.typed-view', {
+  user:  { id: 1, name: 'Suleiman' },
+  posts: [
+    { id: 1, title: 'Welcome to typed views' },
+    { id: 2, title: 'Props checked at the controller' },
+  ],
+}))
+
 // GET /demos/page-context — pageContext.user/.flash/.locale enhancer demo + per-page headers.
 Route.get('/demos/page-context', async () => view('demos.page-context', {}, {
   headers: { 'cache-control': 'no-store' },

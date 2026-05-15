@@ -45,6 +45,7 @@ export default defineConfig({
             { text: 'Configuration', link: '/guide/configuration' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
             { text: 'Frontend', link: '/guide/frontend' },
+            { text: 'Typed Views', link: '/guide/typed-views' },
             { text: 'Deployment', link: '/guide/deployment' },
           ],
         },

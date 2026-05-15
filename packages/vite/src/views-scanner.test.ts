@@ -183,3 +183,183 @@ describe('views-scanner — framework detection', () => {
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+Page.vue')))
   })
 })
+
+describe('views-scanner — ViewPropsRegistry emission', () => {
+  const prevCwd = process.cwd()
+  let root = ''
+
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('emits registry.d.ts for views with an exported Props interface', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export interface Props { user: { id: number }; count: number }\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    assert.ok(fs.existsSync(registryPath), 'registry.d.ts should be emitted')
+    const registry = fs.readFileSync(registryPath, 'utf8')
+    assert.match(registry, /declare module '@rudderjs\/view'/)
+    assert.match(registry, /interface ViewPropsRegistry/)
+    assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
+  })
+
+  it('emits registry.d.ts for views with an exported Props type alias', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export type Props = { foo: string }\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
+  })
+
+  it('omits views that do not export Props', () => {
+    root = scaffold('react')
+    // Default Home.tsx scaffold has no Props export.
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Untyped.tsx'),
+      `export default function Untyped() { return null }\n`,
+    )
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Dashboard.tsx'),
+      `export interface Props { count: number }\nexport default function Dashboard() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    assert.match(registry, /'dashboard':/)
+    assert.doesNotMatch(registry, /'untyped':/, 'view without Props export must be omitted')
+    assert.doesNotMatch(registry, /'home':/, 'untyped placeholder must be omitted')
+  })
+
+  it('writes an empty ViewPropsRegistry when no views export Props', () => {
+    root = scaffold('react')
+    // The default scaffold leaves Home.tsx as a placeholder with no Props export.
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    if (fs.existsSync(registryPath)) {
+      const contents = fs.readFileSync(registryPath, 'utf8')
+      assert.doesNotMatch(contents, /import\(/, 'no typed views = no import() entries')
+      assert.match(contents, /interface ViewPropsRegistry/)
+    }
+  })
+
+  it('emits registry.d.ts for Vue views that export Props in a regular <script> block', () => {
+    root = scaffold('vue')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.vue'),
+      `<script lang="ts">\nexport interface Props { user: { id: number } }\n</script>\n<script setup lang="ts">\nconst x = 1\n</script>\n<template><div /></template>\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.vue['"]\)\.Props/)
+  })
+
+  it('re-emits registry.d.ts after a view source change adds a Props export', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    const before = fs.existsSync(registryPath) ? fs.readFileSync(registryPath, 'utf8') : ''
+    assert.doesNotMatch(before, /'home':\s*import\(/, 'placeholder has no Props export yet')
+
+    // Add an exported Props interface and re-run a scan (mimics the watcher firing).
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export interface Props { foo: string }\nexport default function Home() { return null }\n`,
+    )
+    viewsScannerPlugin()
+    const after = fs.readFileSync(registryPath, 'utf8')
+    assert.match(after, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
+  })
+})
+
+describe('views-scanner — typed +Page stubs', () => {
+  const prevCwd = process.cwd()
+  let root = ''
+
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('React stub imports the per-view Props type when available', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export interface Props { foo: string }\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(stub, /import type \{ Props \} from ['"]App\/Views\/Home\.tsx['"]/)
+    assert.match(stub, /viewProps\?:\s*Props/)
+    assert.doesNotMatch(stub, /Record<string, unknown>/, 'must not fall back to loose record when Props exists')
+  })
+
+  it('React stub uses a loose record when no Props export is present', () => {
+    root = scaffold('react')
+    // Default scaffold leaves Home.tsx as a placeholder with no Props export.
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(stub, /Record<string, unknown>/)
+    assert.doesNotMatch(stub, /import type \{ Props \}/, 'no Props import when source has none')
+  })
+
+  it('Solid stub imports the per-view Props type when available', () => {
+    root = scaffold('solid')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export interface Props { count: number }\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(stub, /import type \{ Props \} from ['"]App\/Views\/Home\.tsx['"]/)
+    assert.match(stub, /viewProps\?:\s*Props/)
+    assert.doesNotMatch(stub, /Record<string, unknown>/)
+  })
+
+  it('Solid stub uses a loose record when no Props export is present', () => {
+    root = scaffold('solid')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(stub, /Record<string, unknown>/)
+  })
+
+  it('Vue stub imports the per-view Props type when available', () => {
+    root = scaffold('vue')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.vue'),
+      `<script lang="ts">\nexport interface Props { user: { id: number } }\n</script>\n<script setup lang="ts">\nconst x = 1\n</script>\n<template><div /></template>\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.vue'), 'utf8')
+    assert.match(stub, /import type \{ Props \} from ['"]App\/Views\/Home\.vue['"]/)
+    assert.match(stub, /viewProps:\s*Props/)
+    assert.doesNotMatch(stub, /Record<string, unknown>/)
+  })
+
+  it('Vue stub uses a loose record when no Props export is present', () => {
+    root = scaffold('vue')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.vue'), 'utf8')
+    assert.match(stub, /Record<string, unknown>/)
+  })
+})
