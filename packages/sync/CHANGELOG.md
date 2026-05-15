@@ -1,5 +1,28 @@
 # @rudderjs/live
 
+## 1.1.1
+
+### Patch Changes
+
+- b461123: Declare `engines.node: "^20.19.0 || >=22.12.0"` on every published package and on the scaffolder-generated `package.json` template.
+
+  Matches the actual runtime floor enforced transitively by `vite@7` (`^20.19.0 || >=22.12.0`) and `vike` (`>=20.19.0`). Previously the requirement was only mentioned in the install guide — adding it to `engines.node` surfaces the floor at `pnpm install` / `npm install` time via the package manager's engines warning, rather than waiting for runtime / transitive errors.
+
+  Not a breaking API change — `engines` is advisory by default (package managers warn but don't refuse without `engineStrict=true`).
+
+- 1dfb6b8: Document the WS `docName` URL contract on `SyncConfig.path` and add a multi-peer broadcast regression test.
+
+  - **JSDoc** on `SyncConfig.path` now spells out that the room key (`docName`) is extracted as the **last non-empty path segment** of the connection URL, after stripping the query string. Consumers with composite room ids must flatten with a non-slash separator before mounting — otherwise distinct logical rooms with the same trailing segment collide into one shared `Y.Doc`.
+  - **Inline comment** added on `handleConnection`'s docName extraction documenting the same rule plus the collision implication.
+  - **Two new tests** in `packages/sync/src/index.test.ts` (`Multi-peer WS broadcast` suite):
+    - `forwards an update from peer A to peer B in the same room` — drives `_handleConnection` with mock WS sockets, encodes a real Yjs syncUpdate frame, verifies the originator is skipped and the other peer receives it.
+    - `isolates broadcasts: peers in different rooms do not see each other` — defensive negative test for the room-collision class of bug.
+
+  No behavior change. Filed alongside `docs/plans/2026-05-15-sync-ws-multi-peer-diagnostic.md` from pilotiq agent — answers the three open questions in the plan's "Rudder-side response" section.
+
+- Updated dependencies [b461123]
+  - @rudderjs/core@1.1.5
+
 ## 1.1.0
 
 ### Minor Changes

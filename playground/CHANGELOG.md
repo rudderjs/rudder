@@ -1,5 +1,51 @@
 # rudderjs-playground
 
+## 0.0.67
+
+### Patch Changes
+
+- Updated dependencies [b461123]
+- Updated dependencies [1dfb6b8]
+  - @rudderjs/ai@1.6.3
+  - @rudderjs/auth@6.0.1
+  - @rudderjs/boost@1.2.1
+  - @rudderjs/broadcast@1.0.4
+  - @rudderjs/cache@1.1.4
+  - @rudderjs/cashier-paddle@4.0.1
+  - @rudderjs/concurrency@1.0.3
+  - @rudderjs/console@1.0.2
+  - @rudderjs/contracts@1.6.1
+  - @rudderjs/core@1.1.5
+  - @rudderjs/hash@1.0.2
+  - @rudderjs/horizon@6.0.2
+  - @rudderjs/http@1.0.2
+  - @rudderjs/image@1.1.1
+  - @rudderjs/localization@2.0.1
+  - @rudderjs/log@1.0.3
+  - @rudderjs/mail@1.0.3
+  - @rudderjs/mcp@5.1.3
+  - @rudderjs/middleware@1.1.1
+  - @rudderjs/notification@1.0.3
+  - @rudderjs/orm@1.9.2
+  - @rudderjs/orm-prisma@1.7.2
+  - @rudderjs/passport@1.1.3
+  - @rudderjs/pennant@1.0.3
+  - @rudderjs/process@1.0.2
+  - @rudderjs/pulse@6.1.3
+  - @rudderjs/queue@4.1.3
+  - @rudderjs/queue-bullmq@1.1.3
+  - @rudderjs/router@1.2.1
+  - @rudderjs/schedule@1.0.5
+  - @rudderjs/server-hono@1.1.1
+  - @rudderjs/session@2.0.1
+  - @rudderjs/storage@1.1.3
+  - @rudderjs/support@1.2.2
+  - @rudderjs/sync@1.1.1
+  - @rudderjs/telescope@14.0.1
+  - @rudderjs/terminal@1.1.2
+  - @rudderjs/view@1.1.1
+  - @rudderjs/vite@2.0.1
+
 ## 0.0.66
 
 ### Patch Changes

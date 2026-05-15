@@ -1,5 +1,36 @@
 # @rudderjs/telescope
 
+## 14.0.1
+
+### Patch Changes
+
+- b461123: Declare `engines.node: "^20.19.0 || >=22.12.0"` on every published package and on the scaffolder-generated `package.json` template.
+
+  Matches the actual runtime floor enforced transitively by `vite@7` (`^20.19.0 || >=22.12.0`) and `vike` (`>=20.19.0`). Previously the requirement was only mentioned in the install guide — adding it to `engines.node` surfaces the floor at `pnpm install` / `npm install` time via the package manager's engines warning, rather than waiting for runtime / transitive errors.
+
+  Not a breaking API change — `engines` is advisory by default (package managers warn but don't refuse without `engineStrict=true`).
+
+- Updated dependencies [b461123]
+- Updated dependencies [1dfb6b8]
+  - @rudderjs/ai@1.6.3
+  - @rudderjs/auth@6.0.1
+  - @rudderjs/broadcast@1.0.4
+  - @rudderjs/cache@1.1.4
+  - @rudderjs/console@1.0.2
+  - @rudderjs/contracts@1.6.1
+  - @rudderjs/core@1.1.5
+  - @rudderjs/http@1.0.2
+  - @rudderjs/log@1.0.3
+  - @rudderjs/mail@1.0.3
+  - @rudderjs/mcp@5.1.3
+  - @rudderjs/middleware@1.1.1
+  - @rudderjs/notification@1.0.3
+  - @rudderjs/orm@1.9.2
+  - @rudderjs/queue@4.1.3
+  - @rudderjs/router@1.2.1
+  - @rudderjs/schedule@1.0.5
+  - @rudderjs/sync@1.1.1
+
 ## 14.0.0
 
 ### Patch Changes

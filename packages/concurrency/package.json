@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/concurrency",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Parallel execution for RudderJS — worker thread pool, deferred tasks, and sync driver for testing",
   "license": "MIT",
   "repository": {
