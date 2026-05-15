@@ -57,7 +57,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## A taste of RudderJS
 
-Thirteen features, thirteen snippets. Each one is real code from the playground — copy, run, ship.
+Fourteen features, fourteen snippets. Each one is real code from the playground — copy, run, ship.
 
 ### 1. Bootstrap — the whole app shape in one file
 
@@ -408,6 +408,37 @@ Schedule.call(() => sendDigest())
 ```
 
 Run the scheduler with `pnpm rudder schedule:work` (long-lived) or `schedule:run` (one-shot, cron-driven). Frequency helpers, timezones, overlap prevention, and per-task descriptions surface in `pnpm rudder schedule:list`.
+
+### 14. Typed views — props checked at the controller, not at render
+
+```tsx
+// app/Views/Dashboard.tsx
+export interface Props {
+  user:  { id: number; name: string }
+  posts: { id: number; title: string }[]
+}
+
+export default function Dashboard({ user, posts }: Props) {
+  return (
+    <main>
+      <h1>Hello, {user.name}</h1>
+      <ul>{posts.map(p => <li key={p.id}>{p.title}</li>)}</ul>
+    </main>
+  )
+}
+```
+
+```ts
+// routes/web.ts
+Route.get('/dashboard', async () => view('dashboard', {
+  user:  { id: 1, name: 'Suleiman' },
+  // forgot a prop, or passed the wrong shape? tsc fails right here,
+  // not at render time.
+  posts: [{ id: 1, title: 'Hello' }],
+}))
+```
+
+`@rudderjs/vite`'s scanner picks up the exported `Props` on every scan and emits `pages/__view/registry.d.ts`. The `view('id', props)` call site is then type-checked against the receiving component. Opt in per view; apps that don't keep working unchanged. No codegen step to remember.
 
 ---
 
