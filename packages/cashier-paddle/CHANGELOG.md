@@ -1,5 +1,11 @@
 # @rudderjs/cashier-paddle
 
+## 4.0.0
+
+### Patch Changes
+
+- @rudderjs/auth@6.0.0
+
 ## 3.0.1
 
 ### Patch Changes

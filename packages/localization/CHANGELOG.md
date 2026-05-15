@@ -1,5 +1,12 @@
 # @rudderjs/localization
 
+## 2.0.0
+
+### Patch Changes
+
+- Updated dependencies [4ce1e09]
+  - @rudderjs/vite@2.0.0
+
 ## 1.1.0
 
 ### Minor Changes

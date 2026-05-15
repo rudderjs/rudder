@@ -1,5 +1,11 @@
 # @rudderjs/socialite
 
+## 2.0.0
+
+### Patch Changes
+
+- @rudderjs/session@2.0.0
+
 ## 1.1.0
 
 ### Minor Changes

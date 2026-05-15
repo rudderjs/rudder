@@ -1,5 +1,19 @@
 # rudderjs-playground-web
 
+## 0.0.37
+
+### Patch Changes
+
+- Updated dependencies [fc79ae4]
+- Updated dependencies [4ce1e09]
+  - @rudderjs/support@1.2.1
+  - @rudderjs/vite@2.0.0
+  - @rudderjs/auth@6.0.0
+  - @rudderjs/localization@2.0.0
+  - @rudderjs/session@2.0.0
+  - @rudderjs/cashier-paddle@4.0.0
+  - @rudderjs/telescope@14.0.0
+
 ## 0.0.36
 
 ### Patch Changes
