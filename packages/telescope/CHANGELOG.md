@@ -1,5 +1,11 @@
 # @rudderjs/telescope
 
+## 14.0.0
+
+### Patch Changes
+
+- @rudderjs/auth@6.0.0
+
 ## 13.1.0
 
 ### Minor Changes
