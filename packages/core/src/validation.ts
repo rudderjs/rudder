@@ -1,21 +1,11 @@
 import { z, ZodType, ZodError } from 'zod'
-import type { AppRequest, AppResponse } from '@rudderjs/contracts'
+import { ValidationError, type AppRequest, type AppResponse } from '@rudderjs/contracts'
 
-// ─── Validation Error ──────────────────────────────────────
-
-export class ValidationError extends Error {
-  constructor(public errors: Record<string, string[]>) {
-    super('Validation failed')
-    this.name = 'ValidationError'
-  }
-
-  toJSON() {
-    return {
-      message: this.message,
-      errors:  this.errors,
-    }
-  }
-}
+// Re-export so existing `import { ValidationError } from '@rudderjs/core'`
+// keeps working. The class itself now lives in `@rudderjs/contracts` so
+// packages outside core (e.g. `@rudderjs/router`'s `.query(schema)` chain)
+// can throw it without a circular core dependency.
+export { ValidationError } from '@rudderjs/contracts'
 
 // ─── Validation Response (short-circuit sentinel) ──────────
 

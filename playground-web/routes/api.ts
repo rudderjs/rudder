@@ -18,6 +18,17 @@ Route.registerController(TestController)
 
 Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
+// Demo: typed routes
+//   - Path params: `:id` typed from the literal path; reading `req.params.userId`
+//     would be a TS error.
+//   - Query: the opts-form `{ query: schema }` infers `req.query` from Zod —
+//     `req.query.page` is `number`, not `string`, thanks to z.coerce.
+Route.get(
+  '/api/typed/users/:id',
+  { query: z.object({ page: z.coerce.number().default(1), q: z.string().optional() }) },
+  (req, res) => res.json({ id: req.params.id, page: req.query.page, q: req.query.q ?? null }),
+)
+
 // Demo: Laravel-style controller views
 // Visit /home and /about — controllers fetch data, view() renders pages
 // from app/Views/Home.tsx and app/Views/About.tsx via Vike SSR.

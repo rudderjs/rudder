@@ -34,11 +34,12 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/resource.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/resource.test.js dist-test/query-validator.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
     "@rudderjs/contracts": "workspace:^",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
