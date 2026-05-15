@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Node.js** 18 or later
+- **Node.js** `^20.19.0` or `>=22.12.0` (matches Vite 7's required runtime)
 - One of: **pnpm**, **npm**, **yarn**, or **bun**
 
 ## Scaffold a new project
