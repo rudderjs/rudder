@@ -177,6 +177,12 @@ async function loadPackageCommands(): Promise<void> {
       const mod = await tryImport('@rudderjs/terminal', 'commands/make-terminal')
       registerMakeSpecs(mod['makeTerminalSpec'] as import('@rudderjs/console').MakeSpec)
     },
+    // @rudderjs/vite → view:sync
+    async () => {
+      const mod = await tryImport('@rudderjs/vite', 'commands/view-sync')
+      const register = mod['registerViewSyncCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
   ]
 
   await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
@@ -268,7 +274,10 @@ async function main(): Promise<void> {
   // - `providers:discover` regenerates the manifest the app needs to boot,
   //   so it has to work when the app can't.
   // - `module:publish` copies static assets out of node_modules; no app state.
-  const NO_BOOT_EXACT  = new Set(['providers:discover', 'module:publish'])
+  // - `view:sync` regenerates `pages/__view/` (registry.d.ts + Vike stubs)
+  //   from disk; needed when CI typechecks before Vite has run, or on a
+  //   fresh clone before the first dev server boot.
+  const NO_BOOT_EXACT  = new Set(['providers:discover', 'module:publish', 'view:sync'])
   const NO_BOOT_PREFIX = ['make:']
   const skipBoot = process.argv.slice(2).some(arg =>
     NO_BOOT_EXACT.has(arg) || NO_BOOT_PREFIX.some(p => arg.startsWith(p)),

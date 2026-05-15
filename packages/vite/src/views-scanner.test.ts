@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { viewsScannerPlugin } from './views-scanner.js'
+import { viewsScannerPlugin, syncViewsFromDisk } from './views-scanner.js'
 
 /**
  * Scaffold a throwaway project tree that looks like a real app to the scanner:
@@ -361,5 +361,65 @@ describe('views-scanner — typed +Page stubs', () => {
     viewsScannerPlugin()
     const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.vue'), 'utf8')
     assert.match(stub, /Record<string, unknown>/)
+  })
+})
+
+describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
+  const prevCwd = process.cwd()
+  let root = ''
+
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('reports viewsRootExists: false when app/Views/ is missing', () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'views-sync-noviews-'))
+    process.chdir(root)
+    const result = syncViewsFromDisk()
+    assert.deepEqual(result, { viewsRootExists: false, framework: null, viewCount: 0, typedCount: 0 })
+    // No pages/__view/ should be created either.
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '__view')))
+  })
+
+  it('regenerates pages/__view/ and returns counts for a typed view', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export interface Props { foo: string }\nexport default function Home() { return null }\n`,
+    )
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Plain.tsx'),
+      `export default function Plain() { return null }\n`,
+    )
+    process.chdir(root)
+    const result = syncViewsFromDisk()
+
+    assert.equal(result.viewsRootExists, true)
+    assert.equal(result.framework, 'react')
+    assert.equal(result.viewCount, 2)
+    assert.equal(result.typedCount, 1)
+
+    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx')))
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'plain', '+Page.tsx')))
+  })
+
+  it('is idempotent — second call leaves files untouched', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    syncViewsFromDisk()
+    const stubPath = path.join(root, 'pages', '__view', 'home', '+Page.tsx')
+    const mtime1 = fs.statSync(stubPath).mtimeMs
+
+    // Wait briefly so a real fs write would change mtime, then re-sync.
+    const sleep = (): Promise<void> => new Promise(r => setTimeout(r, 20))
+    return sleep().then(() => {
+      syncViewsFromDisk()
+      const mtime2 = fs.statSync(stubPath).mtimeMs
+      assert.equal(mtime1, mtime2, 'idempotent sync must not rewrite unchanged files')
+    })
   })
 })
