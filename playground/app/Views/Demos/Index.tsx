@@ -47,6 +47,12 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/errors',
     packages:    ['@rudderjs/core', '@rudderjs/server-hono'],
   },
+  {
+    title:       'Typed view props',
+    description: 'Export interface Props in the view file — @rudderjs/vite\'s scanner emits a ViewPropsRegistry entry, and view(\'demos.typed-view\', ...) type-checks against it. Pass the wrong shape and tsc fails at the controller, not at render time.',
+    href:        '/demos/typed-view',
+    packages:    ['@rudderjs/view', '@rudderjs/vite'],
+  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]

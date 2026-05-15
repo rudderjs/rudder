@@ -134,6 +134,7 @@ Routes return `view('id', props)` and the page is rendered through Vike's SSR pi
 - **Framework support**: React / Vue / Solid / vanilla (Blade equivalent — HTML-string functions, zero client JS). Scanner auto-detects the installed `vike-*` renderer. Vanilla views should use the `html\`\`` tagged template from `@rudderjs/view` for auto-escaping.
 - **Packages shipping views** follow the shape `packages/<name>/views/<framework>/<Name>.{tsx,vue}` + `src/routes.ts` exporting `registerXRoutes(router, opts)`. `@rudderjs/auth` is the reference implementation — see `feedback_package_ui_shape.md` in memory.
 - **Welcome page** (`app/Views/Welcome.tsx` with `export const route = '/'`) is the default landing page scaffolded by `create-rudder-app`. Auth-aware: shows Log in / Register links or a signed-in user with a Sign out button.
+- **Typed `view()` calls** — when a view file exports `interface Props` (or `type Props`), `@rudderjs/vite`'s scanner emits `pages/__view/registry.d.ts` mapping the view id to `import('App/Views/<file>').Props`. The corresponding `view('id', ...)` call is then type-checked at the controller. Views without `Props` keep the loose `Record<string, unknown>` behavior — opt in per view, no migration required. See `docs/guide/typed-views.md`.
 
 ### Terminal Views (`@rudderjs/terminal`)
 
