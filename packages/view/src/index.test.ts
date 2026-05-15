@@ -1,7 +1,7 @@
 import { describe, it, mock, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { escapeHtml, html, SafeString, view, isViewResponse, ViewResponse } from './index.js'
+import { escapeHtml, html, SafeString, view, isViewResponse, ViewResponse, _resetVikeServerCacheForTests } from './index.js'
 
 describe('escapeHtml()', () => {
   it('escapes the five HTML-sensitive characters', () => {
@@ -233,7 +233,12 @@ function installVikeMock(opts: {
   return { calls }
 }
 
-afterEach(() => mock.reset())
+afterEach(() => {
+  mock.reset()
+  // `vike/server` is loaded once and cached for the process lifetime; clear
+  // the cache between tests so each can install its own renderPage mock.
+  _resetVikeServerCacheForTests()
+})
 
 describe('ViewResponse.toResponse()', () => {
   it('returns a Response built from Vike\'s httpResponse', async () => {
