@@ -33,12 +33,14 @@ Route.get('/dashboard', async () => {
 
 ```tsx
 // app/Views/Dashboard.tsx
-export default function Dashboard({ users }: { users: User[] }) {
+export interface Props { users: User[] }
+
+export default function Dashboard({ users }: Props) {
   return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
 }
 ```
 
-That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation, no Inertia adapter, no JSON envelope. The same router chain serves JSON APIs, queued jobs, scheduled tasks, WebSocket channels, and AI agents.
+That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation, no Inertia adapter, no JSON envelope. Export `Props` and the `view('dashboard', ...)` call is type-checked at the controller. The same router chain serves JSON APIs, queued jobs, scheduled tasks, WebSocket channels, and AI agents.
 
 ---
 
@@ -57,7 +59,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## A taste of RudderJS
 
-Fourteen features, fourteen snippets. Each one is real code from the playground — copy, run, ship.
+Thirteen features, thirteen snippets. Each one is real code from the playground — copy, run, ship.
 
 ### 1. Bootstrap — the whole app shape in one file
 
@@ -127,13 +129,15 @@ export class UserController {
 ```
 
 ```tsx
-// app/Views/Users/Index.tsx — typed props, SSR'd through Vike
-export default function Index({ users }: { users: User[] }) {
+// app/Views/Users/Index.tsx — SSR'd through Vike, props checked at the controller
+export interface Props { users: User[] }
+
+export default function Index({ users }: Props) {
   return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
 }
 ```
 
-Decorator controllers, fluent middleware, controller-returned SSR views. No Inertia adapter, no JSON envelope.
+Decorator controllers, fluent middleware, controller-returned SSR views. Export `Props` from the view and the matching `view('id', ...)` call is type-checked — wrong shape fails tsc, not render. No Inertia adapter, no JSON envelope.
 
 ### 4. Console & Terminal — rudder commands + Ink
 
@@ -408,37 +412,6 @@ Schedule.call(() => sendDigest())
 ```
 
 Run the scheduler with `pnpm rudder schedule:work` (long-lived) or `schedule:run` (one-shot, cron-driven). Frequency helpers, timezones, overlap prevention, and per-task descriptions surface in `pnpm rudder schedule:list`.
-
-### 14. Typed views — props checked at the controller, not at render
-
-```tsx
-// app/Views/Dashboard.tsx
-export interface Props {
-  user:  { id: number; name: string }
-  posts: { id: number; title: string }[]
-}
-
-export default function Dashboard({ user, posts }: Props) {
-  return (
-    <main>
-      <h1>Hello, {user.name}</h1>
-      <ul>{posts.map(p => <li key={p.id}>{p.title}</li>)}</ul>
-    </main>
-  )
-}
-```
-
-```ts
-// routes/web.ts
-Route.get('/dashboard', async () => view('dashboard', {
-  user:  { id: 1, name: 'Suleiman' },
-  // forgot a prop, or passed the wrong shape? tsc fails right here,
-  // not at render time.
-  posts: [{ id: 1, title: 'Hello' }],
-}))
-```
-
-`@rudderjs/vite`'s scanner picks up the exported `Props` on every scan and emits `pages/__view/registry.d.ts`. The `view('id', props)` call site is then type-checked against the receiving component. Opt in per view; apps that don't keep working unchanged. No codegen step to remember.
 
 ---
 
