@@ -12,22 +12,28 @@ export function pagesRootConfig(ctx: TemplateContext): string {
         ? `import vikeSolid from 'vike-solid/config'`
         : `import vikeReact from 'vike-react/config'`
     const rendererVar = ctx.primary === 'vue' ? 'vikeVue' : ctx.primary === 'solid' ? 'vikeSolid' : 'vikeReact'
+    // vike-react 0.6.23+ fixed vikejs/vike#3251 (extends rejected
+    // vike-*/config under exactOptionalPropertyTypes), so the React path
+    // uses plain `satisfies Config`. vike-vue and vike-solid don't ship
+    // an equivalent fix yet, so they keep the `as unknown as Config` cast.
+    const closer = ctx.primary === 'react' ? '} satisfies Config' : '} as unknown as Config'
     return `import type { Config } from 'vike/types'
 ${rendererImport}
 
 export default {
   extends:      [${rendererVar}],
   passToClient: ['user', 'locale', 'flash'],
-} as unknown as Config
+${closer}
 `
   }
 
-  // Multi-framework: no renderer in root config — each page picks its own
+  // Multi-framework: no renderer in root config — each page picks its own.
+  // No `extends` here, so the workaround isn't needed.
   return `import type { Config } from 'vike/types'
 
 export default {
   passToClient: ['user', 'locale', 'flash'],
-} as unknown as Config
+} satisfies Config
 `
 }
 
@@ -55,7 +61,7 @@ import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
-} as unknown as Config
+} satisfies Config
 `
   }
 }

@@ -4,4 +4,4 @@ import vikeReact from 'vike-react/config'
 export default {
   extends:      [vikeReact],
   passToClient: ['user', 'locale', 'flash'],
-} as unknown as Config
+} satisfies Config

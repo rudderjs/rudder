@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65497
-const EXPECTED_CONTENT_HASH = '5b3f885370454a07704452df736dd62794ffbb25f95cde349db8e31cdac76c37'
+const EXPECTED_TOTAL_BYTES = 65481
+const EXPECTED_CONTENT_HASH = '4c6315bb6e628408e1a6e5e4a9da4c1b6a777084acb5c3d2c4253f19ab68c1cd'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

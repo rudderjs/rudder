@@ -19,12 +19,13 @@ export default {
 } as unknown as Config
 `
     default: // react
+      // vike-react 0.6.23+ fixed vikejs/vike#3251 — no cast needed.
       return `import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
-} as unknown as Config
+} satisfies Config
 `
   }
 }
