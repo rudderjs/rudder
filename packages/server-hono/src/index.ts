@@ -429,7 +429,6 @@ class HonoAdapter implements ServerAdapter {
 
     this.app[method](route.path, async (c: Context) => {
       const trace = process.env['RUDDER_PERF_TRACE'] === '1'
-      const t0 = trace ? performance.now() : 0
       // Subdomain gate — Hono routes by path only, so we filter on Host here.
       // Mismatch returns 404 (matches Laravel: a route scoped to a subdomain
       // simply isn't registered for other hosts). Captured `:param` segments
