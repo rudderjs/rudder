@@ -1,0 +1,55 @@
+{
+  "provenance": {
+    "node": "v22.14.0",
+    "hyperfine": "1.20.0",
+    "date": "2026-05-15T20:10:05Z",
+    "versions": {
+      "rudderjs": "1.1.5 (workspace)",
+      "next": "16.2.6",
+      "nuxt": "4.4.5",
+      "svelte_kit": "2.60.1",
+      "svelte": "5.55.7"
+    }
+  },
+  "frameworks": {
+    "rudderjs": {
+      "build_s": 1.94335175304,
+      "cold_boot_s": 0.19100951464000002,
+      "first_request_root_s": 0.5360003078400001,
+      "first_request_health_s": 0.29508897876,
+      "node_modules_bytes": 141611008,
+      "client_js_bytes": 5993
+    },
+    "next": {
+      "build_s": 6.37572138072,
+      "cold_boot_s": 0.25186826444,
+      "first_request_root_s": 0.30514324618000005,
+      "first_request_health_s": 0.37699142324,
+      "node_modules_bytes": 360878080,
+      "client_js_bytes": 642439
+    },
+    "nuxt": {
+      "build_s": 4.60526746854,
+      "cold_boot_s": 0.09372356400000001,
+      "first_request_root_s": 0.16595012422,
+      "first_request_health_s": 0.16980766160000002,
+      "node_modules_bytes": 188706816,
+      "client_js_bytes": 150129
+    },
+    "svelte": {
+      "build_s": 1.8113841122,
+      "cold_boot_s": 0.09327785708,
+      "first_request_root_s": 0.11345883198000001,
+      "first_request_health_s": 0.10821889986000001,
+      "node_modules_bytes": 79224832,
+      "client_js_bytes": 0
+    }
+  },
+  "rudderjs_internals": {
+    "view_scan_ms": 1.19,
+    "providers_register_ms": 0.1,
+    "providers_boot_ms": 1.0,
+    "application_bootstrap_ms": 1.1,
+    "providers_discover_s": 0.40428811484000005
+  }
+}

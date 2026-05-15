@@ -560,6 +560,8 @@ export interface ViewsSyncResult {
  * without re-walking the directory.
  */
 export function syncViewsFromDisk(cwd: string = process.cwd()): ViewsSyncResult {
+  const trace = process.env['RUDDER_PERF_TRACE'] === '1'
+  const t0 = trace ? performance.now() : 0
   const viewsRoot     = path.join(cwd, 'app', 'Views')
   const pagesRoot     = path.join(cwd, 'pages')
   const generatedRoot = path.join(pagesRoot, '__view')
@@ -573,12 +575,19 @@ export function syncViewsFromDisk(cwd: string = process.cwd()): ViewsSyncResult 
   cleanStale(generatedRoot, views)
   generate(generatedRoot, pagesRoot, views, framework)
 
-  return {
+  const result: ViewsSyncResult = {
     viewsRootExists: true,
     framework,
     viewCount:  views.length,
     typedCount: views.filter(v => v.hasProps).length,
   }
+
+  if (trace) {
+    const dt = performance.now() - t0
+    console.log(`[perf] view-scan ${dt.toFixed(1)}ms (${result.viewCount} views, ${result.typedCount} typed)`)
+  }
+
+  return result
 }
 
 export function viewsScannerPlugin(): Plugin {
