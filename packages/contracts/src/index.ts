@@ -389,6 +389,27 @@ export class InputTypeError extends Error {
   }
 }
 
+/**
+ * Thrown by validation pipelines (FormRequest, router `.query(schema)`, etc.)
+ * when input fails schema validation. Lives in contracts so packages outside
+ * `@rudderjs/core` can throw it without taking a core dependency. The
+ * framework's exception handler in `@rudderjs/core` renders this as
+ * HTTP 422 with a JSON body of `{ message, errors }`.
+ */
+export class ValidationError extends Error {
+  constructor(public errors: Record<string, string[]>) {
+    super('Validation failed')
+    this.name = 'ValidationError'
+  }
+
+  toJSON(): { message: string; errors: Record<string, string[]> } {
+    return {
+      message: this.message,
+      errors:  this.errors,
+    }
+  }
+}
+
 export interface AppRequest {
   method:  string
   url:     string
