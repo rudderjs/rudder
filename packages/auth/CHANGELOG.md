@@ -1,5 +1,24 @@
 # @rudderjs/auth
 
+## 6.0.1
+
+### Patch Changes
+
+- b461123: Declare `engines.node: "^20.19.0 || >=22.12.0"` on every published package and on the scaffolder-generated `package.json` template.
+
+  Matches the actual runtime floor enforced transitively by `vite@7` (`^20.19.0 || >=22.12.0`) and `vike` (`>=20.19.0`). Previously the requirement was only mentioned in the install guide — adding it to `engines.node` surfaces the floor at `pnpm install` / `npm install` time via the package manager's engines warning, rather than waiting for runtime / transitive errors.
+
+  Not a breaking API change — `engines` is advisory by default (package managers warn but don't refuse without `engineStrict=true`).
+
+- Updated dependencies [b461123]
+  - @rudderjs/contracts@1.6.1
+  - @rudderjs/core@1.1.5
+  - @rudderjs/hash@1.0.2
+  - @rudderjs/router@1.2.1
+  - @rudderjs/session@2.0.1
+  - @rudderjs/view@1.1.1
+  - @rudderjs/vite@2.0.1
+
 ## 6.0.0
 
 ### Patch Changes

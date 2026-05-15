@@ -1,5 +1,22 @@
 # @rudderjs/orm-prisma
 
+## 1.7.2
+
+### Patch Changes
+
+- b461123: Declare `engines.node: "^20.19.0 || >=22.12.0"` on every published package and on the scaffolder-generated `package.json` template.
+
+  Matches the actual runtime floor enforced transitively by `vite@7` (`^20.19.0 || >=22.12.0`) and `vike` (`>=20.19.0`). Previously the requirement was only mentioned in the install guide — adding it to `engines.node` surfaces the floor at `pnpm install` / `npm install` time via the package manager's engines warning, rather than waiting for runtime / transitive errors.
+
+  Not a breaking API change — `engines` is advisory by default (package managers warn but don't refuse without `engineStrict=true`).
+
+- Updated dependencies [b461123]
+  - @rudderjs/ai@1.6.3
+  - @rudderjs/contracts@1.6.1
+  - @rudderjs/core@1.1.5
+  - @rudderjs/orm@1.9.2
+  - @rudderjs/support@1.2.2
+
 ## 1.7.1
 
 ### Patch Changes
