@@ -1,9 +1,11 @@
 import { describe, it, beforeEach } from 'node:test'
+import { EventEmitter } from 'node:events'
 import assert from 'node:assert/strict'
 import * as Y from 'yjs'
 import {
   MemoryPersistence,
   SyncProvider,
+  _handleConnection,
   type SyncPersistence,
   type SyncConfig,
 } from './index.js'
@@ -434,5 +436,135 @@ describe('MemoryPersistence instances are independent', () => {
     // p2 has no knowledge of p1's documents
     const doc = await p2.getYDoc('shared-name')
     assert.strictEqual(doc.getText('t').toString(), '')
+  })
+})
+
+// ─── Multi-peer WS broadcast ─────────────────────────────────
+//
+// Drives `_handleConnection` directly with a minimal MockWsSocket so we can
+// assert the broadcast loop fans out an update from one peer to every other
+// peer in the same room. Filed alongside pilotiq's
+// docs/plans/2026-05-15-sync-ws-multi-peer-diagnostic.md as Option C —
+// a defensive regression test that doubles as a known-good reference for
+// consumers debugging multi-peer issues.
+
+class MockWsSocket extends EventEmitter {
+  public readyState = 1 // ws.OPEN
+  public sent: Uint8Array[] = []
+
+  send(data: Uint8Array | Buffer): void {
+    this.sent.push(data instanceof Buffer ? new Uint8Array(data) : data)
+  }
+
+  // The handler calls `ws.close()` in some paths; no-op in the mock.
+  close(): void {
+    this.readyState = 3 // ws.CLOSED
+  }
+
+  // Inject an inbound frame as if it had arrived over the wire.
+  receive(buf: Uint8Array): void {
+    this.emit('message', Buffer.from(buf))
+  }
+}
+
+function writeVarUint(val: number): Uint8Array {
+  const out: number[] = []
+  while (val > 0x7f) {
+    out.push((val & 0x7f) | 0x80)
+    val >>>= 7
+  }
+  out.push(val & 0x7f)
+  return new Uint8Array(out)
+}
+
+/** Build the y-protocols wire frame for a syncUpdate message. */
+function encodeSyncUpdateFrame(update: Uint8Array): Uint8Array {
+  // [messageSync=0, syncUpdate=2, dataLen(varint), ...update]
+  const len = writeVarUint(update.length)
+  const buf = new Uint8Array(2 + len.length + update.length)
+  buf[0] = 0 // messageSync
+  buf[1] = 2 // syncUpdate
+  buf.set(len, 2)
+  buf.set(update, 2 + len.length)
+  return buf
+}
+
+/** Identify the subType (syncStep1=0, syncStep2=1, syncUpdate=2) of a frame. */
+function decodeSyncSubType(frame: Uint8Array): number | null {
+  if (frame.length < 2) return null
+  if (frame[0] !== 0 /* messageSync */) return null
+  return frame[1] ?? null
+}
+
+describe('Multi-peer WS broadcast', () => {
+  it('forwards an update from peer A to peer B in the same room', async () => {
+    const persistence = new MemoryPersistence()
+    // Unique docName per test — the room registry is process-wide on globalThis.
+    const docName = `2peer-fanout-${Date.now()}`
+    const url     = `/ws-sync/${docName}`
+
+    const peerA = new MockWsSocket()
+    const peerB = new MockWsSocket()
+
+    await _handleConnection(peerA as never, { url } as never, persistence)
+    await _handleConnection(peerB as never, { url } as never, persistence)
+
+    // Both peers should have received an initial syncStep1 (state vector).
+    assert.strictEqual(decodeSyncSubType(peerA.sent[0]!), 0)
+    assert.strictEqual(decodeSyncSubType(peerB.sent[0]!), 0)
+
+    // Track what peer B receives *after* the initial handshake so we can
+    // isolate the broadcast frame from the connection-time messages.
+    const peerBBaseline = peerB.sent.length
+
+    // Peer A makes a local edit and sends the resulting update.
+    const localDocA = new Y.Doc()
+    localDocA.getMap('test').set('foo', 'bar')
+    const update    = Y.encodeStateAsUpdate(localDocA)
+    peerA.receive(encodeSyncUpdateFrame(update))
+
+    // Yield to the message handler's microtasks (applyUpdate → broadcast).
+    await new Promise(r => setImmediate(r))
+
+    // Peer B should have received exactly one new frame, a syncUpdate, with
+    // peer A's update payload.
+    const newFrames = peerB.sent.slice(peerBBaseline)
+    assert.strictEqual(newFrames.length, 1, 'peer B should receive exactly one broadcast frame')
+    assert.strictEqual(decodeSyncSubType(newFrames[0]!), 2 /* syncUpdate */, 'forwarded frame should be a syncUpdate')
+
+    // Peer A should NOT receive its own update back (originator skip).
+    // We know connection-time messages, then nothing new — assert no frames
+    // arrived after the broadcast window.
+    const peerASentBefore = peerA.sent.length
+    await new Promise(r => setImmediate(r))
+    assert.strictEqual(peerA.sent.length, peerASentBefore, 'originator should not receive its own update')
+  })
+
+  it('isolates broadcasts: peers in different rooms do not see each other', async () => {
+    const persistence = new MemoryPersistence()
+    const tagA = `room-a-${Date.now()}`
+    const tagB = `room-b-${Date.now()}`
+
+    const peerInA = new MockWsSocket()
+    const peerInB = new MockWsSocket()
+
+    await _handleConnection(peerInA as never, { url: `/ws-sync/${tagA}` } as never, persistence)
+    await _handleConnection(peerInB as never, { url: `/ws-sync/${tagB}` } as never, persistence)
+
+    const peerInBBaseline = peerInB.sent.length
+
+    // Peer in room A edits + broadcasts; peer in room B must not see it.
+    const localDoc = new Y.Doc()
+    localDoc.getMap('test').set('hello', 'world')
+    const update   = Y.encodeStateAsUpdate(localDoc)
+    peerInA.receive(encodeSyncUpdateFrame(update))
+
+    await new Promise(r => setImmediate(r))
+
+    assert.strictEqual(
+      peerInB.sent.length,
+      peerInBBaseline,
+      'peer in a different room should NOT receive frames from another room',
+    )
   })
 })

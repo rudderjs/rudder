@@ -56,7 +56,24 @@ export interface SyncPersistence {
 export type SyncClientProvider = 'websocket' | 'indexeddb'
 
 export interface SyncConfig {
-  /** URL path for the Sync WebSocket endpoint. Default: `/ws-sync` */
+  /**
+   * URL path prefix for the Sync WebSocket endpoint. Default: `/ws-sync`.
+   *
+   * **docName URL contract:** the room key (`docName`) is extracted as the
+   * **last non-empty path segment** of the connection URL, after stripping
+   * the query string. Examples:
+   *
+   * - `/ws-sync/myroom` → `docName = 'myroom'`
+   * - `/ws-sync/myroom?token=xyz` → `docName = 'myroom'`
+   * - `/ws-sync/a/b/c` → `docName = 'c'` *(only the last segment)*
+   * - `/ws-sync` → `docName = 'default'`
+   *
+   * **If your application uses composite room ids** (e.g. `panel/resource/id`)
+   * you must flatten them with a non-slash separator before mounting —
+   * otherwise distinct logical rooms with the same trailing segment will
+   * collide into one shared `Y.Doc`. For example, `panel-posts-42` rather
+   * than `panel/posts/42`.
+   */
   path?: string
   /** Server-side persistence adapter. Default: in-memory (resets on restart). */
   persistence?: SyncPersistence
@@ -453,7 +470,12 @@ async function handleConnection(
   onChange?:       SyncConfig['onChange'],
   onFirstConnect?: SyncConfig['onFirstConnect'],
 ): Promise<void> {
-  // Extract document name from URL path: /ws-sync/my-doc → my-doc
+  // Extract docName from URL path: /ws-sync/my-doc → my-doc.
+  // Strips the query string, then takes the LAST non-empty path segment.
+  // Composite room ids must be flattened with a non-slash separator before
+  // mounting (see SyncConfig.path JSDoc). Multi-segment paths only honor the
+  // final segment, so distinct logical rooms with the same trailing segment
+  // would otherwise collide into one Y.Doc.
   const docName  = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
   const clientId = getClientId(ws)
   const room     = getOrCreateRoom(docName, persistence)
