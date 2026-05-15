@@ -60,10 +60,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-15 — vite.config.ts template now emits
-  // `import vike from 'vike/plugin'` + `vike()` in the plugins array (after
-  // `rudderjs()` so the views-scanner writes stubs before Vike scans pages).
-  // Migration to user-side Vike registration per vikejs/vike#3258.
+  // Baseline last captured 2026-05-15 — scaffolded package.json template now
+  // emits an `engines.node` field matching Vite 7's + Vike's required runtime
+  // floor (`^20.19.0 || >=22.12.0`).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -72,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65441
-const EXPECTED_CONTENT_HASH = '09d649ece0621d98e63b45f83838030c01051794424de8aaabd385be082bb1a3'
+const EXPECTED_TOTAL_BYTES = 65497
+const EXPECTED_CONTENT_HASH = '5b3f885370454a07704452df736dd62794ffbb25f95cde349db8e31cdac76c37'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
