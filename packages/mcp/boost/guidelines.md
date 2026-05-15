@@ -300,9 +300,10 @@ import type { McpWebEntry, McpWebBuilder } from '@rudderjs/mcp'
 import { oauth2McpMiddleware, registerOAuth2Metadata } from '@rudderjs/mcp'
 import type { OAuth2McpOptions } from '@rudderjs/mcp'
 
-// Runtime primitives (rarely needed in app code)
-import { createSdkServer, startStdio, mountHttpTransport } from '@rudderjs/mcp'
-import type { HttpTransportOptions } from '@rudderjs/mcp'
+// Runtime primitives (rarely needed in app code) — live at the `/runtime`
+// subpath so the main entry can stay free of the MCP SDK.
+import { createSdkServer, startStdio, mountHttpTransport } from '@rudderjs/mcp/runtime'
+import type { HttpTransportOptions } from '@rudderjs/mcp/runtime'
 
 // Provider + testing
 import { McpProvider, McpTestClient } from '@rudderjs/mcp'

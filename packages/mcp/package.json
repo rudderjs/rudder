@@ -31,6 +31,10 @@
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
     },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
     "./commands/make-mcp-server": {
       "import": "./dist/commands/make-mcp-server.js",
       "types": "./dist/commands/make-mcp-server.d.ts"
