@@ -5,69 +5,81 @@ import { GoogleCacheRegistry, type CacheStoreLike } from '../providers/google-ca
 import type { AiConfig, AiProviderConfig, ProviderFactory } from '../types.js'
 
 /**
- * Throw with a clear pointer to the offending config key when an apiKey-
- * requiring provider has no key set. The config type lets `apiKey` be
- * undefined (some drivers — ollama, bedrock — don't need one), so this is
- * the bootstrap-time enforcement point for the drivers that do.
+ * Return the configured `apiKey`, or `null` when missing/empty.
+ *
+ * The config type lets `apiKey` be undefined (some drivers — ollama, bedrock —
+ * don't need one), so apiKey-requiring drivers use this gate. When the gate
+ * returns `null` the driver factory bails to `null` and `AiProvider.boot()`
+ * skips the provider with a warning instead of crashing — matches Laravel's
+ * "drivers as data, missing credentials don't kill the framework" pattern.
+ *
+ * Use-site (`AI.use('anthropic')`) will surface the standard
+ * "provider not registered" error so debugging stays actionable.
  */
-function requireKey(name: string, cfg: AiProviderConfig): string {
-  if (!cfg.apiKey) {
-    throw new Error(`[RudderJS AI] config('ai').providers.${name} is missing apiKey (driver "${cfg.driver ?? name}").`)
-  }
-  return cfg.apiKey
+function requireKey(_name: string, cfg: AiProviderConfig): string | null {
+  return cfg.apiKey || null
 }
 
 type DriverDeps = { googleCacheRegistry: GoogleCacheRegistry }
-type DriverBuilder = (name: string, cfg: AiProviderConfig, deps: DriverDeps) => Promise<ProviderFactory>
+type DriverBuilder = (name: string, cfg: AiProviderConfig, deps: DriverDeps) => Promise<ProviderFactory | null>
 
 const DRIVERS: Record<string, DriverBuilder> = {
   anthropic: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { AnthropicProvider } = await import('../providers/anthropic.js')
-    return new AnthropicProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    return new AnthropicProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   openai: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { OpenAIProvider } = await import('../providers/openai.js')
     return new OpenAIProvider({
-      apiKey:       requireKey(name, cfg),
+      apiKey,
       baseUrl:      cfg.baseUrl,
       organization: cfg['organization'] as string | undefined,
     })
   },
   google: async (name, cfg, { googleCacheRegistry }) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { GoogleProvider } = await import('../providers/google.js')
-    return new GoogleProvider({ apiKey: requireKey(name, cfg) }, googleCacheRegistry)
+    return new GoogleProvider({ apiKey }, googleCacheRegistry)
   },
   ollama: async (_name, cfg) => {
     const { OllamaProvider } = await import('../providers/ollama.js')
     return new OllamaProvider({ baseUrl: cfg.baseUrl })
   },
   deepseek: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { DeepSeekProvider } = await import('../providers/deepseek.js')
-    return new DeepSeekProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    return new DeepSeekProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   xai: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { XaiProvider } = await import('../providers/xai.js')
-    return new XaiProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    return new XaiProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   groq: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { GroqProvider } = await import('../providers/groq.js')
-    return new GroqProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    return new GroqProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   mistral: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { MistralProvider } = await import('../providers/mistral.js')
-    return new MistralProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    return new MistralProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   azure: async (name, cfg) => {
-    const { AzureOpenAIProvider } = await import('../providers/azure.js')
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     if (!cfg.baseUrl) {
       throw new Error(`[RudderJS AI] config('ai').providers.${name} is missing baseUrl (driver "azure" requires it).`)
     }
-    return new AzureOpenAIProvider({ apiKey: requireKey(name, cfg), baseUrl: cfg.baseUrl })
+    const { AzureOpenAIProvider } = await import('../providers/azure.js')
+    return new AzureOpenAIProvider({ apiKey, baseUrl: cfg.baseUrl })
   },
   openrouter: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { OpenRouterProvider } = await import('../providers/openrouter.js')
     return new OpenRouterProvider({
-      apiKey:   requireKey(name, cfg),
+      apiKey,
       baseUrl:  cfg.baseUrl,
       siteUrl:  cfg['siteUrl'] as string | undefined,
       siteName: cfg['siteName'] as string | undefined,
@@ -82,17 +94,19 @@ const DRIVERS: Record<string, DriverBuilder> = {
     return new BedrockProvider(credentials ? { region, credentials } : { region })
   },
   elevenlabs: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { ElevenLabsProvider } = await import('../providers/elevenlabs.js')
     return new ElevenLabsProvider({
-      apiKey: requireKey(name, cfg),
+      apiKey,
       ...(cfg.baseUrl              ? { baseUrl:           cfg.baseUrl                              } : {}),
       ...(cfg['defaultTtsModelId'] ? { defaultTtsModelId: cfg['defaultTtsModelId'] as string       } : {}),
     })
   },
   voyage: async (name, cfg) => {
+    const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     const { VoyageProvider } = await import('../providers/voyage.js')
     return new VoyageProvider({
-      apiKey: requireKey(name, cfg),
+      apiKey,
       ...(cfg.baseUrl             ? { baseUrl:          cfg.baseUrl                                            } : {}),
       ...(cfg['defaultInputType'] ? { defaultInputType: cfg['defaultInputType'] as 'query' | 'document'        } : {}),
     })
@@ -118,7 +132,19 @@ export class AiProvider extends ServiceProvider {
       const driver = providerConfig.driver ?? name
       const build = DRIVERS[driver]
       if (!build) continue
-      AiRegistry.register(await build(name, providerConfig, { googleCacheRegistry }))
+      const instance = await build(name, providerConfig, { googleCacheRegistry })
+      if (instance === null) {
+        // Drivers that need an apiKey return null when it's missing/empty
+        // (see requireKey). Skip with a one-line warning so the app boots
+        // and `AI.use('${name}')` surfaces the standard "not registered"
+        // error at the use-site with a clear hint to set the env var.
+        console.warn(
+          `[RudderJS AI] Skipped provider "${name}" (driver "${driver}"): apiKey is empty. ` +
+          `Set config('ai').providers.${name}.apiKey (typically via an env var) to enable.`,
+        )
+        continue
+      }
+      AiRegistry.register(instance)
     }
 
     AiRegistry.setDefault(cfg.default)

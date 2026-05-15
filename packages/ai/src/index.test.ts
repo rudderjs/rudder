@@ -1859,11 +1859,107 @@ describe('AiFake', () => {
 // ─── AiProvider ───────────────────────────────────────────
 
 import { AiProvider } from './server/provider.js'
+import * as _core from '@rudderjs/core'
 
 describe('AiProvider', () => {
   it('is a ServiceProvider class', () => {
     assert.ok(typeof AiProvider === 'function')
     assert.ok(AiProvider.prototype)
+  })
+})
+
+describe('AiProvider — empty apiKey skip-and-warn', () => {
+  // Fake `app` object — AiProvider only needs `.instance` and `.container.has`.
+  function makeFakeApp(): never {
+    return {
+      instance: () => undefined,
+      container: { has: () => false },
+      make:      () => undefined,
+    } as never
+  }
+
+  async function bootWith(aiConfig: Record<string, unknown>): Promise<string[]> {
+    AiRegistry.reset()
+    const previousRepo  = _core.getConfigRepository?.()
+    const previousWarn  = console.warn
+    const captured: string[] = []
+    console.warn = (...args: unknown[]) => { captured.push(args.map(String).join(' ')) }
+
+    _core.setConfigRepository(new _core.ConfigRepository({ ai: aiConfig }))
+    try {
+      const provider = new AiProvider(makeFakeApp())
+      await provider.boot()
+    } finally {
+      console.warn = previousWarn
+      if (previousRepo) _core.setConfigRepository(previousRepo)
+    }
+    return captured
+  }
+
+  it('boots cleanly when an apiKey-requiring provider has empty apiKey, warns once', async () => {
+    const warnings = await bootWith({
+      default:   'anthropic/claude-sonnet-4-5',
+      providers: {
+        anthropic: { driver: 'anthropic', apiKey: '' },
+      },
+    })
+
+    assert.equal(warnings.length, 1, 'one warning for the skipped anthropic provider')
+    assert.match(warnings[0]!, /Skipped provider "anthropic"/)
+    assert.match(warnings[0]!, /apiKey is empty/)
+    assert.throws(
+      () => AiRegistry.getFactory('anthropic'),
+      /Unknown AI provider "anthropic"/,
+      'anthropic should not be registered',
+    )
+  })
+
+  it('registers providers that DO have a key while skipping ones that don\'t', async () => {
+    const warnings = await bootWith({
+      default:   'anthropic/claude-sonnet-4-5',
+      providers: {
+        anthropic: { driver: 'anthropic', apiKey: 'sk-real-key' },
+        openai:    { driver: 'openai',    apiKey: '' },
+        google:    { driver: 'google',    apiKey: '' },
+        ollama:    { driver: 'ollama',    baseUrl: 'http://localhost:11434' },
+      },
+    })
+
+    assert.equal(warnings.length, 2, 'two warnings — openai + google')
+    assert.ok(warnings.some(w => /Skipped provider "openai"/.test(w)),  'openai warned')
+    assert.ok(warnings.some(w => /Skipped provider "google"/.test(w)),  'google warned')
+
+    assert.doesNotThrow(() => AiRegistry.getFactory('anthropic'), 'anthropic registered')
+    assert.doesNotThrow(() => AiRegistry.getFactory('ollama'),    'ollama registered (no apiKey needed)')
+    assert.throws(() => AiRegistry.getFactory('openai'), /Unknown AI provider "openai"/)
+    assert.throws(() => AiRegistry.getFactory('google'), /Unknown AI provider "google"/)
+  })
+
+  it('boots clean with zero providers configured', async () => {
+    const warnings = await bootWith({
+      default:   'anthropic/claude-sonnet-4-5',
+      providers: {},
+    })
+
+    assert.equal(warnings.length, 0, 'no warnings when no providers are configured')
+  })
+
+  it('boots clean when every apiKey-requiring provider is empty (matches fresh-scaffolded state)', async () => {
+    // Reproduces the scaffolder's default ai.ts: anthropic/openai/google all
+    // present, all reading from env vars that haven't been set yet, plus
+    // ollama (no apiKey needed). Pre-fix this would crash on the first one.
+    const warnings = await bootWith({
+      default:   'anthropic/claude-sonnet-4-5',
+      providers: {
+        anthropic: { driver: 'anthropic', apiKey: '' },
+        openai:    { driver: 'openai',    apiKey: '' },
+        google:    { driver: 'google',    apiKey: '' },
+        ollama:    { driver: 'ollama',    baseUrl: 'http://localhost:11434' },
+      },
+    })
+
+    assert.equal(warnings.length, 3, 'one warning per apiKey-requiring provider')
+    assert.doesNotThrow(() => AiRegistry.getFactory('ollama'), 'ollama still registers')
   })
 })
 
