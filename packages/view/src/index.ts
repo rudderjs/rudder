@@ -188,7 +188,12 @@ export class ViewResponse {
  *
  * Unrecognized ids fall through to the loose `view(id, props?)` overload, so
  * call sites in apps that haven't adopted the convention keep working.
+ *
+ * Intentionally empty — module augmentation requires `interface`, not `type`,
+ * because consumers add members via `interface ViewPropsRegistry { ... }`
+ * in a `declare module '@rudderjs/view'` block.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- module-augmentation target; see comment above
 export interface ViewPropsRegistry {}
 
 /** Resolved prop type for a registered view id. */
