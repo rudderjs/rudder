@@ -1,0 +1,625 @@
+{
+  "provenance": {
+    "node": "v22.14.0",
+    "autocannon": "autocannon v8.0.0",
+    "date": "2026-05-16T14:41:20Z"
+  },
+  "frameworks": {
+    "rudderjs": {
+      "ssr-c10": {
+        "iterations": 2,
+        "req_sec_median": 917.2,
+        "req_sec_min": 912,
+        "req_sec_max": 917.2,
+        "latency_p50_median_ms": 10,
+        "latency_p99_median_ms": 19,
+        "bytes_per_sec_median": 4009984,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 912,
+            "req_sec_stddev": 96.68,
+            "latency_p50_ms": 10,
+            "latency_p99_ms": 19,
+            "latency_max_ms": 60,
+            "bytes_per_sec": 3987251.2,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 917.2,
+            "req_sec_stddev": 78.71,
+            "latency_p50_ms": 10,
+            "latency_p99_ms": 18,
+            "latency_max_ms": 49,
+            "bytes_per_sec": 4009984,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "ssr-c100": {
+        "iterations": 2,
+        "req_sec_median": 928.8,
+        "req_sec_min": 911.4,
+        "req_sec_max": 928.8,
+        "latency_p50_median_ms": 113,
+        "latency_p99_median_ms": 324,
+        "bytes_per_sec_median": 4060160,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 928.8,
+            "req_sec_stddev": 86.61,
+            "latency_p50_ms": 105,
+            "latency_p99_ms": 324,
+            "latency_max_ms": 2044,
+            "bytes_per_sec": 4060160,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 911.4,
+            "req_sec_stddev": 101.66,
+            "latency_p50_ms": 113,
+            "latency_p99_ms": 297,
+            "latency_max_ms": 2692,
+            "bytes_per_sec": 3984793.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c10": {
+        "iterations": 2,
+        "req_sec_median": 11255.2,
+        "req_sec_min": 11077.2,
+        "req_sec_max": 11255.2,
+        "latency_p50_median_ms": 0,
+        "latency_p99_median_ms": 3,
+        "bytes_per_sec_median": 3838156.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 11255.2,
+            "req_sec_stddev": 1342.98,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 2,
+            "latency_max_ms": 12,
+            "bytes_per_sec": 3838156.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.01
+          },
+          {
+            "req_sec_mean": 11077.2,
+            "req_sec_stddev": 1479.79,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 3,
+            "latency_max_ms": 7,
+            "bytes_per_sec": 3777126.4,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c100": {
+        "iterations": 2,
+        "req_sec_median": 10749.6,
+        "req_sec_min": 10618.4,
+        "req_sec_max": 10749.6,
+        "latency_p50_median_ms": 8,
+        "latency_p99_median_ms": 17,
+        "bytes_per_sec_median": 3665305.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 10749.6,
+            "req_sec_stddev": 1107.38,
+            "latency_p50_ms": 8,
+            "latency_p99_ms": 17,
+            "latency_max_ms": 221,
+            "bytes_per_sec": 3665305.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 10618.4,
+            "req_sec_stddev": 1094.29,
+            "latency_p50_ms": 8,
+            "latency_p99_ms": 17,
+            "latency_max_ms": 198,
+            "bytes_per_sec": 3620249.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.18
+          }
+        ]
+      }
+    },
+    "next": {
+      "ssr-c10": {
+        "iterations": 2,
+        "req_sec_median": 5872.6,
+        "req_sec_min": 5777.4,
+        "req_sec_max": 5872.6,
+        "latency_p50_median_ms": 1,
+        "latency_p99_median_ms": 5,
+        "bytes_per_sec_median": 65935769.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 5872.6,
+            "req_sec_stddev": 1340.16,
+            "latency_p50_ms": 1,
+            "latency_p99_ms": 5,
+            "latency_max_ms": 12,
+            "bytes_per_sec": 65935769.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 5777.4,
+            "req_sec_stddev": 1345.17,
+            "latency_p50_ms": 1,
+            "latency_p99_ms": 5,
+            "latency_max_ms": 13,
+            "bytes_per_sec": 64867532.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "ssr-c100": {
+        "iterations": 2,
+        "req_sec_median": 5852.6,
+        "req_sec_min": 5822.2,
+        "req_sec_max": 5852.6,
+        "latency_p50_median_ms": 14,
+        "latency_p99_median_ms": 31,
+        "bytes_per_sec_median": 65706393.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 5822.2,
+            "req_sec_stddev": 1302.78,
+            "latency_p50_ms": 14,
+            "latency_p99_ms": 31,
+            "latency_max_ms": 1177,
+            "bytes_per_sec": 65365606.4,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 5852.6,
+            "req_sec_stddev": 1309.64,
+            "latency_p50_ms": 14,
+            "latency_p99_ms": 26,
+            "latency_max_ms": 1310,
+            "bytes_per_sec": 65706393.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c10": {
+        "iterations": 2,
+        "req_sec_median": 2897.6,
+        "req_sec_min": 2871,
+        "req_sec_max": 2897.6,
+        "latency_p50_median_ms": 2,
+        "latency_p99_median_ms": 10,
+        "bytes_per_sec_median": 796851.2,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 2897.6,
+            "req_sec_stddev": 772.91,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 10,
+            "latency_max_ms": 21,
+            "bytes_per_sec": 796851.2,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 2871,
+            "req_sec_stddev": 715.76,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 10,
+            "latency_max_ms": 23,
+            "bytes_per_sec": 789529.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c100": {
+        "iterations": 2,
+        "req_sec_median": 3002.6,
+        "req_sec_min": 2868.8,
+        "req_sec_max": 3002.6,
+        "latency_p50_median_ms": 29,
+        "latency_p99_median_ms": 67,
+        "bytes_per_sec_median": 825625.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 2868.8,
+            "req_sec_stddev": 619.51,
+            "latency_p50_ms": 29,
+            "latency_p99_ms": 67,
+            "latency_max_ms": 1947,
+            "bytes_per_sec": 788864,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 3002.6,
+            "req_sec_stddev": 656.53,
+            "latency_p50_ms": 28,
+            "latency_p99_ms": 49,
+            "latency_max_ms": 1862,
+            "bytes_per_sec": 825625.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      }
+    },
+    "nuxt": {
+      "ssr-c10": {
+        "iterations": 2,
+        "req_sec_median": 3945,
+        "req_sec_min": 3470.8,
+        "req_sec_max": 3945,
+        "latency_p50_median_ms": 2,
+        "latency_p99_median_ms": 8,
+        "bytes_per_sec_median": 113842585.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 3470.8,
+            "req_sec_stddev": 388.7,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 8,
+            "latency_max_ms": 21,
+            "bytes_per_sec": 100158668.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 3945,
+            "req_sec_stddev": 575.76,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 7,
+            "latency_max_ms": 15,
+            "bytes_per_sec": 113842585.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "ssr-c100": {
+        "iterations": 2,
+        "req_sec_median": 3998,
+        "req_sec_min": 3459.8,
+        "req_sec_max": 3998,
+        "latency_p50_median_ms": 23,
+        "latency_p99_median_ms": 77,
+        "bytes_per_sec_median": 115363020.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 3998,
+            "req_sec_stddev": 589.07,
+            "latency_p50_ms": 21,
+            "latency_p99_ms": 50,
+            "latency_max_ms": 1120,
+            "bytes_per_sec": 115363020.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 3459.8,
+            "req_sec_stddev": 796.68,
+            "latency_p50_ms": 23,
+            "latency_p99_ms": 77,
+            "latency_max_ms": 1162,
+            "bytes_per_sec": 99827712,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c10": {
+        "iterations": 2,
+        "req_sec_median": 33464,
+        "req_sec_min": 31089.6,
+        "req_sec_max": 33464,
+        "latency_p50_median_ms": 0,
+        "latency_p99_median_ms": 1,
+        "bytes_per_sec_median": 5688934.4,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 33464,
+            "req_sec_stddev": 2526.92,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 1,
+            "latency_max_ms": 8,
+            "bytes_per_sec": 5688934.4,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 31089.6,
+            "req_sec_stddev": 3703.25,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 1,
+            "latency_max_ms": 13,
+            "bytes_per_sec": 5284249.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c100": {
+        "iterations": 2,
+        "req_sec_median": 34830.4,
+        "req_sec_min": 34134.4,
+        "req_sec_max": 34830.4,
+        "latency_p50_median_ms": 2,
+        "latency_p99_median_ms": 7,
+        "bytes_per_sec_median": 5923225.6,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 34134.4,
+            "req_sec_stddev": 2407.82,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 7,
+            "latency_max_ms": 149,
+            "bytes_per_sec": 5803622.4,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 34830.4,
+            "req_sec_stddev": 2116.29,
+            "latency_p50_ms": 2,
+            "latency_p99_ms": 7,
+            "latency_max_ms": 123,
+            "bytes_per_sec": 5923225.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      }
+    },
+    "svelte": {
+      "ssr-c10": {
+        "iterations": 2,
+        "req_sec_median": 7155.2,
+        "req_sec_min": 6645.6,
+        "req_sec_max": 7155.2,
+        "latency_p50_median_ms": 1,
+        "latency_p99_median_ms": 5,
+        "bytes_per_sec_median": 28150988.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 6645.6,
+            "req_sec_stddev": 1391.68,
+            "latency_p50_ms": 1,
+            "latency_p99_ms": 5,
+            "latency_max_ms": 23,
+            "bytes_per_sec": 26147225.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 7155.2,
+            "req_sec_stddev": 1305.1,
+            "latency_p50_ms": 1,
+            "latency_p99_ms": 4,
+            "latency_max_ms": 18,
+            "bytes_per_sec": 28150988.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "ssr-c100": {
+        "iterations": 2,
+        "req_sec_median": 6943.2,
+        "req_sec_min": 6756.2,
+        "req_sec_max": 6943.2,
+        "latency_p50_median_ms": 12,
+        "latency_p99_median_ms": 40,
+        "bytes_per_sec_median": 27319500.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 6943.2,
+            "req_sec_stddev": 1444.54,
+            "latency_p50_ms": 12,
+            "latency_p99_ms": 27,
+            "latency_max_ms": 1099,
+            "bytes_per_sec": 27319500.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 6756.2,
+            "req_sec_stddev": 1909,
+            "latency_p50_ms": 12,
+            "latency_p99_ms": 40,
+            "latency_max_ms": 808,
+            "bytes_per_sec": 26587136,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c10": {
+        "iterations": 2,
+        "req_sec_median": 13584.8,
+        "req_sec_min": 13111.2,
+        "req_sec_max": 13584.8,
+        "latency_p50_median_ms": 0,
+        "latency_p99_median_ms": 3,
+        "bytes_per_sec_median": 2309836.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 13584.8,
+            "req_sec_stddev": 2366.46,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 3,
+            "latency_max_ms": 13,
+            "bytes_per_sec": 2309836.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          },
+          {
+            "req_sec_mean": 13111.2,
+            "req_sec_stddev": 2159.76,
+            "latency_p50_ms": 0,
+            "latency_p99_ms": 3,
+            "latency_max_ms": 29,
+            "bytes_per_sec": 2229248,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      },
+      "json-c100": {
+        "iterations": 2,
+        "req_sec_median": 13316,
+        "req_sec_min": 12303.6,
+        "req_sec_max": 13316,
+        "latency_p50_median_ms": 6,
+        "latency_p99_median_ms": 29,
+        "bytes_per_sec_median": 2263756.8,
+        "errors_total": 0,
+        "non2xx_total": 0,
+        "timeouts_total": 0,
+        "raw": [
+          {
+            "req_sec_mean": 12303.6,
+            "req_sec_stddev": 2878.2,
+            "latency_p50_ms": 6,
+            "latency_p99_ms": 29,
+            "latency_max_ms": 508,
+            "bytes_per_sec": 2091417.6,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.03
+          },
+          {
+            "req_sec_mean": 13316,
+            "req_sec_stddev": 1884.71,
+            "latency_p50_ms": 6,
+            "latency_p99_ms": 16,
+            "latency_max_ms": 606,
+            "bytes_per_sec": 2263756.8,
+            "non2xx": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "duration_sec": 5.02
+          }
+        ]
+      }
+    }
+  }
+}
