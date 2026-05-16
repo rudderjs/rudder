@@ -3,6 +3,7 @@ import type { StatusCode, RedirectStatusCode } from 'hono/utils/http-status'
 import { renderErrorPage } from './error-page.js'
 import { serve } from '@hono/node-server'
 import http from 'node:http'
+import { B, startRequest, markBoundary, finishRequest, runWithRequest, currentPerfId } from './perf-boundaries.js'
 
 // ─── WebSocket upgrade handler for production ──────────────
 // Monkey-patch http.createServer at module load time so that any HTTP server
@@ -429,6 +430,8 @@ class HonoAdapter implements ServerAdapter {
 
     this.app[method](route.path, async (c: Context) => {
       const trace = process.env['RUDDER_PERF_TRACE'] === '1'
+      const perfId = currentPerfId()
+      markBoundary(perfId, B.ROUTE_HANDLER_IN)
       // Subdomain gate — Hono routes by path only, so we filter on Host here.
       // Mismatch returns 404 (matches Laravel: a route scoped to a subdomain
       // simply isn't registered for other hosts). Captured `:param` segments
@@ -442,6 +445,7 @@ class HonoAdapter implements ServerAdapter {
 
       const req = normalizeRequest(c, this._trustProxy)
       const res = normalizeResponse(c)
+      markBoundary(perfId, B.NORM_DONE)
 
       // Compose group middleware (e.g. session, auth on the web group) before
       // per-route middleware. Routes without a group tag get no group middleware.
@@ -487,6 +491,7 @@ class HonoAdapter implements ServerAdapter {
           } catch { req.body = {} }
         }
       }
+      markBoundary(perfId, B.BODY_PARSE_DONE)
 
       // Run middleware chain with the handler as the final step.
       // Middleware and handler share the same `res` so headers set by middleware
@@ -503,9 +508,11 @@ class HonoAdapter implements ServerAdapter {
         } else {
           // All middleware passed — run the handler with the same res
           if (trace) console.log(`[perf] req middleware ${(performance.now() - t1).toFixed(1)}ms`)
+          markBoundary(perfId, B.MIDDLEWARE_DONE)
           const t2 = trace ? performance.now() : 0
           const result = await route.handler(req, res)
           if (trace) console.log(`[perf] req handler ${(performance.now() - t2).toFixed(1)}ms`)
+          markBoundary(perfId, B.HANDLER_DONE)
           if (isViewResponse(result)) {
             // @rudderjs/view ViewResponse — resolve via Vike's renderPage().
             // Detected by duck-typing on the static __rudder_view__ marker so
@@ -515,7 +522,9 @@ class HonoAdapter implements ServerAdapter {
             // instead of HTML for SPA navigation.
             const originalUrl = c.req.header('x-rudder-original-url') ?? c.req.url
             const tv = trace ? performance.now() : 0
+            markBoundary(perfId, B.VIEW_TORESPONSE_IN)
             c.res = await result.toResponse({ url: originalUrl })
+            markBoundary(perfId, B.VIEW_TORESPONSE_OUT)
             if (trace) console.log(`[perf] req view.toResponse ${(performance.now() - tv).toFixed(1)}ms`)
             // Stash view info for Telescope
             const v = result as unknown as { id?: string; props?: Record<string, unknown> }
@@ -671,6 +680,8 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       // Logging at the outermost fetch level catches ALL requests — including Vike's
       // client-side navigation data fetches, which bypass the Hono middleware chain.
       return async (request) => {
+        const perfId = startRequest()
+        markBoundary(perfId, B.HONO_FETCH_IN)
         // Vike client-router SPA nav: rewrite /<path>.pageContext.json → /<path>
         // so the controller route matches. Stash the original URL on a header so
         // ViewResponse.toResponse() can pass it back to Vike — Vike then emits the
@@ -701,11 +712,22 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         }
 
         const display = logPath(new URL(request.url).pathname)
-        if (display === null) return app.fetch(actualRequest)
+        if (display === null) {
+          markBoundary(perfId, B.APP_FETCH_IN)
+          const r = await runWithRequest(perfId, () => app.fetch(actualRequest))
+          markBoundary(perfId, B.APP_FETCH_OUT)
+          markBoundary(perfId, B.HONO_FETCH_OUT)
+          finishRequest(perfId)
+          return r
+        }
         const n     = nextReqId()
         const start = performance.now()
-        const res   = await app.fetch(actualRequest)
+        markBoundary(perfId, B.APP_FETCH_IN)
+        const res   = await runWithRequest(perfId, () => app.fetch(actualRequest))
+        markBoundary(perfId, B.APP_FETCH_OUT)
         console.log(formatRequestLog(n, display, res.status, performance.now() - start))
+        markBoundary(perfId, B.HONO_FETCH_OUT)
+        finishRequest(perfId)
         return res
       }
     },
