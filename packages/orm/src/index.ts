@@ -659,8 +659,23 @@ export abstract class Model {
   // getDirty. Captured by hydrate(), save(), refresh(), and increment/
   // decrement so the baseline always matches the persisted state.
 
-  /** @internal — own enumerable column values as of last load/save/refresh. */
-  #original: Record<string, unknown> = {}
+  /**
+   * @internal — materialized own-column baseline as of last load/save/refresh.
+   * Populated lazily: hydrate just stores the raw input record in
+   * {@link Model.#originalRaw} and defers the filter pass until the first
+   * dirty-tracking access. Save/refresh/etc. populate this field eagerly
+   * because they have current instance state in hand.
+   */
+  #originalSnapshot: Record<string, unknown> = {}
+
+  /**
+   * @internal — reference to the raw record passed to `hydrate()`. While
+   * non-undefined, dirty-tracking reads route through {@link Model._original}
+   * which materializes {@link Model.#originalSnapshot} on first access. Reset
+   * to `undefined` once materialized or once an explicit `_syncOriginal()`
+   * captures the post-save / post-refresh state.
+   */
+  #originalRaw: Record<string, unknown> | undefined = undefined
 
   /** @internal — diff of attributes that changed during the most recent save. */
   #changes: Record<string, unknown> = {}
@@ -780,7 +795,9 @@ export abstract class Model {
     const Ctor = this as unknown as new () => InstanceType<T>
     const instance = new Ctor()
     Object.assign(instance, record)
-    instance._syncOriginal()
+    // Defer the dirty-tracking baseline. _original() materializes the filtered
+    // snapshot on first access — typically never, for read-and-discard rows.
+    instance.#originalRaw = record as Record<string, unknown>
     return instance
   }
 
@@ -1435,9 +1452,31 @@ export abstract class Model {
     return this._currentAttrs()
   }
 
+  /**
+   * @internal — return the dirty-tracking baseline, materializing the deferred
+   * raw record from hydrate on first access. After materialization (or after
+   * an explicit `_syncOriginal()` reset), subsequent calls return the cached
+   * snapshot directly.
+   */
+  private _original(): Record<string, unknown> {
+    if (this.#originalRaw === undefined) return this.#originalSnapshot
+    const aggregates = (this as unknown as Record<symbol, Set<string> | undefined>)[AGGREGATES_SYMBOL]
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(this.#originalRaw)) {
+      if (k.startsWith('_')) continue
+      if (v === undefined) continue
+      if (aggregates && aggregates.has(k)) continue
+      out[k] = v
+    }
+    this.#originalSnapshot = out
+    this.#originalRaw      = undefined
+    return out
+  }
+
   /** @internal — capture current attrs as the new dirty-tracking baseline. */
   private _syncOriginal(): void {
-    this.#original = this._currentAttrs()
+    this.#originalSnapshot = this._currentAttrs()
+    this.#originalRaw      = undefined
   }
 
   /**
@@ -1458,12 +1497,14 @@ export abstract class Model {
       : await Model._doUpdate.call(ctor, id, data)
     Object.assign(this, persisted)
     const next: Record<string, unknown> = this._currentAttrs()
+    const prev = this._original()
     const diff: Record<string, unknown> = {}
-    for (const k of new Set([...Object.keys(next), ...Object.keys(this.#original)])) {
-      if (!attrEqual(next[k], this.#original[k])) diff[k] = next[k]
+    for (const k of new Set([...Object.keys(next), ...Object.keys(prev)])) {
+      if (!attrEqual(next[k], prev[k])) diff[k] = next[k]
     }
-    this.#changes  = diff
-    this.#original = next
+    this.#changes          = diff
+    this.#originalSnapshot = next
+    this.#originalRaw      = undefined
     return this
   }
 
@@ -1747,8 +1788,9 @@ export abstract class Model {
   getOriginal<T = unknown>(key: string): T
   getOriginal(): Record<string, unknown>
   getOriginal<T = unknown>(key?: string): T | Record<string, unknown> {
-    if (key === undefined) return { ...this.#original }
-    return this.#original[key] as T
+    const snap = this._original()
+    if (key === undefined) return { ...snap }
+    return snap[key] as T
   }
 
   /** Diff map of attributes that changed during the most recent {@link save}. */
@@ -1760,8 +1802,9 @@ export abstract class Model {
   getDirty(): Record<string, unknown> {
     const out: Record<string, unknown> = {}
     const current = this._currentAttrs()
-    for (const k of new Set([...Object.keys(current), ...Object.keys(this.#original)])) {
-      if (!attrEqual(current[k], this.#original[k])) out[k] = current[k]
+    const prev    = this._original()
+    for (const k of new Set([...Object.keys(current), ...Object.keys(prev)])) {
+      if (!attrEqual(current[k], prev[k])) out[k] = current[k]
     }
     return out
   }

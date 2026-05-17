@@ -200,6 +200,19 @@ describe('Model dirty tracking', () => {
     assert.equal(u.getOriginal('name'), 'A')
   })
 
+  it('hydrate + mutate before first dirty-check still reports the pre-mutation baseline', () => {
+    class User extends Model { id!: number; name!: string; email!: string }
+    const u = User.hydrate({ id: 1, name: 'A', email: 'a@x.com' })!
+    // Mutate before any dirty-check. Lazy materialization must capture the
+    // pre-mutation values, not the current instance state.
+    u.name  = 'B'
+    u.email = 'b@x.com'
+    assert.equal(u.isDirty(), true)
+    assert.deepStrictEqual(u.getDirty(), { name: 'B', email: 'b@x.com' })
+    assert.equal(u.getOriginal('name'), 'A')
+    assert.equal(u.getOriginal('email'), 'a@x.com')
+  })
+
   it('save() after creating new instance: id set, not dirty, wasChanged true', async () => {
     const qb = makeQb({
       create: async (data) => ({ id: 42, ...(data as object) }),
