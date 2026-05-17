@@ -1,5 +1,12 @@
 # create-rudder-app
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [765a19d]
+  - @rudderjs/auth@6.0.2
+
 ## 1.0.2
 
 ### Patch Changes

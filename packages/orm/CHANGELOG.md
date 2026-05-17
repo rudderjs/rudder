@@ -1,5 +1,21 @@
 # @rudderjs/orm
 
+## 1.9.3
+
+### Patch Changes
+
+- 16f87a4: Fast-path `Model._fireEvent` to return synchronously when the class has no observers or event listeners — recovers ~0.5 ms on `.all()` over 5000 rows by avoiding 5000 empty microtask schedules for the per-row `retrieved` event.
+
+  The slow path (observers or listeners present) is unchanged — it routes through `_fireEventSlow` which is still `async` with the original semantics. Internal-only refactor; no public API change.
+
+- 4634586: Route `ModelRegistry`'s state (adapter, model map, listeners) through `globalThis` so it survives the case where `@rudderjs/orm` is loaded twice — typical in a Vite-bundled server where the framework bundles `@rudderjs/orm` inline but externalizes `@rudderjs/orm-prisma` / `@rudderjs/orm-drizzle`. Those adapter packages resolve their own copy of `@rudderjs/orm` from `node_modules` at runtime; without a shared store, `DatabaseProvider.boot()` would land on a different `ModelRegistry` class than the one Model handlers read from, producing a misleading `No ORM adapter registered` error on every DB route in prod.
+
+  No public API change — same `set` / `get` / `getAdapter` / `register` / `all` / `onRegister` / `reset` surface. Same pattern as the ai/mcp/http/queue/sync/broadcast observer registries.
+
+- bdfe575: Defer the dirty-tracking baseline build past `Model.hydrate()` — recovers ~1.8 ms on a 5000-row hydration when the rows are read-and-discarded (the dominant bulk-read pattern). For rows that ARE dirty-checked or saved, the snapshot materializes on first access; total work is unchanged, just shifted later.
+
+  Internal refactor only — `getOriginal` / `getDirty` / `isDirty` / `wasChanged` / `save()` diff semantics are preserved. No public API change.
+
 ## 1.9.2
 
 ### Patch Changes
