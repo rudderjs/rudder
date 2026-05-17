@@ -283,6 +283,35 @@ describe('HonoAdapter — body parsing', () => {
     assert.strictEqual(res.status, 200)
     assert.deepStrictEqual(getCaptured(), {})
   })
+
+  it('preserves raw body stream after pre-parse — handlers that need raw access (e.g. MCP streamable-HTTP transport) can still read c.req.raw.body', async () => {
+    const adapter = hono().create()
+    let parsedBody: unknown = undefined
+    let rawText:    string  = ''
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/raw',
+      handler: async (req, res) => {
+        const c = req.raw as { req: { raw: Request } }
+        parsedBody = req.body
+        // The streaming-aware handler reaches for the raw stream — must still
+        // be available after server-hono's pre-parse populated req.body.
+        rawText = await c.req.raw.text()
+        return res.json({ ok: true })
+      },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const payload = '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
+    const res = await app.fetch(new Request('http://localhost/raw', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    payload,
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(parsedBody, { jsonrpc: '2.0', id: 1, method: 'initialize' })
+    assert.strictEqual(rawText, payload)
+  })
 })
 
 // ─── renderErrorPage() ──────────────────────────────────────
