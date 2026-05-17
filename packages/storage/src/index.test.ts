@@ -374,6 +374,34 @@ describe('BaseAdapter defaults (via FakeAdapter)', () => {
   })
 })
 
+// ─── StorageRegistry global store ─────────────────────────────────────────
+
+describe('StorageRegistry global store', () => {
+  afterEach(() => StorageRegistry.reset())
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/storage', async () => {
+    // Vite-bundled server apps inline `@rudderjs/storage` (Storage.*, Storage.disk(...))
+    // into entry.mjs, but `StorageProvider.boot()` runs from a node_modules
+    // copy of `@rudderjs/storage` resolved via the provider auto-discovery
+    // manifest. Without a globalThis-routed store, `set()` from the
+    // externalized copy would never be visible to `get()` from the bundled
+    // copy. This test pins the contract: writes from this module copy are
+    // visible on a global key the second copy would also read from.
+    const root = await makeTmpDir()
+    try {
+      const adapter = new LocalAdapter({ driver: 'local', root })
+      StorageRegistry.set('audit', adapter)
+      StorageRegistry.setDefault('audit')
+      const store = (globalThis as Record<string, unknown>)['__rudderjs_storage_registry__'] as { adapters: Map<string, unknown>; defaultDisk: string } | undefined
+      assert.ok(store, 'global store should exist after StorageRegistry.set()')
+      assert.strictEqual(store.adapters.get('audit'), adapter)
+      assert.strictEqual(store.defaultDisk, 'audit')
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
 // ─── FakeAdapter / Storage.fake() ───────────────────────────
 
 describe('FakeAdapter + Storage.fake()', () => {
