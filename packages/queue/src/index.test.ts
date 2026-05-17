@@ -151,6 +151,22 @@ describe('QueueRegistry', () => {
     QueueRegistry.reset()
     assert.strictEqual(QueueRegistry.get(), null)
   })
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/queue', () => {
+    // Vite-bundled server apps inline `@rudderjs/queue` (Queue.dispatch and
+    // worker boot read `QueueRegistry`) into entry.mjs, but driver packages
+    // (`@rudderjs/queue-bullmq`) are externalized and resolve their own copy
+    // of `@rudderjs/queue` from `node_modules`. Without a globalThis-routed
+    // store, `set()` from the externalized driver would never be visible to
+    // `get()` from the bundled copy. This test pins the contract: writes
+    // from this module copy are visible on a global key the second copy
+    // would also read from.
+    const adapter = new SyncAdapter()
+    QueueRegistry.set(adapter)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_queue_registry__'] as { adapter: unknown } | undefined
+    assert.ok(store, 'global store should exist after QueueRegistry.set()')
+    assert.strictEqual(store.adapter, adapter)
+  })
 })
 
 // ─── SyncAdapter ───────────────────────────────────────────
