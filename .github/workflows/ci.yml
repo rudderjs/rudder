@@ -85,3 +85,10 @@ jobs:
 
       - name: Test
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
+
+      - name: Build docs site
+        # Docs build catches VitePress/Vue-parser breakage in `.md` files
+        # (plan docs accidentally landing `Promise<T>` or `<5%` patterns, etc.).
+        # The release workflow runs this as part of `pnpm build` and used to
+        # be the first place such breakage surfaced — now it's caught at PR time.
+        run: pnpm --filter @rudderjs/docs build
