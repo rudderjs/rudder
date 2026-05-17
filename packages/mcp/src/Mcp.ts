@@ -23,14 +23,41 @@ export interface McpWebBuilder {
   oauth2(options?: OAuth2McpOptions): McpWebBuilder
 }
 
-export class Mcp {
-  private static webServers: Map<string, McpWebEntry> = new Map()
-  private static localServers: Map<string, ServerClass> = new Map()
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/mcp` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/mcp` inline but
+ * `McpProvider.boot()` and any `Mcp.web()` / `Mcp.local()` calls in
+ * `routes/console.ts` / `app/Mcp/...` run from a `node_modules` copy resolved
+ * via the provider auto-discovery manifest. Without a shared store, servers
+ * registered from the externalized copy would never be visible to the route
+ * mounter reading the bundled copy — every `/mcp/*` request would 404.
+ *
+ * Defensive migration per the #499 static-state singleton audit (the
+ * `__rudderjs_mcp_observers__` registry was already migrated as part of the
+ * observer-registry pattern; this completes the package). Same pattern as
+ * PR #498 (`@rudderjs/orm` `ModelRegistry`), #500–#505 (pennant, cache,
+ * queue, mail, storage, hash).
+ */
+interface McpServersStore {
+  web: Map<string, McpWebEntry>
+  local: Map<string, ServerClass>
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_mcp_servers__']) {
+  _g['__rudderjs_mcp_servers__'] = {
+    web: new Map<string, McpWebEntry>(),
+    local: new Map<string, ServerClass>(),
+  } satisfies McpServersStore
+}
+const _store = _g['__rudderjs_mcp_servers__'] as McpServersStore
+
+export class Mcp {
   /** Register an MCP server on an HTTP endpoint (Streamable HTTP transport) */
   static web(path: string, server: ServerClass, middleware: unknown[] = []): McpWebBuilder {
     const entry: McpWebEntry = { server, middleware }
-    this.webServers.set(path, entry)
+    _store.web.set(path, entry)
     const builder: McpWebBuilder = {
       middleware(mw: unknown[]) {
         entry.middleware.push(...mw)
@@ -46,9 +73,9 @@ export class Mcp {
 
   /** Register an MCP server as a local CLI command (stdio transport) */
   static local(name: string, server: ServerClass): void {
-    this.localServers.set(name, server)
+    _store.local.set(name, server)
   }
 
-  static getWebServers(): Map<string, McpWebEntry> { return this.webServers }
-  static getLocalServers(): Map<string, ServerClass> { return this.localServers }
+  static getWebServers(): Map<string, McpWebEntry> { return _store.web }
+  static getLocalServers(): Map<string, ServerClass> { return _store.local }
 }

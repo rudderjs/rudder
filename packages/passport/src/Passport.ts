@@ -23,100 +23,113 @@ export interface AuthorizationViewContext {
 
 export type AuthorizationViewFn = (ctx: AuthorizationViewContext) => unknown | Promise<unknown>
 
+/**
+ * Shared singleton store routed through `globalThis` so the configuration
+ * survives the case where `@rudderjs/passport` is loaded twice — typical in a
+ * Vite-bundled server where the framework bundles `@rudderjs/passport` inline
+ * but `PassportProvider.boot()` (and `Passport.tokensCan()` /
+ * `Passport.tokensExpireIn()` calls in `AppServiceProvider.boot()`) runs from
+ * a `node_modules` copy resolved via the provider auto-discovery manifest.
+ * Without a shared store, scopes / lifetimes / RSA keys configured from the
+ * externalized copy would never be visible to grant handlers reading the
+ * bundled copy — every `/oauth/*` request would behave as if Passport was
+ * never configured.
+ *
+ * Defensive migration per the #499 static-state singleton audit. Same pattern
+ * as PR #498 (`@rudderjs/orm` `ModelRegistry`), #500–#505 (pennant, cache,
+ * queue, mail, storage, hash).
+ */
+interface PassportConfigStore {
+  scopes: Map<string, string>
+  tokenLifetime: number
+  refreshTokenLifetime: number
+  personalTokenLifetime: number
+  keyPath: string
+  privateKey: string | null
+  publicKey: string | null
+  previousPublicKey: string | null
+  clientModel: typeof OAuthClient | null
+  tokenModel: typeof AccessToken | null
+  refreshTokenModel: typeof RefreshToken | null
+  authCodeModel: typeof AuthCode | null
+  deviceCodeModel: typeof DeviceCode | null
+  authorizationView: AuthorizationViewFn | null
+  routesIgnored: boolean
+  issuer: string | null
+  deviceMaxInterval: number
+}
+
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_passport_config__']) {
+  _g['__rudderjs_passport_config__'] = {
+    scopes: new Map<string, string>(),
+    tokenLifetime:         15 * 24 * 60 * 60 * 1000,
+    refreshTokenLifetime:  30 * 24 * 60 * 60 * 1000,
+    personalTokenLifetime: 6 * 30 * 24 * 60 * 60 * 1000,
+    keyPath: 'storage',
+    privateKey: null,
+    publicKey: null,
+    previousPublicKey: null,
+    clientModel: null,
+    tokenModel: null,
+    refreshTokenModel: null,
+    authCodeModel: null,
+    deviceCodeModel: null,
+    authorizationView: null,
+    routesIgnored: false,
+    issuer: null,
+    deviceMaxInterval: 60,
+  } satisfies PassportConfigStore
+}
+const _store = _g['__rudderjs_passport_config__'] as PassportConfigStore
+
 export class Passport {
-  private static _scopes = new Map<string, string>()
-  private static _tokenLifetime       = 15 * 24 * 60 * 60 * 1000   // 15 days
-  private static _refreshTokenLifetime = 30 * 24 * 60 * 60 * 1000  // 30 days
-  private static _personalTokenLifetime = 6 * 30 * 24 * 60 * 60 * 1000 // ~6 months
-  private static _keyPath = 'storage'
-  private static _privateKey: string | null = null
-  private static _publicKey: string | null = null
-  /**
-   * Previous public key, retained for verification only after a `passport:keys
-   * --force` rotation. Tokens minted before the rotation keep verifying via
-   * this slot during the grace window; new tokens are signed by the current
-   * private key. Single-slot — one rotation deep — by design (operators who
-   * need a longer history should stage rotations to land outside the
-   * configured access-token lifetime). See JWKS verifier design notes in
-   * `verificationKeys()` below.
-   */
-  private static _previousPublicKey: string | null = null
-
-  // Custom model overrides (lazy — resolved at use-site so the defaults aren't eagerly loaded).
-  private static _clientModel:       typeof OAuthClient  | null = null
-  private static _tokenModel:        typeof AccessToken  | null = null
-  private static _refreshTokenModel: typeof RefreshToken | null = null
-  private static _authCodeModel:     typeof AuthCode     | null = null
-  private static _deviceCodeModel:   typeof DeviceCode   | null = null
-
-  // Consent screen hook
-  private static _authorizationView: AuthorizationViewFn | null = null
-
-  // Route auto-registration toggle
-  private static _routesIgnored = false
-
-  // JWT issuer URL — when set, createToken stamps `iss` on the payload and
-  // verifyToken can validate it via `expectedIssuer`. Optional per RFC 7519
-  // but recommended by RFC 8725 §3.10 once the deployment has more than one
-  // possible issuer (e.g. multi-tenant or staging vs prod sharing keys).
-  private static _issuer: string | null = null
-
-  /**
-   * Maximum value (in seconds) the per-row `oauth_device_codes.interval` is
-   * allowed to grow to via repeated `slow_down` escalations (RFC 8628 §3.5
-   * doesn't specify a cap; we add one to keep degenerate clients from
-   * pushing the interval to absurd values). 60 seconds is the default — long
-   * enough to make a misbehaving client back off meaningfully, short enough
-   * that a legitimate user typing the user_code never hits it.
-   */
-  private static _deviceMaxInterval = 60
-
   // ── Scopes ──────────────────────────────────────────────
 
   /** Define available OAuth scopes. */
   static tokensCan(scopes: Record<string, string>): void {
     for (const [id, description] of Object.entries(scopes)) {
-      this._scopes.set(id, description)
+      _store.scopes.set(id, description)
     }
   }
 
   /** Check if a scope is defined. */
   static hasScope(id: string): boolean {
-    return this._scopes.has(id)
+    return _store.scopes.has(id)
   }
 
   /** Get all defined scopes. */
   static scopes(): PassportScope[] {
-    return [...this._scopes.entries()].map(([id, description]) => ({ id, description }))
+    return [..._store.scopes.entries()].map(([id, description]) => ({ id, description }))
   }
 
   /** Validate a list of scopes — returns only the valid ones. */
   static validScopes(requested: string[]): string[] {
-    return requested.filter(s => this._scopes.has(s) || s === '*')
+    return requested.filter(s => _store.scopes.has(s) || s === '*')
   }
 
   // ── Lifetimes ───────────────────────────────────────────
 
-  static tokensExpireIn(ms: number): void { this._tokenLifetime = ms }
-  static refreshTokensExpireIn(ms: number): void { this._refreshTokenLifetime = ms }
-  static personalAccessTokensExpireIn(ms: number): void { this._personalTokenLifetime = ms }
+  static tokensExpireIn(ms: number): void { _store.tokenLifetime = ms }
+  static refreshTokensExpireIn(ms: number): void { _store.refreshTokenLifetime = ms }
+  static personalAccessTokensExpireIn(ms: number): void { _store.personalTokenLifetime = ms }
 
-  static tokenLifetime(): number { return this._tokenLifetime }
-  static refreshTokenLifetime(): number { return this._refreshTokenLifetime }
-  static personalTokenLifetime(): number { return this._personalTokenLifetime }
+  static tokenLifetime(): number { return _store.tokenLifetime }
+  static refreshTokenLifetime(): number { return _store.refreshTokenLifetime }
+  static personalTokenLifetime(): number { return _store.personalTokenLifetime }
 
   // ── Keys ────────────────────────────────────────────────
 
   /** Set the directory where RSA keys are stored. */
-  static loadKeysFrom(path: string): void { this._keyPath = path }
+  static loadKeysFrom(path: string): void { _store.keyPath = path }
 
   /** Get the configured key path. */
-  static keyPath(): string { return this._keyPath }
+  static keyPath(): string { return _store.keyPath }
 
   /** Set keys directly (from environment variables). */
   static setKeys(privateKey: string, publicKey: string): void {
-    this._privateKey = privateKey
-    this._publicKey = publicKey
+    _store.privateKey = privateKey
+    _store.publicKey = publicKey
   }
 
   /**
@@ -128,7 +141,7 @@ export class Passport {
    * convention. Pass `null` to clear.
    */
   static setPreviousPublicKey(publicKey: string | null): void {
-    this._previousPublicKey = publicKey && publicKey.length > 0 ? publicKey : null
+    _store.previousPublicKey = publicKey && publicKey.length > 0 ? publicKey : null
   }
 
   /**
@@ -141,13 +154,13 @@ export class Passport {
    * Does NOT load or cache the keys; it only stats the files.
    */
   static async keysAvailable(): Promise<boolean> {
-    if (this._privateKey && this._publicKey) return true
+    if (_store.privateKey && _store.publicKey) return true
 
     const { stat } = await import('node:fs/promises')
     const { join } = await import('node:path')
 
-    const privatePath = join(process.cwd(), this._keyPath, 'oauth-private.key')
-    const publicPath  = join(process.cwd(), this._keyPath, 'oauth-public.key')
+    const privatePath = join(process.cwd(), _store.keyPath, 'oauth-private.key')
+    const publicPath  = join(process.cwd(), _store.keyPath, 'oauth-public.key')
 
     const [priv, pub] = await Promise.all([
       stat(privatePath).then(() => true, () => false),
@@ -159,24 +172,24 @@ export class Passport {
   /** Load keys from files or env. Returns { privateKey, publicKey }. */
   static async keys(): Promise<{ privateKey: string; publicKey: string }> {
     // Prefer explicitly set keys (from env vars)
-    if (this._privateKey && this._publicKey) {
-      return { privateKey: this._privateKey, publicKey: this._publicKey }
+    if (_store.privateKey && _store.publicKey) {
+      return { privateKey: _store.privateKey, publicKey: _store.publicKey }
     }
 
     // Load from filesystem
     const { readFile } = await import('node:fs/promises')
     const { join } = await import('node:path')
 
-    const privatePath = join(process.cwd(), this._keyPath, 'oauth-private.key')
-    const publicPath  = join(process.cwd(), this._keyPath, 'oauth-public.key')
+    const privatePath = join(process.cwd(), _store.keyPath, 'oauth-private.key')
+    const publicPath  = join(process.cwd(), _store.keyPath, 'oauth-public.key')
 
     const [privateKey, publicKey] = await Promise.all([
       readFile(privatePath, 'utf8'),
       readFile(publicPath, 'utf8'),
     ])
 
-    this._privateKey = privateKey
-    this._publicKey = publicKey
+    _store.privateKey = privateKey
+    _store.publicKey = publicKey
 
     return { privateKey, publicKey }
   }
@@ -205,8 +218,8 @@ export class Passport {
     const { publicKey } = await this.keys()
     const keys: string[] = [publicKey]
 
-    if (this._previousPublicKey) {
-      keys.push(this._previousPublicKey)
+    if (_store.previousPublicKey) {
+      keys.push(_store.previousPublicKey)
       return keys
     }
 
@@ -215,10 +228,10 @@ export class Passport {
     // timestamped audit backup.
     const { readFile } = await import('node:fs/promises')
     const { join } = await import('node:path')
-    const previousPath = join(process.cwd(), this._keyPath, 'oauth-previous-public.key')
+    const previousPath = join(process.cwd(), _store.keyPath, 'oauth-previous-public.key')
     try {
       const previous = await readFile(previousPath, 'utf8')
-      this._previousPublicKey = previous
+      _store.previousPublicKey = previous
       keys.push(previous)
     } catch {
       // No previous key on disk — first rotation hasn't happened yet, or
@@ -230,35 +243,35 @@ export class Passport {
 
   /** Get the configured previous public key, if any. */
   static previousPublicKey(): string | null {
-    return this._previousPublicKey
+    return _store.previousPublicKey
   }
 
   // ── Custom Models ───────────────────────────────────────
 
-  static useClientModel(cls: typeof OAuthClient):        void { this._clientModel = cls }
-  static useTokenModel(cls: typeof AccessToken):         void { this._tokenModel = cls }
-  static useRefreshTokenModel(cls: typeof RefreshToken): void { this._refreshTokenModel = cls }
-  static useAuthCodeModel(cls: typeof AuthCode):         void { this._authCodeModel = cls }
-  static useDeviceCodeModel(cls: typeof DeviceCode):     void { this._deviceCodeModel = cls }
+  static useClientModel(cls: typeof OAuthClient):        void { _store.clientModel = cls }
+  static useTokenModel(cls: typeof AccessToken):         void { _store.tokenModel = cls }
+  static useRefreshTokenModel(cls: typeof RefreshToken): void { _store.refreshTokenModel = cls }
+  static useAuthCodeModel(cls: typeof AuthCode):         void { _store.authCodeModel = cls }
+  static useDeviceCodeModel(cls: typeof DeviceCode):     void { _store.deviceCodeModel = cls }
 
   static async clientModel(): Promise<typeof OAuthClient> {
-    if (this._clientModel) return this._clientModel
+    if (_store.clientModel) return _store.clientModel
     return (await import('./models/OAuthClient.js')).OAuthClient
   }
   static async tokenModel(): Promise<typeof AccessToken> {
-    if (this._tokenModel) return this._tokenModel
+    if (_store.tokenModel) return _store.tokenModel
     return (await import('./models/AccessToken.js')).AccessToken
   }
   static async refreshTokenModel(): Promise<typeof RefreshToken> {
-    if (this._refreshTokenModel) return this._refreshTokenModel
+    if (_store.refreshTokenModel) return _store.refreshTokenModel
     return (await import('./models/RefreshToken.js')).RefreshToken
   }
   static async authCodeModel(): Promise<typeof AuthCode> {
-    if (this._authCodeModel) return this._authCodeModel
+    if (_store.authCodeModel) return _store.authCodeModel
     return (await import('./models/AuthCode.js')).AuthCode
   }
   static async deviceCodeModel(): Promise<typeof DeviceCode> {
-    if (this._deviceCodeModel) return this._deviceCodeModel
+    if (_store.deviceCodeModel) return _store.deviceCodeModel
     return (await import('./models/DeviceCode.js')).DeviceCode
   }
 
@@ -270,11 +283,11 @@ export class Passport {
    * When unset, GET /oauth/authorize returns JSON with the validated request.
    */
   static authorizationView(fn: AuthorizationViewFn): void {
-    this._authorizationView = fn
+    _store.authorizationView = fn
   }
 
   static authorizationViewFn(): AuthorizationViewFn | null {
-    return this._authorizationView
+    return _store.authorizationView
   }
 
   // ── Route auto-registration toggle ──────────────────────
@@ -284,11 +297,11 @@ export class Passport {
    * letting the application wire OAuth routes manually.
    */
   static ignoreRoutes(): void {
-    this._routesIgnored = true
+    _store.routesIgnored = true
   }
 
   static routesIgnored(): boolean {
-    return this._routesIgnored
+    return _store.routesIgnored
   }
 
   // ── JWT issuer ──────────────────────────────────────────
@@ -306,8 +319,8 @@ export class Passport {
    * exempt during the migration window — same pattern as redirect_uri (P1)
    * and familyId (P4).
    */
-  static useIssuer(url: string): void { this._issuer = url || null }
-  static issuer(): string | null { return this._issuer }
+  static useIssuer(url: string): void { _store.issuer = url || null }
+  static issuer(): string | null { return _store.issuer }
 
   // ── Device flow polling cap (RFC 8628 §3.5) ─────────────
 
@@ -327,34 +340,34 @@ export class Passport {
   static deviceMaxInterval(seconds: number): void {
     // Never below the floor — escalation is by 5s, so a cap below 5
     // would prevent any escalation from ever taking effect.
-    this._deviceMaxInterval = Math.max(5, Math.floor(seconds))
+    _store.deviceMaxInterval = Math.max(5, Math.floor(seconds))
   }
 
   /** Current cap on `oauth_device_codes.interval` (seconds). */
   static deviceMaxIntervalSeconds(): number {
-    return this._deviceMaxInterval
+    return _store.deviceMaxInterval
   }
 
   // ── Reset (testing) ─────────────────────────────────────
 
   /** @internal */
   static reset(): void {
-    this._scopes.clear()
-    this._tokenLifetime         = 15 * 24 * 60 * 60 * 1000
-    this._refreshTokenLifetime  = 30 * 24 * 60 * 60 * 1000
-    this._personalTokenLifetime = 6 * 30 * 24 * 60 * 60 * 1000
-    this._keyPath    = 'storage'
-    this._privateKey = null
-    this._publicKey  = null
-    this._previousPublicKey = null
-    this._clientModel       = null
-    this._tokenModel        = null
-    this._refreshTokenModel = null
-    this._authCodeModel     = null
-    this._deviceCodeModel   = null
-    this._authorizationView = null
-    this._routesIgnored     = false
-    this._issuer            = null
-    this._deviceMaxInterval = 60
+    _store.scopes.clear()
+    _store.tokenLifetime         = 15 * 24 * 60 * 60 * 1000
+    _store.refreshTokenLifetime  = 30 * 24 * 60 * 60 * 1000
+    _store.personalTokenLifetime = 6 * 30 * 24 * 60 * 60 * 1000
+    _store.keyPath    = 'storage'
+    _store.privateKey = null
+    _store.publicKey  = null
+    _store.previousPublicKey = null
+    _store.clientModel       = null
+    _store.tokenModel        = null
+    _store.refreshTokenModel = null
+    _store.authCodeModel     = null
+    _store.deviceCodeModel   = null
+    _store.authorizationView = null
+    _store.routesIgnored     = false
+    _store.issuer            = null
+    _store.deviceMaxInterval = 60
   }
 }

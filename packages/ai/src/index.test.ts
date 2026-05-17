@@ -3396,3 +3396,27 @@ describe('parallel tool execution', () => {
     assert.deepEqual(parallel, serial)
   })
 })
+
+describe('AiRegistry store on globalThis', () => {
+  it('state lives on globalThis so it survives a second copy of @rudderjs/ai', () => {
+    // Vite-bundled server apps inline `@rudderjs/ai` (every agent path reads
+    // `AiRegistry.resolve(...)`) into entry.mjs, but `AiProvider.boot()`
+    // (loaded via `@rudderjs/ai/server`) runs from a node_modules copy
+    // resolved via the provider auto-discovery manifest. Without a
+    // globalThis-routed store, factories registered from the externalized
+    // copy would never be visible to agent resolution from inside the bundle
+    // and every call would throw "Unknown AI provider".
+    AiRegistry.reset()
+    AiRegistry.register(mockFactory)
+    AiRegistry.setDefault('mock/some-model')
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_ai_registry__'] as {
+      factories: Map<string, unknown>
+      default:   string | null
+      models:    unknown[]
+    } | undefined
+    assert.ok(store, 'global store should exist after AiRegistry.register()')
+    assert.ok(store.factories.has('mock'))
+    assert.equal(store.default, 'mock/some-model')
+    AiRegistry.reset()
+  })
+})

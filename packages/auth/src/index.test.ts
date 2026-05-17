@@ -943,3 +943,26 @@ describe('BaseAuthController', () => {
     assert.deepStrictEqual(body, { custom: true })
   })
 })
+
+describe('Gate registry on globalThis', () => {
+  beforeEach(() => Gate.reset())
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/auth', () => {
+    // Vite-bundled server apps inline `@rudderjs/auth` (Gate.allows reads the
+    // registry) into entry.mjs, but `AuthProvider.boot()` and any
+    // `Gate.define()` / `Gate.policy()` calls in app code can run from a
+    // node_modules copy resolved via the provider auto-discovery manifest.
+    // Without a globalThis-routed store, abilities registered from the
+    // externalized copy would never be visible to `Gate.allows()` from inside
+    // the bundle. This test pins the contract: writes from this module copy
+    // are visible on a global key the second copy would also read from.
+    Gate.define('edit-post', () => true)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_gate_registry__'] as {
+      abilities: Map<string, unknown>
+      policies:  Map<unknown, unknown>
+      beforeCallbacks: unknown[]
+    } | undefined
+    assert.ok(store, 'global store should exist after Gate.define()')
+    assert.ok(store.abilities.has('edit-post'))
+  })
+})
