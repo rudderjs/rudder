@@ -480,13 +480,20 @@ class HonoAdapter implements ServerAdapter {
       // OAuth2 token endpoints; without this branch any spec-compliant OAuth
       // client (curl -d, Postman default, axios URLSearchParams) sends a
       // request whose body never reaches the handler.
+      //
+      // **Clone before consuming.** `c.req.json()` / `c.req.text()` go straight
+      // through to the raw Web Request's `.text()`, which consumes the body
+      // stream. Handlers that need raw streaming access (e.g. `@rudderjs/mcp`'s
+      // `WebStandardStreamableHTTPServerTransport`, which reads
+      // `c.req.raw.body` to parse the JSON-RPC payload itself) would hang on
+      // an empty stream. Cloning preserves the original stream for the handler.
       if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
         const ct = c.req.header('content-type') ?? ''
         if (ct.includes('application/json')) {
-          try { req.body = await c.req.json() } catch { req.body = {} }
+          try { req.body = await c.req.raw.clone().json() } catch { req.body = {} }
         } else if (ct.includes('application/x-www-form-urlencoded')) {
           try {
-            const text = await c.req.text()
+            const text = await c.req.raw.clone().text()
             req.body = Object.fromEntries(new URLSearchParams(text))
           } catch { req.body = {} }
         }
