@@ -112,6 +112,24 @@ describe('CacheRegistry', () => {
     CacheRegistry.reset()
     assert.strictEqual(CacheRegistry.get(), null)
   })
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/cache', () => {
+    // Vite-bundled server apps inline `@rudderjs/middleware` (which imports
+    // `CacheRegistry` for `RateLimit`) into entry.mjs, but `CacheProvider.boot()`
+    // runs from a `node_modules` copy of `@rudderjs/cache` resolved via the
+    // provider auto-discovery manifest. Without a globalThis-routed store,
+    // `set()` from the externalized copy would never be visible to `get()`
+    // from the bundled copy. This test pins the contract: writes from this
+    // module copy are visible on a global key the second copy would also
+    // read from.
+    const adapter = new MemoryAdapter()
+    CacheRegistry.set(adapter)
+    CacheRegistry.setDefaultName('redis')
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_cache_registry__'] as { adapter: unknown; defaultName: unknown } | undefined
+    assert.ok(store, 'global store should exist after CacheRegistry.set()')
+    assert.strictEqual(store.adapter, adapter)
+    assert.strictEqual(store.defaultName, 'redis')
+  })
 })
 
 // ─── Cache facade ──────────────────────────────────────────
