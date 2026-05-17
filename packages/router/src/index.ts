@@ -858,8 +858,25 @@ export type { ResourceVerb, ResourceOptions } from './resource.js'
 export { ResourceRegistration, SingletonRegistration } from './resource.js'
 
 // ─── Global router instance ────────────────────────────────
+//
+// The singleton lives on `globalThis` (not at module scope) so consumers that
+// reach the router through two different module instances — typically a
+// bundled app (entry.mjs) plus a node_modules copy loaded by
+// `resolveOptionalPeer('@rudderjs/router')` — see the same routes/middleware
+// arrays. A module-level `new Router()` splits into independent instances:
+// e.g. `@rudderjs/mcp`'s `McpProvider.boot()` registers `/mcp/echo` on the
+// node_modules copy, while server-hono dispatches against the bundled copy,
+// so the route silently 404s. Matches the pattern used by
+// `groupMiddlewareStore` in `@rudderjs/core` and the static-state registries
+// audited in PRs #498/#500–#506.
 
-export const router = new Router()
+const ROUTER_KEY = '__rudderjs_router__'
+const _routerGlobal = globalThis as Record<string, unknown>
+export const router: Router = (_routerGlobal[ROUTER_KEY] as Router | undefined) ?? (() => {
+  const r = new Router()
+  _routerGlobal[ROUTER_KEY] = r
+  return r
+})()
 
 /** Alias for router — Laravel-style capitalised name */
 export const Route = router
