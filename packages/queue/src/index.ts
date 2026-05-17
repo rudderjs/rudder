@@ -156,20 +156,43 @@ export interface QueueAdapterFactory<TConfig = unknown> {
 
 // ─── Global Queue Registry ─────────────────────────────────
 
-export class QueueRegistry {
-  private static adapter: QueueAdapter | null = null
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/queue` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/queue` inline (`Queue.dispatch`
+ * and worker boot read `QueueRegistry`), but driver packages
+ * (`@rudderjs/queue-bullmq`) are externalized and resolve their own copy of
+ * `@rudderjs/queue` from `node_modules`. Without a shared store,
+ * `QueueRegistry.set()` from the externalized driver would land on a different
+ * class than the one `Queue.*` reads from inside the bundle, producing a
+ * misleading `No queue adapter registered` error on every `Queue.dispatch`
+ * call in prod. Same pattern as PR #498 (`@rudderjs/orm` `ModelRegistry`),
+ * PR #500 (`@rudderjs/pennant`), and PR #501 (`@rudderjs/cache`).
+ */
+interface QueueRegistryStore {
+  adapter: QueueAdapter | null
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_queue_registry__']) {
+  _g['__rudderjs_queue_registry__'] = {
+    adapter: null,
+  } satisfies QueueRegistryStore
+}
+const _store = _g['__rudderjs_queue_registry__'] as QueueRegistryStore
+
+export class QueueRegistry {
   static set(adapter: QueueAdapter): void {
-    this.adapter = adapter
+    _store.adapter = adapter
   }
 
   static get(): QueueAdapter | null {
-    return this.adapter
+    return _store.adapter
   }
 
   /** @internal — clears the registered adapter. Used for testing. */
   static reset(): void {
-    this.adapter = null
+    _store.adapter = null
   }
 }
 
