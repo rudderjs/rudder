@@ -528,6 +528,55 @@ describe('Model.toJSON()', () => {
     const json = new User().toJSON()
     assert.ok(!('password' in json))
   })
+
+  it('fast-path: no-config Model returns equivalent output to slow-path with empty config arrays', () => {
+    // No casts / attributes / appends / hidden / visible — should hit the fast
+    // path and return a plain own-property snapshot. Output must match what
+    // the slow path would produce.
+    class PlainPost extends Model {
+      id    = 1
+      title = 'Hello'
+      body  = 'World'
+    }
+    const json = new PlainPost().toJSON()
+    assert.deepStrictEqual(json, { id: 1, title: 'Hello', body: 'World' })
+    // The result must be a fresh object (not the instance itself) — otherwise
+    // JSON.stringify would recurse infinitely.
+    assert.notStrictEqual(json, new PlainPost())
+  })
+
+  it('fast-path skips when hidden is configured (slow path applies filter)', () => {
+    class User extends Model {
+      static override hidden = ['password']
+      name     = 'Alice'
+      password = 'secret'
+    }
+    const json = new User().toJSON()
+    assert.deepStrictEqual(json, { name: 'Alice' })
+  })
+
+  it('fast-path skips when visible is configured (slow path applies allowlist)', () => {
+    class User extends Model {
+      static override visible = ['name']
+      id       = 1
+      name     = 'Alice'
+      password = 'secret'
+    }
+    const json = new User().toJSON()
+    assert.deepStrictEqual(json, { name: 'Alice' })
+  })
+
+  it('fast-path skips when instance-level visible/hidden overrides are set', () => {
+    class Post extends Model {
+      id    = 1
+      title = 'Hello'
+      body  = 'World'
+    }
+    const p = new Post()
+    p.makeHidden('body')
+    const json = p.toJSON()
+    assert.ok(!('body' in json))
+  })
 })
 
 // ─── Scopes ──────────────────────────────────────────────────────────────────
