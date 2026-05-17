@@ -458,5 +458,15 @@ function resolveToken(token: string | symbol | Constructor): string | symbol {
 }
 
 // ─── Global container singleton ────────────────────────────
+//
+// Routed through `globalThis` so duplicate bundles of `@rudderjs/core` share
+// the same Container instance. Defensive — today only `Application` imports
+// this, and the Application itself lives on globalThis, so consumers reaching
+// the container through `app().container` / `app().make()` already share one
+// instance. But if a future consumer ever imports `container` directly across
+// a bundle boundary, the singleton needs to survive the split.
 
-export const container = new Container()
+const CONTAINER_KEY = '__rudderjs_core_container__'
+const _containerGlobal = globalThis as Record<string, unknown>
+export const container: Container = (_containerGlobal[CONTAINER_KEY] as Container | undefined)
+  ?? (() => { const c = new Container(); _containerGlobal[CONTAINER_KEY] = c; return c })()

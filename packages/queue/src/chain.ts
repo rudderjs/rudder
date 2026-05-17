@@ -2,8 +2,19 @@ import type { Job, QueueAdapter } from './index.js'
 import { QueueRegistry } from './index.js'
 
 // ─── Chain State ────────────────────────────────────────────
+//
+// Routed through `globalThis` so duplicate `@rudderjs/queue` bundles share
+// one WeakMap. `Chain.of([...]).dispatch()` (entry.mjs bundle) stamps state
+// on each job via `_setChainState`; the worker reads via `getChainState(this)`
+// inside `handle()` — if the worker was loaded from a different bundle, the
+// WeakMap lookup misses (different Map identity even though the Job instance
+// is the same object). Same pattern as the static-state-singleton audit.
 
-const _chainStates = new WeakMap<Job, Record<string, unknown>>()
+const CHAIN_STATES_KEY = '__rudderjs_queue_chain_states__'
+const _chainStatesGlobal = globalThis as Record<string, unknown>
+const _chainStates: WeakMap<Job, Record<string, unknown>> =
+  (_chainStatesGlobal[CHAIN_STATES_KEY] as WeakMap<Job, Record<string, unknown>> | undefined)
+  ?? (() => { const m = new WeakMap<Job, Record<string, unknown>>(); _chainStatesGlobal[CHAIN_STATES_KEY] = m; return m })()
 
 /** Get the chain state for a job (empty object if not part of a chain). */
 export function getChainState(job: Job): Record<string, unknown> {

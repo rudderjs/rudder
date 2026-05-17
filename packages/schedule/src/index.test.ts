@@ -132,6 +132,16 @@ describe('Scheduler singleton', () => {
     assert.strictEqual(Schedule, schedule)
   })
 
+  it('singleton lives on globalThis under __rudderjs_schedule_singleton__', () => {
+    // Pinned so duplicate `@rudderjs/schedule` bundles share one Scheduler.
+    // User code registers tasks via entry.mjs's `schedule`; the cron runner +
+    // telescope ScheduleCollector read via `await import('@rudderjs/schedule')`
+    // resolved from node_modules — without globalThis routing, different
+    // Scheduler instances → registered tasks invisible to the runner.
+    const fromGlobal = (globalThis as Record<string, unknown>)['__rudderjs_schedule_singleton__']
+    assert.strictEqual(fromGlobal, schedule)
+  })
+
   it('call() registers a task and returns ScheduledTask', () => {
     const task = schedule.call(() => {})
     assert.ok(task instanceof ScheduledTask)

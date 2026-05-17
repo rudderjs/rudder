@@ -595,10 +595,21 @@ export function logger(message?: string, context?: Record<string, unknown>): typ
 }
 
 // ─── Driver Registry (for custom drivers) ──────────────────
+//
+// Routed through `globalThis` so the public `extendLog(name, factory)` API
+// survives bundle splits — user app calls `extendLog('sentry', ...)` in
+// `bootstrap/app.ts` (entry.mjs), `LogProvider.boot()` resolves channels via a
+// node_modules-loaded copy of `@rudderjs/log` → reading from a fresh Map →
+// "[RudderJS Log] Unknown log driver" on every channel using the custom
+// driver. Same pattern as the static-state-singleton audit.
 
 type DriverFactory = (config: LogChannelConfig) => LogAdapter
 
-const customDrivers = new Map<string, DriverFactory>()
+const CUSTOM_DRIVERS_KEY = '__rudderjs_log_custom_drivers__'
+const _customDriversGlobal = globalThis as Record<string, unknown>
+const customDrivers: Map<string, DriverFactory> =
+  (_customDriversGlobal[CUSTOM_DRIVERS_KEY] as Map<string, DriverFactory> | undefined)
+  ?? (() => { const m = new Map<string, DriverFactory>(); _customDriversGlobal[CUSTOM_DRIVERS_KEY] = m; return m })()
 
 function resolveFormatter(config: LogChannelConfig): LogFormatter {
   if (config.formatter === 'json') return new JsonFormatter()

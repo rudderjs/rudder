@@ -182,7 +182,18 @@ class Scheduler {
   reset(): void { this._tasks.length = 0 }
 }
 
-export const schedule = new Scheduler()
+// Routed through `globalThis` so duplicate `@rudderjs/schedule` bundles share
+// one Scheduler. User code calls `schedule.run('cmd', '* * * * *')` to
+// register tasks (from `routes/console.ts`, bundled into entry.mjs); the cron
+// runner and `@rudderjs/telescope`'s ScheduleCollector read `_tasks` via
+// `await import('@rudderjs/schedule')` — different bundle, different
+// Scheduler → no tasks visible to the runner. Same pattern as the
+// static-state-singleton audit.
+
+const SCHEDULE_KEY = '__rudderjs_schedule_singleton__'
+const _scheduleGlobal = globalThis as Record<string, unknown>
+export const schedule: Scheduler = (_scheduleGlobal[SCHEDULE_KEY] as Scheduler | undefined)
+  ?? (() => { const s = new Scheduler(); _scheduleGlobal[SCHEDULE_KEY] = s; return s })()
 export const Schedule = schedule
 
 // ─── Task execution with hooks/overlap/oneServer ──────────
