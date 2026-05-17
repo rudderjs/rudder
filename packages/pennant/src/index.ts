@@ -176,22 +176,43 @@ class ScopedFeature {
 
 // ─── Registry ─────────────────────────────────────────────
 
-class PennantRegistry {
-  private static manager: PennantManager | null = null
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/pennant` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles user code (including `AppServiceProvider`,
+ * which calls `Feature.define()`) inline, but `PennantProvider.boot()` runs
+ * from a `node_modules` copy of `@rudderjs/pennant` resolved via the provider
+ * auto-discovery manifest. Without a shared store, `set()` from the externalized
+ * copy would land on a different class than the one `Feature.*` reads from
+ * inside the bundle, and every feature check would throw "Not registered".
+ * Same pattern as the ORM/AI/MCP registries.
+ */
+interface PennantRegistryStore {
+  manager: PennantManager | null
+}
 
-  static set(manager: PennantManager): void { this.manager = manager }
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_pennant_registry__']) {
+  _g['__rudderjs_pennant_registry__'] = {
+    manager: null,
+  } satisfies PennantRegistryStore
+}
+const _store = _g['__rudderjs_pennant_registry__'] as PennantRegistryStore
+
+class PennantRegistry {
+  static set(manager: PennantManager): void { _store.manager = manager }
 
   static get(): PennantManager {
-    if (!this.manager) {
+    if (!_store.manager) {
       throw new Error(
         '[RudderJS Pennant] Not registered.\n' +
         '  Add pennant() to your providers in bootstrap/providers.ts'
       )
     }
-    return this.manager
+    return _store.manager
   }
 
-  static reset(): void { this.manager = null }
+  static reset(): void { _store.manager = null }
 }
 
 // ─── Fake ─────────────────────────────────────────────────

@@ -29,6 +29,26 @@ afterEach(() => {
   Application.resetForTesting()
 })
 
+// ─── globalThis-routed registry ───────────────────────────
+
+describe('PennantRegistry global store', () => {
+  it('state lives on globalThis so it survives a second copy of @rudderjs/pennant', async () => {
+    // Vite-bundled server apps inline user code (AppServiceProvider, which
+    // calls Feature.define()) into entry.mjs, but PennantProvider.boot()
+    // runs from a node_modules copy of @rudderjs/pennant resolved via the
+    // provider auto-discovery manifest. Without a globalThis-routed store,
+    // set() from the externalized copy would never be visible to get() from
+    // the bundled copy. This test pins the contract: the manager set during
+    // bootstrap is reachable on a predictable global key that the second
+    // copy would also read from.
+    Feature.define('any', () => true)
+    await Feature.active('any')
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_pennant_registry__'] as { manager: unknown } | undefined
+    assert.ok(store, 'global store should exist after PennantProvider.boot()')
+    assert.ok(store.manager, 'manager should be set on the global store')
+  })
+})
+
 // ─── Feature.define + active/value ────────────────────────
 
 describe('Feature.define() + active()', () => {
