@@ -375,6 +375,12 @@ describe('Global router and Route alias', () => {
   it('Route is the same object as router', () => {
     assert.strictEqual(Route, router)
   })
+
+  it('singleton is routed through globalThis under a pinned key', () => {
+    const g = globalThis as Record<string, unknown>
+    assert.strictEqual(g['__rudderjs_router__'], router,
+      'router must live on globalThis so duplicate module instances share state')
+  })
 })
 
 // ─── Route model binding ───────────────────────────────────
