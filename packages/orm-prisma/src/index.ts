@@ -1150,7 +1150,10 @@ export class DatabaseProvider extends ServiceProvider {
     }
 
     const adapter = await PrismaAdapter.make(prismaConfig)
-    await adapter.connect()
+    // Prisma's `$connect()` is optional — the client connects lazily on first
+    // query. Skipping it saves ~20–40 ms cold boot; the trade-off is DB-down
+    // surfacing on first query instead of at boot. Apps that need fail-fast at
+    // boot can call `await app.make('db').connect()` from AppServiceProvider.
 
     ModelRegistry.set(adapter)
     this.app.instance('db', adapter)
