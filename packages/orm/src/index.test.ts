@@ -89,6 +89,21 @@ describe('ModelRegistry', () => {
     assert.strictEqual(ModelRegistry.get(), second)
   })
 
+  it('state lives on globalThis so it survives a second copy of @rudderjs/orm', () => {
+    // Vite-bundled server apps inline `@rudderjs/orm` into entry.mjs, but the
+    // adapter packages (`@rudderjs/orm-prisma`, `@rudderjs/orm-drizzle`) are
+    // externalized and load their own copy of `@rudderjs/orm` from
+    // `node_modules`. Without a globalThis-routed store, `set()` from the
+    // externalized copy would never be visible to `getAdapter()` from the
+    // bundled copy. This test pins the contract: writes from this module copy
+    // are visible on a global key the second copy would also read from.
+    const adapter = makeAdapter()
+    ModelRegistry.set(adapter)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_orm_registry__'] as { adapter: unknown } | undefined
+    assert.ok(store, 'global store should exist after ModelRegistry.set()')
+    assert.strictEqual(store.adapter, adapter)
+  })
+
   // ─── Model class registration ───────────────────────────────────────────────
 
   it('all() returns an empty Map before any models are registered', () => {

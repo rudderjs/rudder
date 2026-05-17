@@ -69,24 +69,46 @@ export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor 
 
 // ─── Global ORM Registry ───────────────────────────────────
 
-export class ModelRegistry {
-  private static adapter: OrmAdapter | null = null
-  private static models: Map<string, typeof Model> = new Map()
-  private static listeners: Set<(name: string, ModelClass: typeof Model) => void> = new Set()
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/orm` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/orm` inline but externalizes
+ * `@rudderjs/orm-prisma` / `@rudderjs/orm-drizzle`. Those adapter packages
+ * resolve their own copy of `@rudderjs/orm` from `node_modules` at runtime;
+ * without a shared store, `ModelRegistry.set()` would land on a different
+ * class than the one Model handlers read from. Same pattern as ai/mcp/http/
+ * queue/sync/broadcast observer registries.
+ */
+interface OrmRegistryStore {
+  adapter:   OrmAdapter | null
+  models:    Map<string, typeof Model>
+  listeners: Set<(name: string, ModelClass: typeof Model) => void>
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_orm_registry__']) {
+  _g['__rudderjs_orm_registry__'] = {
+    adapter:   null,
+    models:    new Map(),
+    listeners: new Set(),
+  } satisfies OrmRegistryStore
+}
+const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
+
+export class ModelRegistry {
   static set(adapter: OrmAdapter): void {
-    this.adapter = adapter
+    _store.adapter = adapter
   }
 
   static get(): OrmAdapter | null {
-    return this.adapter
+    return _store.adapter
   }
 
   static getAdapter(): OrmAdapter {
-    if (!this.adapter) {
+    if (!_store.adapter) {
       throw new Error('[RudderJS ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
     }
-    return this.adapter
+    return _store.adapter
   }
 
   /**
@@ -102,11 +124,11 @@ export class ModelRegistry {
    */
   static register(ModelClass: typeof Model): void {
     const name = ModelClass.name
-    if (!name || this.models.has(name)) return
-    this.models.set(name, ModelClass)
+    if (!name || _store.models.has(name)) return
+    _store.models.set(name, ModelClass)
     installBelongsToManyMethods(ModelClass)
     installMorphPivotMethods(ModelClass)
-    for (const listener of this.listeners) listener(name, ModelClass)
+    for (const listener of _store.listeners) listener(name, ModelClass)
   }
 
   /**
@@ -114,7 +136,7 @@ export class ModelRegistry {
    * model collector and any code that needs to iterate discovered models.
    */
   static all(): Map<string, typeof Model> {
-    return this.models
+    return _store.models
   }
 
   /**
@@ -122,14 +144,14 @@ export class ModelRegistry {
    * class. Returns an unsubscribe function.
    */
   static onRegister(listener: (name: string, ModelClass: typeof Model) => void): () => void {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+    _store.listeners.add(listener)
+    return () => { _store.listeners.delete(listener) }
   }
 
   static reset(): void {
-    this.adapter = null
-    this.models.clear()
-    this.listeners.clear()
+    _store.adapter = null
+    _store.models.clear()
+    _store.listeners.clear()
   }
 }
 
