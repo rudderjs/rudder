@@ -46,6 +46,10 @@ import {
   type MorphToManyAccessor,
   type MorphedByManyAccessor,
 } from './relations/pivot-accessors.js'
+import {
+  partitionEagerLoads,
+  attachPolymorphicRelations,
+} from './polymorphic-eager-load.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
@@ -830,6 +834,15 @@ export abstract class Model {
      *  on this QB. Tagged on each hydrated instance via `aggregateKeysOf` so
      *  `_toData()` excludes them on writes. */
     const aggregateAliases = new Set<string>()
+    /** Polymorphic eager-load names captured by the proxy's `with` intercept.
+     *  Resolved after the terminal call returns hydrated parents (see
+     *  `./polymorphic-eager-load.ts`). Direct relation names are forwarded to
+     *  the adapter unchanged in the same call. */
+    const polymorphicWiths: string[] = []
+    const attachPoly = async (instances: InstanceType<T>[]): Promise<void> => {
+      if (polymorphicWiths.length === 0) return
+      await attachPolymorphicRelations(ModelClass, instances as ReadonlyArray<Model>, polymorphicWiths)
+    }
     const wrap = (r: unknown): InstanceType<T> => {
       const inst = ModelClass.hydrate.call(self, r) as InstanceType<T>
       if (inst && aggregateAliases.size > 0) {
@@ -912,26 +925,53 @@ export abstract class Model {
             return proxy
           }
         }
+        // `with(...names)` — intercept to partition polymorphic vs adapter
+        // relations. Polymorphic names are captured for post-terminal batch
+        // resolution; adapter names are forwarded unchanged.
+        if (prop === 'with') {
+          return (...names: string[]): QueryBuilder<InstanceType<T>> => {
+            const { adapter, polymorphic } = partitionEagerLoads(ModelClass, names)
+            for (const n of polymorphic) if (!polymorphicWiths.includes(n)) polymorphicWiths.push(n)
+            if (adapter.length > 0) {
+              ;(target as QueryBuilder<unknown>).with(...adapter)
+            }
+            return proxy
+          }
+        }
         const value = Reflect.get(target, prop, receiver) as unknown
         if (typeof value !== 'function') return value
 
         switch (prop) {
           case 'find':
-            return async (id: number | string): Promise<InstanceType<T> | null> =>
-              wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
+            return async (id: number | string): Promise<InstanceType<T> | null> => {
+              const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
+              if (inst) await attachPoly([inst])
+              return inst
+            }
           case 'first':
-            return async (): Promise<InstanceType<T> | null> =>
-              wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
+            return async (): Promise<InstanceType<T> | null> => {
+              const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
+              if (inst) await attachPoly([inst])
+              return inst
+            }
           case 'get':
-            return async (): Promise<InstanceType<T>[]> =>
-              wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+            return async (): Promise<InstanceType<T>[]> => {
+              const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+              await attachPoly(insts)
+              return insts
+            }
           case 'all':
-            return async (): Promise<InstanceType<T>[]> =>
-              wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
+            return async (): Promise<InstanceType<T>[]> => {
+              const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
+              await attachPoly(insts)
+              return insts
+            }
           case 'paginate':
             return async (page?: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> => {
               const r = await (target as QueryBuilder<InstanceType<T>>).paginate(page ?? 1, perPage)
-              return { ...r, data: wrapMany(r.data) }
+              const data = wrapMany(r.data)
+              await attachPoly(data)
+              return { ...r, data }
             }
           case 'create':
             return async (data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
