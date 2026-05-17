@@ -133,6 +133,23 @@ describe('MailRegistry', () => {
     MailRegistry.reset()
     assert.strictEqual(MailRegistry.getFrom().address, 'noreply@example.com')
   })
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/mail', () => {
+    // Vite-bundled server apps inline `@rudderjs/mail` (Mail.to(...).send()
+    // reads MailRegistry) into entry.mjs, but `MailProvider.boot()` and
+    // driver packages are externalized via the provider auto-discovery
+    // manifest. Without a globalThis-routed store, `set()` from the
+    // externalized copy would never be visible to `get()` from the bundled
+    // copy. This test pins the contract: writes from this module copy are
+    // visible on a global key the second copy would also read from.
+    const adapter: MailAdapter = { send: async () => {} }
+    MailRegistry.set(adapter)
+    MailRegistry.setFrom({ address: 'global@example.com', name: 'Global' })
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_mail_registry__'] as { adapter: unknown; from: { address: string } } | undefined
+    assert.ok(store, 'global store should exist after MailRegistry.set()')
+    assert.strictEqual(store.adapter, adapter)
+    assert.strictEqual(store.from.address, 'global@example.com')
+  })
 })
 
 // ─── MailPendingSend ───────────────────────────────────────

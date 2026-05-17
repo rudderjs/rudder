@@ -25,19 +25,45 @@ export interface MailAdapterProvider {
 
 // ─── Mail Registry ─────────────────────────────────────────
 
-export class MailRegistry {
-  private static adapter: MailAdapter | null = null
-  private static _from: { address: string; name?: string } = { address: 'noreply@example.com' }
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/mail` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/mail` inline (`Mail.to(...).send()`
+ * reads `MailRegistry`), but driver packages (`nodemailer`-backed adapters and
+ * future SMTP/SES drivers) and `MailProvider.boot()` itself are externalized
+ * via the provider auto-discovery manifest. Without a shared store, `set()`
+ * from the externalized copy would land on a different class than the one
+ * `Mail.*` reads from inside the bundle, producing a misleading
+ * `No mail adapter registered` error on every send in prod. Same pattern as
+ * PR #498 (`@rudderjs/orm` `ModelRegistry`), PR #500 (`@rudderjs/pennant`),
+ * PR #501 (`@rudderjs/cache`), and PR #502 (`@rudderjs/queue`).
+ */
+const DEFAULT_FROM: { address: string; name?: string } = { address: 'noreply@example.com' }
 
-  static set(adapter: MailAdapter): void  { this.adapter = adapter }
-  static get(): MailAdapter | null        { return this.adapter }
-  static setFrom(from: { address: string; name?: string }): void { this._from = { ...from } }
-  static getFrom(): { address: string; name?: string }           { return { ...this._from } }
+interface MailRegistryStore {
+  adapter: MailAdapter | null
+  from:    { address: string; name?: string }
+}
+
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_mail_registry__']) {
+  _g['__rudderjs_mail_registry__'] = {
+    adapter: null,
+    from:    { ...DEFAULT_FROM },
+  } satisfies MailRegistryStore
+}
+const _store = _g['__rudderjs_mail_registry__'] as MailRegistryStore
+
+export class MailRegistry {
+  static set(adapter: MailAdapter): void  { _store.adapter = adapter }
+  static get(): MailAdapter | null        { return _store.adapter }
+  static setFrom(from: { address: string; name?: string }): void { _store.from = { ...from } }
+  static getFrom(): { address: string; name?: string }           { return { ..._store.from } }
 
   /** @internal — clears the registered adapter and resets from. Used for testing. */
   static reset(): void {
-    this.adapter = null
-    this._from   = { address: 'noreply@example.com' }
+    _store.adapter = null
+    _store.from    = { ...DEFAULT_FROM }
   }
 }
 
