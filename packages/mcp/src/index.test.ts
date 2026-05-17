@@ -1324,3 +1324,27 @@ describe('registerOAuth2Metadata', () => {
     assert.deepStrictEqual(b['scopes_supported'], ['mcp.read', 'mcp.write'])
   })
 })
+
+describe('Mcp servers registry on globalThis', () => {
+  it('state lives on globalThis so it survives a second copy of @rudderjs/mcp', () => {
+    // Vite-bundled server apps inline `@rudderjs/mcp` (the route mounter
+    // reads `Mcp.getWebServers()`) into entry.mjs, but any `Mcp.web()` /
+    // `Mcp.local()` calls in `routes/console.ts` or `app/Mcp/...` can run
+    // from a node_modules copy resolved via the provider auto-discovery
+    // manifest. Without a globalThis-routed store, servers registered from
+    // the externalized copy would never be visible to the bundled copy's
+    // mounter — every `/mcp/*` request would 404. This test pins the
+    // contract: writes from this module copy are visible on a global key
+    // the second copy would also read from.
+    class S extends McpServer { Name = 'Echo'; Version = '1.0.0' }
+    Mcp.web('/mcp/echo', S)
+    Mcp.local('echo', S)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_mcp_servers__'] as {
+      web:   Map<string, unknown>
+      local: Map<string, unknown>
+    } | undefined
+    assert.ok(store, 'global store should exist after Mcp.web()')
+    assert.ok(store.web.has('/mcp/echo'))
+    assert.ok(store.local.has('echo'))
+  })
+})

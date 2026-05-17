@@ -39,11 +39,40 @@ type ModelClass = abstract new (...args: any[]) => unknown
 
 // ─── Gate ─────────────────────────────────────────────────
 
-export class Gate {
-  private static _abilities = new Map<string, AbilityCallback>()
-  private static _policies = new Map<ModelClass, PolicyClass>()
-  private static _beforeCallbacks: BeforeCallback[] = []
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/auth` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/auth` inline but
+ * `AuthProvider.boot()` (and any `Gate.define()` / `Gate.policy()` calls in
+ * `AppServiceProvider.boot()`) runs from a `node_modules` copy resolved via
+ * the provider auto-discovery manifest. Without a shared store, abilities
+ * registered from the externalized copy would never be visible to
+ * `Gate.allows()` calls from inside the bundle, silently denying every
+ * authorization check.
+ *
+ * Defensive migration per the #499 static-state singleton audit (the
+ * `@rudderjs/auth` provider currently boots from the bundle in practice, so
+ * this isn't broken today — but the layout is identical to packages that
+ * were). Same pattern as PR #498 (`@rudderjs/orm` `ModelRegistry`), #500–#505
+ * (pennant, cache, queue, mail, storage, hash).
+ */
+interface GateRegistryStore {
+  abilities: Map<string, AbilityCallback>
+  policies: Map<ModelClass, PolicyClass>
+  beforeCallbacks: BeforeCallback[]
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_gate_registry__']) {
+  _g['__rudderjs_gate_registry__'] = {
+    abilities: new Map<string, AbilityCallback>(),
+    policies: new Map<ModelClass, PolicyClass>(),
+    beforeCallbacks: [],
+  } satisfies GateRegistryStore
+}
+const _store = _g['__rudderjs_gate_registry__'] as GateRegistryStore
+
+export class Gate {
   // ── Define abilities ──────────────────────────────────
 
   /**
@@ -61,15 +90,15 @@ export class Gate {
     ability: string,
     callback: (user: Authenticatable, ...args: TArgs) => boolean | Promise<boolean>,
   ): void {
-    this._abilities.set(ability, callback as AbilityCallback)
+    _store.abilities.set(ability, callback as AbilityCallback)
   }
 
   static before(callback: BeforeCallback): void {
-    this._beforeCallbacks.push(callback)
+    _store.beforeCallbacks.push(callback)
   }
 
   static policy(model: ModelClass, policy: PolicyClass): void {
-    this._policies.set(model, policy)
+    _store.policies.set(model, policy)
   }
 
   // ── Check abilities ───────────────────────────────────
@@ -103,7 +132,7 @@ export class Gate {
   // ── Scoped to a specific user ─────────────────────────
 
   static forUser(user: Authenticatable): GateForUser {
-    return new GateForUser(user, this._abilities, this._policies, this._beforeCallbacks)
+    return new GateForUser(user, _store.abilities, _store.policies, _store.beforeCallbacks)
   }
 
   // ── Internal ──────────────────────────────────────────
@@ -119,7 +148,7 @@ export class Gate {
 
   private static async _check(user: Authenticatable, ability: string, ...args: unknown[]): Promise<CheckResult> {
     // Run before callbacks
-    for (const cb of this._beforeCallbacks) {
+    for (const cb of _store.beforeCallbacks) {
       const result = await cb(user, ability)
       if (result === true)  return { allowed: true,  resolvedVia: 'before' }
       if (result === false) return { allowed: false, resolvedVia: 'before' }
@@ -136,7 +165,7 @@ export class Gate {
     }
 
     // Fall back to defined abilities
-    const callback = this._abilities.get(ability)
+    const callback = _store.abilities.get(ability)
     if (!callback) return { allowed: false, resolvedVia: 'default' }
     return { allowed: await callback(user, ...args), resolvedVia: 'ability' }
   }
@@ -147,11 +176,11 @@ export class Gate {
     if (!constructor) return undefined
 
     // Direct match
-    const direct = this._policies.get(constructor)
+    const direct = _store.policies.get(constructor)
     if (direct) return direct
 
     // Check prototype chain
-    for (const [modelClass, policyClass] of this._policies) {
+    for (const [modelClass, policyClass] of _store.policies) {
       if (model instanceof modelClass) return policyClass
     }
 
@@ -207,9 +236,9 @@ export class Gate {
 
   /** @internal — reset all definitions. Used for testing. */
   static reset(): void {
-    this._abilities.clear()
-    this._policies.clear()
-    this._beforeCallbacks = []
+    _store.abilities.clear()
+    _store.policies.clear()
+    _store.beforeCallbacks = []
   }
 }
 

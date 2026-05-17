@@ -35,32 +35,59 @@ export async function tryWithFailover<T>(
   throw lastError ?? new Error('[RudderJS AI] No provider available for failover.')
 }
 
-export class AiRegistry {
-  private static readonly factories = new Map<string, ProviderFactory>()
-  private static _default: string | null = null
-  private static _models: AiModelConfig[] = []
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/ai` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/ai` inline (any agent
+ * resolution path reads `AiRegistry`), but `AiProvider.boot()` runs from a
+ * `node_modules` copy of `@rudderjs/ai/server` resolved via the provider
+ * auto-discovery manifest. Without a shared store, provider factories
+ * registered from the externalized copy would never be visible to
+ * `AiRegistry.resolve()` from inside the bundle — every agent call would
+ * throw "Unknown AI provider".
+ *
+ * Defensive migration per the #499 static-state singleton audit. Same pattern
+ * as PR #498 (`@rudderjs/orm` `ModelRegistry`), #500–#505 (pennant, cache,
+ * queue, mail, storage, hash).
+ */
+interface AiRegistryStore {
+  factories: Map<string, ProviderFactory>
+  default: string | null
+  models: AiModelConfig[]
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_ai_registry__']) {
+  _g['__rudderjs_ai_registry__'] = {
+    factories: new Map<string, ProviderFactory>(),
+    default: null,
+    models: [],
+  } satisfies AiRegistryStore
+}
+const _store = _g['__rudderjs_ai_registry__'] as AiRegistryStore
+
+export class AiRegistry {
   /** Register a provider factory */
   static register(factory: ProviderFactory): void {
-    this.factories.set(factory.name, factory)
+    _store.factories.set(factory.name, factory)
   }
 
   /** Get a registered provider factory by name */
   static getFactory(name: string): ProviderFactory {
-    const f = this.factories.get(name)
+    const f = _store.factories.get(name)
     if (!f) throw new Error(`[RudderJS AI] Unknown AI provider "${name}". Register it first.`)
     return f
   }
 
   /** Set the default provider/model string */
   static setDefault(modelString: string): void {
-    this._default = modelString
+    _store.default = modelString
   }
 
   /** Get the default provider/model string */
   static getDefault(): string {
-    if (!this._default) throw new Error('[RudderJS AI] No default model set. Add ai() to providers with a config.')
-    return this._default
+    if (!_store.default) throw new Error('[RudderJS AI] No default model set. Add ai() to providers with a config.')
+    return _store.default
   }
 
   /** Parse 'provider/model' string into [providerName, modelId] */
@@ -117,18 +144,18 @@ export class AiRegistry {
 
   /** Set available models for user selection */
   static setModels(models: AiModelConfig[]): void {
-    this._models = models
+    _store.models = models
   }
 
   /** Get available models */
   static getModels(): AiModelConfig[] {
-    return this._models
+    return _store.models
   }
 
   /** @internal — reset for testing */
   static reset(): void {
-    this.factories.clear()
-    this._default = null
-    this._models = []
+    _store.factories.clear()
+    _store.default = null
+    _store.models = []
   }
 }

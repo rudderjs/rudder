@@ -382,4 +382,32 @@ describe('@rudderjs/log', () => {
       assert.equal(entry.channel, 'test')
     })
   })
+
+  // ── globalThis-routed store ──
+
+  describe('LogRegistry store on globalThis', () => {
+    it('state lives on globalThis so it survives a second copy of @rudderjs/log', () => {
+      // Vite-bundled server apps inline `@rudderjs/log` (`Log.info` /
+      // `Log.error` resolve `LogRegistry.default()`) into entry.mjs, but
+      // `LogProvider.boot()` and any custom `LogRegistry.register()` calls in
+      // app code can run from a node_modules copy resolved via the provider
+      // auto-discovery manifest. Without a globalThis-routed store, channels
+      // registered from the externalized copy would never be visible to
+      // `Log.*` reading the bundled copy.
+      setup()
+      LogRegistry.shareContext({ foo: 'bar' })
+      LogRegistry.listen(() => {})
+      const store = (globalThis as Record<string, unknown>)['__rudderjs_log_registry__'] as {
+        channels:       Map<string, unknown>
+        defaultName:    string
+        shared:         Record<string, unknown>
+        eventListeners: unknown[]
+      } | undefined
+      assert.ok(store, 'global store should exist after LogRegistry.register()')
+      assert.ok(store.channels.has('test'))
+      assert.equal(store.defaultName, 'test')
+      assert.equal(store.shared['foo'], 'bar')
+      assert.equal(store.eventListeners.length, 1)
+    })
+  })
 })

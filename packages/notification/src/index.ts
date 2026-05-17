@@ -140,25 +140,46 @@ export interface NotificationChannel {
  * the same process. Tests that mutate channels MUST call `reset()` in
  * `beforeEach()` / `afterEach()` or registrations leak between tests.
  * Production code never calls `reset()`.
+ *
+ * **Shared store via `globalThis`.** Routes through a global key so the
+ * registry survives the case where `@rudderjs/notification` is loaded twice
+ * — typical in a Vite-bundled server where the framework bundles the package
+ * inline but `NotificationProvider.boot()` runs from a `node_modules` copy
+ * resolved via the provider auto-discovery manifest. Without a shared store,
+ * channels registered from the externalized copy would never be visible to
+ * `Notifier.send()` reading the bundled copy. Defensive migration per the
+ * #499 static-state singleton audit. Same pattern as PR #498
+ * (`@rudderjs/orm` `ModelRegistry`), #500–#505 (pennant, cache, queue, mail,
+ * storage, hash).
  */
-export class ChannelRegistry {
-  private static channels: Map<string, NotificationChannel> = new Map()
+interface NotificationChannelsStore {
+  channels: Map<string, NotificationChannel>
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_notification_channels__']) {
+  _g['__rudderjs_notification_channels__'] = {
+    channels: new Map<string, NotificationChannel>(),
+  } satisfies NotificationChannelsStore
+}
+const _store = _g['__rudderjs_notification_channels__'] as NotificationChannelsStore
+
+export class ChannelRegistry {
   static register(name: string, channel: NotificationChannel): void {
-    this.channels.set(name, channel)
+    _store.channels.set(name, channel)
   }
 
   static get(name: string): NotificationChannel | undefined {
-    return this.channels.get(name)
+    return _store.channels.get(name)
   }
 
   static has(name: string): boolean {
-    return this.channels.has(name)
+    return _store.channels.has(name)
   }
 
   /** @internal — clears all registered channels. Test-only; do NOT call from production code. */
   static reset(): void {
-    this.channels.clear()
+    _store.channels.clear()
   }
 }
 

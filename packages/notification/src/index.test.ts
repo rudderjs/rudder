@@ -503,3 +503,24 @@ describe('notification schema files', () => {
     assert.ok(content.includes('drizzle-orm/mysql-core'))
   })
 })
+
+describe('ChannelRegistry store on globalThis', () => {
+  beforeEach(() => ChannelRegistry.reset())
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/notification', () => {
+    // Vite-bundled server apps inline `@rudderjs/notification` (Notifier.send
+    // reads `ChannelRegistry.get(name)`) into entry.mjs, but
+    // `NotificationProvider.boot()` runs from a node_modules copy resolved
+    // via the provider auto-discovery manifest. Without a globalThis-routed
+    // store, the built-in mail/database/broadcast channels registered from
+    // the externalized copy would never be visible to `Notifier.send()`
+    // reading the bundled copy — every send would throw "Unknown channel".
+    const channel: NotificationChannel = { async send() {} }
+    ChannelRegistry.register('custom', channel)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_notification_channels__'] as {
+      channels: Map<string, unknown>
+    } | undefined
+    assert.ok(store, 'global store should exist after ChannelRegistry.register()')
+    assert.equal(store.channels.get('custom'), channel)
+  })
+})

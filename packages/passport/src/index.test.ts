@@ -4421,4 +4421,31 @@ describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
   })
 })
 
+describe('Passport config on globalThis', () => {
+  test('state lives on globalThis so it survives a second copy of @rudderjs/passport', () => {
+    // Vite-bundled server apps inline `@rudderjs/passport` (grant handlers
+    // and middleware read `Passport.*` config) into entry.mjs, but
+    // `PassportProvider.boot()` and any `Passport.tokensCan()` /
+    // `Passport.tokensExpireIn()` calls in app code can run from a
+    // node_modules copy resolved via the provider auto-discovery manifest.
+    // Without a globalThis-routed store, scopes/lifetimes/RSA keys set from
+    // the externalized copy would never be visible to grants reading the
+    // bundled copy. This test pins the contract: writes from this module
+    // copy are visible on a global key the second copy would also read from.
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access', write: 'Write access' })
+    Passport.tokensExpireIn(123_456)
+    Passport.useIssuer('https://app.example.com')
 
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_passport_config__'] as {
+      scopes:         Map<string, string>
+      tokenLifetime:  number
+      issuer:         string | null
+    } | undefined
+    assert.ok(store, 'global store should exist after Passport.* setters')
+    assert.equal(store.scopes.get('read'), 'Read access')
+    assert.equal(store.tokenLifetime, 123_456)
+    assert.equal(store.issuer, 'https://app.example.com')
+    Passport.reset()
+  })
+})

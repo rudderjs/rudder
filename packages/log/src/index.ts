@@ -257,72 +257,101 @@ class Channel {
 
 // ─── Log Registry ──────────────────────────────────────────
 
-export class LogRegistry {
-  private static channels = new Map<string, Channel>()
-  private static defaultName = 'console'
-  private static shared: Record<string, unknown> = {}
-  private static eventListeners: Array<(entry: LogEntry) => void> = []
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/log` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/log` inline but
+ * `LogProvider.boot()` runs from a `node_modules` copy resolved via the
+ * provider auto-discovery manifest. Without a shared store, channels
+ * registered from the externalized copy would never be visible to `Log.*`
+ * calls reading the bundled copy — every log call would throw "Channel
+ * 'console' is not registered". The shared-context surface (`shareContext`,
+ * `flushSharedContext`) and the event-listener subscription used by
+ * Telescope's log collector would silently drop writes the same way.
+ *
+ * Defensive migration per the #499 static-state singleton audit. Same pattern
+ * as PR #498 (`@rudderjs/orm` `ModelRegistry`), #500–#505 (pennant, cache,
+ * queue, mail, storage, hash).
+ */
+interface LogRegistryStore {
+  channels: Map<string, Channel>
+  defaultName: string
+  shared: Record<string, unknown>
+  eventListeners: Array<(entry: LogEntry) => void>
+}
 
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_log_registry__']) {
+  _g['__rudderjs_log_registry__'] = {
+    channels: new Map<string, Channel>(),
+    defaultName: 'console',
+    shared: {},
+    eventListeners: [],
+  } satisfies LogRegistryStore
+}
+const _store = _g['__rudderjs_log_registry__'] as LogRegistryStore
+
+export class LogRegistry {
   static register(name: string, adapter: LogAdapter, level: LogLevel = 'debug'): void {
-    this.channels.set(name, new Channel(name, adapter, level))
+    _store.channels.set(name, new Channel(name, adapter, level))
   }
 
   static channel(name: string): Channel {
-    const ch = this.channels.get(name)
+    const ch = _store.channels.get(name)
     if (!ch) throw new Error(`[RudderJS Log] Channel "${name}" is not registered.`)
     return ch
   }
 
   static default(): Channel {
-    return this.channel(this.defaultName)
+    return this.channel(_store.defaultName)
   }
 
   static setDefault(name: string): void {
-    this.defaultName = name
+    _store.defaultName = name
   }
 
   static getDefault(): string {
-    return this.defaultName
+    return _store.defaultName
   }
 
   /** Share context across ALL channels (current and future). */
   static shareContext(ctx: Record<string, unknown>): void {
-    Object.assign(this.shared, ctx)
+    Object.assign(_store.shared, ctx)
   }
 
   static sharedContext(): Record<string, unknown> {
-    return { ...this.shared }
+    return { ..._store.shared }
   }
 
   static flushSharedContext(): void {
-    this.shared = {}
+    _store.shared = {}
   }
 
   /** Listen to all log entries. */
   static listen(fn: (entry: LogEntry) => void): void {
-    this.eventListeners.push(fn)
+    _store.eventListeners.push(fn)
   }
 
   static listeners(): ReadonlyArray<(entry: LogEntry) => void> {
-    return this.eventListeners
+    return _store.eventListeners
   }
 
   /** Forget a channel (free memory, force re-creation). */
   static forgetChannel(name: string): void {
-    this.channels.delete(name)
+    _store.channels.delete(name)
   }
 
   /** Get all registered channel names. */
   static getChannels(): string[] {
-    return [...this.channels.keys()]
+    return [..._store.channels.keys()]
   }
 
   /** @internal */
   static reset(): void {
-    this.channels.clear()
-    this.defaultName = 'console'
-    this.shared = {}
-    this.eventListeners = []
+    _store.channels.clear()
+    _store.defaultName = 'console'
+    _store.shared = {}
+    _store.eventListeners = []
   }
 }
 
