@@ -910,6 +910,26 @@ describe('@Handle DI injection', () => {
     const result = await client.callTool('plain', { n: 7 })
     assert.equal((result.content[0] as { text: string }).text, 'got 7')
   })
+
+  it('@Handle metadata key uses Symbol.for(...) so define-side and read-side survive bundle splits', () => {
+    // The user's tool class is decorated at module-load in the app bundle;
+    // the MCP runtime reads the metadata later from a node_modules-resolved
+    // copy of `decorators.ts`. `Symbol(...)` would give two distinct
+    // identities → read-side `Reflect.getMetadata` returns `undefined` and
+    // every `@Handle(...)`-injected dep is silently dropped. The fix uses
+    // `Symbol.for(...)` so both copies share the process-global symbol
+    // registry entry. Pin the exact key so a future refactor doesn't drift.
+    class T extends McpTool {
+      schema() { return z.object({}) }
+      @Handle(Logger)
+      async handle(_input: Record<string, unknown>, _log: Logger) {
+        return McpResponse.text('ok')
+      }
+    }
+    const instance = new T()
+    const stored = Reflect.getMetadata(Symbol.for('rudderjs.mcp.inject'), instance, 'handle')
+    assert.ok(stored, 'metadata must be readable via the registered Symbol.for key')
+  })
 })
 
 // ─── Server-initiated notifications ──────────────────────
