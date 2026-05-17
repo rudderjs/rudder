@@ -27,6 +27,16 @@ describe('Chain', () => {
     QueueRegistry.set(new SyncAdapter())
   })
 
+  it('chain-state WeakMap lives on globalThis under __rudderjs_queue_chain_states__', () => {
+    // Pinned so duplicate `@rudderjs/queue` bundles share one WeakMap.
+    // Chain.of([...]).dispatch() (entry.mjs bundle) stamps state on each job;
+    // the worker reads via getChainState(this) inside handle() — if the
+    // worker was loaded from a different bundle, the WeakMap lookup misses
+    // (different Map identity even though the Job instance is identical).
+    const map = (globalThis as Record<string, unknown>)['__rudderjs_queue_chain_states__']
+    assert.ok(map instanceof WeakMap)
+  })
+
   it('dispatches jobs sequentially', async () => {
     const a = new StatefulJob()
     const b = new StatefulJob()

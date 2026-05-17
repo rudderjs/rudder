@@ -806,6 +806,25 @@ describe('Core contract baseline', () => {
 
 // ─── Group middleware store (globalThis-backed) ───────────
 
+describe('Cross-bundle singleton globalThis routing', () => {
+  // Pin the global keys so a future refactor doesn't drift back to module
+  // scope. Same shape as the appendToGroup test below — duplicate
+  // `@rudderjs/core` bundles must share these singletons or providers
+  // registered in one bundle would silently invisible to consumers in another.
+
+  it('container singleton lives on globalThis under __rudderjs_core_container__', () => {
+    const fromGlobal = (globalThis as Record<string, unknown>)['__rudderjs_core_container__']
+    assert.strictEqual(fromGlobal, container,
+      'container must be routed through globalThis to survive bundle splits')
+  })
+
+  it('dispatcher singleton lives on globalThis under __rudderjs_core_dispatcher__', () => {
+    const fromGlobal = (globalThis as Record<string, unknown>)['__rudderjs_core_dispatcher__']
+    assert.strictEqual(fromGlobal, dispatcher,
+      'dispatcher must be routed through globalThis to survive bundle splits')
+  })
+})
+
 describe('appendToGroup / resetGroupMiddleware', () => {
   const GROUP_KEY = '__rudderjs_group_middleware__'
 

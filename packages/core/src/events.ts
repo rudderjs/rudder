@@ -63,8 +63,20 @@ export class EventDispatcher {
 }
 
 // ─── Global Dispatcher Singleton ───────────────────────────
+//
+// Routed through `globalThis` so duplicate `@rudderjs/core` bundles share one
+// dispatcher. `dispatch()` is re-exported from several packages
+// (`@rudderjs/cashier-paddle`, `@rudderjs/queue` docs, etc.); a module-scope
+// `new EventDispatcher()` would split into independent instances under bundle
+// boundaries → listeners registered via `eventsProvider({...})` in user
+// `bootstrap/providers.ts` (entry.mjs bundle) silently invisible when a
+// node_modules-resolved framework package fires the event. Same pattern as
+// `groupMiddlewareStore` and the static-state-singleton audit.
 
-export const dispatcher = new EventDispatcher()
+const DISPATCHER_KEY = '__rudderjs_core_dispatcher__'
+const _dispatcherGlobal = globalThis as Record<string, unknown>
+export const dispatcher: EventDispatcher = (_dispatcherGlobal[DISPATCHER_KEY] as EventDispatcher | undefined)
+  ?? (() => { const d = new EventDispatcher(); _dispatcherGlobal[DISPATCHER_KEY] = d; return d })()
 
 /** Dispatch an event through the global dispatcher */
 export function dispatch<T extends object>(event: T): Promise<void> {
