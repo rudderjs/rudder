@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/schedule",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "rudderjs": {
     "provider": "ScheduleProvider",
     "stage": "feature"
