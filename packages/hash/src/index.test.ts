@@ -72,6 +72,21 @@ describe('HashRegistry', () => {
     HashRegistry.reset()
     assert.strictEqual(HashRegistry.get(), null)
   })
+
+  it('state lives on globalThis so it survives a second copy of @rudderjs/hash', () => {
+    // Vite-bundled server apps inline `@rudderjs/hash` (`Hash.make` / `Hash.check`
+    // read `HashRegistry`) into entry.mjs, but `HashProvider.boot()` runs from
+    // a node_modules copy of `@rudderjs/hash` resolved via the provider
+    // auto-discovery manifest. Without a globalThis-routed store, `set()` from
+    // the externalized copy would never be visible to `get()` from the bundled
+    // copy. This test pins the contract: writes from this module copy are
+    // visible on a global key the second copy would also read from.
+    const driver = new BcryptDriver()
+    HashRegistry.set(driver)
+    const store = (globalThis as Record<string, unknown>)['__rudderjs_hash_registry__'] as { driver: unknown } | undefined
+    assert.ok(store, 'global store should exist after HashRegistry.set()')
+    assert.strictEqual(store.driver, driver)
+  })
 })
 
 // ─── Hash facade ──────────────────────────────────────────
