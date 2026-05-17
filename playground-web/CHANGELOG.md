@@ -1,5 +1,13 @@
 # rudderjs-playground-web
 
+## 0.0.45
+
+### Patch Changes
+
+- Updated dependencies [21bf38e]
+  - @rudderjs/router@1.3.1
+  - @rudderjs/storage@1.1.4
+
 ## 0.0.44
 
 ### Patch Changes
