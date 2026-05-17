@@ -25,18 +25,42 @@ export interface CacheAdapterProvider {
 
 // ─── Cache Registry ────────────────────────────────────────
 
-export class CacheRegistry {
-  private static adapter: CacheAdapter | null = null
-  private static defaultName: string | null = null
+/**
+ * Shared singleton store routed through `globalThis` so the registry survives
+ * the case where `@rudderjs/cache` is loaded twice — typical in a Vite-bundled
+ * server where the framework bundles `@rudderjs/middleware` inline (which
+ * imports `CacheRegistry` for `RateLimit`), but `CacheProvider.boot()` runs
+ * from a `node_modules` copy of `@rudderjs/cache` resolved via the provider
+ * auto-discovery manifest. Without a shared store, `set()` from the
+ * externalized copy would land on a different class than the one `Cache.*` /
+ * `RateLimit` read from inside the bundle, producing a misleading
+ * `No cache adapter registered` error on every rate-limited route in prod.
+ * Same pattern as PR #498 (`@rudderjs/orm` `ModelRegistry`) and PR #500
+ * (`@rudderjs/pennant` `PennantRegistry`).
+ */
+interface CacheRegistryStore {
+  adapter:     CacheAdapter | null
+  defaultName: string | null
+}
 
-  static set(adapter: CacheAdapter): void    { this.adapter = adapter }
-  static get(): CacheAdapter | null          { return this.adapter }
-  static setDefaultName(name: string): void  { this.defaultName = name }
-  static getDefaultName(): string | null     { return this.defaultName }
+const _g = globalThis as Record<string, unknown>
+if (!_g['__rudderjs_cache_registry__']) {
+  _g['__rudderjs_cache_registry__'] = {
+    adapter:     null,
+    defaultName: null,
+  } satisfies CacheRegistryStore
+}
+const _store = _g['__rudderjs_cache_registry__'] as CacheRegistryStore
+
+export class CacheRegistry {
+  static set(adapter: CacheAdapter): void    { _store.adapter = adapter }
+  static get(): CacheAdapter | null          { return _store.adapter }
+  static setDefaultName(name: string): void  { _store.defaultName = name }
+  static getDefaultName(): string | null     { return _store.defaultName }
   /** @internal — clears the registered adapter. Used for testing. */
   static reset(): void {
-    this.adapter = null
-    this.defaultName = null
+    _store.adapter = null
+    _store.defaultName = null
   }
 }
 
