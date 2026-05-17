@@ -174,7 +174,9 @@ await post.increment('viewCount')
 
 ## Relations
 
-For eager loading, prefer your adapter's native relation engine — Prisma's `include` / `select`, Drizzle's `with()`. They're already type-safe and handle joins, depth, ordering, and selective columns out of the box.
+For **direct** eager loading (`hasOne` / `hasMany` / `belongsTo` / `belongsToMany`), prefer your adapter's native relation engine — Prisma's `include` / `select`, Drizzle's `with()`. They're already type-safe and handle joins, depth, ordering, and selective columns out of the box.
+
+For **polymorphic** eager loading (`morphMany` / `morphOne` / `morphTo` / `morphToMany` / `morphedByMany`), use `Model.with(...)` — the ORM resolves those in batched IN-queries because they have no FK declared in the underlying schema and so can't go through `include` / `with` natively. See [Eager loading polymorphic relations](#eager-loading-polymorphic-relations) below.
 
 For the *lazy fluent fetch* case — "give me a chainable QueryBuilder scoped to this parent record" — declare the relation on `static relations` and call `instance.related(name)`:
 
@@ -419,6 +421,50 @@ Don't use a class-field annotation (`tags!: () => ...`) — it creates an own pr
 - Pivot columns are not surfaced on read.
 - No `withTimestamps` — pass `attach(ids, { createdAt: new Date() })` or use schema defaults.
 - Each `morphedByMany` relation targets one concrete inverse class. To query *every* taggable for a tag, declare one relation per concrete class and merge results in app code (or drop to the adapter).
+
+### Eager loading polymorphic relations
+
+`Model.with(...)` resolves polymorphic relations in batched IN-queries — one query per `morphOne` / `morphMany` relation, one per distinct discriminator for `morphTo`, two (pivot + related) for `morphToMany` / `morphedByMany`. The N+1 path is gone:
+
+```ts
+// Single batched query for the comments — one round-trip, not N
+const posts = await Post.with('comments').all()
+
+posts[0]!.comments       // Comment[]  (morphMany → array)
+posts[0]!.comments[0]    // Comment instance
+
+// morphOne — single instance or null per parent
+const users = await User.with('avatar').all()
+users[0]!.avatar         // Image | null
+
+// morphTo — the inverse direction; grouped by `{morphName}Type` so each
+// concrete target table is hit once, not once per child
+const comments = await Comment.with('commentable').all()
+comments[0]!.commentable // Post | Video — the resolved parent instance
+
+// morphToMany — pivot lookup + IN-clause on the related table
+const post = (await Post.with('tags').get())[0]
+post!.tags               // Tag[]
+```
+
+Mix freely with direct relations — names are partitioned automatically:
+
+```ts
+// 'author' goes through Prisma's `include`; 'comments' + 'tags' route
+// through the polymorphic batch path. Single chain, all attached.
+const posts = await Post.with('author', 'comments', 'tags').get()
+```
+
+Soft-deletes on the related table are respected — queries go through the related Model's own query path which already filters `deletedAt IS NULL`.
+
+::: tip Single-instance + paginate
+`.with()` works on every terminal — `.find(id)`, `.first()`, `.get()`, `.all()`, `.paginate()`. For pagination, the polymorphic load runs against the current page's rows only, so a single batched query per relation regardless of page size.
+:::
+
+**Not yet supported** (v1):
+
+- **Nested** polymorphic eager-load — `Post.with('comments.author')`. Single level only for now.
+- **Constrained** polymorphic eager-load — `Post.with('comments', (q) => q.where('approved', true))`. The constrain-callback form on `with()` is direct-relation only today; use `whereHas` + a second `with(...)` chain as a workaround, or load + filter in app code.
 
 ### Querying parents by related rows
 
