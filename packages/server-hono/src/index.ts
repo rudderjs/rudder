@@ -605,7 +605,10 @@ class HonoAdapter implements ServerAdapter {
 // avoid a hard TS build dep, and the chain catches the not-installed case.
 {
   const viewModuleSpecifier = '@rudderjs/view'
-  void import(viewModuleSpecifier)
+  // `/* @vite-ignore */` silences Vite's "dynamic import cannot be analyzed"
+  // warning — the string-variable indirection is intentional so the TS build
+  // doesn't hard-resolve the peer.
+  void import(/* @vite-ignore */ viewModuleSpecifier)
     .then((m: { prewarmVikeServer?: () => Promise<unknown> }) =>
       m.prewarmVikeServer?.())
     .catch(() => { /* view not installed — fine */ })
