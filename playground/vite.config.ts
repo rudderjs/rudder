@@ -1,11 +1,13 @@
 import { defineConfig } from 'vite'
 import rudderjs from '@rudderjs/vite'
+import vike from 'vike/plugin'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [
     rudderjs(),
+    vike(),
     tailwindcss(),
     react(),
   ],
