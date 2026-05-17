@@ -1,21 +1,33 @@
 import 'reflect-metadata'
 
-const NAME_KEY = Symbol('mcp:name')
-const VERSION_KEY = Symbol('mcp:version')
-const INSTRUCTIONS_KEY = Symbol('mcp:instructions')
-const DESCRIPTION_KEY = Symbol('mcp:description')
-const INJECT_KEY = Symbol('mcp:inject')
+// Metadata keys MUST use `Symbol.for(...)` rather than `Symbol(...)` so that
+// they have the same identity across every module instance loaded in the
+// process. A bundled app's `entry.mjs` typically inlines `decorators.ts` (the
+// `@Handle` / `@Description` decorators run at module-load time when the
+// user's tool class is defined), while the MCP runtime that later reads the
+// metadata is resolved through `await import('@rudderjs/mcp/...')` —
+// node_modules → a second copy of `decorators.ts` with a separate `Symbol(...)`
+// identity. Write under one symbol, read from the other, get `undefined` →
+// every `@Handle(...)` injection silently fell back to no DI. `Symbol.for(...)`
+// shares one identity in the process-global symbol registry regardless of how
+// many bundled copies exist. Same class of bug fixed in router (#507) and the
+// static-state-singleton audit (#498/#500–#506).
+const NAME_KEY = Symbol.for('rudderjs.mcp.name')
+const VERSION_KEY = Symbol.for('rudderjs.mcp.version')
+const INSTRUCTIONS_KEY = Symbol.for('rudderjs.mcp.instructions')
+const DESCRIPTION_KEY = Symbol.for('rudderjs.mcp.description')
+const INJECT_KEY = Symbol.for('rudderjs.mcp.inject')
 
 // Tool annotations (MCP spec hints — clients use these to decide auto-approval, batching, sandboxing)
-const READ_ONLY_KEY     = Symbol('mcp:readOnly')
-const DESTRUCTIVE_KEY   = Symbol('mcp:destructive')
-const IDEMPOTENT_KEY    = Symbol('mcp:idempotent')
-const OPEN_WORLD_KEY    = Symbol('mcp:openWorld')
+const READ_ONLY_KEY     = Symbol.for('rudderjs.mcp.readOnly')
+const DESTRUCTIVE_KEY   = Symbol.for('rudderjs.mcp.destructive')
+const IDEMPOTENT_KEY    = Symbol.for('rudderjs.mcp.idempotent')
+const OPEN_WORLD_KEY    = Symbol.for('rudderjs.mcp.openWorld')
 
 // Resource annotations
-const AUDIENCE_KEY      = Symbol('mcp:audience')
-const PRIORITY_KEY      = Symbol('mcp:priority')
-const LAST_MODIFIED_KEY = Symbol('mcp:lastModified')
+const AUDIENCE_KEY      = Symbol.for('rudderjs.mcp.audience')
+const PRIORITY_KEY      = Symbol.for('rudderjs.mcp.priority')
+const LAST_MODIFIED_KEY = Symbol.for('rudderjs.mcp.lastModified')
 
 export function Name(name: string): ClassDecorator {
   return (target) => { Reflect.defineMetadata(NAME_KEY, name, target) }
