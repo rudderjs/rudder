@@ -6,6 +6,12 @@ export default defineConfig({
   lang: 'en-US',
   ignoreDeadLinks: 'localhostLinks',
 
+  // `docs/plans/` holds internal RFC/investigation artifacts, not user docs.
+  // They're not in the nav or sidebar and use technical prose (`Promise<T>`,
+  // `<2% CPU`, etc.) that VitePress's Vue-template parser rejects. Exclude
+  // them from the build to keep the published site focused on guide + packages.
+  srcExclude: ['plans/**'],
+
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
     ['meta', { name: 'theme-color', content: '#f97316' }],
