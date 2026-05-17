@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/queue",
-  "version": "4.1.4",
+  "version": "4.1.5",
   "rudderjs": {
     "provider": "QueueProvider",
     "stage": "feature"
