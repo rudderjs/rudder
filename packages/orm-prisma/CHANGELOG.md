@@ -1,5 +1,22 @@
 # @rudderjs/orm-prisma
 
+## 1.7.3
+
+### Patch Changes
+
+- fa81f44: `DatabaseProvider.boot()` no longer calls Prisma's `$connect()` eagerly. The client connects lazily on first query — Prisma's documented behavior — saving ~20–40 ms cold boot.
+
+  **Behavior change:** a database-down deploy now surfaces on the first user query instead of at boot. The HTTP server starts and accepts connections regardless of database availability. Apps that want fail-fast at boot can call `await app.make('db').connect()` from an `AppServiceProvider.boot()` hook.
+
+  No API change. No code change required in apps.
+
+- Updated dependencies [765a19d]
+- Updated dependencies [16f87a4]
+- Updated dependencies [4634586]
+- Updated dependencies [bdfe575]
+  - @rudderjs/ai@1.7.1
+  - @rudderjs/orm@1.9.3
+
 ## 1.7.2
 
 ### Patch Changes
