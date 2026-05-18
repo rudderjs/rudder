@@ -47,10 +47,11 @@ The full Model API — defining models, mass assignment, hidden fields, custom s
 import { Env } from '@rudderjs/support'
 
 export default {
-  default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'libsql',
+  default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'mysql' | 'libsql',
   connections: {
     sqlite:     { driver: 'sqlite'     as const, url: Env.get('DATABASE_URL', 'file:./dev.db') },
     postgresql: { driver: 'postgresql' as const, url: Env.get('DATABASE_URL', '') },
+    mysql:      { driver: 'mysql'      as const, url: Env.get('DATABASE_URL', '') },
     libsql:     { driver: 'libsql'     as const, url: Env.get('DATABASE_URL', '') },
   },
 }
