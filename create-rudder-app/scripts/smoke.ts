@@ -34,6 +34,15 @@ const argv = process.argv.slice(2)
 const KEEP = argv.includes('--keep')
 const PROFILE = argv.find((a) => a.startsWith('--profile='))?.split('=')[1] ?? 'default'
 
+type Framework = 'react' | 'vue' | 'solid'
+const FRAMEWORKS_VALID: readonly Framework[] = ['react', 'vue', 'solid']
+const FRAMEWORK_RAW = argv.find((a) => a.startsWith('--framework='))?.split('=')[1]
+if (FRAMEWORK_RAW !== undefined && !FRAMEWORKS_VALID.includes(FRAMEWORK_RAW as Framework)) {
+  console.error(`unknown framework "${FRAMEWORK_RAW}". options: ${FRAMEWORKS_VALID.join(', ')}`)
+  process.exit(2)
+}
+const FRAMEWORK = (FRAMEWORK_RAW ?? 'react') as Framework
+
 // ─── Profiles ────────────────────────────────────────────
 
 const profiles: Record<string, TemplateContext> = {
@@ -355,13 +364,24 @@ async function bootAndProbe(target: string, port: number): Promise<RunResult> {
 // ─── Main ───────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const ctx = profiles[PROFILE]
-  if (!ctx) {
+  const baseCtx = profiles[PROFILE]
+  if (!baseCtx) {
     console.error(`unknown profile "${PROFILE}". options: ${Object.keys(profiles).join(', ')}`)
     process.exit(2)
   }
 
-  console.log(`\n[create-rudder-app smoke] profile=${PROFILE}`)
+  // Apply --framework= override. Single-framework smoke (the matrix is the caller's
+  // job, not this script's). The demos-all profile defines a demos list that is
+  // currently react-only — when running against vue/solid we drop the demos so
+  // the scaffold compiles. See plan: docs/plans/2026-05-19-scaffolder-render-e2e.md.
+  const ctx: TemplateContext = {
+    ...baseCtx,
+    frameworks: [FRAMEWORK],
+    primary:    FRAMEWORK,
+    demos:      FRAMEWORK === 'react' ? baseCtx.demos : [],
+  }
+
+  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK}`)
 
   const work = await mkdtemp(path.join(tmpdir(), 'rudder-smoke-'))
   const target = path.join(work, ctx.name)
