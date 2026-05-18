@@ -277,7 +277,17 @@ async function main(): Promise<void> {
   // - `view:sync` regenerates `pages/__view/` (registry.d.ts + Vike stubs)
   //   from disk; needed when CI typechecks before Vite has run, or on a
   //   fresh clone before the first dev server boot.
-  const NO_BOOT_EXACT  = new Set(['providers:discover', 'module:publish', 'view:sync'])
+  // - `db:generate`, `db:push`, `migrate*` all spawn the underlying ORM
+  //   binary (prisma / drizzle-kit) and don't touch app state. Crucially,
+  //   `db:generate` MUST work before `@prisma/client` exists, which is
+  //   exactly the chicken-and-egg the framework boot would hit otherwise
+  //   on a fresh scaffolded project. (`db:seed` is deliberately NOT here —
+  //   user seeders use the ORM and need a booted app.)
+  const NO_BOOT_EXACT  = new Set([
+    'providers:discover', 'module:publish', 'view:sync',
+    'db:generate', 'db:push',
+    'migrate', 'migrate:fresh', 'migrate:status',
+  ])
   const NO_BOOT_PREFIX = ['make:']
   const skipBoot = process.argv.slice(2).some(arg =>
     NO_BOOT_EXACT.has(arg) || NO_BOOT_PREFIX.some(p => arg.startsWith(p)),

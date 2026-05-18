@@ -98,14 +98,16 @@ test('parseFlags — install boolean', () => {
   assert.strictEqual(r.partial.install, false)
 })
 
-test('parseFlags — empty demos list resolves to []', () => {
+test('parseFlags — --demos= is now a silent no-op (demos dropped from scaffolder)', () => {
   const r = parseFlags(['my-app', '--demos='])
   assert.deepStrictEqual(r.partial.demos, [])
 })
 
-test('parseFlags — demos=* is preserved (expanded later)', () => {
+test('parseFlags — --demos=* accepted for backwards compat but ignored', () => {
   const r = parseFlags(['my-app', '--demos=*'])
-  assert.deepStrictEqual(r.partial.demos, ['*'])
+  // Recipe-driven flow always sets demos to []; the flag is accepted to not
+  // break existing scripts/CI but its value no longer matters.
+  assert.deepStrictEqual(r.partial.demos, [])
 })
 
 test('parseFlags — invalid orm rejected', () => {
@@ -124,21 +126,26 @@ test('parseFlags — unknown framework rejected', () => {
   assert.throws(() => parseFlags(['my-app', '--frameworks=svelte']), FlagError)
 })
 
-test('parseFlags — unknown demo rejected', () => {
-  assert.throws(() => parseFlags(['my-app', '--demos=bogus-demo']), FlagError)
+test('parseFlags — unknown demo silently ignored (backwards-compat)', () => {
+  // Pre-recipe behavior was to throw FlagError on unknown demo values. Since
+  // demos were dropped from the default scaffolder, the flag is a no-op and
+  // doesn't validate its argument.
+  const r = parseFlags(['my-app', '--demos=bogus-demo'])
+  assert.deepStrictEqual(r.partial.demos, [])
 })
 
 // ─── validateJsonMode ───────────────────────────────────────
 
-test('validateJsonMode — empty input lists every required flag', () => {
+test('validateJsonMode — empty input lists every required flag (legacy path)', () => {
   const missing = validateJsonMode(undefined, {})
   assert.ok(missing.includes('<project-name>'))
   assert.ok(missing.includes('--orm'))
   assert.ok(missing.includes('--packages'))
   assert.ok(missing.includes('--frameworks'))
   assert.ok(missing.includes('--tailwind'))
-  assert.ok(missing.includes('--demos'))
   assert.ok(missing.includes('--install'))
+  // --demos is no longer required — demos were dropped from the scaffolder.
+  assert.ok(!missing.includes('--demos'))
 })
 
 test('validateJsonMode — orm=false skips --db', () => {
@@ -190,15 +197,13 @@ test('resolveJsonAnswers — defaults primary to first framework when omitted', 
   assert.strictEqual(answers.primary, 'vue')
 })
 
-test('resolveJsonAnswers — demos=* expands for react primary', () => {
+test('resolveJsonAnswers — demos is always [] (demos dropped from scaffolder)', () => {
   const answers = resolveJsonAnswers('app', {
     orm: 'prisma', db: 'sqlite',
     packages: packagesFromList(['auth', 'queue', 'mail'], 'prisma'),
     frameworks: ['react'], tailwind: false, demos: ['*'], install: false,
   })
-  assert.ok(answers.demos.length > 0)
-  assert.ok(answers.demos.includes('queue'))
-  assert.ok(answers.demos.includes('mail'))
+  assert.deepStrictEqual(answers.demos, [])
 })
 
 test('resolveJsonAnswers — demos=* yields empty for non-react primary', () => {
@@ -217,4 +222,205 @@ test('resolveJsonAnswers — orm=false coerces db to sqlite (unused)', () => {
   })
   assert.strictEqual(answers.db, 'sqlite')
   assert.strictEqual(answers.orm, false)
+})
+
+// ─── Recipe path (new flow) ─────────────────────────────────
+
+test('parseFlags — --recipe=web-app sets partial.recipe', () => {
+  const r = parseFlags(['my-app', '--recipe=web-app'])
+  assert.strictEqual(r.partial.recipe, 'web-app')
+})
+
+test('parseFlags — invalid --recipe rejected', () => {
+  assert.throws(() => parseFlags(['my-app', '--recipe=bogus']), FlagError)
+})
+
+test('parseFlags — --framework=react sets singular frameworks + primary', () => {
+  const r = parseFlags(['my-app', '--framework=react'])
+  assert.deepStrictEqual(r.partial.frameworks, ['react'])
+  assert.strictEqual(r.partial.primary, 'react')
+})
+
+test('parseFlags — --framework=none yields empty frameworks', () => {
+  const r = parseFlags(['my-app', '--framework=none'])
+  assert.deepStrictEqual(r.partial.frameworks, [])
+})
+
+test('parseFlags — invalid --framework rejected', () => {
+  assert.throws(() => parseFlags(['my-app', '--framework=svelte']), FlagError)
+})
+
+test('parseFlags — --styling=tailwind+shadcn maps to tailwind+shadcn booleans', () => {
+  const r = parseFlags(['my-app', '--styling=tailwind+shadcn'])
+  assert.strictEqual(r.partial.tailwind, true)
+  assert.strictEqual(r.partial.shadcn,   true)
+})
+
+test('parseFlags — --styling=tailwind sets tailwind only', () => {
+  const r = parseFlags(['my-app', '--styling=tailwind'])
+  assert.strictEqual(r.partial.tailwind, true)
+  assert.strictEqual(r.partial.shadcn,   false)
+})
+
+test('parseFlags — --styling=plain disables both', () => {
+  const r = parseFlags(['my-app', '--styling=plain'])
+  assert.strictEqual(r.partial.tailwind, false)
+  assert.strictEqual(r.partial.shadcn,   false)
+})
+
+test('parseFlags — explicit --tailwind overrides --styling', () => {
+  const r = parseFlags(['my-app', '--styling=tailwind+shadcn', '--tailwind=false'])
+  assert.strictEqual(r.partial.tailwind, false)
+  // --styling still applies to shadcn (no explicit override)
+  assert.strictEqual(r.partial.shadcn,   true)
+})
+
+test('parseFlags — --git boolean', () => {
+  const t = parseFlags(['my-app', '--git=false'])
+  assert.strictEqual(t.partial.git, false)
+  const f = parseFlags(['my-app', '--git=true'])
+  assert.strictEqual(f.partial.git, true)
+})
+
+test('parseFlags — --db-ready boolean', () => {
+  const r = parseFlags(['my-app', '--db-ready=false'])
+  assert.strictEqual(r.partial.dbReady, false)
+})
+
+test('validateJsonMode — --recipe=web-app shortens required flags', () => {
+  const missing = validateJsonMode('app', {
+    recipe:    'web-app',
+    db:        'sqlite',
+    framework: undefined, // ignored — singular shortcut covered by --framework flag
+    frameworks: ['react'],
+    install:   true,
+  } as never)
+  assert.deepStrictEqual(missing, [])
+})
+
+test('validateJsonMode — --recipe=web-app without --framework lists it', () => {
+  const missing = validateJsonMode('app', {
+    recipe:  'web-app',
+    db:      'sqlite',
+    install: true,
+  })
+  assert.ok(missing.includes('--framework'))
+})
+
+test('validateJsonMode — --recipe=api-service skips --framework', () => {
+  const missing = validateJsonMode('app', {
+    recipe:  'api-service',
+    db:      'sqlite',
+    install: true,
+  })
+  assert.ok(!missing.includes('--framework'))
+  assert.deepStrictEqual(missing, [])
+})
+
+test('validateJsonMode — --recipe=minimal skips --db', () => {
+  const missing = validateJsonMode('app', {
+    recipe:  'minimal',
+    install: true,
+  })
+  assert.ok(!missing.includes('--db'))
+  assert.deepStrictEqual(missing, [])
+})
+
+test('validateJsonMode — --recipe=custom still requires --packages', () => {
+  const missing = validateJsonMode('app', {
+    recipe:  'custom',
+    db:      'sqlite',
+    install: true,
+  })
+  assert.ok(missing.includes('--packages'))
+})
+
+test('resolveJsonAnswers — recipe=web-app derives auth + prisma', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    db:         'sqlite',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.orm, 'prisma')
+  assert.strictEqual(answers.packages.auth, true)
+  assert.strictEqual(answers.tailwind, true)
+  assert.strictEqual(answers.shadcn,   true)
+  assert.strictEqual(answers.recipe,   'web-app')
+  assert.deepStrictEqual(answers.demos, [])
+})
+
+test('resolveJsonAnswers — recipe=saas adds queue + mail + notifications', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'saas',
+    db:         'sqlite',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.packages.auth,          true)
+  assert.strictEqual(answers.packages.queue,         true)
+  assert.strictEqual(answers.packages.mail,          true)
+  assert.strictEqual(answers.packages.notifications, true)
+  assert.strictEqual(answers.packages.broadcast,     false)
+})
+
+test('resolveJsonAnswers — recipe=api-service has no frontend', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:  'api-service',
+    db:      'sqlite',
+    install: true,
+  })
+  assert.deepStrictEqual(answers.frameworks, [])
+  assert.strictEqual(answers.tailwind, false)
+  assert.strictEqual(answers.packages.http, true)
+})
+
+test('resolveJsonAnswers — recipe=minimal has no orm + no frontend', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:  'minimal',
+    install: true,
+  })
+  assert.strictEqual(answers.orm, false)
+  assert.deepStrictEqual(answers.frameworks, [])
+  assert.strictEqual(answers.packages.auth, false)
+})
+
+test('resolveJsonAnswers — recipe defaults dbReady=true for sqlite', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    db:         'sqlite',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.dbReady, true)
+})
+
+test('resolveJsonAnswers — recipe defaults dbReady=false for postgres', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    db:         'postgresql',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.dbReady, false)
+})
+
+test('resolveJsonAnswers — recipe defaults git=true', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    db:         'sqlite',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.git, true)
+})
+
+test('resolveJsonAnswers — legacy path defaults git+dbReady', () => {
+  const answers = resolveJsonAnswers('app', {
+    orm: 'prisma', db: 'sqlite', packages: packagesFromList(['auth'], 'prisma'),
+    frameworks: ['react'], tailwind: true, shadcn: true, demos: [], install: true,
+  })
+  assert.strictEqual(answers.git,     true)
+  assert.strictEqual(answers.dbReady, true)
+  assert.strictEqual(answers.recipe,  'custom')
 })
