@@ -60,7 +60,9 @@
     "pg": "^8.0.0",
     "@prisma/adapter-pg": "^7.0.0",
     "@libsql/client": "^0.17.0",
-    "@prisma/adapter-libsql": "^7.0.0"
+    "@prisma/adapter-libsql": "^7.0.0",
+    "mariadb": "^3.0.0",
+    "@prisma/adapter-mariadb": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

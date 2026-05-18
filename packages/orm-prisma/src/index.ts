@@ -1012,6 +1012,21 @@ class PrismaAdapter implements OrmAdapter {
       const { Pool } = await import('pg') as typeof import('pg')
       const { PrismaPg } = await import('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg')
       opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
+    } else if (config.driver === 'mysql' && config.url) {
+      // MySQL / MariaDB via the mariadb wire-compatible adapter. The
+      // `@prisma/adapter-mariadb` constructor takes parsed connection options
+      // (the underlying `mariadb` npm client doesn't accept a URL directly),
+      // so we parse the standard mysql:// URL into host / user / password
+      // / port / database.
+      const { PrismaMariaDb } = await import('@prisma/adapter-mariadb') as typeof import('@prisma/adapter-mariadb')
+      const u = new URL(config.url)
+      opts['adapter'] = new PrismaMariaDb({
+        host:     u.hostname,
+        port:     u.port ? Number(u.port) : 3306,
+        user:     decodeURIComponent(u.username),
+        password: decodeURIComponent(u.password),
+        database: u.pathname.replace(/^\//, ''),
+      })
     } else if (config.driver === 'libsql' && config.url) {
       // Remote libSQL / Turso
       const { PrismaLibSql } = await import('@prisma/adapter-libsql') as typeof import('@prisma/adapter-libsql')
