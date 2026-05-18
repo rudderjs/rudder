@@ -77,7 +77,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/*.test.js",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "clean": "rm -rf dist"
   },
   "dependencies": {

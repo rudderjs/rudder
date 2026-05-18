@@ -44,7 +44,7 @@ export async function resolveComponent(
       }
       if (!mod.default) {
         throw new Error(
-          `Terminal component "${id}" (${fullPath}) has no default export. ` +
+          `Terminal component "${id}" (${toPosix(fullPath)}) has no default export. ` +
           `Export a React component as the default export.`,
         )
       }
@@ -57,6 +57,8 @@ export async function resolveComponent(
 
   throw new Error(
     `Terminal component "${id}" not found. ` +
-    `Expected file at: ${path.join(appRoot, rel)}.{tsx,ts,js}`,
+    `Expected file at: ${toPosix(path.join(appRoot, rel))}.{tsx,ts,js}`,
   )
 }
+
+const toPosix = (p: string) => p.split(path.sep).join('/')
