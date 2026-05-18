@@ -34,7 +34,9 @@ pnpm add -D @types/better-sqlite3
 | `mysql` | `mysql2` | MySQL / MariaDB |
 | `libsql` | `@libsql/client` | Turso / libSQL — SQLite-compatible schema |
 
-The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → sqlite, `postgresql:` → postgresql, `libsql:` → libsql) unless you set `driver` explicitly.
+The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → sqlite, `postgresql:` → postgresql, `mysql:` → mysql, `libsql:` → libsql) unless you set `driver` explicitly.
+
+MySQL uses `@prisma/adapter-mariadb` under the hood (wire-compatible with both MySQL 5.7+ and MariaDB 10.x), so a single `'mysql'` driver value covers both engines. Install the adapter once: `pnpm add mariadb @prisma/adapter-mariadb`. Available in `@rudderjs/orm-prisma` 1.8.0+.
 
 ## Multi-file schema
 
