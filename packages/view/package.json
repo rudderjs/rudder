@@ -27,7 +27,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --experimental-test-module-mocks --test 'dist-test/**/*.test.js'; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --experimental-test-module-mocks --test",
     "clean": "rm -rf dist"
   },
   "peerDependencies": {

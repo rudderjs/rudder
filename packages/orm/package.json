@@ -36,7 +36,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/dirty.test.js dist-test/morph.test.js dist-test/morph-many-to-many.test.js dist-test/polymorphic-eager-load.test.js dist-test/belongs-to-many-pivot.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/seeder.test.js dist-test/prune.test.js dist-test/vector-cast.test.js dist-test/commands/migrate.test.js dist-test/commands/prune.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/dirty.test.js dist-test/morph.test.js dist-test/morph-many-to-many.test.js dist-test/polymorphic-eager-load.test.js dist-test/belongs-to-many-pivot.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/seeder.test.js dist-test/prune.test.js dist-test/vector-cast.test.js dist-test/commands/migrate.test.js dist-test/commands/prune.test.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {

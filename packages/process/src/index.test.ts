@@ -2,6 +2,8 @@ import { describe, it, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Process, PendingProcess, FakeProcess, ProcessFailedException } from './index.js'
 
+const posixOnly = { skip: process.platform === 'win32' ? 'POSIX shell required' : false }
+
 // ─── Process.run() ────────────────────────────────────────
 
 describe('Process.run()', () => {
@@ -42,14 +44,14 @@ describe('ProcessResult.throw()', () => {
 // ─── PendingProcess builder ───────────────────────────────
 
 describe('PendingProcess', () => {
-  it('supports env vars', async () => {
+  it('supports env vars', posixOnly, async () => {
     const result = await Process.command('echo $MY_VAR')
       .env({ MY_VAR: 'hello-env' })
       .run()
     assert.strictEqual(result.stdout.trim(), 'hello-env')
   })
 
-  it('supports working directory', async () => {
+  it('supports working directory', posixOnly, async () => {
     const result = await Process.command('pwd')
       .path('/tmp')
       .run()
@@ -57,14 +59,14 @@ describe('PendingProcess', () => {
     assert.ok(result.stdout.trim().endsWith('/tmp'))
   })
 
-  it('supports stdin input', async () => {
+  it('supports stdin input', posixOnly, async () => {
     const result = await Process.command('cat')
       .input('hello-stdin')
       .run()
     assert.strictEqual(result.stdout.trim(), 'hello-stdin')
   })
 
-  it('supports timeout', async () => {
+  it('supports timeout', posixOnly, async () => {
     const result = await Process.command('sleep 10')
       .timeout(0.1)
       .run()
@@ -91,7 +93,7 @@ describe('Process.start()', () => {
     assert.ok(result.stdout.includes('background'))
   })
 
-  it('reports running state', async () => {
+  it('reports running state', posixOnly, async () => {
     const running = await Process.start('sleep 0.5')
     assert.ok(running.pid > 0)
     // Process should be running initially
@@ -123,7 +125,7 @@ describe('Process.pool()', () => {
 // ─── Process.pipe() ───────────────────────────────────────
 
 describe('Process.pipe()', () => {
-  it('pipes stdout from one command to stdin of next', async () => {
+  it('pipes stdout from one command to stdin of next', posixOnly, async () => {
     const result = await Process.pipe([
       'echo hello world',
       'tr a-z A-Z',

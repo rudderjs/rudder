@@ -349,7 +349,7 @@ describe('migrate — writeVectorMigration()', () => {
     }))
     const result = await writeVectorMigration({ table: 'documents', column: 'embedding', dimensions: 1536 }, tmpDir, fixedNow)
 
-    assert.match(result.filePath, /prisma\/migrations\/20260511123456_add_embedding_vector_to_documents\/migration\.sql$/)
+    assert.match(result.filePath.replace(/\\/g, '/'), /prisma\/migrations\/20260511123456_add_embedding_vector_to_documents\/migration\.sql$/)
     const written = await fs.readFile(result.filePath, 'utf8')
     assert.match(written, /CREATE EXTENSION IF NOT EXISTS vector;/)
     assert.match(written, /vector_cosine_ops/)
@@ -361,13 +361,13 @@ describe('migrate — writeVectorMigration()', () => {
     }))
     const result = await writeVectorMigration({ table: 'documents', column: 'embedding', dimensions: 768 }, tmpDir, fixedNow)
 
-    assert.match(result.filePath, /drizzle\/20260511123456_add_embedding_vector_to_documents\.sql$/)
+    assert.match(result.filePath.replace(/\\/g, '/'), /drizzle\/20260511123456_add_embedding_vector_to_documents\.sql$/)
   })
 
   it('falls back to drizzle layout when no ORM is detected', async () => {
     await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({}))
     const result = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8 }, tmpDir, fixedNow)
-    assert.match(result.filePath, /drizzle\//)
+    assert.match(result.filePath.replace(/\\/g, '/'), /drizzle\//)
   })
 
   it('returns the Prisma schema snippet only for Prisma projects', async () => {
@@ -390,7 +390,7 @@ describe('migrate — writeVectorMigration()', () => {
       dependencies: { '@rudderjs/orm-drizzle': 'latest' },
     }))
     const result = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8, orm: 'prisma' }, tmpDir, fixedNow)
-    assert.match(result.filePath, /prisma\/migrations\//)
+    assert.match(result.filePath.replace(/\\/g, '/'), /prisma\/migrations\//)
     assert.ok(result.prismaSchemaSnippet)
   })
 })

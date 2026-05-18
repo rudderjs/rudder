@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import path from 'node:path'
 import type { Plugin } from 'vite'
 import { rudderjs } from './index.js'
 
@@ -140,7 +141,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
-    const expected = ['routes', 'bootstrap', 'app'].map(d => `${cwd}/${d}`)
+    const expected = ['routes', 'bootstrap', 'app'].map(d => path.resolve(cwd, d))
     for (const e of expected) {
       assert.ok(server.watcher.added.includes(e), `should watch ${e}`)
     }
@@ -154,7 +155,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', `${cwd}/routes/web.ts`)
+    server.watcher.fire('change', path.join(cwd, 'routes', 'web.ts'))
 
     const g = globalThis as Record<string, unknown>
     assert.equal(g['__rudderjs_instance__'], undefined)
@@ -171,9 +172,9 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', `${cwd}/node_modules/some-pkg/index.js`)
-    server.watcher.fire('change', `${cwd}/pages/+Page.tsx`)
-    server.watcher.fire('change', `${cwd}/some-file.txt`)
+    server.watcher.fire('change', path.join(cwd, 'node_modules', 'some-pkg', 'index.js'))
+    server.watcher.fire('change', path.join(cwd, 'pages', '+Page.tsx'))
+    server.watcher.fire('change', path.join(cwd, 'some-file.txt'))
 
     const g = globalThis as Record<string, unknown>
     assert.deepEqual(g['__rudderjs_instance__'], { stub: true }, 'singleton should NOT be cleared')
@@ -189,8 +190,8 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', `${cwd}/app/Views/Home.tsx`)
-    server.watcher.fire('change', `${cwd}/app/Views/Auth/Login.tsx`)
+    server.watcher.fire('change', path.join(cwd, 'app', 'Views', 'Home.tsx'))
+    server.watcher.fire('change', path.join(cwd, 'app', 'Views', 'Auth', 'Login.tsx'))
 
     const g = globalThis as Record<string, unknown>
     assert.deepEqual(g['__rudderjs_instance__'], { stub: true }, 'singleton should NOT be cleared for view edits')
@@ -207,7 +208,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', `${cwd}/app/Models/User.ts`)
+    server.watcher.fire('change', path.join(cwd, 'app', 'Models', 'User.ts'))
 
     const g = globalThis as Record<string, unknown>
     assert.equal(g['__rudderjs_instance__'], undefined, 'singleton cleared for model edits')

@@ -53,7 +53,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test 'dist-test/**/*.test.js'; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "clean": "rm -rf dist"
   },
   "peerDependencies": {

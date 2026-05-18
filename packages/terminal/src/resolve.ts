@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
 import type { ComponentType } from 'react'
 
 /**
@@ -22,7 +23,10 @@ export function idToPath(id: string): string {
   const segments = id
     .split('.')
     .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-  return path.join('app', 'Terminal', ...segments)
+  // POSIX separators — id-to-path is part of the public API and must
+  // be platform-stable. fs.access / dynamic import accept mixed slashes
+  // on Windows, so downstream code keeps working.
+  return path.posix.join('app', 'Terminal', ...segments)
 }
 
 /**
@@ -39,12 +43,13 @@ export async function resolveComponent(
     const fullPath = path.join(appRoot, rel + ext)
     try {
       await fs.access(fullPath)
-      const mod = await import(/* @vite-ignore */ fullPath) as {
+      // Node's ESM loader requires file:// URLs for absolute paths on Windows.
+      const mod = await import(/* @vite-ignore */ pathToFileURL(fullPath).href) as {
         default?: ComponentType<Record<string, unknown>>
       }
       if (!mod.default) {
         throw new Error(
-          `Terminal component "${id}" (${fullPath}) has no default export. ` +
+          `Terminal component "${id}" (${toPosix(fullPath)}) has no default export. ` +
           `Export a React component as the default export.`,
         )
       }
@@ -57,6 +62,8 @@ export async function resolveComponent(
 
   throw new Error(
     `Terminal component "${id}" not found. ` +
-    `Expected file at: ${path.join(appRoot, rel)}.{tsx,ts,js}`,
+    `Expected file at: ${toPosix(path.join(appRoot, rel))}.{tsx,ts,js}`,
   )
 }
+
+const toPosix = (p: string) => p.split(path.sep).join('/')

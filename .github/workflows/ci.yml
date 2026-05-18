@@ -52,9 +52,49 @@ jobs:
         run: pnpm lint
 
   build-test:
-    name: Build & Test
+    name: Build & Test (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: ['20', '22']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache turbo artifacts
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-node${{ matrix.node-version }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-node${{ matrix.node-version }}-
+
+      - name: Build
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
+
+      - name: Test
+        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
+
+  docs-build:
+    name: Docs Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -72,23 +112,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache turbo artifacts
-        uses: actions/cache@v4
-        with:
-          path: node_modules/.cache/turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Build
-        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
-
-      - name: Test
-        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
-
       - name: Build docs site
         # Docs build catches VitePress/Vue-parser breakage in `.md` files
         # (plan docs accidentally landing `Promise<T>` or `<5%` patterns, etc.).
         # The release workflow runs this as part of `pnpm build` and used to
         # be the first place such breakage surfaced — now it's caught at PR time.
+        # Pulled out of build-test so it doesn't run 4× per matrix cell.
         run: pnpm --filter @rudderjs/docs build

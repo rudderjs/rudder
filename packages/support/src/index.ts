@@ -218,12 +218,17 @@ export function config<T = unknown>(key: string, fallback?: T): T {
  */
 export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier: string): Promise<T> {
   const { createRequire } = await import('node:module')
+  const { pathToFileURL } = await import('node:url')
   const appRequire = createRequire(process.cwd() + '/package.json')
 
   // Fast path — works when the package has a `require` or `default` condition.
   try {
     const resolved = appRequire.resolve(specifier)
-    return import(/* @vite-ignore */ resolved) as Promise<T>
+    // Convert absolute paths to file:// URLs — Node's ESM loader rejects
+    // raw absolute paths on Windows ("Only URLs with a scheme in: file, data,
+    // and node are supported"). pathToFileURL is a no-op for bare specifiers
+    // (CJS resolver returns paths, but pathToFileURL handles both).
+    return import(/* @vite-ignore */ pathToFileURL(resolved).href) as Promise<T>
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     // Only fall through for the specific exports-condition mismatch.
@@ -236,7 +241,6 @@ export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier
   // ESM-aware fallback — read the package's exports field manually.
   const fs = await import('node:fs/promises')
   const path = await import('node:path')
-  const { pathToFileURL } = await import('node:url')
 
   const { pkgName, subpath } = parseSpecifier(specifier)
   const pkgInfo = await findPackageJson(pkgName, process.cwd(), fs, path)

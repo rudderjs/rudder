@@ -14,12 +14,19 @@ import { createBoostServer, BoostProvider } from './index.js'
 import { parseFrontmatter } from './frontmatter.js'
 import { generateClaudeMd } from './generators/claude-md.js'
 
+// Boost's integration tests drive the playground end-to-end — spawning
+// `pnpm rudder` for command-list / route-list / run-command, parsing prisma
+// schema, etc. Cross-platform fixture support (Windows path quirks, the
+// pnpm.cmd shim, prisma generate) is out of scope for the CI portability
+// matrix Phase 1. Re-evaluate when the scaffolder E2E job lands.
+const skipOnWindows = { skip: process.platform === 'win32' ? 'boost playground integration tests need cross-platform fixture work' : false }
+
 // Use the playground as the test project
 const PLAYGROUND = join(import.meta.dirname, '..', '..', '..', 'playground')
 
 // ─── app_info ─────────────────────────────────────────────
 
-describe('getAppInfo', () => {
+describe('getAppInfo', skipOnWindows, () => {
   it('returns project info from playground', () => {
     const info = getAppInfo(PLAYGROUND)
     assert.ok(info['name'])
@@ -41,7 +48,7 @@ describe('getAppInfo', () => {
 
 // ─── db_schema ────────────────────────────────────────────
 
-describe('getDbSchema', () => {
+describe('getDbSchema', skipOnWindows, () => {
   it('parses prisma schema from playground', () => {
     const schema = getDbSchema(PLAYGROUND)
     assert.ok(schema.models.length > 0)
@@ -64,7 +71,7 @@ describe('getDbSchema', () => {
 
 // ─── config_get ───────────────────────────────────────────
 
-describe('getConfigValue', () => {
+describe('getConfigValue', skipOnWindows, () => {
   it('lists config files when no key', () => {
     const result = getConfigValue(PLAYGROUND)
     assert.ok(typeof result === 'object')
@@ -87,7 +94,7 @@ describe('getConfigValue', () => {
 
 // ─── route_list ───────────────────────────────────────────
 
-describe('getRouteList', () => {
+describe('getRouteList', skipOnWindows, () => {
   it('finds routes in playground', () => {
     const routes = getRouteList(PLAYGROUND)
     assert.ok(routes.length > 0)
@@ -104,7 +111,7 @@ describe('getRouteList', () => {
 
 // ─── model_list ───────────────────────────────────────────
 
-describe('getModelList', () => {
+describe('getModelList', skipOnWindows, () => {
   it('finds models in playground', () => {
     const models = getModelList(PLAYGROUND)
     assert.ok(models.length > 0)
@@ -117,7 +124,7 @@ describe('getModelList', () => {
 
 // ─── last_error ───────────────────────────────────────────
 
-describe('getLastError', () => {
+describe('getLastError', skipOnWindows, () => {
   it('returns message when no logs found', () => {
     const lines = getLastError('/tmp/nonexistent-rudderjs-test')
     assert.ok(lines[0]!.includes('No log files'))
@@ -126,7 +133,7 @@ describe('getLastError', () => {
 
 // ─── createBoostServer ───────────────────────────────────
 
-describe('createBoostServer', () => {
+describe('createBoostServer', skipOnWindows, () => {
   it('creates an MCP server', () => {
     const server = createBoostServer(PLAYGROUND)
     assert.ok(server)
@@ -156,7 +163,7 @@ describe('parseFirstJsonObject', () => {
 
 // ─── listCommands ────────────────────────────────────────
 
-describe('listCommands', () => {
+describe('listCommands', skipOnWindows, () => {
   it('returns built-in + package commands from playground', { timeout: 60_000 }, async () => {
     const result = await listCommands(PLAYGROUND)
     assert.ok(Array.isArray(result.commands))
@@ -176,7 +183,7 @@ describe('listCommands', () => {
 
 // ─── runCommand ──────────────────────────────────────────
 
-describe('runCommand', () => {
+describe('runCommand', skipOnWindows, () => {
   it('runs a no-side-effect command and returns structured result', { timeout: 60_000 }, async () => {
     const result = await runCommand(PLAYGROUND, 'command:list', ['--all', '--json'], 30_000)
     assert.strictEqual(result.exitCode, 0)

@@ -2093,14 +2093,16 @@ describe('Passport.keysAvailable() — L4 boot warning probe', () => {
   test('returns true when no explicit keys but both key files exist on disk', async () => {
     Passport.reset()
     const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
-    const { tmpdir } = await import('node:os')
     const { join, relative } = await import('node:path')
 
-    const dir = await mkdtemp(join(tmpdir(), 'passport-keys-'))
+    // Create the tmp dir under cwd so the relative path stays on the same
+    // drive — on Windows, tmpdir() may live on a different volume than the
+    // package, and path.relative() across drives produces a path that
+    // path.join(cwd, rel) can't resolve back.
+    const dir = await mkdtemp(join(process.cwd(), '.tmp-passport-keys-'))
     try {
       await writeFile(join(dir, 'oauth-private.key'), 'PRIV')
       await writeFile(join(dir, 'oauth-public.key'),  'PUB')
-      // keysAvailable() joins on process.cwd(), so feed it a relative path
       const rel = relative(process.cwd(), dir)
       Passport.loadKeysFrom(rel)
       assert.equal(await Passport.keysAvailable(), true)
@@ -2113,10 +2115,9 @@ describe('Passport.keysAvailable() — L4 boot warning probe', () => {
   test('returns false when only one of the two key files exists', async () => {
     Passport.reset()
     const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
-    const { tmpdir } = await import('node:os')
     const { join, relative } = await import('node:path')
 
-    const dir = await mkdtemp(join(tmpdir(), 'passport-keys-'))
+    const dir = await mkdtemp(join(process.cwd(), '.tmp-passport-keys-'))
     try {
       await writeFile(join(dir, 'oauth-private.key'), 'PRIV')
       // public file intentionally missing
