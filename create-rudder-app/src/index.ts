@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {
-  intro, outro, text, select, multiselect, groupMultiselect, confirm, spinner, log,
+  intro, outro, text, select, groupMultiselect, confirm, spinner, log,
   isCancel, cancel,
 } from '@clack/prompts'
 import fs     from 'node:fs/promises'
@@ -9,14 +9,13 @@ import path   from 'node:path'
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
-import { getTemplates, detectPackageManager, pmExec, pmRun, pmInstall, type PackageManager, type TemplateContext } from './templates.js'
-import { availableDemos } from './templates/demos/registry.js'
+import { getTemplates, detectPackageManager, pmRun, pmInstall, type PackageManager, type TemplateContext } from './templates.js'
 import { detectAgent } from './agent-detect.js'
 import {
   parseFlags, validateJsonMode, resolveJsonAnswers, packagesFromList,
-  FlagError, DB_GATED,
+  FlagError, DB_GATED, RECIPES,
   type Answers, type PartialAnswers, type ParsedFlags,
-  type Frameworks, type Orm, type Db,
+  type Frameworks, type Orm, type Db, type Recipe,
 } from './cli-flags.js'
 
 // ──────────────────────────────────────────────────────────────
@@ -39,16 +38,45 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
     resolvedName = (answer as string).trim()
   }
 
+  // ── Recipe (the one-question replacement for the 25-option multiselect) ──
+  let recipe: Recipe
+  if (p.recipe) recipe = p.recipe
+  else {
+    const recipeAnswer = await select({
+      message: 'What are you building?',
+      options: [
+        { value: 'web-app',     label: 'Web app',     hint: 'auth + ORM + frontend' },
+        { value: 'saas',        label: 'SaaS',        hint: '+ queue + mail + notifications' },
+        { value: 'api-service', label: 'API service', hint: 'ORM + auth + http, no frontend' },
+        { value: 'realtime',    label: 'Realtime',    hint: '+ broadcast + sync (WebSocket)' },
+        { value: 'minimal',     label: 'Minimal',     hint: 'just the framework — no extras' },
+        { value: 'custom',      label: 'Custom',      hint: 'pick packages yourself' },
+      ],
+      initialValue: 'web-app',
+    })
+    if (isCancel(recipeAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    recipe = recipeAnswer as Recipe
+  }
+
+  const preset = recipe === 'custom' ? null : RECIPES[recipe]
+
+  // ── Database ORM + driver ──
   let orm: Orm
   if (p.orm !== undefined) orm = p.orm
+  else if (preset && !preset.needsOrm) orm = false
   else {
     const ormAnswer = await select({
-      message: 'Database ORM',
-      options: [
-        { value: 'prisma',  label: 'Prisma' },
-        { value: 'drizzle', label: 'Drizzle' },
-        { value: 'none',    label: 'None',    hint: 'no database' },
-      ],
+      message: 'Database',
+      options: recipe === 'minimal' || recipe === 'custom'
+        ? [
+            { value: 'prisma',  label: 'Prisma'  },
+            { value: 'drizzle', label: 'Drizzle' },
+            { value: 'none',    label: 'None',    hint: 'no database' },
+          ]
+        : [
+            { value: 'prisma',  label: 'Prisma'  },
+            { value: 'drizzle', label: 'Drizzle' },
+          ],
     })
     if (isCancel(ormAnswer)) { cancel('Cancelled.'); process.exit(0) }
     orm = ormAnswer === 'none' ? false : ormAnswer as 'prisma' | 'drizzle'
@@ -59,80 +87,23 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
     const dbAnswer = await select({
       message: 'Database driver',
       options: [
-        { value: 'sqlite',     label: 'SQLite' },
+        { value: 'sqlite',     label: 'SQLite',     hint: 'recommended — no setup' },
         { value: 'postgresql', label: 'PostgreSQL' },
         { value: 'mysql',      label: 'MySQL / MariaDB' },
       ],
+      initialValue: 'sqlite',
     })
     if (isCancel(dbAnswer)) { cancel('Cancelled.'); process.exit(0) }
     db = dbAnswer as Db
   }
 
+  // ── Packages: recipe preset OR explicit Custom multiselect ──
   let packages: TemplateContext['packages']
   if (p.packages !== undefined) packages = p.packages
-  else {
-    type Pkg = { value: string; label: string; hint?: string }
-    const PACKAGE_GROUPS: Record<string, Pkg[]> = {
-      'Auth & Security': [
-        { value: 'auth',          label: 'Authentication',        hint: 'login, register, sessions' },
-        { value: 'sanctum',       label: 'Sanctum',               hint: 'API tokens (SHA-256 + abilities)' },
-        { value: 'passport',      label: 'Passport',               hint: 'OAuth2 server — requires Auth + Prisma' },
-        { value: 'socialite',     label: 'Socialite',             hint: 'social login: GitHub, Google, Facebook, Apple' },
-        { value: 'crypt',         label: 'Crypt',                 hint: 'AES-256-CBC + HMAC encryption' },
-      ],
-      'Infrastructure': [
-        { value: 'queue',         label: 'Queue',                 hint: 'background jobs' },
-        { value: 'storage',       label: 'Storage',               hint: 'file uploads (local + S3)' },
-        { value: 'scheduler',     label: 'Scheduler',             hint: 'cron-like task scheduling' },
-      ],
-      'Communication': [
-        { value: 'mail',          label: 'Mail',                  hint: 'SMTP + log driver' },
-        { value: 'notifications', label: 'Notifications',         hint: 'multi-channel notifications' },
-        { value: 'broadcast',     label: 'WebSocket / Broadcast', hint: 'real-time channels' },
-        { value: 'sync',          label: 'Sync (Yjs CRDT)',       hint: 'collaborative documents' },
-      ],
-      'Internationalization': [
-        { value: 'localization',  label: 'Localization',          hint: 'i18n — trans(), setLocale()' },
-      ],
-      'Developer Experience': [
-        { value: 'pennant',       label: 'Pennant',               hint: 'feature flags' },
-        { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
-        { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
-        { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
-        { value: 'terminal',      label: 'Terminal',              hint: 'rich terminal UIs from CLI commands (Ink)' },
-      ],
-      'Media': [
-        { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
-      ],
-      'Observability': [
-        { value: 'telescope',     label: 'Telescope',             hint: 'debug dashboard — requests, queries, jobs, exceptions' },
-        { value: 'pulse',         label: 'Pulse',                 hint: 'metrics dashboard — throughput, latency, hit rates' },
-        { value: 'horizon',       label: 'Horizon',               hint: 'queue monitoring — lifecycle, workers, retry/delete' },
-      ],
-      'AI & Tooling': [
-        { value: 'ai',            label: 'AI',                    hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
-        { value: 'mcp',           label: 'MCP',                   hint: 'Model Context Protocol — expose tools/resources to LLMs' },
-        { value: 'boost',         label: 'Boost',                 hint: 'AI coding DX (Claude Code/Cursor/Copilot)' },
-      ],
-    }
-
-    if (orm === false) log.info('Database not selected — auth, sanctum, and passport options are hidden.')
-
-    const groupedOptions: Record<string, Pkg[]> = {}
-    for (const [group, pkgs] of Object.entries(PACKAGE_GROUPS)) {
-      const visible = orm === false ? pkgs.filter(p => !DB_GATED.has(p.value)) : pkgs
-      if (visible.length > 0) groupedOptions[group] = visible
-    }
-
-    const packageAnswer = await groupMultiselect({
-      message:          'Select packages',
-      options:          groupedOptions,
-      initialValues:    orm === false ? [] : ['auth'],
-      required:         false,
-      selectableGroups: false,
-    })
-    if (isCancel(packageAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    packages = packagesFromList(packageAnswer as string[], orm)
+  else if (recipe !== 'custom') {
+    packages = packagesFromList([...(preset?.packages ?? [])] as string[], orm)
+  } else {
+    packages = await promptCustomPackages(orm)
   }
 
   if (packages.passport && (!packages.auth || orm !== 'prisma')) {
@@ -140,81 +111,166 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
     process.exit(1)
   }
 
+  // ── Frontend framework + styling (skipped for API-service / Minimal) ──
+  const wantsFrontend = preset
+    ? preset.needsFrontend
+    : (recipe === 'minimal' ? false : true)
+
   let frameworks: Frameworks
-  if (p.frameworks) frameworks = p.frameworks
-  else {
-    const frameworksAnswer = await multiselect({
-      message: 'Frontend frameworks',
-      options: [
-        { value: 'react', label: 'React' },
-        { value: 'vue',   label: 'Vue' },
-        { value: 'solid', label: 'Solid' },
-      ],
-      initialValues: ['react'],
-      required:      true,
-    })
-    if (isCancel(frameworksAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    frameworks = frameworksAnswer as Frameworks
-  }
+  let primary:    'react' | 'vue' | 'solid' = 'react'
+  let tailwind:   boolean
+  let shadcn:     boolean
 
-  let primary: 'react' | 'vue' | 'solid'
-  if (p.primary) primary = p.primary
-  else if (frameworks.length > 1) {
-    const primaryAnswer = await select({
-      message: 'Primary framework (drives main pages)',
-      options: frameworks.map(f => ({ value: f, label: f.charAt(0).toUpperCase() + f.slice(1) })),
-    })
-    if (isCancel(primaryAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    primary = primaryAnswer as 'react' | 'vue' | 'solid'
+  if (!wantsFrontend && p.frameworks === undefined) {
+    frameworks = []
+    tailwind   = false
+    shadcn     = false
+  } else if (p.frameworks?.length) {
+    // legacy multi-framework flag path
+    frameworks = p.frameworks
+    primary    = p.primary ?? frameworks[0]!
+    tailwind   = p.tailwind ?? true
+    shadcn     = p.shadcn   ?? (frameworks.includes('react') && tailwind)
   } else {
-    primary = frameworks[0]!
-  }
+    const frameworkAnswer = await select({
+      message: 'Frontend framework',
+      options: [
+        { value: 'react', label: 'React', hint: 'recommended' },
+        { value: 'vue',   label: 'Vue'                       },
+        { value: 'solid', label: 'Solid'                     },
+        { value: 'none',  label: 'None',  hint: 'server-rendered HTML only' },
+      ],
+      initialValue: 'react',
+    })
+    if (isCancel(frameworkAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    const fw = frameworkAnswer as 'react' | 'vue' | 'solid' | 'none'
+    frameworks = fw === 'none' ? [] : [fw]
+    primary    = fw === 'none' ? 'react' : fw
 
-  let tailwind: boolean
-  if (p.tailwind !== undefined) tailwind = p.tailwind
-  else {
-    const tailwindAnswer = await confirm({ message: 'Add Tailwind CSS?', initialValue: true })
-    if (isCancel(tailwindAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    tailwind = tailwindAnswer as boolean
-  }
-
-  let shadcn = p.shadcn ?? false
-  if (frameworks.includes('react') && tailwind && p.shadcn === undefined) {
-    const shadcnAnswer = await confirm({ message: 'Add shadcn/ui?', initialValue: true })
-    if (isCancel(shadcnAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    shadcn = shadcnAnswer as boolean
-  }
-
-  let demos: string[] = p.demos ?? []
-  if (primary === 'react' && p.demos === undefined) {
-    const demoOptions = availableDemos(orm, packages)
-    if (demoOptions.length > 0) {
-      const demoAnswer = await multiselect({
-        message:       'Select demos to scaffold (under /demos)',
-        options:       demoOptions.map(d => ({
-          value: d.value,
-          label: d.label,
-          ...(d.hint !== undefined ? { hint: d.hint } : {}),
-        })),
-        initialValues: ['contact'],
-        required:      false,
+    if (frameworks.length === 0) {
+      tailwind = p.tailwind ?? false
+      shadcn   = false
+    } else if (p.tailwind !== undefined) {
+      tailwind = p.tailwind
+      shadcn   = p.shadcn ?? (fw === 'react' && tailwind)
+    } else {
+      const stylingAnswer = await select({
+        message: 'Styling',
+        options: fw === 'react'
+          ? [
+              { value: 'tailwind+shadcn', label: 'Tailwind + shadcn/ui', hint: 'recommended' },
+              { value: 'tailwind',        label: 'Tailwind only'                              },
+              { value: 'plain',           label: 'Plain CSS',            hint: 'no framework' },
+            ]
+          : [
+              { value: 'tailwind', label: 'Tailwind',  hint: 'recommended' },
+              { value: 'plain',    label: 'Plain CSS', hint: 'no framework' },
+            ],
+        initialValue: fw === 'react' ? 'tailwind+shadcn' : 'tailwind',
       })
-      if (isCancel(demoAnswer)) { cancel('Cancelled.'); process.exit(0) }
-      demos = demoAnswer as string[]
+      if (isCancel(stylingAnswer)) { cancel('Cancelled.'); process.exit(0) }
+      tailwind = stylingAnswer !== 'plain'
+      shadcn   = stylingAnswer === 'tailwind+shadcn'
     }
-  } else if (demos.includes('*')) {
-    demos = primary === 'react' ? availableDemos(orm, packages).map(d => d.value) : []
+  }
+
+  // ── Smart DB-push: for non-SQLite ask once whether the DB is reachable ──
+  let dbReady: boolean
+  if (p.dbReady !== undefined) dbReady = p.dbReady
+  else if (orm === false) dbReady = false
+  else if (db === 'sqlite') dbReady = true
+  else {
+    const dbReadyAnswer = await confirm({
+      message:      `Is your ${db === 'postgresql' ? 'Postgres' : 'MySQL'} running now? (we'll push the schema for you)`,
+      initialValue: true,
+    })
+    if (isCancel(dbReadyAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    dbReady = dbReadyAnswer as boolean
   }
 
   let install: boolean
   if (p.install !== undefined) install = p.install
   else {
-    const installAnswer = await confirm({ message: 'Install dependencies?', initialValue: true })
+    const installAnswer = await confirm({ message: 'Install and run setup?', initialValue: true })
     if (isCancel(installAnswer)) { cancel('Cancelled.'); process.exit(0) }
     install = installAnswer as boolean
   }
 
-  return { name: resolvedName, orm, db, packages, frameworks, primary, tailwind, shadcn, demos, install }
+  const git = p.git ?? install
+
+  return {
+    name: resolvedName, recipe, orm, db, packages, frameworks, primary, tailwind, shadcn,
+    demos: [], git, dbReady, install,
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// Custom-recipe package picker — only shown for `recipe = 'custom'`
+// ──────────────────────────────────────────────────────────────
+
+async function promptCustomPackages(orm: Orm): Promise<TemplateContext['packages']> {
+  type Pkg = { value: string; label: string; hint?: string }
+  const PACKAGE_GROUPS: Record<string, Pkg[]> = {
+    'Auth & Security': [
+      { value: 'auth',          label: 'Authentication',        hint: 'login, register, sessions' },
+      { value: 'sanctum',       label: 'Sanctum',               hint: 'API tokens (SHA-256 + abilities)' },
+      { value: 'passport',      label: 'Passport',              hint: 'OAuth2 server — requires Auth + Prisma' },
+      { value: 'socialite',     label: 'Socialite',             hint: 'social login: GitHub, Google, Facebook, Apple' },
+      { value: 'crypt',         label: 'Crypt',                 hint: 'AES-256-CBC + HMAC encryption' },
+    ],
+    'Infrastructure': [
+      { value: 'queue',         label: 'Queue',                 hint: 'background jobs' },
+      { value: 'storage',       label: 'Storage',               hint: 'file uploads (local + S3)' },
+      { value: 'scheduler',     label: 'Scheduler',             hint: 'cron-like task scheduling' },
+    ],
+    'Communication': [
+      { value: 'mail',          label: 'Mail',                  hint: 'SMTP + log driver' },
+      { value: 'notifications', label: 'Notifications',         hint: 'multi-channel notifications' },
+      { value: 'broadcast',     label: 'WebSocket / Broadcast', hint: 'real-time channels' },
+      { value: 'sync',          label: 'Sync (Yjs CRDT)',       hint: 'collaborative documents' },
+    ],
+    'Internationalization': [
+      { value: 'localization',  label: 'Localization',          hint: 'i18n — trans(), setLocale()' },
+    ],
+    'Developer Experience': [
+      { value: 'pennant',       label: 'Pennant',               hint: 'feature flags' },
+      { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
+      { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
+      { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
+      { value: 'terminal',      label: 'Terminal',              hint: 'rich terminal UIs from CLI commands (Ink)' },
+    ],
+    'Media': [
+      { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
+    ],
+    'Observability': [
+      { value: 'telescope',     label: 'Telescope',             hint: 'debug dashboard — requests, queries, jobs, exceptions' },
+      { value: 'pulse',         label: 'Pulse',                 hint: 'metrics dashboard — throughput, latency, hit rates' },
+      { value: 'horizon',       label: 'Horizon',               hint: 'queue monitoring — lifecycle, workers, retry/delete' },
+    ],
+    'AI & Tooling': [
+      { value: 'ai',            label: 'AI',                    hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
+      { value: 'mcp',           label: 'MCP',                   hint: 'Model Context Protocol — expose tools/resources to LLMs' },
+      { value: 'boost',         label: 'Boost',                 hint: 'AI coding DX (Claude Code/Cursor/Copilot)' },
+    ],
+  }
+
+  if (orm === false) log.info('Database not selected — auth, sanctum, and passport options are hidden.')
+
+  const groupedOptions: Record<string, Pkg[]> = {}
+  for (const [group, pkgs] of Object.entries(PACKAGE_GROUPS)) {
+    const visible = orm === false ? pkgs.filter(p => !DB_GATED.has(p.value)) : pkgs
+    if (visible.length > 0) groupedOptions[group] = visible
+  }
+
+  const packageAnswer = await groupMultiselect({
+    message:          'Select packages',
+    options:          groupedOptions,
+    initialValues:    orm === false ? [] : ['auth'],
+    required:         false,
+    selectableGroups: false,
+  })
+  if (isCancel(packageAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  return packagesFromList(packageAnswer as string[], orm)
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -236,6 +292,16 @@ interface ScaffoldResult {
   installAttempted: boolean
   installOk:        boolean
   discoverOk:       boolean
+  /** `rudder db:generate` — null = skipped (no ORM / install failed). */
+  dbGenerateOk:     boolean | null
+  /** `rudder db:push` — null = skipped (no ORM / non-SQLite + dbReady=false). */
+  dbPushOk:         boolean | null
+  /** `rudder vendor:publish --tag=auth-views-*` — null = skipped (no auth). */
+  vendorPublishOk:  boolean | null
+  /** `rudder passport:keys` — null = skipped (no passport). */
+  passportKeysOk:   boolean | null
+  /** `git init` + initial commit — null = skipped (user opted out, or git not available). */
+  gitInitOk:        boolean | null
 }
 
 async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<ScaffoldResult> {
@@ -285,6 +351,12 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
   s?.stop(`${Object.keys(templates).length} files written`)
 
   let installAttempted = false, installOk = false, discoverOk = false
+  let dbGenerateOk: boolean | null    = null
+  let dbPushOk: boolean | null        = null
+  let vendorPublishOk: boolean | null = null
+  let passportKeysOk: boolean | null  = null
+  let gitInitOk: boolean | null       = null
+
   if (answers.install) {
     installAttempted = true
     const s2 = quiet ? null : spinner()
@@ -296,12 +368,59 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
     if (installOk) {
       const s3 = quiet ? null : spinner()
       s3?.start('Discovering framework providers...')
-      const [rcmd, ...rargs] = `${pmRun(pm, 'rudder')} providers:discover`.split(' ')
-      discoverOk = await runChild(rcmd!, rargs, target, logFile)
+      discoverOk = await runRudder(pm, 'providers:discover', target, logFile)
       s3?.stop(discoverOk
         ? 'Provider manifest generated'
         : `providers:discover failed — run \`${pmRun(pm, 'rudder')} providers:discover\` manually`)
+
+      // ── Auto-cascade — only when install + providers:discover both succeed ──
+      if (discoverOk && answers.orm) {
+        const s4 = quiet ? null : spinner()
+        s4?.start('Generating database client...')
+        dbGenerateOk = await runRudder(pm, 'db:generate', target, logFile)
+        s4?.stop(dbGenerateOk
+          ? (answers.orm === 'prisma' ? 'Prisma client generated' : 'Client step skipped (Drizzle)')
+          : `db:generate failed — run \`${pmRun(pm, 'rudder')} db:generate\` manually`)
+      }
+
+      if (discoverOk && answers.orm && answers.dbReady) {
+        const s5 = quiet ? null : spinner()
+        s5?.start('Pushing schema to database...')
+        dbPushOk = await runRudder(pm, 'db:push', target, logFile)
+        const niceDb = answers.db === 'sqlite' ? 'dev.db ready' : 'schema pushed'
+        s5?.stop(dbPushOk
+          ? niceDb
+          : `db:push failed — start your database and run \`${pmRun(pm, 'rudder')} db:push\``)
+      }
+
+      if (discoverOk && answers.packages.auth && !authViewsCopied) {
+        const s6 = quiet ? null : spinner()
+        s6?.start('Publishing auth views...')
+        vendorPublishOk = await runRudder(pm, `vendor:publish --tag=auth-views-${answers.primary}`, target, logFile)
+        s6?.stop(vendorPublishOk
+          ? 'Auth views published'
+          : `vendor:publish failed — run \`${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${answers.primary}\``)
+      }
+
+      if (discoverOk && answers.packages.passport) {
+        const s7 = quiet ? null : spinner()
+        s7?.start('Generating Passport keys...')
+        passportKeysOk = await runRudder(pm, 'passport:keys', target, logFile)
+        s7?.stop(passportKeysOk
+          ? 'Passport keys generated'
+          : `passport:keys failed — run \`${pmRun(pm, 'rudder')} passport:keys\` manually`)
+      }
     }
+  }
+
+  // ── git init — independent of install; runs whenever user opted in ──
+  if (answers.git) {
+    const s8 = quiet ? null : spinner()
+    s8?.start('Initializing git repository...')
+    gitInitOk = await runGitInit(target, logFile)
+    s8?.stop(gitInitOk
+      ? 'Git initialized'
+      : 'git init skipped — git not available or already a repo')
   }
 
   return {
@@ -309,7 +428,29 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
     filesWritten: Object.keys(templates).length,
     authViewsCopied,
     installAttempted, installOk, discoverOk,
+    dbGenerateOk, dbPushOk, vendorPublishOk, passportKeysOk, gitInitOk,
   }
+}
+
+/** Run a `rudder <subcommand>` in the target dir. Subcommand may include flags. */
+async function runRudder(pm: PackageManager, subcommand: string, cwd: string, logFile?: string): Promise<boolean> {
+  const [cmd, ...args] = `${pmRun(pm, 'rudder')} ${subcommand}`.split(' ').filter(Boolean)
+  return runChild(cmd!, args, cwd, logFile)
+}
+
+/** `git init` + first commit. Returns false if git isn't on $PATH or the dir is already a repo. */
+async function runGitInit(cwd: string, logFile?: string): Promise<boolean> {
+  // Probe `git --version` first so we don't write a half-init repo on systems without git.
+  const hasGit = await runChild('git', ['--version'], cwd, logFile)
+  if (!hasGit) return false
+  // If `.git/` exists (rare in scaffolded apps but possible) bail rather than commit blindly.
+  try { await fs.access(path.join(cwd, '.git')); return false } catch { /* good — no existing repo */ }
+
+  if (!await runChild('git', ['init', '-q'],                                      cwd, logFile)) return false
+  if (!await runChild('git', ['add', '.'],                                        cwd, logFile)) return false
+  // -q silences the commit summary; --no-gpg-sign avoids pgp prompts on fresh machines.
+  if (!await runChild('git', ['commit', '-q', '-m', 'Initial commit (create-rudder-app)', '--no-gpg-sign'], cwd, logFile)) return false
+  return true
 }
 
 class ScaffoldError extends Error {}
@@ -406,8 +547,13 @@ async function main(): Promise<void> {
       if (result.installAttempted) {
         payload['installed'] = result.installOk
         payload['providersDiscovered'] = result.discoverOk
+        if (result.dbGenerateOk    !== null) payload['dbGenerated']    = result.dbGenerateOk
+        if (result.dbPushOk        !== null) payload['dbPushed']       = result.dbPushOk
+        if (result.vendorPublishOk !== null) payload['authViewsPublished'] = result.vendorPublishOk
+        if (result.passportKeysOk  !== null) payload['passportKeysGenerated'] = result.passportKeysOk
       }
-      if (answers.packages.auth && !result.authViewsCopied) {
+      if (result.gitInitOk !== null) payload['gitInitialized'] = result.gitInitOk
+      if (answers.packages.auth && !result.authViewsCopied && result.vendorPublishOk !== true) {
         payload['warning'] = `Auth views could not be vendored. Run: ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${answers.primary}`
       }
       process.stdout.write(JSON.stringify(payload) + '\n')
@@ -441,26 +587,33 @@ async function main(): Promise<void> {
     throw err
   }
 
-  if (answers.packages.auth && !result.authViewsCopied) {
-    console.warn(
-      `  ⚠ Auth views could not be vendored from @rudderjs/auth.\n` +
-      `    After install, run: ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${answers.primary}`
-    )
+  // ── Build the "manual steps" list ─ only includes things the auto-cascade
+  // either didn't run or couldn't finish. The goal: when everything succeeded,
+  // the panel has exactly one line (`cd app && pnpm dev`).
+  const manual: string[] = []
+  if (!answers.install) {
+    manual.push(`  ${pmInstall(pm)}`)
+    manual.push(`  ${pmRun(pm, 'rudder')} providers:discover`)
   }
-
-  const nextSteps = [
-    `  cd ${answers.name}`,
-    ...(!answers.install ? [`  ${pmInstall(pm)}`, `  ${pmRun(pm, 'rudder')} providers:discover`] : []),
-    ...(answers.orm === 'prisma' ? [
-      `  ${pmExec(pm, 'prisma generate')}`,
-      `  ${pmExec(pm, 'prisma db push')}`,
-    ] : []),
-    ...(!answers.install && answers.packages.auth
-      ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${answers.primary}`]
-      : []),
-    ...(answers.packages.passport ? [`  ${pmRun(pm, 'rudder')} passport:keys`] : []),
-    `  ${pmRun(pm, 'dev')}`,
-  ]
+  if (answers.orm && (result.dbGenerateOk === false || (result.dbGenerateOk === null && !answers.install))) {
+    manual.push(`  ${pmRun(pm, 'rudder')} db:generate`)
+  }
+  if (answers.orm && result.dbPushOk !== true) {
+    // dbPushOk is null when we deliberately skipped (e.g. user said DB not running)
+    if (result.dbPushOk === null && !answers.dbReady) {
+      manual.push(`  ${pmRun(pm, 'rudder')} db:push   ${result.installOk ? '# once your database is running' : ''}`)
+    } else if (result.dbPushOk === false) {
+      manual.push(`  ${pmRun(pm, 'rudder')} db:push   # retry after starting your database`)
+    } else if (result.dbPushOk === null && !answers.install) {
+      manual.push(`  ${pmRun(pm, 'rudder')} db:push`)
+    }
+  }
+  if (answers.packages.auth && result.vendorPublishOk !== true && !result.authViewsCopied) {
+    manual.push(`  ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${answers.primary}`)
+  }
+  if (answers.packages.passport && result.passportKeysOk !== true) {
+    manual.push(`  ${pmRun(pm, 'rudder')} passport:keys`)
+  }
 
   const hints: string[] = []
   if (answers.packages.ai)        hints.push('  AI chat:     /ai-chat  (set ANTHROPIC_API_KEY in .env)')
@@ -471,11 +624,27 @@ async function main(): Promise<void> {
   if (answers.packages.terminal)  hints.push(`  Terminal:    ${pmRun(pm, 'rudder')} make:terminal <Name>  (scaffold a terminal view)`)
   const hintsStr = hints.length > 0 ? '\n\n' + hints.join('\n') : ''
 
+  const exampleLink = '\n\n  Examples: https://rudderjs.com/examples'
+
+  // The happy-path output — auto-cascade succeeded, no manual remediation.
+  if (manual.length === 0) {
+    outro(
+      `Done!\n\n` +
+      `  cd ${answers.name} && ${pmRun(pm, 'dev')}` +
+      hintsStr +
+      exampleLink
+    )
+    return
+  }
+
+  // Something needs the user's attention — print remediation steps explicitly.
   outro(
-    `Done! Get started:\n\n` +
-    nextSteps.join('\n') +
+    `Done! A few things still need your attention:\n\n` +
+    `  cd ${answers.name}\n` +
+    manual.join('\n') + '\n' +
+    `  ${pmRun(pm, 'dev')}` +
     hintsStr +
-    `\n\n  Docs: https://github.com/rudderjs/rudder`
+    exampleLink
   )
 }
 

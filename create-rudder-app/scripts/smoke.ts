@@ -269,6 +269,18 @@ async function main(): Promise<void> {
     const done4 = step('rudder providers:discover')
     done4(await run('pnpm', ['rudder', 'providers:discover'], target, { timeoutMs: 60_000 }))
 
+    // rudder db:generate + db:push exercise the chicken-and-egg-safe path used
+    // by the create-rudder-app auto-cascade: both must succeed via the rudder
+    // CLI (skip-boot) even before @prisma/client exists. Catches regressions
+    // where db: commands accidentally fall back into bootApp().
+    if (ctx.orm === 'prisma') {
+      const done4a = step('rudder db:generate (skip-boot)')
+      done4a(await run('pnpm', ['rudder', 'db:generate'], target, { timeoutMs: 60_000 }))
+
+      const done4b = step('rudder db:push (skip-boot)')
+      done4b(await run('pnpm', ['rudder', 'db:push'], target, { timeoutMs: 60_000 }))
+    }
+
     // command:list does a full bootApp() — boots every provider with real config.
     // Catches: drift between Prisma schema and routes (ORM init), config string-
     // vs-class refs (provider register/boot), missing dist exports (resolveOptionalPeer).
