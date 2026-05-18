@@ -132,7 +132,7 @@ Always-included base packages: `core`, `router`, `server-hono`, `middleware`, `v
 
 ### What about demos?
 
-Demos are no longer scaffolded into your project — they live in the [framework playground](https://github.com/rudderjs/rudder/tree/main/playground) and at [rudderjs.com/examples](https://rudderjs.com/examples). The previous "demos multiselect" added 1–15 demo pages under `app/Views/Demos/`; new users found that confusing ("is this my code?") and easy to forget to delete before deploying. The trade-off in favor of a clean scaffold won out.
+Demos are no longer scaffolded into your project — they live in the [framework playground](https://github.com/rudderjs/rudder/tree/main/playground), the canonical "what can RudderJS do?" gallery with every package wired up. The previous "demos multiselect" added 1–15 demo pages under `app/Views/Demos/`; new users found that confusing ("is this my code?") and easy to forget to delete before deploying. The trade-off in favor of a clean scaffold won out.
 
 If you want a guided tour, the playground runs every demo at once and is meant to be cloned + explored.
 

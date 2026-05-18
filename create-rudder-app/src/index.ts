@@ -624,7 +624,10 @@ async function main(): Promise<void> {
   if (answers.packages.terminal)  hints.push(`  Terminal:    ${pmRun(pm, 'rudder')} make:terminal <Name>  (scaffold a terminal view)`)
   const hintsStr = hints.length > 0 ? '\n\n' + hints.join('\n') : ''
 
-  const exampleLink = '\n\n  Examples: https://rudderjs.com/examples'
+  // GitHub's tree view of the framework playground (15 working demo views,
+  // every package wired up) is the actual examples gallery today. The
+  // rudderjs.com/examples URL was vaporware in the original scaffolder copy.
+  const exampleLink = '\n\n  Examples: https://github.com/rudderjs/rudder/tree/main/playground'
 
   // The happy-path output — auto-cascade succeeded, no manual remediation.
   if (manual.length === 0) {
