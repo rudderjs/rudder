@@ -426,16 +426,15 @@ pnpm create rudder-app my-app
 # or: bunx create-rudder-app my-app
 ```
 
-The interactive installer asks you to pick a database (Prisma or Drizzle), a frontend framework (React / Vue / Solid), optional packages (Auth, Cache, Queue, Mail, AI, MCP, Passport, …), Tailwind, and shadcn/ui — then scaffolds a production-ready project.
+The installer asks one question — _"What are you building?"_ — and picks a recipe (Web app · SaaS · API service · Realtime · Minimal · Custom), a database, a frontend framework, and styling. Then it installs deps, generates the Prisma client, pushes the schema, publishes auth views, and initializes git — all without leaving the prompt.
 
 ```bash
-cd my-app
-pnpm exec prisma generate
-pnpm exec prisma db push
-pnpm dev
+cd my-app && pnpm dev
 ```
 
 Visit `http://localhost:3000`. Done.
+
+> **Adding packages later.** `pnpm rudder add queue` installs the package, generates its config, registers it in `config/index.ts`, and refreshes the provider manifest. `pnpm rudder remove queue` reverses it. See the [CLI guide](./docs/guide/rudder.md).
 
 ---
 

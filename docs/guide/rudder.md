@@ -139,6 +139,7 @@ The framework ships several built-in commands that show up automatically. The se
 | `schedule:work`, `schedule:run`, `schedule:list` | schedule | Task scheduler |
 | `route:list` | router | List all registered routes with name + middleware |
 | `command:list` | rudder | List all registered commands. `--all` includes built-in + package commands; `--json` emits a machine-readable envelope used by `@rudderjs/boost`'s MCP tools |
+| `add`, `remove` | core | Install / uninstall a `@rudderjs/*` package end-to-end (see below) |
 | `vendor:publish` | core | Publish package assets (configs, views, schemas) |
 | `providers:discover` | core | Refresh the provider manifest |
 | `mcp:inspector` | mcp | Dev UI for MCP servers |
@@ -167,6 +168,51 @@ pnpm rudder make:command Backup              # → app/Commands/BackupCommand.ts
 
 Pass `--force` to overwrite an existing file. Every generated stub uses your project's framework selection (React for `.tsx`, Vue for `.vue`, etc.) and tsconfig.
 
+## `add` / `remove` — manage framework packages
+
+After scaffolding, the easiest way to grow your app is `rudder add`:
+
+```bash
+pnpm rudder add queue         # install + generate config/queue.ts + register + providers:discover
+pnpm rudder add ai            # generates config/ai.ts — print: "Set ANTHROPIC_API_KEY in .env"
+pnpm rudder add telescope     # debug dashboard at /telescope
+pnpm rudder add passport      # validates: passport requires auth + Prisma
+```
+
+Each invocation:
+
+1. Validates the alias against the registry of 25 known packages (same set the scaffolder offers under **Custom**).
+2. Checks dependencies — e.g. `sanctum` requires `auth`; `passport` requires `auth` + Prisma.
+3. Installs `@rudderjs/<name>` via the auto-detected package manager.
+4. Writes `config/<name>.ts` from a vendored template — skipped if the file already exists.
+5. Surgically inserts the new entry into `config/index.ts` (import line + key in the `configs = { ... }` map). Idempotent.
+6. Re-runs `providers:discover` so the new provider boots on the next request.
+7. Prints a one-line hint specific to the package.
+
+`remove` reverses every step:
+
+```bash
+pnpm rudder remove queue              # uninstall + delete config/queue.ts + unregister + providers:discover
+pnpm rudder remove queue --keep-config   # uninstall but preserve config/queue.ts for re-add later
+```
+
+It refuses to break the dependency graph — `rudder remove auth` while `sanctum`/`passport` are still installed fails with a friendly message pointing at which dependents need to go first.
+
+### Supported aliases
+
+```
+Auth & Security      — auth, sanctum, passport, socialite, crypt
+Infrastructure       — queue, storage, scheduler
+Communication        — mail, notifications, broadcast, sync
+Internationalization — localization
+Developer Experience — pennant, http, process, concurrency, terminal
+Media                — image
+Observability        — telescope, pulse, horizon
+AI & Tooling         — ai, mcp, boost
+```
+
+Either the short alias (`rudder add queue`) or the full npm name (`rudder add @rudderjs/queue`) works.
+
 ## Modules
 
 For larger apps, group a feature's models, services, providers, and Prisma shard under `app/Modules/<Name>/`:
@@ -186,4 +232,4 @@ pnpm rudder module:publish
 - **Running rudder from a sub-package.** It resolves `bootstrap/app.ts` from `process.cwd()`. Run from the project root.
 - **Forgetting `pnpm rudder providers:discover` after install.** Newly installed framework packages don't load until you refresh the manifest. The scaffolder runs it automatically; manual installs need it explicit.
 - **`make:*` overwriting work.** Without `--force`, the generator refuses to overwrite. With `--force`, it overwrites silently — review the diff before committing.
-- **Slow commands at startup.** The CLI boots the full app for every command. `make:*` and `providers:discover` skip `bootApp()` for speed; if you write a custom command that doesn't need the app, you can do the same — see `@rudderjs/cli`'s source.
+- **Slow commands at startup.** The CLI boots the full app for every command. `make:*`, `providers:discover`, `db:generate`, `db:push`, `migrate*`, `add`, `remove`, and `view:sync` skip `bootApp()` for speed; if you write a custom command that doesn't need the app, you can do the same — see `@rudderjs/cli`'s source.

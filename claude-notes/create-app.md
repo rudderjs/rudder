@@ -5,46 +5,69 @@
 
 ---
 
-## Prompts (cascade-aware, in order)
+## Prompts (recipe-driven, cascade-aware, in order)
 
 1. Project name — skipped if passed as argv
-2. Database ORM — Prisma · Drizzle · **None**
-3. Database driver — SQLite · PostgreSQL · MySQL — only when ORM ≠ None
-4. **Packages** — categorized multiselect (8 sections, 25 visible rows, Authentication pre-checked). When ORM=None, `Auth & Users` (Authentication, Sanctum, Passport) and `Cashier-Paddle` rows are filtered out — Socialite stays
-5. Frontend frameworks — multiselect: React · Vue · Solid (default React)
-6. Primary framework — single select, only when >1 framework picked
-7. Add Tailwind CSS? — yes/no (default yes)
-8. Add shadcn/ui? — yes/no (default yes), only when React + Tailwind
-9. **Demos** — multiselect filtered by selected packages (default Contact form). Only shown when at least one demo is available
-10. Install dependencies? — yes/no
+2. **What are you building?** — `web-app` (default) · `saas` · `api-service` · `realtime` · `minimal` · `custom`. Single-select recipe picker that drives the next prompts.
+3. Database ORM — Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`)
+4. Database driver — SQLite (default) · PostgreSQL · MySQL — only when ORM is selected
+5. **Packages** — categorized multiselect (8 sections, 25 visible rows, Authentication pre-checked). **Only shown for recipe = `custom`.** When ORM=None, the three DB-gated rows (Authentication, Sanctum, Passport) are hidden — Socialite stays.
+6. Frontend framework — single select: React (default) · Vue · Solid · None. Skipped for recipe = `api-service` or `minimal`. Multi-framework picks live behind the legacy `--frameworks` flag only.
+7. Styling — single select: Tailwind+shadcn (default for React) · Tailwind · Plain CSS. Skipped when no framework / API service / Minimal. shadcn row only shown for React.
+8. Is your DB running now? — yes/no — **only when DB is Postgres/MySQL.** If no, the auto-cascade skips `db:push` and adds it to the manual steps panel.
+9. Install and run setup? — yes/no (default yes). When yes, the post-install cascade fires (see below).
+
+### Recipe → preset map
+Lives in `src/cli-flags.ts` as the `RECIPES` constant:
+
+| Recipe | Packages preset | needsOrm | needsFrontend |
+|---|---|---|---|
+| `web-app` | `auth` | true | true |
+| `saas` | `auth, queue, mail, notifications` | true | true |
+| `api-service` | `auth, http` | true | false |
+| `realtime` | `auth, broadcast, sync` | true | true |
+| `minimal` | *(none beyond Tier A)* | false | false |
+| `custom` | *(user picks via multiselect)* | optional | optional |
 
 ### Tier A silent install
 `@rudderjs/session`, `@rudderjs/hash`, `@rudderjs/cache` are always installed (no checkbox). They're required by the default bootstrap (rate-limit middleware needs cache; auth needs hash + session).
 
-### Package categories (prompt 4)
+### Package categories (custom recipe — prompt 5)
 
 ```
-Auth & Users     — auth, sanctum, passport, socialite
-Infrastructure   — queue, storage, scheduler, image
-Communication    — mail, notifications, broadcast, sync
-AI               — ai, mcp, boost
-i18n             — localization
-Product          — cashier-paddle, pennant
-Observability    — telescope, pulse, horizon
-Utilities        — crypt, http, process, concurrency
+Auth & Security      — auth, sanctum, passport, socialite, crypt
+Infrastructure       — queue, storage, scheduler
+Communication        — mail, notifications, broadcast, sync
+Internationalization — localization
+Developer Experience — pennant, http, process, concurrency, terminal
+Media                — image
+Observability        — telescope, pulse, horizon
+AI & Tooling         — ai, mcp, boost
 ```
 
-When `ai` is selected: `config/ai.ts`, `ai()` provider, AI chat demo at `/ai-chat`, `POST /api/ai/chat`. When `mcp` is selected: `app/Mcp/EchoServer.ts` + `EchoTool.ts` + `POST /mcp/echo`. When `passport` is selected: full OAuth 2 server (filtered out under ORM=none). `@rudderjs/log` is always a base dep.
+Package-specific scaffolded behavior:
+- `ai` → `config/ai.ts`, `ai()` provider, AI chat demo at `/ai-chat`, `POST /api/ai/chat`
+- `mcp` → `app/Mcp/EchoServer.ts` + `EchoTool.ts` + `POST /mcp/echo`
+- `passport` → full OAuth 2 server (filtered out under ORM=none); auto-cascade runs `passport:keys` to generate the RSA keypair
+- `auth` → vendors `@rudderjs/auth/views/<framework>/*` into `app/Views/Auth/` via `fs.cp`; auto-cascade runs `vendor:publish --tag=auth-views-*` only if that fallback was needed
 
-### Demos (prompt 9)
+### Post-install auto-cascade
 
-Source of truth: `src/templates/demos/registry.ts` — exports `DEMOS: ReadonlyArray<DemoSpec>` plus `availableDemos(orm, packages)`, `demoHref(spec)`, `demoTitle(spec)` helpers. The list is also published as a subpath export (`create-rudder-app/demos-registry`) so the framework's playground consumes the same data without duplicating descriptions.
+When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:discover`, the scaffolder also runs:
 
-`DemoSpec` shape: `{ value, label, hint?, title?, description, packages, requires?, requiresOrm? }`. `label` is the multiselect row, `title` is the optional card title (falls back to `label`), `description` is the long card text, `packages` is the `@rudderjs/*` chip list under the card.
+1. `pnpm rudder db:generate` — always when ORM is selected (no-op for Drizzle)
+2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed)
+3. `pnpm rudder vendor:publish --tag=auth-views-<framework>` — only when auth was selected AND `fs.cp` couldn't vendor the views
+4. `pnpm rudder passport:keys` — only when passport selected
+5. `git init` + `git add . && git commit -m "Initial commit (create-rudder-app)"` — controlled by `--git=true|false`, default true
 
-15 demos as of 2026-05-14: contact, cache (always); todos, polymorphic (ORM-gated); queue, mail, notifications, localization, http, avatar, fibonacci, system-info, pennant, ws, sync (each gated on its package). Demos are silently skipped when `primary !== 'react'`.
+These rely on @rudderjs/cli having the matching commands in its **skip-boot list** (`db:generate`, `db:push`, `migrate*` were added in PR #519's bundled cli fix; `add`/`remove` were added in #520/#521). Without skip-boot, `rudder db:generate` would try to boot the app before `@prisma/client` exists and crash — that's why the framework fix is load-bearing for the scaffolder's first 60-second story.
 
-The scaffolder's `app/Views/Demos/Index.tsx` is generated from `DEMOS` via `templates/demos/index-view.ts` (filtered through `shouldScaffoldDemo`). Adding a new demo = one registry entry + one per-demo template module — Index.tsx picks it up automatically.
+### What about demos?
+
+**Dropped from the default scaffolder** (PR #519). The 15-demo multiselect is gone; no `app/Views/Demos/` folder is generated. Demos still exist in the framework `playground/` (canonical reference app) and at `rudderjs.com/examples`.
+
+`src/templates/demos/registry.ts` still exists as a subpath export (`create-rudder-app/demos-registry`) so the playground continues to consume the same DemoSpec metadata for its own gallery. The scaffolder's template pipeline still accepts a `demos: string[]` field on `TemplateContext`, but the interactive flow always passes `[]`. The `--demos` flag is preserved as a silent no-op for backwards compatibility.
 
 ---
 
@@ -58,7 +81,22 @@ Inspired by Laravel Installer v5.27. When run inside an AI coding agent the prom
 - `--json` flag
 - `--interactive` overrides all of the above
 
-**Required flags in JSON mode** (every prompt has a corresponding flag):
+**Required flags in JSON mode** — two valid call shapes:
+
+**Recipe shortcut** (preferred for new scripts):
+```
+<project-name>
+--recipe=web-app|saas|api-service|realtime|minimal|custom
+--db=sqlite|postgresql|mysql           (omit when --recipe=minimal or --orm=none)
+--framework=react|vue|solid|none       (omit when recipe doesn't need frontend)
+--styling=tailwind+shadcn|tailwind|plain  (optional, defaults to recipe-appropriate)
+--packages=...                         (only when --recipe=custom)
+--db-ready=true|false                  (optional — pre-answers the Postgres/MySQL prompt; defaults to true for SQLite, false otherwise)
+--git=true|false                       (optional, default true)
+--install=true|false
+```
+
+**Legacy explicit** (pre-recipe contract; still supported for older scripts/CI):
 ```
 <project-name>
 --orm=prisma|drizzle|none
@@ -68,17 +106,27 @@ Inspired by Laravel Installer v5.27. When run inside an AI coding agent the prom
 --primary-framework=react|vue|solid    (only when >1 framework)
 --tailwind=true|false
 --shadcn=true|false                    (only when react + tailwind=true)
---demos=contact,queue,...              ('*' = all gated-available; '' = none)
 --install=true|false
 ```
 
+The `--demos` flag still parses but is a silent no-op (demos were dropped from the scaffolder default).
+
 **Output**:
 ```jsonc
-// success
-{ "success": true, "name": "my-app", "directory": "/abs/path", "files": 42, "agent": "claude-code", "installed": true, "providersDiscovered": true }
+// success — the auto-cascade fields appear only when --install=true and each
+// step was attempted (null = skipped, true/false = ran with that result)
+{
+  "success": true, "name": "my-app", "directory": "/abs/path", "files": 36,
+  "agent": "claude-code",
+  "installed": true, "providersDiscovered": true,
+  "dbGenerated": true, "dbPushed": true,
+  "authViewsPublished": null,        // null = fs.cp succeeded, no fallback needed
+  "passportKeysGenerated": null,     // null = passport not selected
+  "gitInitialized": true
+}
 
 // missing flags (exit 1)
-{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--orm", "--db"], "agent": "claude-code" }
+{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--recipe", "--db"], "agent": "claude-code" }
 
 // install crash (exit 1)
 { "success": false, "error": "...", "logFile": "/tmp/cra-xxx.log", "logTail": "...", "agent": "claude-code" }
@@ -120,9 +168,11 @@ templates/
 ├── routes/                # api, web, console
 ├── pages/                 # index, error, ai-chat (per framework)
 ├── views/                 # welcome (per framework)
-└── demos/                 # registry, index-view, shared, contact, cache, todos, queue, mail,
-                            #   notifications, localization, http, avatar, fibonacci, system-info,
-                            #   pennant, ws, sync, rudder-socket
+└── demos/                 # registry + per-demo template modules — kept for the
+                            #   `create-rudder-app/demos-registry` subpath export consumed
+                            #   by the framework playground. Not scaffolded by default
+                            #   (templates pipeline still accepts demos: string[] but the
+                            #   interactive + recipe flows always pass []).
 ```
 
 ---

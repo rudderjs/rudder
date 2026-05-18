@@ -1,14 +1,14 @@
 # create-rudder-app
 
-**Spin up a production-ready [RudderJS](https://github.com/rudderjs/rudder) app in under 60 seconds** — with auth that works, a database wired, SSR views rendering, and your pick from 25 opt-in packages, all bootstrapped through Vite + Vike.
+**Spin up a production-ready [RudderJS](https://github.com/rudderjs/rudder) app in under 60 seconds** — pick a recipe, the installer handles deps, database, auth views, and git init for you.
 
 ```bash
 pnpm create rudder-app my-app
-cd my-app
-pnpm exec prisma generate && pnpm exec prisma db push
-pnpm dev
+cd my-app && pnpm dev
 # → http://localhost:3000 — welcome page + register/login working end-to-end
 ```
+
+The installer asks four to six questions, then runs `pnpm install`, generates the Prisma client, pushes the schema (for SQLite) or asks first (for Postgres/MySQL), publishes auth views, generates Passport keys (when selected), and initializes git — all in one shot. No copy-pasting commands from the "Next Steps" panel.
 
 ---
 
@@ -29,47 +29,56 @@ Skip `[name]` to be prompted for one.
 
 ## What you get out of the box
 
-With the **default choices** (Prisma + SQLite + Auth + React + Tailwind + shadcn/ui + Contact demo), you get a working fullstack app you can register into, log into, and sign out of — without writing any code:
+With the **Web app recipe** (Prisma + SQLite + Auth + React + Tailwind + shadcn/ui), you get a working fullstack app you can register into, log into, and sign out of — without writing any code:
 
 - **Welcome page at `/`** — controller-returned view, Tailwind + shadcn styled, with Log in / Register links or a signed-in user + Sign out button.
 - **Auth flow that works** — `/login`, `/register`, `/forgot-password`, `/reset-password` pages vendored into `app/Views/Auth/` (so you can customize them freely) and wired to `POST /auth/sign-in/email` / `sign-up/email` / `sign-out` / `request-password-reset` / `reset-password` endpoints.
-- **Database ready** — Prisma schema with a `User` + `PasswordResetToken` model, SQLite by default, a `User` ORM model.
+- **Database ready** — Prisma schema with a `User` + `PasswordResetToken` model, SQLite by default, a `User` ORM model. Schema pushed automatically on install.
 - **Session-based auth** — cookie sessions via `@rudderjs/session`, `AuthMiddleware` applied to the `web` group, ghost-user-safe (see the [Request Lifecycle guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/lifecycle.md)).
 - **Rate limiting** — 60 req/min globally, 10 req/min on auth endpoints out of the box.
 - **Bootstrap you can read** — `bootstrap/app.ts` in 25 lines, `bootstrap/providers.ts` shows auto-discovery, `config/` has one file per concern.
 - **Rudder CLI** — `pnpm rudder --help` lists framework commands; `routes/console.ts` shows you how to add your own.
-- **`/demos` index** — every demo you ticked appears as a card linking to its page; new demos picked up automatically from the shared registry.
+- **Git initialized** — initial commit made for you (use `--git=false` to skip).
 
-If you tick **AI** you get a `/ai-chat` demo. If you tick **MCP**, `POST /mcp/echo`. If you tick **Passport**, a full OAuth 2 server at `/oauth/authorize` / `/oauth/token`. Everything is opt-in and pay-as-you-go.
+Pick the **SaaS recipe** and you also get queue + mail + notifications. **Realtime** adds broadcast + sync. **API service** drops the frontend entirely. **Custom** lets you check exactly the packages you want from the full 25-package menu.
 
 ---
 
 ## Prompts
 
-The installer walks you through up to 10 prompts (several are conditional):
+The installer asks at most six questions on the happy path:
 
 | # | Prompt | Options | Default | Condition |
 |---|--------|---------|---------|-----------|
 | 1 | Project name | any string | — | always (skipped if passed as argv) |
-| 2 | Database ORM | Prisma · Drizzle · None | Prisma | always |
-| 3 | Database driver | SQLite · PostgreSQL · MySQL | SQLite | only if ORM selected |
-| 4 | Packages | categorized multiselect (see below) | Authentication | always |
-| 5 | Frontend frameworks | React · Vue · Solid (multiselect) | React | always |
-| 6 | Primary framework | single select from chosen frameworks | — | only if >1 framework selected |
-| 7 | Add Tailwind CSS? | yes / no | yes | always |
-| 8 | Add shadcn/ui? | yes / no | yes | only if React + Tailwind |
-| 9 | Demos | multiselect filtered by previous picks | Contact form | only when at least one available |
-| 10 | Install dependencies? | yes / no | yes | always |
+| 2 | What are you building? *(recipe)* | Web app · SaaS · API service · Realtime · Minimal · Custom | Web app | always |
+| 3 | Database | Prisma · Drizzle *(+ None for Minimal/Custom)* | Prisma | unless recipe is `minimal` |
+| 4 | Database driver | SQLite · PostgreSQL · MySQL | SQLite | only when an ORM is selected |
+| 5 | Frontend framework | React · Vue · Solid · None | React | unless recipe is `api-service`/`minimal` |
+| 6 | Styling | Tailwind+shadcn · Tailwind · Plain CSS | Tailwind+shadcn (React) / Tailwind (Vue/Solid) | only when a framework is selected |
+| 7 | Is your DB running now? | yes / no | yes | only for PostgreSQL/MySQL |
+| 8 | Install and run setup? | yes / no | yes | always |
 
-> **Not sure what to pick?** Accept every default — it produces the most-used stack (Prisma + SQLite + Auth + React + Tailwind + shadcn/ui + Contact demo) and is the best-tested path. You can always add packages later.
+> **Not sure what to pick?** Accept every default — Web app with Prisma + SQLite + React + Tailwind + shadcn/ui is the best-tested path. You can [add packages later](#adding-packages-later).
+
+### Recipes (prompt 2)
+
+| Recipe | Adds on top of the framework core | Needs ORM | Needs frontend |
+|---|---|---|---|
+| **Web app** *(default)* | `auth` | yes | yes |
+| **SaaS** | `auth` + `queue` + `mail` + `notifications` | yes | yes |
+| **API service** | `auth` + `http` | yes | no |
+| **Realtime** | `auth` + `broadcast` + `sync` | yes | yes |
+| **Minimal** | nothing beyond the framework core | no | no |
+| **Custom** | *(prompts you with the full 25-package multiselect)* | optional | optional |
+
+Each recipe is a curated bundle. **Custom** is the escape hatch — if you want a specific mix, pick Custom and select exactly the packages you want from the legacy multiselect (8 categories, 25 packages).
 
 ### Tier A — silent install
 
 `@rudderjs/session`, `@rudderjs/hash`, and `@rudderjs/cache` are installed unconditionally. They're required by the default bootstrap (rate-limit middleware needs cache; auth needs hash + session) so making them explicit-but-silent prevents broken projects when you don't tick Authentication.
 
-### Package checklist (prompt 4)
-
-Eight categories, 24 visible rows, one pre-checked. Picking ORM=none filters out the three DB-gated rows (Authentication, Sanctum, Passport). Category labels mirror the framework README.
+### Custom recipe — full package list
 
 ```
 ─── Auth & Security ───
@@ -117,32 +126,15 @@ Package-specific behavior:
 
 - **AI** — generates `config/ai.ts`, AI chat demo at `/ai-chat`, `POST /api/ai/chat`.
 - **MCP** — generates `app/Mcp/EchoServer.ts` + `EchoTool.ts` and wires `POST /mcp/echo`.
-- **Passport** — generates `config/passport.ts`, OAuth 2 routes (`/oauth/authorize`, `/oauth/token`, etc.), and `OAuthClient` + `OAuthAccessToken` Prisma models. Filtered out when ORM=none.
-
-### Demos (prompt 9)
-
-Each demo is a small view + one API endpoint, gated on the relevant package. The list is sourced from a single registry at `src/templates/demos/registry.ts` (also exported as `create-rudder-app/demos-registry` so the framework's own playground consumes it).
-
-| Demo | Gate | What it shows |
-|------|------|---------------|
-| Contact form | always | CSRF + Zod validation, FormRequest-style errors |
-| Cache counter | always | `Cache.get` + `Cache.set` round-trip |
-| Todos | ORM | CRUD wired through ORM model + interactive UI |
-| Queue dispatch | Queue | `ExampleJob.dispatch().send()` → handler logs |
-| Mail send | Mail | `Mail.to(addr).send(new DemoMail(...))` via log driver |
-| Notifications | Notifications + Mail | `notify(Notification.route('mail', addr), ...)` |
-| Localization | Localization | locale switcher + `runWithLocale` + `trans()` |
-| HTTP client | HTTP | `Http.retry(3, 200).timeout(5000).get(url)` against a public API |
-| Avatar resize | Storage + Image | upload → 256×256 WebP via `@rudderjs/image` |
-| Worker threads | Concurrency | sequential vs parallel `fib(n)` via `Concurrency.run()` |
-| System info | Process | three shell commands via `Process.run()` and `Process.pool()` |
-| Feature flags | Pennant + Auth | boolean / value / scoped / Lottery features + `FeatureMiddleware` |
-| WebSocket chat | Broadcast | real-time chat + presence over a single WS |
-| Yjs collaboration | Sync | CRDT live document with awareness cursors |
-
-Demos are silently skipped when the primary framework isn't React (the templates ship React only for now).
+- **Passport** — generates `config/passport.ts`, OAuth 2 routes (`/oauth/authorize`, `/oauth/token`, etc.), and `OAuthClient` + `OAuthAccessToken` Prisma models. Filtered out when ORM=none. The installer runs `pnpm rudder passport:keys` automatically to generate the RSA keypair.
 
 Always-included base packages: `core`, `router`, `server-hono`, `middleware`, `vite`, `console`, `cli`, `log`, plus the Tier A trio above.
+
+### What about demos?
+
+Demos are no longer scaffolded into your project — they live in the [framework playground](https://github.com/rudderjs/rudder/tree/main/playground) and at [rudderjs.com/examples](https://rudderjs.com/examples). The previous "demos multiselect" added 1–15 demo pages under `app/Views/Demos/`; new users found that confusing ("is this my code?") and easy to forget to delete before deploying. The trade-off in favor of a clean scaffold won out.
+
+If you want a guided tour, the playground runs every demo at once and is meant to be cloned + explored.
 
 ---
 
@@ -239,19 +231,40 @@ Demos use the same semantic class vocabulary across all three variants — `.pag
 
 ## After scaffolding
 
-The installer prints the exact commands for your package manager. For reference:
+When **Install and run setup** is `yes` (the default), the installer runs the whole cascade for you — `pnpm install`, `rudder providers:discover`, `rudder db:generate`, `rudder db:push` (for SQLite, or after confirming for Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (if needed), `rudder passport:keys` (when Passport is selected), and `git init` + an initial commit. On the happy path the final panel says exactly one thing:
+
+```
+cd my-app && pnpm dev
+```
+
+If you said **no** to install, or a cascade step failed (e.g. your Postgres wasn't reachable), the panel prints only the steps you still need to run manually. Common ones:
 
 | Step | pnpm | npm | yarn | bun |
 |------|------|-----|------|-----|
-| Install (if skipped) | `pnpm install` | `npm install` | `yarn install` | `bun install` |
-| Discover providers (if install skipped) | `pnpm rudder providers:discover` | `npm run rudder providers:discover` | `yarn rudder providers:discover` | `bun rudder providers:discover` |
-| Prisma generate (if Prisma) | `pnpm exec prisma generate` | `npx prisma generate` | `yarn dlx prisma generate` | `bunx prisma generate` |
-| Prisma db push (if Prisma) | `pnpm exec prisma db push` | `npx prisma db push` | `yarn dlx prisma db push` | `bunx prisma db push` |
-| Drizzle push (if Drizzle) | `pnpm exec drizzle-kit push` | `npx drizzle-kit push` | `yarn dlx drizzle-kit push` | `bunx drizzle-kit push` |
-| Passport keys (if Passport) | `pnpm rudder passport:keys` | `npm run rudder passport:keys` | `yarn rudder passport:keys` | `bun rudder passport:keys` |
+| Install | `pnpm install` | `npm install` | `yarn install` | `bun install` |
+| Discover providers | `pnpm rudder providers:discover` | `npm run rudder providers:discover` | `yarn rudder providers:discover` | `bun rudder providers:discover` |
+| DB schema | `pnpm rudder db:push` | `npm run rudder db:push` | `yarn rudder db:push` | `bun rudder db:push` |
+| Generate client (Prisma) | `pnpm rudder db:generate` | `npm run rudder db:generate` | `yarn rudder db:generate` | `bun rudder db:generate` |
+| Publish auth views | `pnpm rudder vendor:publish --tag=auth-views-react` | `npm run rudder vendor:publish --tag=auth-views-react` | `yarn rudder vendor:publish --tag=auth-views-react` | `bun rudder vendor:publish --tag=auth-views-react` |
+| Passport keys | `pnpm rudder passport:keys` | `npm run rudder passport:keys` | `yarn rudder passport:keys` | `bun rudder passport:keys` |
 | Start dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
 
-When you let the installer run **Install dependencies**, it also runs `rudder providers:discover` automatically so the app boots on first `dev`. If you skipped install, run both manually before `dev`.
+## Adding packages later
+
+Scaffolding gives you a minimal default. When you want to grow:
+
+```bash
+pnpm rudder add queue        # installs @rudderjs/queue, generates config/queue.ts,
+                             #   wires it into config/index.ts, refreshes the manifest
+
+pnpm rudder add ai           # ANTHROPIC_API_KEY etc. — see the printed hint
+pnpm rudder add telescope    # debug dashboard at /telescope
+pnpm rudder add passport     # validates: passport requires auth + Prisma
+
+pnpm rudder remove queue     # uninstall + delete config/queue.ts + unregister
+```
+
+Both commands are **idempotent** — re-running is safe. `add` refuses to overwrite an existing config file. `remove` refuses to break the dep graph (e.g. removing `auth` while `sanctum`/`passport` are installed prints a friendly error). See the [CLI guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/rudder.md) for the full list of aliases.
 
 ---
 
@@ -270,11 +283,11 @@ pnpm rudder providers:discover
 <details>
 <summary><strong>Register or login returns 500 with a Prisma error</strong></summary>
 
-Usually means the schema wasn't pushed. Run:
+Usually means the schema wasn't pushed. The installer normally does this for you on SQLite, and after you confirm "Is your DB running?" for Postgres/MySQL. To run it yourself:
 
 ```bash
-pnpm exec prisma generate
-pnpm exec prisma db push
+pnpm rudder db:generate
+pnpm rudder db:push
 ```
 </details>
 
@@ -336,13 +349,13 @@ cd rudder/create-rudder-app
 pnpm install
 pnpm build
 node dist/index.js                              # launches the interactive CLI from source
-pnpm test                                       # 169 template tests + snapshot baseline
+pnpm test                                       # template tests + snapshot baseline
 pnpm smoke                                      # default end-to-end smoke
+pnpm smoke --profile=minimal                    # ORM=none + nothing else
 pnpm smoke --profile=no-db                      # ORM=none + observability survivability
-pnpm smoke --profile=demos-all                  # every demo at once
 ```
 
-Template logic lives in `src/templates.ts` (pure — returns `Record<path, content>`, no filesystem) plus modular `src/templates/{configs,demos,prisma,…}/`. The entrypoint `src/index.ts` handles prompts + writes + installs. Adding a new package option touches `templates/configs/`, `templates/package-json.ts`, and `src/index.ts`. Adding a new demo means one entry in `src/templates/demos/registry.ts` plus a per-demo template module — the playground's `/demos` index picks it up automatically via the `create-rudder-app/demos-registry` subpath export.
+Template logic lives in `src/templates.ts` (pure — returns `Record<path, content>`, no filesystem) plus modular `src/templates/{configs,prisma,…}/`. The entrypoint `src/index.ts` handles prompts + writes + the post-install cascade. Adding a new package option touches `templates/configs/`, `templates/package-json.ts`, and the `PACKAGE_GROUPS` map in `src/index.ts`. Adding a new recipe touches the `RECIPES` map in `src/cli-flags.ts` and (if a new prompt arm is needed) `src/index.ts`.
 
 ---
 
