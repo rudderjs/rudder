@@ -60,9 +60,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-15 — scaffolded package.json template now
-  // emits an `engines.node` field matching Vite 7's + Vike's required runtime
-  // floor (`^20.19.0 || >=22.12.0`).
+  // Baseline last captured 2026-05-19 — scaffolded AuthController template now
+  // sources PasswordBroker's `secret` from process.env.AUTH_SECRET so a fresh
+  // `pnpm build && pnpm start` boots without manual config in production.
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65481
-const EXPECTED_CONTENT_HASH = '4c6315bb6e628408e1a6e5e4a9da4c1b6a777084acb5c3d2c4253f19ab68c1cd'
+const EXPECTED_TOTAL_BYTES = 65673
+const EXPECTED_CONTENT_HASH = '2b8c187370eb20b050667e25aad06fcbae6eef95e3226c8b86928ce5fb5656b3'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

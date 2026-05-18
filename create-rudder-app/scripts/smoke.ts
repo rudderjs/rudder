@@ -18,8 +18,9 @@
 // Pre-req: `pnpm build` has been run from repo root so packages/*/dist exists.
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, readdir, readFile, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, mkdir, writeFile, cp } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -208,7 +209,147 @@ async function buildOverrides(): Promise<Record<string, string>> {
     if (typeof name !== 'string') continue
     overrides[name] = `link:${path.join(PACKAGES_DIR, dir)}`
   }
+
+  // Pin @prisma/client + prisma to whatever the workspace install resolved to.
+  // Without this, the smoke-app picks the latest matching `^7.0.0` (e.g. 7.8.0)
+  // while the link:'d @rudderjs/orm-prisma source resolves @prisma/client back
+  // to the workspace's hoisted version (e.g. 7.4.2) — two engines diverge and
+  // `prisma generate` outputs for one while the runtime loads the other,
+  // producing "Cannot find module '.prisma/client/default'". Pinning to the
+  // workspace version keeps generator + runtime on the same engine.
+  // Read versions from packages/orm-prisma/node_modules since pnpm does not
+  // hoist @prisma/client / prisma to the workspace root (no root-level dep).
+  const ormPrismaModules = path.join(PACKAGES_DIR, 'orm-prisma', 'node_modules')
+  for (const dep of ['@prisma/client', 'prisma']) {
+    const wsPkg = path.join(ormPrismaModules, dep, 'package.json')
+    if (!existsSync(wsPkg)) continue
+    const { version } = JSON.parse(await readFile(wsPkg, 'utf8'))
+    if (typeof version === 'string') overrides[dep] = version
+  }
+
   return overrides
+}
+
+async function mirrorPrismaGeneratedClient(target: string): Promise<void> {
+  // pnpm `link:` makes @rudderjs/orm-prisma's transitive resolution of
+  // @prisma/client land on the workspace's hoisted copy in `worktree/node_modules/
+  // .pnpm/@prisma+client@<ver>_<peerhash>/...`, NOT the copy installed inside
+  // smoke-app. `prisma generate` only writes `.prisma/client/` into the latter.
+  // Mirror the generated dir into every workspace copy of @prisma+client so the
+  // linked source can find `default.js` at boot. Same-version copies still differ
+  // by peer-suffix, so we mirror to all of them.
+  const repoPnpm = path.join(REPO_ROOT, 'node_modules', '.pnpm')
+  const smokePnpm = path.join(target, 'node_modules', '.pnpm')
+  if (!existsSync(repoPnpm) || !existsSync(smokePnpm)) return
+
+  const smokeEntries = await readdir(smokePnpm)
+  const generatedFrom = smokeEntries
+    .map((e) => path.join(smokePnpm, e, 'node_modules', '.prisma', 'client'))
+    .find((p) => existsSync(p))
+  if (!generatedFrom) return
+
+  const repoEntries = await readdir(repoPnpm)
+  const targets = repoEntries.filter((e) => e.startsWith('@prisma+client@'))
+  for (const e of targets) {
+    const dest = path.join(repoPnpm, e, 'node_modules', '.prisma', 'client')
+    await mkdir(path.dirname(dest), { recursive: true })
+    await cp(generatedFrom, dest, { recursive: true, force: true })
+  }
+}
+
+async function pickFreePort(): Promise<number> {
+  // Bind to port 0 to let the OS pick an available port, read it, then release.
+  // Tiny race between close and the rudder server's bind, but CI runners are
+  // single-tenant per job so collisions are not realistic.
+  return new Promise((resolve, reject) => {
+    const srv = createNetServer()
+    srv.on('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      srv.close(() => {
+        if (typeof addr === 'object' && addr) resolve(addr.port)
+        else reject(new Error('failed to allocate port'))
+      })
+    })
+  })
+}
+
+async function bootAndProbe(target: string, port: number): Promise<RunResult> {
+  // Boots the scaffolded app via `node ./dist/server/index.mjs`, polls / for a
+  // 200 response, and asserts the welcome page marker is in the body. Catches
+  // prod-bundle drift (missing exports, top-level node: imports), Vike build
+  // output going wrong, and any provider that throws at HTTP-server start time.
+  const child = spawn('node', ['./dist/server/index.mjs'], {
+    cwd: target,
+    stdio: 'pipe',
+    env: { ...process.env, NODE_ENV: 'production', PORT: String(port), CI: '1' },
+  })
+
+  let stdout = ''
+  let stderr = ''
+  child.stdout?.on('data', (d) => { stdout += d.toString() })
+  child.stderr?.on('data', (d) => { stderr += d.toString() })
+
+  const exitPromise = new Promise<number>((resolve) => {
+    child.on('close', (code) => resolve(code ?? 1))
+    child.on('error', () => resolve(1))
+  })
+
+  try {
+    const url = `http://127.0.0.1:${port}/`
+    const deadline = Date.now() + 15_000
+    let lastErr: unknown = null
+    let body: string | null = null
+
+    while (Date.now() < deadline) {
+      if (child.exitCode !== null) {
+        return {
+          code: 1,
+          stdout,
+          stderr: stderr + `\n[smoke] server exited (code ${child.exitCode}) before serving /`,
+        }
+      }
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(2_000) })
+        if (res.status === 200) {
+          body = await res.text()
+          break
+        }
+        lastErr = new Error(`HTTP ${res.status}`)
+      } catch (e) {
+        lastErr = e
+      }
+      await new Promise((r) => setTimeout(r, 250))
+    }
+
+    if (body === null) {
+      return {
+        code: 1,
+        stdout,
+        stderr: stderr + `\n[smoke] server did not serve 200 within 15s on port ${port}: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+      }
+    }
+
+    const marker = 'Built with RudderJS'
+    if (!body.includes(marker)) {
+      return {
+        code: 1,
+        stdout,
+        stderr: stderr + `\n[smoke] response body missing marker "${marker}"\n--- body (first 500 chars) ---\n${body.slice(0, 500)}`,
+      }
+    }
+
+    return { code: 0, stdout, stderr }
+  } finally {
+    if (child.exitCode === null) {
+      child.kill('SIGTERM')
+      const result = await Promise.race([
+        exitPromise,
+        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 3_000)),
+      ])
+      if (result === 'timeout') child.kill('SIGKILL')
+    }
+  }
 }
 
 // ─── Main ───────────────────────────────────────────────
@@ -258,6 +399,7 @@ async function main(): Promise<void> {
     if (ctx.orm === 'prisma') {
       const done2 = step('prisma generate')
       done2(await run('pnpm', ['exec', 'prisma', 'generate'], target, { timeoutMs: 120_000 }))
+      await mirrorPrismaGeneratedClient(target)
 
       // db push catches schema validity + Prisma generator parity.
       const done3 = step('prisma db push')
@@ -276,6 +418,7 @@ async function main(): Promise<void> {
     if (ctx.orm === 'prisma') {
       const done4a = step('rudder db:generate (skip-boot)')
       done4a(await run('pnpm', ['rudder', 'db:generate'], target, { timeoutMs: 60_000 }))
+      await mirrorPrismaGeneratedClient(target)
 
       const done4b = step('rudder db:push (skip-boot)')
       done4b(await run('pnpm', ['rudder', 'db:push'], target, { timeoutMs: 60_000 }))
@@ -286,6 +429,18 @@ async function main(): Promise<void> {
     // vs-class refs (provider register/boot), missing dist exports (resolveOptionalPeer).
     const done5 = step('rudder command:list (full boot)')
     done5(await run('pnpm', ['rudder', 'command:list'], target, { timeoutMs: 60_000 }))
+
+    // pnpm build + node ./dist/server/index.mjs + GET / — the actual user path.
+    // Catches prod-bundle drift the dev mode hides: missing `exports` conditions
+    // (see feedback_esm_only_peer_require_bug.md), top-level node:* imports the
+    // Vite build externalizes wrong, provider boot failures that surface only
+    // when the HTTP server starts accepting connections.
+    const done6 = step('pnpm build')
+    done6(await run('pnpm', ['build'], target, { timeoutMs: 300_000 }))
+
+    const port = await pickFreePort()
+    const done7 = step(`boot + GET / on port ${port}`)
+    done7(await bootAndProbe(target, port))
 
     success = true
     console.log(`\n[create-rudder-app smoke] OK\n`)

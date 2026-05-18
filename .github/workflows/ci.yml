@@ -119,3 +119,38 @@ jobs:
         # be the first place such breakage surfaced — now it's caught at PR time.
         # Pulled out of build-test so it doesn't run 4× per matrix cell.
         run: pnpm --filter @rudderjs/docs build
+
+  scaffolder-e2e:
+    # Phase 2 of docs/plans/2026-05-18-ci-portability-matrix.md.
+    # Scaffolds a real app via create-rudder-app, links every @rudderjs/* to
+    # the local workspace, installs, runs prisma + rudder boot commands, then
+    # builds + boots the prod server and asserts GET / returns 200 with the
+    # welcome marker. Catches scaffolder template drift, missing dist `exports`,
+    # provider-boot regressions — bugs that pass unit tests but break the
+    # actual `pnpm create rudder-app` user path.
+    # Ubuntu + Node 22 only; cross-OS scaffolder coverage is Phase 3.
+    name: Scaffolder E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages + scaffolder
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
+
+      - name: Scaffold + boot smoke
+        run: pnpm --filter create-rudder-app smoke
