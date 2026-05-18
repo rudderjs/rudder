@@ -22,7 +22,10 @@ export function idToPath(id: string): string {
   const segments = id
     .split('.')
     .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-  return path.join('app', 'Terminal', ...segments)
+  // POSIX separators — id-to-path is part of the public API and must
+  // be platform-stable. fs.access / dynamic import accept mixed slashes
+  // on Windows, so downstream code keeps working.
+  return path.posix.join('app', 'Terminal', ...segments)
 }
 
 /**
