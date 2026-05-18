@@ -65,7 +65,7 @@ These rely on @rudderjs/cli having the matching commands in its **skip-boot list
 
 ### What about demos?
 
-**Dropped from the default scaffolder** (PR #519). The 15-demo multiselect is gone; no `app/Views/Demos/` folder is generated. Demos still exist in the framework `playground/` (canonical reference app) and at `rudderjs.com/examples`.
+**Dropped from the default scaffolder** (PR #519). The 15-demo multiselect is gone; no `app/Views/Demos/` folder is generated. Demos still exist in the framework `playground/` (canonical reference app). The original PR copy mentioned `rudderjs.com/examples` but that URL has never shipped — the scaffolder's final panel now links to the GitHub playground tree directly.
 
 `src/templates/demos/registry.ts` still exists as a subpath export (`create-rudder-app/demos-registry`) so the playground continues to consume the same DemoSpec metadata for its own gallery. The scaffolder's template pipeline still accepts a `demos: string[]` field on `TemplateContext`, but the interactive flow always passes `[]`. The `--demos` flag is preserved as a silent no-op for backwards compatibility.
 
