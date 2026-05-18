@@ -62,7 +62,7 @@ rudderjs/
 │   │                       #   Attribute casts (12 built-in + custom CastUsing), Attribute.make()
 │   │                       #   accessors/mutators, @Hidden/@Visible/@Appends/@Cast decorators,
 │   │                       #   JsonResource/ResourceCollection, ModelCollection, ModelFactory, sequence()
-│   ├── orm-prisma/         # Prisma adapter (multi-driver: pg, libsql, default)
+│   ├── orm-prisma/         # Prisma adapter (multi-driver: postgresql, mysql/mariadb, libsql, sqlite-default)
 │   ├── orm-drizzle/        # Drizzle adapter (sqlite, postgresql, libsql)
 │   ├── server-hono/        # Hono adapter (HonoConfig, unified logger [rudderjs], CORS)
 │   ├── queue/              # Job, DispatchBuilder, SyncAdapter, queue:work/status/clear/failed/retry
@@ -149,13 +149,17 @@ rudderjs/
 │   ├── localization/       # i18n — trans(), setLocale(), locale middleware, JSON translation files
 │   ├── testing/            # TestCase, TestResponse, RefreshDatabase, WithFaker, database assertions
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
-│   └── cli/                # Rudder-style CLI (make:*, module:*, module:publish, user commands)
+│   └── cli/                # Rudder-style CLI (make:*, add, remove, module:*, module:publish,
+│                           #   db:generate, db:push, migrate*, providers:discover, user commands)
 ├── create-rudder-app/      # Interactive CLI scaffolder (pnpm create rudder-app)
-│                           #   Cascade-aware prompts: name · ORM (Prisma/Drizzle/None) · DB driver
-│                           #   · 8-category package multiselect · frameworks · primary · Tailwind ·
-│                           #   shadcn · demos (filtered by package picks). 14 demos shipped, all
-│                           #   driven by a single registry exported as create-rudder-app/demos-registry
-│                           #   so the playground reuses the same metadata. Published on npm.
+│                           #   Recipe-driven prompts (Web app / SaaS / API service / Realtime /
+│                           #   Minimal / Custom) replace the legacy 25-option multiselect — Custom
+│                           #   still walks the full picker. Frontend collapsed to framework + styling
+│                           #   single-selects. Post-install auto-cascade runs prisma generate +
+│                           #   migrate deploy + vendor:publish + passport:keys + git init so the
+│                           #   final panel is just `cd app && pnpm dev`. Demos dropped from default
+│                           #   scaffold (registry subpath export still ships for the playground).
+│                           #   Published on npm.
 ├── .github/workflows/      # CI (build, typecheck, lint, test) + Release (Changesets auto-publish)
 ├── docs/                   # VitePress documentation site
 └── playground/             # Framework demo app (port 3000) — auth, routing, ORM, queue, mail,
@@ -216,9 +220,10 @@ cd playground && pnpm dev
 
 **Why `server.restart()` doesn't work:** it closes the Vite module runner, breaking any in-flight SSR request that references the old RudderJS instance. SSR module graph invalidation is the correct approach — the runner stays alive, and the next request re-executes `bootstrap/app.ts` which creates a fresh instance.
 
-**What auto-reloads vs. what doesn't:**
-- **Auto-reloads:** Views (`app/Views/`), route files (`routes/`), bootstrap files (`bootstrap/`), controllers/models/middleware (tracked by Vite's SSR module graph)
-- **Requires `pnpm build`:** Changes to framework packages in `packages/` (they compile to `dist/`)
+**What re-bootstraps vs. what hot-reloads:**
+- **Hot-reloads via Vike (no re-bootstrap):** `app/Views/**` — view files are loaded lazily per request and never captured in provider closures, so the `rudderjs:routes` watcher skips the singleton-clear path for them. Vike's component HMR fires natively (~50 ms in-browser refresh).
+- **Triggers full re-bootstrap:** route files (`routes/`), bootstrap files (`bootstrap/`), and non-view files under `app/` (models, controllers, providers, services, middleware, jobs, mail, listeners). The watcher clears `__rudderjs_instance__` + `__rudderjs_app__` and invalidates the SSR module graph; next request re-executes `bootstrap/app.ts`.
+- **Requires `pnpm build`:** Changes to framework packages in `packages/` (they compile to `dist/`).
 
 ---
 
@@ -325,7 +330,7 @@ RudderJS Framework
 │
 ├─── Data Layer
 │    ├── @rudderjs/orm                Model, QueryBuilder, casts, resources, factories
-│    │    ├── @rudderjs/orm-prisma    Prisma adapter
+│    │    ├── @rudderjs/orm-prisma    Prisma adapter (postgresql, mysql/mariadb, libsql, sqlite)
 │    │    └── @rudderjs/orm-drizzle   Drizzle adapter (sqlite, pg, libsql)
 │    ├── @rudderjs/cache              Cache facade, Memory + Redis, Cache.fake()
 │    ├── @rudderjs/session            Cookie + Redis session drivers
@@ -944,6 +949,12 @@ pnpm rudder make:mcp-server EchoServer          # @rudderjs/mcp
 pnpm rudder make:mcp-tool MyTool                # @rudderjs/mcp
 pnpm rudder make:mcp-resource AppLog            # @rudderjs/mcp
 pnpm rudder make:mcp-prompt CodeReview          # @rudderjs/mcp
+
+# Grow / shrink the framework deps later (alternative to manual `pnpm add/remove`)
+pnpm rudder add queue                           # installs @rudderjs/queue + writes config/queue.ts + wires it
+pnpm rudder add ai                              # one-line hint per package guides next step
+pnpm rudder remove queue                        # reverses add — uninstall + delete config + un-register
+pnpm rudder remove queue --keep-config          # keep config/queue.ts for re-add later
 
 # Queue
 pnpm rudder queue:work [queues=default]
