@@ -8,6 +8,7 @@ import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
 import { commandListCommand } from './commands/command-list.js'
 import { addCommand } from './commands/add.js'
+import { removeCommand } from './commands/remove.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -266,6 +267,7 @@ async function main(): Promise<void> {
   vendorPublishCommand(program)
   providersDiscoverCommand(program)
   addCommand(program)
+  removeCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -289,11 +291,14 @@ async function main(): Promise<void> {
   //   been registered with the manifest yet, so booting the app would
   //   crash on the missing provider before the command's own
   //   providers:discover step gets a chance to refresh the manifest.
+  // - `remove` uninstalls a package — the about-to-be-deleted provider
+  //   may still be in node_modules but is being torn out; booting would
+  //   be wasted work at best and surface confusing errors at worst.
   const NO_BOOT_EXACT  = new Set([
     'providers:discover', 'module:publish', 'view:sync',
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status',
-    'add',
+    'add', 'remove',
   ])
   const NO_BOOT_PREFIX = ['make:']
   const skipBoot = process.argv.slice(2).some(arg =>
