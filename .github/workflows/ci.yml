@@ -121,17 +121,24 @@ jobs:
         run: pnpm --filter @rudderjs/docs build
 
   scaffolder-e2e:
-    # Phase 2 of docs/plans/2026-05-18-ci-portability-matrix.md.
+    # Phase 2 of docs/plans/2026-05-18-ci-portability-matrix.md + Phase 0 of
+    # docs/plans/2026-05-19-scaffolder-render-e2e.md.
     # Scaffolds a real app via create-rudder-app, links every @rudderjs/* to
     # the local workspace, installs, runs prisma + rudder boot commands, then
     # builds + boots the prod server and asserts GET / returns 200 with the
     # welcome marker. Catches scaffolder template drift, missing dist `exports`,
     # provider-boot regressions — bugs that pass unit tests but break the
     # actual `pnpm create rudder-app` user path.
-    # Ubuntu + Node 22 only; cross-OS scaffolder coverage is Phase 3.
-    name: Scaffolder E2E
+    # Framework matrix (react/vue/solid) catches vike-react/vue/solid renderer
+    # drift; profile expansion is Phase 3. Ubuntu + Node 22 only; cross-OS is
+    # the previous plan doc's Phase 3 and stays deferred.
+    name: Scaffolder E2E (${{ matrix.framework }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [react, vue, solid]
 
     steps:
       - name: Checkout
@@ -153,4 +160,4 @@ jobs:
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Scaffold + boot smoke
-        run: pnpm --filter create-rudder-app smoke
+        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }}
