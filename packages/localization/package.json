@@ -33,7 +33,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
   },
   "dependencies": {
     "@rudderjs/core": "workspace:^"
