@@ -168,7 +168,7 @@ describe('LocalAdapter', () => {
     assert.strictEqual(await adapter.getVisibility('a.txt'), 'private')
   })
 
-  it('getVisibility falls back to mode bits when sidecar is missing', async () => {
+  it('getVisibility falls back to mode bits when sidecar is missing', { skip: process.platform === 'win32' ? 'POSIX mode bits; Windows uses ACLs' : false }, async () => {
     await adapter.put('a.txt', 'x')
     await fs.chmod(adapter.path('a.txt'), 0o600)
     assert.strictEqual(await adapter.getVisibility('a.txt'), 'private')
