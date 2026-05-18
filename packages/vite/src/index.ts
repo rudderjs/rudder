@@ -181,10 +181,16 @@ export function rudderjs(): Plugin[] {
           path.resolve(cwd, 'bootstrap'),
           path.resolve(cwd, 'app'),
         ]
+        // View files (app/Views/**) are loaded lazily by Vike when a page
+        // renders — they aren't captured in provider boot closures. Vike's
+        // component HMR handles them in ~50ms; full re-bootstrap pushes the
+        // first request after an edit to ~600ms cold SSR. Skip them here.
+        const viewsRoot = path.resolve(cwd, 'app', 'Views')
 
         for (const dir of watchDirs) server.watcher.add(dir)
         server.watcher.on('change', (file) => {
           if (!watchDirs.some(d => file.startsWith(d))) return
+          if (file.startsWith(viewsRoot)) return
 
           // Clear the two top-level singletons so a new RudderJS + Application
           // pair is created when the module re-executes. App files (models,

@@ -180,6 +180,40 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     assert.equal(invalidated, 0, 'SSR should NOT be invalidated')
     assert.deepEqual(server.hot.sent, [], 'no full-reload signal')
   })
+
+  it('skips re-bootstrap for app/Views/** edits — Vike handles HMR natively', async () => {
+    const plugin = await findPlugin('rudderjs:routes')
+    const server = makeServer()
+    ;(plugin.configureServer as (s: unknown) => void)(server)
+
+    let invalidated = 0
+    server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
+
+    server.watcher.fire('change', `${cwd}/app/Views/Home.tsx`)
+    server.watcher.fire('change', `${cwd}/app/Views/Auth/Login.tsx`)
+
+    const g = globalThis as Record<string, unknown>
+    assert.deepEqual(g['__rudderjs_instance__'], { stub: true }, 'singleton should NOT be cleared for view edits')
+    assert.deepEqual(g['__rudderjs_app__'], { stub: true }, 'app singleton should NOT be cleared for view edits')
+    assert.equal(invalidated, 0, 'SSR should NOT be invalidated for view edits')
+    assert.deepEqual(server.hot.sent, [], 'no full-reload — Vike component HMR handles it')
+  })
+
+  it('still re-bootstraps for non-view app/ edits (models, controllers, etc.)', async () => {
+    const plugin = await findPlugin('rudderjs:routes')
+    const server = makeServer()
+    ;(plugin.configureServer as (s: unknown) => void)(server)
+
+    let invalidated = 0
+    server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
+
+    server.watcher.fire('change', `${cwd}/app/Models/User.ts`)
+
+    const g = globalThis as Record<string, unknown>
+    assert.equal(g['__rudderjs_instance__'], undefined, 'singleton cleared for model edits')
+    assert.equal(invalidated, 1)
+    assert.deepEqual(server.hot.sent, [{ type: 'full-reload' }])
+  })
 })
 
 // ── rudderjs:ws ───────────────────────────────────────────
