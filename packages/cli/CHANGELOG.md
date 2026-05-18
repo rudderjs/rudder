@@ -1,5 +1,107 @@
 # @rudderjs/cli
 
+## 4.4.0
+
+### Minor Changes
+
+- b04d3d4: Add `rudder add <package>` — install a RudderJS package end-to-end with one command.
+
+  ## What it does
+
+  ```
+  $ pnpm rudder add queue
+
+    Adding @rudderjs/queue...
+    ✓ added 1 dependency
+    Generated config/queue.ts
+    Registered "queue" in config/index.ts
+    Refreshing provider manifest...
+
+    ✓ queue is ready.
+      Background jobs: `import { Bus } from "@rudderjs/queue"; Bus.dispatch(new MyJob())`.
+  ```
+
+  Each invocation:
+
+  1. Validates the alias against a known registry (25 packages — same set the scaffolder offers under "Custom").
+  2. Checks dependencies (e.g. `passport` requires `auth` + Prisma).
+  3. Runs the package manager (auto-detected from `npm_config_user_agent`) to install `@rudderjs/<name>`.
+  4. Writes `config/<name>.ts` from a vendored template — skipped if the file already exists.
+  5. Surgically inserts the new entry into `config/index.ts` (import line + `configs = { ... }` key). Idempotent: re-running returns "already registered" without duplicating anything.
+  6. Re-runs `providers:discover` so the framework picks up the new provider.
+  7. Prints a one-line hint specific to the package (e.g. `Set ANTHROPIC_API_KEY in .env` for `ai`).
+
+  ## Why
+
+  Pairs with the `create-rudder-app` recipe simplification (PR #519). The scaffolder now ships with a minimal default; `rudder add` is the natural growth path for "I want to add queue / mail / telescope later" without manually editing `package.json`, generating a config file, and re-running `providers:discover`.
+
+  ## Supported aliases
+
+  `auth`, `sanctum`, `passport`, `socialite`, `crypt`, `queue`, `storage`, `scheduler`, `mail`, `notifications`, `broadcast`, `sync`, `localization`, `pennant`, `http`, `process`, `concurrency`, `terminal`, `image`, `telescope`, `pulse`, `horizon`, `ai`, `mcp`, `boost`. Accepts either the short alias (`rudder add queue`) or the full npm name (`rudder add @rudderjs/queue`).
+
+  ## Skip-boot
+
+  `add` is in the CLI's skip-boot list — the freshly-added provider hasn't been registered with the manifest yet, so booting the app would crash on the missing provider before the command's own `providers:discover` step gets a chance to refresh the manifest.
+
+- 44f4cdc: Add `rudder remove <package>` — the natural counterpart to `rudder add`.
+
+  Reverses every step the `add` command makes:
+
+  1. **Validates** the alias against the same registry (25 packages).
+  2. **Refuses cleanly** when other installed packages still depend on the target. `rudder remove auth` while `sanctum` or `passport` is installed fails with: `"Cannot remove auth — these installed packages depend on it: passport. Remove them first, or keep auth installed."`
+  3. **Uninstalls** the npm dependency via the auto-detected package manager.
+  4. **Deletes** `config/<name>.ts` (unless `--keep-config` is passed).
+  5. **Surgically unregisters** the entry from `config/index.ts` — removes the import line and drops the key from the `configs = { ... }` map. Idempotent: returns `not-registered` if the key is already gone.
+  6. **Re-runs** `providers:discover` so the removed provider drops out of the manifest.
+
+  Like `rudder add`, this lives in the skip-boot list — the about-to-be-deleted provider may still be in `node_modules` but is being torn out; booting the app would be wasted work at best and surface confusing errors at worst.
+
+  ## Idempotency
+
+  - `rudder remove queue` when `@rudderjs/queue` is already absent: prints `"@rudderjs/queue is not installed — nothing to remove"`, and opportunistically cleans up any orphaned `config/queue.ts` or `config/index.ts` entry left behind by a manual `pnpm remove`.
+  - Running twice in a row is safe — the second invocation just hits the not-installed branch.
+
+  ## --keep-config
+
+  For users who want to uninstall the dependency but keep their tuned `config/<name>.ts` for later. The config file stays in place; the npm package goes away. Useful when temporarily uninstalling to test compatibility, or when migrating between adapter packages that share a config shape.
+
+### Patch Changes
+
+- 9f4ce0f: Make the scaffolder magical — turn the first 60 seconds with RudderJS into "scaffold → working app" instead of "scaffold → copy 4–5 commands → working app".
+
+  ## What changed in `create-rudder-app`
+
+  - **Recipe picker** replaces the 25-option package multiselect. One question — _"What are you building?"_ — picks from `web-app` / `saas` / `api-service` / `realtime` / `minimal` / `custom`. The Custom escape hatch preserves the full multiselect for power users.
+  - **Frontend prompts collapsed**: 4 prompts (frameworks multi, primary, tailwind, shadcn) → 2 (framework single-select, styling single-select). Both auto-skipped for `api-service` and `minimal`.
+  - **Demos dropped from the default scaffold.** The 15-option demo multiselect is gone; nothing scaffolds into `app/Views/Demos/`. The demos still live in the framework playground and at `rudderjs.com/examples` — link printed in the final panel.
+  - **Auto-cascade after install** — what used to be 4–5 manual commands in the "Next Steps" panel now runs automatically:
+    - `pnpm rudder db:generate` (always — no-op for Drizzle)
+    - `pnpm rudder db:push` (SQLite by default; for Postgres/MySQL the scaffolder asks _"Is your DB running now?"_ first, falls through to manual steps if no)
+    - `pnpm rudder vendor:publish --tag=auth-views-<framework>` (only if `@rudderjs/auth` couldn't vendor views via `fs.cp` — fallback path)
+    - `pnpm rudder passport:keys` (only when passport is selected)
+  - **`git init` + initial commit** — runs by default after the cascade (`--git=false` to skip). Skipped silently if `git` isn't on `$PATH` or `.git/` already exists.
+  - **Final panel slimmed down**: when the auto-cascade succeeds end-to-end, the panel prints exactly one line — `cd app && pnpm dev`. When something needed user attention (DB not running, command failed), only the remediation steps appear.
+
+  ## New flags
+
+  | Flag                                         | What it does                                                                             |
+  | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+  | `--recipe=<name>`                            | Preset bundle. Drives ORM default + packages + whether frontend prompts appear.          |
+  | `--framework=react\|vue\|solid\|none`        | Singular shortcut — replaces `--frameworks` + `--primary-framework` for the common case. |
+  | `--styling=tailwind+shadcn\|tailwind\|plain` | Single styling choice — collapses `--tailwind` + `--shadcn`.                             |
+  | `--git=true\|false`                          | Whether to run `git init` after scaffolding (default `true`).                            |
+  | `--db-ready=true\|false`                     | Pre-answer the "Is your DB running?" prompt; only matters for Postgres/MySQL.            |
+
+  ## Backward compatibility
+
+  All old flags (`--orm`, `--packages`, `--frameworks`, `--primary-framework`, `--tailwind`, `--shadcn`, `--demos`, `--install`) still parse and validate. JSON mode supports both shapes — either the new recipe-driven contract or the pre-recipe explicit contract. The `--demos` flag is now a silent no-op (demos were dropped from the default scaffold) — existing scripts and CI passing `--demos=...` keep working without modification.
+
+  ## What changed in `@rudderjs/cli`
+
+  Added `db:generate`, `db:push`, `migrate`, `migrate:fresh`, `migrate:status` to the CLI's skip-boot list. These commands all shell out to the underlying ORM binary (Prisma / drizzle-kit) and never touch app state.
+
+  This is load-bearing for the create-rudder-app auto-cascade: `rudder db:generate` MUST work _before_ `@prisma/client` has been generated, which is exactly the chicken-and-egg the framework boot would hit on a fresh scaffolded project. Without this, `pnpm rudder db:generate` on a fresh app fails with `Could not load @prisma/client` because the framework's `DatabaseProvider` boots before generation runs. (`db:seed` is deliberately not in skip-boot — user seeders use the ORM and need a booted app.)
+
 ## 4.3.0
 
 ### Minor Changes
