@@ -39,7 +39,7 @@ describe('@rudderjs/vite', () => {
     assert.ok(Array.isArray(resolve.alias), 'alias should be an array')
     const atAlias = resolve.alias.find(a => a.find === '@')
     assert.ok(atAlias, 'should have @ alias')
-    assert.ok(atAlias.replacement.endsWith('/src'), '@ alias should point to src/')
+    assert.ok(atAlias.replacement.replace(/\\/g, '/').endsWith('/src'), '@ alias should point to src/')
 
     // Check ssr config
     assert.ok(config.ssr, 'should have ssr config')
