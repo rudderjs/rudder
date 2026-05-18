@@ -121,20 +121,19 @@ jobs:
         run: pnpm --filter @rudderjs/docs build
 
   scaffolder-e2e:
-    # Phase 2 of docs/plans/2026-05-18-ci-portability-matrix.md + Phase 0 of
-    # docs/plans/2026-05-19-scaffolder-render-e2e.md.
+    # Phases 0-2 of docs/plans/2026-05-19-scaffolder-render-e2e.md + Phase 2 of
+    # docs/plans/2026-05-18-ci-portability-matrix.md.
     # Scaffolds a real app via create-rudder-app, links every @rudderjs/* to
-    # the local workspace, installs, runs prisma + rudder boot commands, then
-    # builds + boots the prod server and asserts GET / returns 200 with the
-    # welcome marker. Catches scaffolder template drift, missing dist `exports`,
-    # provider-boot regressions — bugs that pass unit tests but break the
-    # actual `pnpm create rudder-app` user path.
-    # Framework matrix (react/vue/solid) catches vike-react/vue/solid renderer
-    # drift; profile expansion is Phase 3. Ubuntu + Node 22 only; cross-OS is
-    # the previous plan doc's Phase 3 and stays deferred.
+    # the local workspace, installs, runs prisma + rudder boot commands,
+    # builds + boots the prod server, then drives a headless chromium across
+    # the profile route manifest (Welcome + auth UI + selected demos + admin
+    # dashboards) to catch hydration/console-error regressions the SSR-only
+    # smoke can't see. Framework matrix (react/vue/solid) catches vike-react/
+    # vue/solid renderer drift; profile expansion is Phase 3. Ubuntu + Node 22
+    # only; cross-OS is the previous plan doc's Phase 3 and stays deferred.
     name: Scaffolder E2E (${{ matrix.framework }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -156,8 +155,34 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Read Playwright version
+        id: playwright
+        # Keyed-by-version cache below: chromium binary churns when the
+        # devDep version bumps. The shell parse keeps the workflow source
+        # of truth in package.json instead of a duplicate string here.
+        run: |
+          version=$(node -p "require('./create-rudder-app/package.json').devDependencies.playwright.replace(/^[^0-9]*/, '')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright chromium
+        # Skip the ~150MB browser download on cache hit. --with-deps still runs
+        # so system libs land even when binaries were cached.
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter create-rudder-app exec playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter create-rudder-app exec playwright install-deps chromium
+
       - name: Build packages + scaffolder
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
-      - name: Scaffold + boot smoke
+      - name: Scaffold + boot + render-check
         run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }}
