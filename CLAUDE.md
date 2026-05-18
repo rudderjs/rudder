@@ -51,13 +51,15 @@ pnpm rudder      # RudderJS CLI (tsx node_modules/@rudderjs/cli/src/index.ts)
 
 > Always run `pnpm build` from root before `pnpm dev` in playground — packages must be compiled first.
 
-Prisma (run from `playground/`):
+Database (run from `playground/` — ORM-agnostic via the rudder CLI):
 ```bash
-pnpm exec prisma generate       # Regenerate client after schema changes
-pnpm exec prisma db push        # Sync schema → DB (dev, no migrations)
-pnpm exec prisma migrate dev    # Create a migration
-pnpm rudder db:seed            # Seed via rudder command
+pnpm rudder db:generate         # Regenerate client (Prisma) — no-op for Drizzle
+pnpm rudder db:push             # Sync schema → DB (dev, no migrations)
+pnpm rudder migrate             # Create + apply migrations
+pnpm rudder db:seed             # Run DatabaseSeeder
 ```
+
+Raw Prisma still works (`pnpm exec prisma <subcommand>`) when you need a Prisma-specific flag.
 
 ---
 
@@ -312,7 +314,7 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **Missing `reflect-metadata`**: Add `import 'reflect-metadata'` to entry point; install as dep (not devDep)
 - **`workspace:*` not resolving**: Run `pnpm install` from root after adding a new local dependency
 - **Stale `dist/`**: Run `pnpm build` from root before running the playground
-- **Prisma client missing**: Run `pnpm exec prisma generate` from `playground/`
+- **Prisma client missing**: Run `pnpm rudder db:generate` (or `pnpm exec prisma generate`) from `playground/`
 - **Decorator errors**: Ensure `experimentalDecorators` and `emitDecoratorMetadata` in tsconfig.json
 - **Circular dep**: Never add `@rudderjs/core` to router/server-hono's `dependencies` — `peerDependencies` only
 - **Port in use**: `lsof -ti :24678 -ti :3000 | xargs kill -9`

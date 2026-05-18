@@ -126,7 +126,7 @@ This directory is **optional**. Pure API apps omit it entirely and remove Vike f
 
 Multi-file Prisma schema. Each `@rudderjs/*` package that ships models (e.g. `@rudderjs/auth`) publishes its own `<name>.prisma` file via `pnpm rudder vendor:publish`. Your app-specific models live in `app.prisma`. The `datasource` and `generator` blocks live in `base.prisma`.
 
-Run `pnpm exec prisma generate` after any schema change.
+Run `pnpm rudder db:generate` after any schema change (ORM-agnostic — on Prisma this shells to `prisma generate`; on Drizzle it's a no-op).
 
 ## The entry point
 

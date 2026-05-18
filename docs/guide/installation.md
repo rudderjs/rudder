@@ -16,25 +16,34 @@ pnpm create rudder-app my-app
 # or: bunx create-rudder-app my-app
 ```
 
-The scaffolder asks a series of questions, then generates only the code for the choices you made. Selected packages get added to `package.json`, registered in `bootstrap/providers.ts`, and have their config files generated. Unselected packages are excluded entirely — no dead code, no orphan config.
+The scaffolder asks a short recipe-driven sequence, then generates only the code for the choices you made. Selected packages get added to `package.json`, registered via auto-discovery, and have their config files generated. Unselected packages are excluded entirely — no dead code, no orphan config.
 
 | # | Prompt | Notes |
 |---|---|---|
 | 1 | Project name | — |
-| 2 | Database ORM | Prisma · Drizzle · None |
-| 3 | Database driver | SQLite · PostgreSQL · MySQL — only when an ORM is selected |
-| 4 | Packages *(multiselect)* | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Sync · AI · MCP · Passport · Localization · Telescope · Boost · Demos |
-| 5 | Frontend frameworks | React · Vue · Solid (multiselect) |
-| 6 | Primary framework | only when more than one is selected |
-| 7 | Add Tailwind CSS? | — |
-| 8 | Add shadcn/ui? | only when React + Tailwind |
-| 9 | Install dependencies? | — |
+| 2 | What are you building? *(recipe)* | Web app · SaaS · API service · Realtime · Minimal · Custom |
+| 3 | Database | Prisma · Drizzle *(+ None for Minimal/Custom)* |
+| 4 | Database driver | SQLite · PostgreSQL · MySQL — only when an ORM is selected |
+| 5 | Frontend framework | React · Vue · Solid · None — skipped for `api-service` / `minimal` |
+| 6 | Styling | Tailwind+shadcn · Tailwind · Plain CSS — only when a framework is selected |
+| 7 | Is your DB running now? | Only for PostgreSQL/MySQL — if yes, the installer pushes the schema for you |
+| 8 | Install and run setup? | `yes` triggers the full auto-cascade described below |
 
-When the scaffolder finishes it prints the exact next-step commands for your package manager. The shape is always:
+Each recipe is a curated bundle of packages — pick one of the five named recipes for the common shapes, or **Custom** to walk through the full 25-package multiselect.
+
+| Recipe | Adds on top of the framework core | Frontend? |
+|---|---|---|
+| **Web app** *(default)* | `auth` | yes |
+| **SaaS** | `auth` + `queue` + `mail` + `notifications` | yes |
+| **API service** | `auth` + `http` | no |
+| **Realtime** | `auth` + `broadcast` + `sync` | yes |
+| **Minimal** | nothing beyond the framework core | no |
+| **Custom** | *(prompts the full multiselect)* | optional |
+
+When **Install and run setup** is `yes` (the default), the scaffolder runs the entire post-scaffold sequence for you — `pnpm install`, `rudder providers:discover`, `rudder db:generate`, `rudder db:push` (for SQLite, or after your confirmation for Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (when needed), `rudder passport:keys` (when Passport is selected), and `git init` + initial commit. On the happy path the final panel says one thing:
 
 ```bash
-pnpm rudder migrate    # apply database schema
-pnpm dev               # start the dev server
+cd my-app && pnpm dev
 ```
 
 Your app runs at `http://localhost:3000`.
@@ -65,35 +74,41 @@ When `create-rudder-app` runs inside an AI coding agent — Claude Code, Cursor,
 
 ```bash
 CLAUDECODE=1 npx create-rudder-app my-app \
-  --orm=prisma --db=sqlite \
-  --packages=auth,queue,mail \
-  --frameworks=react --tailwind=true --shadcn=true \
-  --demos=contact --install=true
+  --recipe=web-app --db=sqlite \
+  --framework=react --styling=tailwind+shadcn \
+  --install=true
 ```
 
 ```jsonc
-// success — single line of JSON to stdout
-{ "success": true, "name": "my-app", "directory": "/abs/path/my-app", "files": 42, "agent": "claude-code", "installed": true, "providersDiscovered": true }
+// success — single line of JSON to stdout; cascade fields appear only when --install=true
+{
+  "success": true, "name": "my-app", "directory": "/abs/path/my-app", "files": 36,
+  "agent": "claude-code",
+  "installed": true, "providersDiscovered": true,
+  "dbGenerated": true, "dbPushed": true,
+  "gitInitialized": true
+}
 
 // missing flags (exit 1)
-{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--orm", "--db"], "agent": "claude-code" }
+{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--recipe", "--db"], "agent": "claude-code" }
 ```
 
-Every prompt has a corresponding flag. Each flag also works in interactive mode — pass `--orm=prisma` to skip just that question, useful for CI templates.
+Every prompt has a corresponding flag. Each flag also works in interactive mode — pass `--recipe=web-app` to skip the first question, useful for CI templates.
 
 | Flag | Values |
 |---|---|
-| `--orm` | `prisma`, `drizzle`, `none` |
-| `--db` | `sqlite`, `postgresql`, `mysql` *(omit when `--orm=none`)* |
-| `--packages` | comma-separated package names; `*` = all defaults; empty string = none |
-| `--frameworks` | comma-separated: `react`, `vue`, `solid` |
-| `--primary-framework` | `react`, `vue`, `solid` *(only when >1 framework)* |
-| `--tailwind` | `true`, `false` |
-| `--shadcn` | `true`, `false` *(only when react + tailwind=true)* |
-| `--demos` | comma-separated demo ids; `*` = all gated-available; empty = none |
+| `--recipe` | `web-app`, `saas`, `api-service`, `realtime`, `minimal`, `custom` |
+| `--db` | `sqlite`, `postgresql`, `mysql` *(omit when `--recipe=minimal`)* |
+| `--framework` | `react`, `vue`, `solid`, `none` *(omit for `api-service` / `minimal`)* |
+| `--styling` | `tailwind+shadcn`, `tailwind`, `plain` *(optional — recipe picks a sensible default)* |
+| `--packages` | comma-separated package names *(only when `--recipe=custom`)* |
+| `--db-ready` | `true`, `false` — pre-answers the Postgres/MySQL "is your DB running?" prompt |
+| `--git` | `true`, `false` — whether to run `git init` + initial commit *(default `true`)* |
 | `--install` | `true`, `false` |
 | `--json` | force JSON output regardless of detection |
 | `--interactive` | force the prompt UI even inside an agent |
+
+The legacy explicit-flag shape (`--orm`, `--packages`, `--frameworks`, `--primary-framework`, `--tailwind`, `--shadcn`) still parses for backwards-compat with pre-recipe scripts. The `--demos` flag is preserved as a silent no-op — demos were dropped from the default scaffolder.
 
 Set `RUDDER_NONINTERACTIVE=1` in the environment to opt into JSON mode without an agent (e.g. CI scripts).
 
