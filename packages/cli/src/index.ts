@@ -7,6 +7,7 @@ import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
 import { commandListCommand } from './commands/command-list.js'
+import { addCommand } from './commands/add.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -264,6 +265,7 @@ async function main(): Promise<void> {
   moduleCommand(program)
   vendorPublishCommand(program)
   providersDiscoverCommand(program)
+  addCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -283,10 +285,15 @@ async function main(): Promise<void> {
   //   exactly the chicken-and-egg the framework boot would hit otherwise
   //   on a fresh scaffolded project. (`db:seed` is deliberately NOT here —
   //   user seeders use the ORM and need a booted app.)
+  // - `add` installs a new package — the freshly added provider hasn't
+  //   been registered with the manifest yet, so booting the app would
+  //   crash on the missing provider before the command's own
+  //   providers:discover step gets a chance to refresh the manifest.
   const NO_BOOT_EXACT  = new Set([
     'providers:discover', 'module:publish', 'view:sync',
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status',
+    'add',
   ])
   const NO_BOOT_PREFIX = ['make:']
   const skipBoot = process.argv.slice(2).some(arg =>
