@@ -1,6 +1,6 @@
 # RudderJS Feature Roadmap
 
-> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-14
+> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-18
 >
 > Legend: S = Small (1-2 days) | M = Medium (3-5 days) | L = Large (1-2 weeks)
 
@@ -455,3 +455,15 @@ Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ 
 | `@rudderjs/cache` | 6 | +fake | ✅ |
 | `@rudderjs/ai` | 8 | 15 providers, agents, tools, streaming, prompt caching (A1), handoffs (A2), asTool streaming (A2.5), MCP bridge (A3), memory (A4), eval framework (A5), budget enforcement (A6), computer-use (A7), Bedrock (B4), OpenRouter (B5), vector storage (B7), hosted vectors + fileSearch (B8), Gemini RAG (B8.5), ElevenLabs (B9), VoyageAI (B10). Runtime-agnostic main entry. | ✅ |
 | `@rudderjs/boost` | 8 | +boost:install, +guidelines, +skills, +db_query tool, +commands_list / command_run, +SSE-friendly transport | ✅ |
+
+## Post-1.0 Enhancements (2026-05+)
+
+Continuous improvements after 1.0 graduated. Not part of plans 1–9 — these came from real-world use surfacing rough edges (most discovered while deploying `pilotiq-io` to production on Forge + MySQL).
+
+| Area | Change | PR | Status |
+|---|---|---|---|
+| `@rudderjs/vite` | View HMR — `app/Views/**` edits skip framework re-bootstrap, fall through to Vike's native component HMR (~700 ms cold SSR → ~50 ms in-browser refresh) | rudder #517 | ✅ |
+| `create-rudder-app` | Recipe-driven scaffolder (Web app / SaaS / API service / Realtime / Minimal / Custom) replaces the 25-option multiselect; auto-cascade runs `prisma generate` + `migrate deploy` + `vendor:publish` + `passport:keys` + `git init` after install; demos dropped from default scaffold | rudder #519 | ✅ |
+| `@rudderjs/cli` | New `rudder add <pkg>` — installs + generates config + wires `config/index.ts` + refreshes provider manifest in one step. 25-package registry mirrors the scaffolder. | rudder #520 | ✅ |
+| `@rudderjs/cli` | New `rudder remove <pkg>` — reverses `add` end-to-end; refuses when dependents are still installed (`auth` blocked while `sanctum`/`passport` present); `--keep-config` flag preserves the local config | rudder #521 | ✅ |
+| `@rudderjs/orm-prisma` | **MySQL / MariaDB driver** via `@prisma/adapter-mariadb` — Forge (and any host that defaults to MySQL) is now a viable production target without installing Postgres alongside | rudder #523 | ✅ |
