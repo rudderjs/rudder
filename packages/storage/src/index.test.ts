@@ -655,7 +655,7 @@ describe('Storage facade', () => {
   })
 
   it('path() delegates to the adapter', () => {
-    assert.ok(Storage.path('uploads/x.txt').endsWith('uploads/x.txt'))
+    assert.ok(Storage.path('uploads/x.txt').replace(/\\/g, '/').endsWith('uploads/x.txt'))
   })
 
   it('disk() returns a named adapter', () => {
