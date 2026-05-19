@@ -38,13 +38,21 @@ include-based 8-cell shape:
 
 Net coverage gain: `saas` + `realtime` recipes now have E2E.
 
-The `api-service` recipe is **deferred from the matrix** for a follow-up. The
-scaffold currently can't build with `frameworks: []` — Vike's build plugin
-errors with `At least one page should be defined`. Fixing it requires either
-a vanilla `pages/_error/+Page.ts` template (returns plain HTML, no React/Vue/
-Solid imports) or skipping Vike entirely when no frontend is selected. The
-recipe stays in `RECIPES` so the interactive picker still surfaces it, but
-the smoke won't exercise it until a separate scaffolder PR lands the fix.
+Two recipes are **deferred from the matrix** for a follow-up: **`api-service`**
+AND **`minimal`** both have `needsFrontend: false` in `RECIPES`, which
+resolves to `frameworks: []` at scaffold time. Vike's build plugin then
+errors with `At least one page should be defined`, so the scaffold can't
+`pnpm build`. Fixing it requires either a vanilla `pages/_error/+Page.ts`
+template (returns plain HTML, no React/Vue/Solid imports) or skipping Vike
+entirely when no frontend is selected. Both recipes stay in `RECIPES` so the
+interactive picker still surfaces them, but the smoke won't exercise them
+until a separate scaffolder PR lands the fix.
+
+To keep a useful baseline in the matrix, the smoke's `minimal` cell diverges
+from the user-facing `minimal` recipe: it uses `frameworks: ['react']` (no
+packages, no ORM, but a buildable Welcome page) instead of the recipe's
+`frameworks: []`. Comment in `scripts/smoke.ts:profiles.minimal` calls this
+out.
 
 Defensive correctness fix bundled here: `templates.ts` now gates every
 `pages/` scaffold step on `frameworks.length >= 1` so a future recipe with

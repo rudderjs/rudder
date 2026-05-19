@@ -86,12 +86,17 @@ function baseProfile(overrides: Partial<TemplateContext> = {}): TemplateContext 
 }
 
 const profiles: Record<string, TemplateContext> = {
-  // `minimal` recipe — no packages, no ORM, no frontend.
+  // `minimal` cell — react + no packages + no ORM. Diverges from the
+  // user-facing `minimal` recipe (which has `needsFrontend: false`) because
+  // the recipe doesn't currently build — Vike requires at least one page
+  // and there are none with `frameworks: []`. Same gap as `api-service`;
+  // both deferred from the matrix until a no-frontend scaffolder fix lands
+  // (vanilla `+Page.js` or a Vike-skipping vite.config). The cell here is
+  // still useful as the bare-bones / package-less smoke baseline.
   minimal: baseProfile({
     orm:        false,
     authSecret: '',
     appKey:     '',
-    frameworks: [],
   }),
 
   // `web-app` recipe — auth + ORM + frontend (the default canonical shape).
