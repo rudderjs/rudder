@@ -140,10 +140,13 @@ class BedrockAdapter implements ProviderAdapter {
     if (!response.body) return
 
     const decoder = new TextDecoder()
+    // See anthropic.ts for the same shape — Bedrock-Anthropic uses the
+    // identical event protocol, so the prompt-token tracking is identical too.
+    const state: BedrockStreamState = { lastPromptTokens: 0 }
     for await (const event of response.body) {
       if (!event.chunk?.bytes) continue
       const decoded = JSON.parse(decoder.decode(event.chunk.bytes)) as Record<string, any>
-      yield* mapBedrockAnthropicEvent(decoded)
+      yield* mapBedrockAnthropicEvent(decoded, state)
     }
   }
 
@@ -189,12 +192,31 @@ export function isAnthropicOnBedrock(model: string): boolean {
 }
 
 /**
+ * Cross-event state for Bedrock-Anthropic streaming. The Anthropic stream
+ * protocol splits prompt + completion token counts across two distinct
+ * events; we track the prompt count from `message_start` so the later
+ * `message_delta` → `finish` chunk can emit a complete usage object.
+ */
+export interface BedrockStreamState {
+  lastPromptTokens: number
+}
+
+/**
  * Map a single decoded Bedrock-Anthropic stream event to zero-or-more
  * `StreamChunk`s. Bedrock wraps Anthropic's native streaming events 1:1 in
  * `chunk.bytes`, so the body shape matches `anthropic.ts`'s loop — but we
  * keep the mapping here so a future model family can be added cleanly.
+ *
+ * `state` is mutated across calls: `message_start` captures `lastPromptTokens`,
+ * the subsequent `message_delta` reads it back. Without this, the `finish`
+ * chunk reports `promptTokens: 0`, the agent loop's last-wins aggregation
+ * overwrites the correct earlier value, and consumers (billing, withBudget)
+ * silently undercharge for streamed calls.
  */
-export function* mapBedrockAnthropicEvent(event: Record<string, any>): Generator<StreamChunk> {
+export function* mapBedrockAnthropicEvent(
+  event: Record<string, any>,
+  state: BedrockStreamState,
+): Generator<StreamChunk> {
   if (event['type'] === 'content_block_delta') {
     const delta = event['delta']
     if (delta?.type === 'text_delta') {
@@ -208,22 +230,27 @@ export function* mapBedrockAnthropicEvent(event: Record<string, any>): Generator
       toolCall: { id: event['content_block'].id, name: event['content_block'].name },
     }
   } else if (event['type'] === 'message_delta') {
+    const completionTokens = event['usage']?.output_tokens ?? 0
     yield {
       type: 'finish',
       finishReason: event['delta']?.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
       usage: {
-        promptTokens: 0,
-        completionTokens: event['usage']?.output_tokens ?? 0,
-        totalTokens: event['usage']?.output_tokens ?? 0,
+        promptTokens: state.lastPromptTokens,
+        completionTokens,
+        totalTokens: state.lastPromptTokens + completionTokens,
       },
     }
   } else if (event['type'] === 'message_start' && event['message']?.usage) {
+    state.lastPromptTokens = event['message'].usage.input_tokens ?? 0
+    // output_tokens at message_start is the SDK's initial counter (~0/1), not
+    // the final completion total — don't claim a totalTokens here. The
+    // `finish` chunk above carries the authoritative final usage.
     yield {
       type: 'usage',
       usage: {
-        promptTokens: event['message'].usage.input_tokens ?? 0,
-        completionTokens: event['message'].usage.output_tokens ?? 0,
-        totalTokens: (event['message'].usage.input_tokens ?? 0) + (event['message'].usage.output_tokens ?? 0),
+        promptTokens: state.lastPromptTokens,
+        completionTokens: 0,
+        totalTokens: state.lastPromptTokens,
       },
     }
   }

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { AiRegistry } from './registry.js'
 import { OpenRouterProvider } from './providers/openrouter.js'
-import { BedrockProvider, isAnthropicOnBedrock, mapBedrockAnthropicEvent } from './providers/bedrock.js'
+import { BedrockProvider, isAnthropicOnBedrock, mapBedrockAnthropicEvent, type BedrockStreamState } from './providers/bedrock.js'
 import { OpenAIAdapter } from './providers/openai.js'
 
 // ─── OpenRouter ───────────────────────────────────────────
@@ -121,11 +121,13 @@ describe('isAnthropicOnBedrock', () => {
 // ─── mapBedrockAnthropicEvent ─────────────────────────────
 
 describe('mapBedrockAnthropicEvent', () => {
+  const newState = (): BedrockStreamState => ({ lastPromptTokens: 0 })
+
   it('maps text-delta events', () => {
     const chunks = [...mapBedrockAnthropicEvent({
       type: 'content_block_delta',
       delta: { type: 'text_delta', text: 'Hello' },
-    })]
+    }, newState())]
     assert.deepEqual(chunks, [{ type: 'text-delta', text: 'Hello' }])
   })
 
@@ -133,7 +135,7 @@ describe('mapBedrockAnthropicEvent', () => {
     const chunks = [...mapBedrockAnthropicEvent({
       type: 'content_block_start',
       content_block: { type: 'tool_use', id: 'tu_123', name: 'getWeather' },
-    })]
+    }, newState())]
     assert.deepEqual(chunks, [{
       type: 'tool-call-delta',
       toolCall: { id: 'tu_123', name: 'getWeather' },
@@ -144,7 +146,7 @@ describe('mapBedrockAnthropicEvent', () => {
     const chunks = [...mapBedrockAnthropicEvent({
       type: 'content_block_delta',
       delta: { type: 'input_json_delta', partial_json: '{"city":"' },
-    })]
+    }, newState())]
     assert.deepEqual(chunks, [{ type: 'tool-call-delta', text: '{"city":"' }])
   })
 
@@ -153,7 +155,7 @@ describe('mapBedrockAnthropicEvent', () => {
       type: 'message_delta',
       delta: { stop_reason: 'tool_use' },
       usage: { output_tokens: 12 },
-    })]
+    }, newState())]
     assert.equal(chunks.length, 1)
     assert.equal(chunks[0]!.type, 'finish')
     assert.equal((chunks[0] as { finishReason: string }).finishReason, 'tool_calls')
@@ -164,7 +166,7 @@ describe('mapBedrockAnthropicEvent', () => {
       type: 'message_delta',
       delta: { stop_reason: 'end_turn' },
       usage: { output_tokens: 5 },
-    })]
+    }, newState())]
     assert.equal((chunks[0] as { finishReason: string }).finishReason, 'stop')
   })
 
@@ -172,14 +174,51 @@ describe('mapBedrockAnthropicEvent', () => {
     const chunks = [...mapBedrockAnthropicEvent({
       type: 'message_start',
       message: { usage: { input_tokens: 100, output_tokens: 0 } },
-    })]
+    }, newState())]
     assert.equal(chunks.length, 1)
     assert.equal(chunks[0]!.type, 'usage')
     assert.equal((chunks[0] as { usage: { promptTokens: number } }).usage.promptTokens, 100)
   })
 
   it('emits nothing for unknown event types', () => {
-    const chunks = [...mapBedrockAnthropicEvent({ type: 'ping' })]
+    const chunks = [...mapBedrockAnthropicEvent({ type: 'ping' }, newState())]
     assert.equal(chunks.length, 0)
+  })
+
+  // ─── Regression: prompt-token clobber on streaming ────────
+  //
+  // Anthropic's stream protocol splits prompt + completion counts across two
+  // events. Before #545's sibling fix here, message_delta emitted
+  // promptTokens: 0 on the `finish` chunk, the agent loop's last-wins
+  // aggregation overwrote the correct value from message_start, and consumers
+  // (billing, withBudget) silently undercharged. Bedrock-Anthropic uses the
+  // identical protocol so it had the identical bug.
+
+  it('threads promptTokens from message_start into the finish chunk', () => {
+    const state = newState()
+    const startChunks = [...mapBedrockAnthropicEvent({
+      type: 'message_start',
+      message: { usage: { input_tokens: 100, output_tokens: 0 } },
+    }, state)]
+    const deltaChunks = [...mapBedrockAnthropicEvent({
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn' },
+      usage: { output_tokens: 42 },
+    }, state)]
+
+    // message_start carries the prompt count
+    const usageChunk = startChunks[0] as { usage: { promptTokens: number; completionTokens: number; totalTokens: number } }
+    assert.equal(usageChunk.usage.promptTokens, 100)
+    // completionTokens at message_start is the SDK's initial counter, not
+    // the final count — must not claim a totalTokens that mixes them.
+    assert.equal(usageChunk.usage.completionTokens, 0)
+    assert.equal(usageChunk.usage.totalTokens, 100)
+
+    // message_delta — the regression fix: promptTokens MUST carry over from
+    // state.lastPromptTokens, not reset to 0.
+    const finishChunk = deltaChunks[0] as { usage: { promptTokens: number; completionTokens: number; totalTokens: number } }
+    assert.equal(finishChunk.usage.promptTokens, 100, 'finish chunk should report promptTokens from message_start')
+    assert.equal(finishChunk.usage.completionTokens, 42)
+    assert.equal(finishChunk.usage.totalTokens, 142)
   })
 })
