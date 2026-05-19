@@ -82,6 +82,7 @@ Route.get('/', async () => view('welcome', {
     if (shouldScaffoldDemo(ctx, 'polymorphic')) {
       imports.push(`import { Post } from '../app/Models/Post.ts'`)
       imports.push(`import { Video } from '../app/Models/Video.ts'`)
+      imports.push(`import { Tag } from '../app/Models/Tag.ts'`)
       imports.push(`import type { Comment } from '../app/Models/Comment.ts'`)
     }
     if (shouldScaffoldDemo(ctx, 'pennant')) {

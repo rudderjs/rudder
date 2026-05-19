@@ -121,7 +121,7 @@ jobs:
         run: pnpm --filter @rudderjs/docs build
 
   scaffolder-e2e:
-    # Phases 0-2 of docs/plans/2026-05-19-scaffolder-render-e2e.md + Phase 2 of
+    # Phases 0-3 of docs/plans/2026-05-19-scaffolder-render-e2e.md + Phase 2 of
     # docs/plans/2026-05-18-ci-portability-matrix.md.
     # Scaffolds a real app via create-rudder-app, links every @rudderjs/* to
     # the local workspace, installs, runs prisma + rudder boot commands,
@@ -129,15 +129,20 @@ jobs:
     # the profile route manifest (Welcome + auth UI + selected demos + admin
     # dashboards) to catch hydration/console-error regressions the SSR-only
     # smoke can't see. Framework matrix (react/vue/solid) catches vike-react/
-    # vue/solid renderer drift; profile expansion is Phase 3. Ubuntu + Node 22
-    # only; cross-OS is the previous plan doc's Phase 3 and stays deferred.
-    name: Scaffolder E2E (${{ matrix.framework }})
+    # vue/solid renderer drift; profile matrix (minimal/default/demos-all)
+    # catches package-induced route drift. The smoke drops demos for
+    # non-react and the manifest gates auth UI to react, so vue/solid cells
+    # exercise the kitchen-sink package set without untestable views.
+    # Ubuntu + Node 22 only; cross-OS is the previous plan doc's Phase 3 and
+    # stays deferred.
+    name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         framework: [react, vue, solid]
+        profile:   [minimal, default, demos-all]
 
     steps:
       - name: Checkout
@@ -185,4 +190,4 @@ jobs:
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Scaffold + boot + render-check
-        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }}
+        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }}
