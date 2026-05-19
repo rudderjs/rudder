@@ -33,6 +33,12 @@ jobs:
     steps:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          # Canary doesn't check out the repo (it tests `pnpm create
+          # rudder-app` against real npm in isolation), so `packageManager`
+          # autodetect has no package.json to read. Pin to match the repo's
+          # `packageManager` field — bump together if that bumps.
+          version: 10.29.3
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
