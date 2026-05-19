@@ -1029,6 +1029,11 @@ describe('getTemplates() — demos', () => {
     assert.match(files['prisma/schema/modules.prisma']!, /model Taggable \{/)
     assert.match(files['prisma/schema/modules.prisma']!, /taggableType/)
     assert.ok(files['routes/web.ts']!.includes("view('demos.polymorphic'"))
+    // Pinned because the route handler references Tag.all() — without the
+    // import, the prod-built handler hits ReferenceError on /demos/polymorphic.
+    assert.match(files['routes/web.ts']!, /import \{ Post \} from '\.\.\/app\/Models\/Post\.ts'/)
+    assert.match(files['routes/web.ts']!, /import \{ Video \} from '\.\.\/app\/Models\/Video\.ts'/)
+    assert.match(files['routes/web.ts']!, /import \{ Tag \} from '\.\.\/app\/Models\/Tag\.ts'/)
     assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/state"))
     assert.ok(files['routes/api.ts']!.includes("Model.morph('commentable'"))
     assert.ok(files['routes/api.ts']!.includes("Model.morphToMany"))

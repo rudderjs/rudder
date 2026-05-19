@@ -117,7 +117,16 @@ export class AuthManager {
 
 // ─── Request-scoped Auth (AsyncLocalStorage) ──────────────
 
-const _als = new AsyncLocalStorage<AuthManager>()
+// Routed through `globalThis` so duplicate bundles of `@rudderjs/auth` share
+// one ALS instance. Vite/Rollup will sometimes inline auth-manager.js into
+// multiple chunks of an SSR build (one per entry that imports `auth()` /
+// `AuthMiddleware` from different code paths). Without this hoist,
+// AuthMiddleware writes the manager into one ALS while `auth().user()` reads
+// from another — handler sees "No auth context" even though the middleware ran.
+const ALS_KEY = '__rudderjs_auth_als__'
+const _alsGlobal = globalThis as Record<string, unknown>
+const _als: AsyncLocalStorage<AuthManager> = (_alsGlobal[ALS_KEY] as AsyncLocalStorage<AuthManager> | undefined)
+  ?? (() => { const a = new AsyncLocalStorage<AuthManager>(); _alsGlobal[ALS_KEY] = a; return a })()
 
 export function runWithAuth<T>(manager: AuthManager, fn: () => T): T {
   return _als.run(manager, fn)

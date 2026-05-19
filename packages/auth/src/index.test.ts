@@ -16,6 +16,7 @@ import {
   PasswordBroker,
   MemoryTokenRepository,
   runWithAuth,
+  currentAuth,
   toAuthenticatable,
   userToPlain,
   BaseAuthController,
@@ -964,5 +965,26 @@ describe('Gate registry on globalThis', () => {
     } | undefined
     assert.ok(store, 'global store should exist after Gate.define()')
     assert.ok(store.abilities.has('edit-post'))
+  })
+})
+
+describe('Auth ALS on globalThis', () => {
+  it('ALS lives on globalThis so AuthMiddleware and auth() share one context', async () => {
+    // Vite-bundled SSR apps can duplicate `auth-manager.js` into more than
+    // one output chunk (one reached via `AuthMiddleware` from a Provider
+    // copy, one reached via the user's `import { auth } from '@rudderjs/auth'`).
+    // Without a globalThis-routed ALS, AuthMiddleware writes the manager
+    // into one AsyncLocalStorage instance and the handler reads from a
+    // different one — `currentAuth()` throws "No auth context" inside a
+    // request that did run through AuthMiddleware. Pin the contract.
+    // The ALS contract is `runWithAuth(x, fn) → currentAuth() === x` inside fn.
+    // Use a sentinel object — we're testing plumbing, not AuthManager behavior.
+    const sentinel = {} as unknown as AuthManager
+    let observed: AuthManager | undefined
+    await runWithAuth(sentinel, () => { observed = currentAuth() })
+    assert.strictEqual(observed, sentinel)
+
+    const als = (globalThis as Record<string, unknown>)['__rudderjs_auth_als__']
+    assert.ok(als, 'global ALS should exist after runWithAuth()')
   })
 })
