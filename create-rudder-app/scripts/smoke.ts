@@ -86,17 +86,13 @@ function baseProfile(overrides: Partial<TemplateContext> = {}): TemplateContext 
 }
 
 const profiles: Record<string, TemplateContext> = {
-  // `minimal` cell — react + no packages + no ORM. Diverges from the
-  // user-facing `minimal` recipe (which has `needsFrontend: false`) because
-  // the recipe doesn't currently build — Vike requires at least one page
-  // and there are none with `frameworks: []`. Same gap as `api-service`;
-  // both deferred from the matrix until a no-frontend scaffolder fix lands
-  // (vanilla `+Page.js` or a Vike-skipping vite.config). The cell here is
-  // still useful as the bare-bones / package-less smoke baseline.
+  // `minimal` recipe — no packages, no ORM, no frontend. Vanilla welcome
+  // via @rudderjs/view's html`` tag — see `welcomeViewVanilla`.
   minimal: baseProfile({
     orm:        false,
     authSecret: '',
     appKey:     '',
+    frameworks: [],
   }),
 
   // `web-app` recipe — auth + ORM + frontend (the default canonical shape).
@@ -114,13 +110,13 @@ const profiles: Record<string, TemplateContext> = {
     packages: { ...emptyPackages(), auth: true, broadcast: true, sync: true },
   }),
 
-  // `api-service` recipe — DROPPED from the smoke. The scaffold currently
-  // can't build with `frameworks: []` because Vike requires at least one
-  // page ("At least one page should be defined"). Tracked for a follow-up
-  // scaffolder fix — either add a vanilla `pages/_error/+Page.ts` that
-  // returns plain HTML, or skip Vike entirely when the user picks the
-  // no-frontend recipe. Until then, the recipe is documented in
-  // `src/cli-flags.ts:RECIPES` but won't survive `pnpm build`.
+  // `api-service` recipe — auth + http + ORM, NO frontend. Same vanilla
+  // welcome shell as `minimal`; the manifest hits `/` (vanilla welcome) +
+  // `/api/health`.
+  'api-service': baseProfile({
+    frameworks: [],
+    packages:   { ...emptyPackages(), auth: true, http: true },
+  }),
 }
 
 // ─── Utilities ──────────────────────────────────────────

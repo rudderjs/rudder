@@ -41,7 +41,7 @@ import { terminalDashboardView } from './templates/app/terminal-dashboard.js'
 import { routesApi } from './templates/routes/api.js'
 import { routesWeb, welcomeExt } from './templates/routes/web.js'
 import { routesConsole } from './templates/routes/console.js'
-import { pagesRootConfig, pagesIndexConfig, pagesIndexData, pagesIndexPage } from './templates/pages/index.js'
+import { pagesRootConfig, pagesRootRenderHtml, pagesIndexConfig, pagesIndexData, pagesIndexPage } from './templates/pages/index.js'
 import { welcomeView } from './templates/views/welcome.js'
 import { siteHeaderComponent, siteHeaderExt } from './templates/components/site-header.js'
 import { pagesErrorConfig, pagesErrorPage } from './templates/pages/error.js'
@@ -170,31 +170,46 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files['app/Terminal/Dashboard.tsx'] = terminalDashboardView()
   }
 
-  // No frontend → skip every page-level scaffold. The api-service recipe
-  // lands here. Frontend assets (Welcome, SiteHeader, _error, ai-chat,
-  // multi-framework demo pages) all assume a vike-<framework> renderer is
-  // installed; without one, vite's build resolver throws on the imports.
-  const hasFrontend = ctx.frameworks.length >= 1
-  if (hasFrontend) {
+  // Page-level scaffolding. Three shapes:
+  //   - frameworks.length === 0: vanilla welcome via @rudderjs/view's html``.
+  //     pages/+config.ts hand-rolls onRenderHtml (no vike-* installed).
+  //     Skip _error/ai-chat/multi-fw demos — they require a real renderer.
+  //   - frameworks.length === 1: controller view for `/` via @rudderjs/view's
+  //     scanner. SiteHeader + Welcome + _error + (optional) ai-chat.
+  //   - frameworks.length > 1: pages/index/+Page.* picks a primary renderer.
+  //     No `app/Views/` (scanner can't resolve a single framework).
+  files['pages/+config.ts']              = pagesRootConfig(ctx)
+  if (ctx.frameworks.length === 0) {
+    // Vanilla render hook lives in its own file — Vike rejects `onRenderHtml`
+    // declared inline in +config.ts ("runtime in config" error). Vike
+    // auto-discovers the adjacent +onRenderHtml.ts file.
+    files['pages/+onRenderHtml.ts']      = pagesRootRenderHtml()
+    // Welcome.ts is a vanilla view — no vike-* import. Lives in app/Views/
+    // so the @rudderjs/vite scanner picks it up and generates the matching
+    // `pages/__view/welcome/+Page.ts` stub. Apps can swap to a real
+    // frontend by installing vike-react and renaming the file to .tsx.
+    files['app/Views/Welcome.ts']        = welcomeView(ctx)
+  } else if (ctx.frameworks.length === 1) {
+    // Single-framework projects use a controller view for `/` — rendered
+    // through @rudderjs/view and wired in routes/web.ts. The file lives in
+    // app/Views/ and is owned by the user from day one.
+    files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
+    // Shared header component used by Welcome + Demos. Kept outside app/Views/
+    // so the @rudderjs/vite scanner doesn't pick it up as a page.
+    files[`app/Components/SiteHeader.${siteHeaderExt(ctx.primary)}`] = siteHeaderComponent(ctx)
+  } else {
+    // Multi-framework projects keep pages/index/+Page.* with a per-page
+    // +config.ts that picks the primary renderer. The view scanner can't
+    // resolve a single framework when multiple vike-* are installed, so
+    // @rudderjs/view isn't usable in that setup yet.
     const ext = pageExt(ctx.primary)
-    files['pages/+config.ts']              = pagesRootConfig(ctx)
-    if (ctx.frameworks.length === 1) {
-      // Single-framework projects use a controller view for `/` — rendered
-      // through @rudderjs/view and wired in routes/web.ts. The file lives in
-      // app/Views/ and is owned by the user from day one.
-      files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
-      // Shared header component used by Welcome + Demos. Kept outside app/Views/
-      // so the @rudderjs/vite scanner doesn't pick it up as a page.
-      files[`app/Components/SiteHeader.${siteHeaderExt(ctx.primary)}`] = siteHeaderComponent(ctx)
-    } else {
-      // Multi-framework projects keep pages/index/+Page.* with a per-page
-      // +config.ts that picks the primary renderer. The view scanner can't
-      // resolve a single framework when multiple vike-* are installed, so
-      // @rudderjs/view isn't usable in that setup yet.
-      files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
-      files['pages/index/+data.ts']        = pagesIndexData(ctx)
-      files[`pages/index/+Page${ext}`]     = pagesIndexPage(ctx)
-    }
+    files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
+    files['pages/index/+data.ts']        = pagesIndexData(ctx)
+    files[`pages/index/+Page${ext}`]     = pagesIndexPage(ctx)
+  }
+
+  if (ctx.frameworks.length >= 1) {
+    const ext = pageExt(ctx.primary)
     files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
     files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
 
