@@ -1,13 +1,20 @@
-# Docs-only CI sibling. Fires when the real CI workflow's `paths-ignore` filters
-# it out — reports the required status checks so branch protection stays
-# satisfied without booting the full package build + test pipeline.
+# Docs-only CI sibling. Fires when the real CI workflow (`ci.yml`) is
+# filtered out by its `paths-ignore`. Reports the same check names as the
+# real workflow so branch-protection required-status-checks stay satisfied
+# without spinning up the full package build + test pipeline.
 #
-# `Build & Test` still runs the docs site build so VitePress/Vue-parser
-# breakage in plan docs (e.g. unescaped `<2%`, `Promise<T>` patterns) gets
-# caught at PR time instead of slipping into the Version & Publish workflow.
+# Job names here MUST match `ci.yml` exactly — branch protection matches
+# checks by name, including matrix-formatted ones like
+# `Build & Test (ubuntu-latest, Node 22)` and the scaffolder-e2e cells.
 #
-# Job names here MUST match ci.yml exactly (`Lint`, `Build & Test`) — the
-# branch protection ruleset matches checks by name.
+# Real work that stays in this docs-only path:
+#
+#   - Docs Build runs the actual VitePress build so `.md` parse breakage
+#     (e.g. unescaped `<2%`, `Promise<T>` patterns in plan docs) is caught
+#     at PR time instead of slipping into the release workflow.
+#
+# Everything else is a fast `echo`-only no-op (<10s) since docs changes
+# can't affect package code or scaffolder behavior.
 name: CI
 
 on:
@@ -40,10 +47,25 @@ jobs:
     steps:
       - run: echo "Docs-only change — skipping lint."
 
+  # Mirrors ci.yml's `build-test` matrix shape (os × node-version) so the
+  # matrix-formatted check names line up with branch-protection required
+  # checks. No actual build runs — docs changes can't affect package code.
   build-test:
-    name: Build & Test
+    name: Build & Test (${{ matrix.os }}, Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: ['20', '22']
+    steps:
+      - run: echo "Docs-only change — skipping build & test on ${{ matrix.os }} / Node ${{ matrix.node-version }}."
+
+  docs-build:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,4 +83,30 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build docs site
+        # Load-bearing — catches VitePress/Vue-parser breakage in `.md` files
+        # (plan docs landing `Promise<T>` or `<5%` patterns, etc.).
         run: pnpm --filter @rudderjs/docs build
+
+  # Mirrors ci.yml's `scaffolder-e2e` matrix exactly so each cell's
+  # required-check name resolves on docs-only PRs. No scaffold runs.
+  # Keep this matrix in lockstep with ci.yml — if a cell is added there,
+  # add it here too.
+  scaffolder-e2e:
+    name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }} / ${{ matrix.via }} / ${{ matrix.pm }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { framework: react, profile: minimal,     via: direct, pm: pnpm }
+          - { framework: react, profile: web-app,     via: direct, pm: pnpm }
+          - { framework: react, profile: saas,        via: direct, pm: pnpm }
+          - { framework: react, profile: api-service, via: direct, pm: pnpm }
+          - { framework: react, profile: realtime,    via: direct, pm: pnpm }
+          - { framework: vue,   profile: web-app,     via: direct, pm: pnpm }
+          - { framework: solid, profile: web-app,     via: direct, pm: pnpm }
+          - { framework: react, profile: web-app,     via: cli,    pm: pnpm }
+          - { framework: react, profile: web-app,     via: direct, pm: npm  }
+    steps:
+      - run: echo "Docs-only change — skipping scaffolder E2E for ${{ matrix.framework }} / ${{ matrix.profile }} / ${{ matrix.via }} / ${{ matrix.pm }}."
