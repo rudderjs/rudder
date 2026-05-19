@@ -1,0 +1,110 @@
+name: Scaffolder Canary
+
+# Weekly smoke against the *published* `create-rudder-app` + `@rudderjs/*`
+# packages on npm. Closes the cross-version-drift gap that the per-PR
+# matrix can't see — the per-PR smoke uses pnpm.overrides to point at the
+# local workspace, so it never resolves `latest` from the npm registry.
+#
+# This job does:
+#   1. `pnpm create rudder-app smoke-canary --recipe=web-app --install=true`
+#      → fetches the published `create-rudder-app` from npm, scaffolds
+#        a fresh project, and installs every `@rudderjs/*` dep from `latest`.
+#   2. `pnpm build` → builds the prod bundle against real npm tarballs.
+#   3. Boots the server, curls `/` + `/api/health` + `/login`.
+#
+# If a release published one package but a peer constraint requires a
+# version of another package that isn't on npm yet, install or build
+# will fail and this job goes red — within a day, not after a user
+# bug report.
+
+on:
+  schedule:
+    # Mondays at 08:00 UTC. Drift surfaces in the first weekly run after a
+    # release; one signal per week is enough for what this catches.
+    - cron: '0 8 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  canary:
+    name: Scaffold from npm + boot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Scaffold via `pnpm create rudder-app` (real npm)
+        working-directory: ${{ runner.temp }}
+        # `--json` flips into non-interactive mode; recipe + framework + db
+        # + install + git are required by validateJsonMode. `--install=true`
+        # is the load-bearing bit — it actually fetches all `@rudderjs/*`
+        # peer constraints from npm.
+        run: |
+          pnpm create rudder-app smoke-canary \
+            --json \
+            --recipe=web-app \
+            --framework=react \
+            --db=sqlite \
+            --install=true \
+            --git=false
+
+      - name: Vendor auth views
+        # `--install=true` already runs the auto-cascade (providers:discover,
+        # db:generate, db:push, vendor-publish auth views). Belt-and-suspenders:
+        # if the cascade silently skipped vendoring, fall back to the rudder
+        # CLI command directly so /login resolves at boot.
+        working-directory: ${{ runner.temp }}/smoke-canary
+        run: |
+          if [ ! -f app/Views/Auth/Login.tsx ]; then
+            pnpm rudder vendor:publish --tag=auth-views-react || true
+          fi
+
+      - name: Build
+        working-directory: ${{ runner.temp }}/smoke-canary
+        run: pnpm build
+
+      - name: Boot server + smoke curl
+        working-directory: ${{ runner.temp }}/smoke-canary
+        env:
+          PORT: '3000'
+        run: |
+          node ./dist/server/index.mjs > server.log 2>&1 &
+          SERVER_PID=$!
+          # Poll readiness for up to 10s — boot includes provider boot, ORM
+          # init, and route registration; cold-start can take a couple of
+          # seconds on a fresh CI runner.
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://localhost:3000/api/health > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          # Three asserts: SSR welcome, JSON probe, scaffolded auth UI.
+          curl -fsS http://localhost:3000/             -o /tmp/canary-root.html
+          curl -fsS http://localhost:3000/api/health   -o /tmp/canary-api-health.txt
+          curl -fsS http://localhost:3000/login        -o /tmp/canary-login.html
+
+          # Body shape checks — catches the case where the server returns 200
+          # but the response isn't what we expect (e.g. an error page rendered
+          # as a 200 by the error handler).
+          grep -q 'Built with RudderJS'    /tmp/canary-root.html       || { echo "❌ / missing welcome marker";       cat /tmp/canary-root.html;       exit 1; }
+          grep -q '"status":"ok"'          /tmp/canary-api-health.txt  || { echo "❌ /api/health missing status:ok";  cat /tmp/canary-api-health.txt;  exit 1; }
+          grep -q 'Welcome back'           /tmp/canary-login.html      || { echo "❌ /login missing auth UI marker";  cat /tmp/canary-login.html;      exit 1; }
+
+          kill $SERVER_PID 2>/dev/null || true
+          echo "✓ canary green"
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-server-log
+          path: ${{ runner.temp }}/smoke-canary/server.log
+          if-no-files-found: ignore
