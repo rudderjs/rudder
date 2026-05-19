@@ -3144,16 +3144,20 @@ describe('parallel tool execution', () => {
   }
 
   it('default mode runs execute() calls concurrently within a step', async () => {
-    const enters: string[] = []
-    const exits: string[] = []
+    // Unified events log so we can verify the concurrency *invariant* — both
+    // enters happen before either exit — instead of asserting on the exit
+    // ORDER, which is a fragile side-effect of timer ordering (Windows's
+    // ~15ms timer quantum + coalescing can flip sleep(10) > sleep(40) under
+    // load, even though both tools clearly ran in parallel).
+    const events: string[] = []
     const slow = toolDefinition({
       name: 'slow_a',
       description: 'a',
       inputSchema: z.object({}),
     }).server(async () => {
-      enters.push('a')
+      events.push('a-enter')
       await sleep(40)
-      exits.push('a')
+      events.push('a-exit')
       return 'a-done'
     })
     const fast = toolDefinition({
@@ -3161,9 +3165,9 @@ describe('parallel tool execution', () => {
       description: 'b',
       inputSchema: z.object({}),
     }).server(async () => {
-      enters.push('b')
+      events.push('b-enter')
       await sleep(10)
-      exits.push('b')
+      events.push('b-exit')
       return 'b-done'
     })
 
@@ -3177,10 +3181,16 @@ describe('parallel tool execution', () => {
 
     await agent({ instructions: 'sys', tools: [slow, fast] }).prompt('go')
 
-    // Concurrent execution: both tools entered before the slow one exited.
-    // Serial execution would have produced enters: [a], exits: [a], enters: [b], ...
-    assert.deepEqual(enters, ['a', 'b'], 'both tools should have entered in order')
-    assert.deepEqual(exits, ['b', 'a'], 'fast tool should exit before slow tool')
+    // Concurrent execution invariant: both tools entered before either exited.
+    // Serial would interleave: ['a-enter', 'a-exit', 'b-enter', 'b-exit'].
+    const aEnter = events.indexOf('a-enter')
+    const bEnter = events.indexOf('b-enter')
+    const aExit  = events.indexOf('a-exit')
+    const bExit  = events.indexOf('b-exit')
+    assert.ok(aEnter >= 0 && bEnter >= 0 && aExit >= 0 && bExit >= 0, `all four lifecycle events should fire — got ${events.join(' → ')}`)
+    assert.ok(Math.max(aEnter, bEnter) < Math.min(aExit, bExit), `concurrent: both enters must precede both exits — got ${events.join(' → ')}`)
+    // Tool-call order preserved at the enter boundary — a is first in the batch.
+    assert.ok(aEnter < bEnter, `enters must respect tool-call order — got ${events.join(' → ')}`)
   })
 
   it('parallelTools: false reverts to serial execution', async () => {
