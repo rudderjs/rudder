@@ -1,5 +1,110 @@
 # create-rudder-app
 
+## 1.2.0
+
+### Minor Changes
+
+- fffe9b8: Drop the `/demos/*` scaffolder templates. The interactive flow already stopped
+  prompting for demos when recipes shipped (#519); the underlying template
+  fragments lingered as unreachable code reachable only by hand-constructing a
+  `TemplateContext` with `demos: [...]`. The smoke E2E was the last consumer.
+
+  What's gone:
+
+  - `create-rudder-app/src/templates/demos/` (18 files: contact, todos,
+    polymorphic, fibonacci, system-info, avatar, pennant, cache, queue, mail,
+    notifications, localization, http, ws, sync, index-view, registry,
+    rudder-socket).
+  - Demo emitters in `routes/web.ts`, `routes/api.ts`, `app/service-provider.ts`,
+    `prisma/schema/modules.prisma` (now just the empty `<rudderjs:modules:*>`
+    markers).
+  - `<a href="/demos">Demos</a>` nav link in `SiteHeader` (all 6 framework × auth
+    variants).
+  - The `demos` field on `TemplateContext` and `Answers`, plus `--demos`
+    (was already a silent no-op).
+  - `shouldScaffoldDemo` / `shouldScaffoldAnyDemo` / `availableDemos` helpers.
+
+  Why: every demo lives in `playground/` already — that's where new framework
+  features get exercised. Keeping the templates in lockstep with playground was
+  manual work nobody was doing, and the scaffolder no longer surfaced them.
+
+  E2E coverage shape change:
+
+  The smoke profiles were rebuilt to mirror the user-facing recipes
+  (`minimal`, `web-app`, `saas`, `realtime`) instead of the synthetic
+  `default`/`todos`/`no-db`/`demos-all` profiles. The CI matrix is now an
+  include-based 8-cell shape:
+
+  - react × { minimal, web-app, saas, realtime } — 4 buildable recipes
+  - vue × { minimal, web-app } + solid × { minimal, web-app } — renderer drift
+
+  Net coverage gain: `saas` + `realtime` recipes now have E2E.
+
+  Two recipes are **deferred from the matrix** for a follow-up: **`api-service`**
+  AND **`minimal`** both have `needsFrontend: false` in `RECIPES`, which
+  resolves to `frameworks: []` at scaffold time. Vike's build plugin then
+  errors with `At least one page should be defined`, so the scaffold can't
+  `pnpm build`. Fixing it requires either a vanilla `pages/_error/+Page.ts`
+  template (returns plain HTML, no React/Vue/Solid imports) or skipping Vike
+  entirely when no frontend is selected. Both recipes stay in `RECIPES` so the
+  interactive picker still surfaces them, but the smoke won't exercise them
+  until a separate scaffolder PR lands the fix.
+
+  To keep a useful baseline in the matrix, the smoke's `minimal` cell diverges
+  from the user-facing `minimal` recipe: it uses `frameworks: ['react']` (no
+  packages, no ORM, but a buildable Welcome page) instead of the recipe's
+  `frameworks: []`. Comment in `scripts/smoke.ts:profiles.minimal` calls this
+  out.
+
+  Defensive correctness fix bundled here: `templates.ts` now gates every
+  `pages/` scaffold step on `frameworks.length >= 1` so a future recipe with
+  `frameworks: []` won't silently scaffold a `pages/index/+Page.tsx` it can't
+  build (the previous `if (frameworks.length === 1) ... else ...` shape
+  treated `[]` as multi-framework).
+
+- 641f3f4: Make the `minimal` and `api-service` recipes (the two `needsFrontend: false`
+  recipes) actually build. Previously, picking either through the interactive
+  picker or `--recipe=...` produced a scaffold that `pnpm build` couldn't
+  compile — Vike's plugin errors with `At least one page should be defined`
+  because `frameworks: []` skipped every `pages/` scaffold step.
+
+  How it's fixed:
+
+  - **Vanilla `app/Views/Welcome.ts`** — a no-React/Vue/Solid welcome view
+    built with `@rudderjs/view`'s `html\`\``tagged template (zero-client-JS,
+server-rendered string).`@rudderjs/vite`'s view scanner already supported
+vanilla mode: it detects no installed `vike-\*`and generates the matching`pages/\_\_view/welcome/+Page.ts`stub automatically. New`welcomeViewVanilla()`in`templates/views/welcome.ts`.
+  - **Vanilla `pages/+onRenderHtml.ts`** — Vike rejects `onRenderHtml`
+    declared inline in `+config.ts` (`runtime in config` error), so the
+    render hook lives in its own file. Wraps the page's body fragment in
+    the document shell via `escapeInject` + `dangerouslySkipEscape` from
+    `vike/server`. New `pagesRootRenderHtml()` in `templates/pages/index.ts`.
+  - **`pages/+config.ts`** for no-frontend stays minimal — just `passToClient`
+    - the `Config` type. No `extends`, no `onRenderHtml` inline.
+  - **`routes/web.ts`** — welcome route fires for `frameworks.length <= 1`
+    (single-framework OR no-frontend); multi-framework still uses
+    `pages/index/+Page.*`.
+
+  E2E coverage:
+
+  The smoke matrix grows from 8 cells to 7 cells (api-service replaces
+  minimal in the vue/solid axis since minimal is no-frontend and the
+  framework override is a no-op for `frameworks: []`):
+
+  - react × { minimal, web-app, saas, api-service, realtime } — all 5 recipes
+  - vue / solid × { web-app } — renderer drift
+
+  Local verification:
+
+  - react/minimal — 2 routes (`/`, `/api/health`), ~12s
+  - react/api-service — 2 routes, ~17s
+  - react/web-app — 4 routes + flow-check, ~25s (regression check)
+  - Workspace typecheck + lint clean, 210 scaffolder tests pass.
+
+  The `minimal` profile in the smoke now mirrors the actual recipe shape
+  (`frameworks: []`) — no more divergence between what users get and what
+  CI tests.
+
 ## 1.1.2
 
 ### Patch Changes
