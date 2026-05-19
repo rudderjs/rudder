@@ -1062,6 +1062,24 @@ function addUsage(total: TokenUsage, step: TokenUsage): void {
   total.totalTokens += step.totalTokens
 }
 
+/**
+ * Merge two `TokenUsage` snapshots emitted within a single step, taking the
+ * MAX per field. Stream providers may emit usage in multiple chunks (e.g.
+ * Anthropic's `message_start` carries promptTokens, `message_delta` carries
+ * completionTokens) — a naive last-wins overwrite drops correct earlier
+ * values when later chunks under-report. MAX is safe because every chunk is
+ * a running snapshot, not a delta: token counts only ever grow within a step.
+ *
+ * @internal — exported for testing only.
+ */
+export function mergeUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    promptTokens:     Math.max(a.promptTokens,     b.promptTokens),
+    completionTokens: Math.max(a.completionTokens, b.completionTokens),
+    totalTokens:      Math.max(a.totalTokens,      b.totalTokens),
+  }
+}
+
 function buildMiddlewareConfig(messages: AiMessage[], a: Agent): import('./types.js').MiddlewareConfigResult {
   const config: import('./types.js').MiddlewareConfigResult = { messages }
   const temp = a.temperature()
@@ -1668,9 +1686,9 @@ function runAgentLoopStreamingOnce(a: Agent, input: string, options?: AgentPromp
             const tc = chunk.toolCall as ToolCall
             currentToolCalls.push(tc)
           } else if (chunk.type === 'usage' && chunk.usage) {
-            stepUsage = chunk.usage
+            stepUsage = mergeUsage(stepUsage, chunk.usage)
           } else if (chunk.type === 'finish') {
-            if (chunk.usage) stepUsage = chunk.usage
+            if (chunk.usage) stepUsage = mergeUsage(stepUsage, chunk.usage)
             finishReason = chunk.finishReason ?? 'stop'
           }
         }

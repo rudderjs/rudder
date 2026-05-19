@@ -105,6 +105,16 @@ class AnthropicAdapter implements ProviderAdapter {
 
     const stream = await client.messages.stream(params, options.signal ? { signal: options.signal } : undefined)
 
+    // Anthropic's stream protocol splits usage across two events:
+    //   - `message_start.message.usage.input_tokens` carries the prompt count
+    //   - `message_delta.usage.output_tokens` carries the completion count
+    // Track the prompt count from message_start so we can emit a complete
+    // `finish` usage object — without this the finish chunk reports
+    // `promptTokens: 0`, the agent loop's last-wins aggregation overwrites
+    // the correct earlier value, and consumers (billing, withBudget) silently
+    // undercharge for streamed calls.
+    let lastPromptTokens = 0
+
     for await (const event of stream) {
       if (event.type === 'content_block_delta') {
         if (event.delta.type === 'text_delta') {
@@ -118,22 +128,27 @@ class AnthropicAdapter implements ProviderAdapter {
           toolCall: { id: event.content_block.id, name: event.content_block.name },
         }
       } else if (event.type === 'message_delta') {
+        const completionTokens = event.usage?.output_tokens ?? 0
         yield {
           type: 'finish',
           finishReason: event.delta.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
           usage: {
-            promptTokens: 0,
-            completionTokens: event.usage?.output_tokens ?? 0,
-            totalTokens: event.usage?.output_tokens ?? 0,
+            promptTokens: lastPromptTokens,
+            completionTokens,
+            totalTokens: lastPromptTokens + completionTokens,
           },
         }
       } else if (event.type === 'message_start' && event.message?.usage) {
+        lastPromptTokens = event.message.usage.input_tokens ?? 0
+        // output_tokens at message_start is the SDK's initial counter (~0/1),
+        // not the final completion total — don't claim a totalTokens here.
+        // The `finish` chunk above carries the authoritative final usage.
         yield {
           type: 'usage',
           usage: {
-            promptTokens: event.message.usage.input_tokens ?? 0,
-            completionTokens: event.message.usage.output_tokens ?? 0,
-            totalTokens: (event.message.usage.input_tokens ?? 0) + (event.message.usage.output_tokens ?? 0),
+            promptTokens: lastPromptTokens,
+            completionTokens: 0,
+            totalTokens: lastPromptTokens,
           },
         }
       }
