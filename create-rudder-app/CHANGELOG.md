@@ -1,5 +1,20 @@
 # create-rudder-app
 
+## 1.1.2
+
+### Patch Changes
+
+- 32337eb: Scaffolded `routes/web.ts` now imports `Tag` alongside `Post`/`Video`/`Comment`
+  when the polymorphic demo is selected. Without it, the generated
+  `/demos/polymorphic` handler hits `ReferenceError: Tag is not defined` on
+  first request (the handler calls `Tag.all()` and types `Tag[]`). Caught by
+  the new Phase 3 scaffolder render-check matrix on the `demos-all` profile.
+- a9c5bbf: Scaffolded `AuthController` now sources `PasswordBroker`'s `secret` from
+  `process.env.AUTH_SECRET` so a fresh `pnpm build && pnpm start` boots without
+  manual config in production. Caught by the new Phase 2 scaffolder E2E job.
+- Updated dependencies [32337eb]
+  - @rudderjs/auth@6.0.3
+
 ## 1.1.1
 
 ### Patch Changes
