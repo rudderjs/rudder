@@ -27,7 +27,6 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     shadcn:     false,
     pm:         'pnpm',
     packages:   noPkgs,
-    demos:      [],
     ...overrides,
   }
 }
@@ -59,24 +58,26 @@ describe('getProfileRoutes()', () => {
     assert.ok(!paths.includes('/register'))
   })
 
-  it('adds /demos + each selected demo route', () => {
+  it('emits no routes on an API-only profile (api-service recipe parked)', () => {
+    // The api-service recipe (frameworks: []) currently can't build because
+    // Vike requires at least one page. Until that's resolved upstream, the
+    // manifest emits nothing for no-frontend profiles — keep this pinned so
+    // we notice when the recipe becomes buildable.
     const routes = getProfileRoutes(ctx({
-      packages: { ...noPkgs, auth: true },
-      demos:    ['contact', 'cache'],
+      frameworks: [],
+      packages:   { ...noPkgs, auth: true, http: true },
     }))
-    const paths = routes.map(r => r.path)
-    assert.ok(paths.includes('/demos'))
-    assert.ok(paths.includes('/demos/contact'))
-    assert.ok(paths.includes('/demos/cache'))
+    assert.equal(routes.length, 0)
   })
 
-  it('drops demos that lack required packages', () => {
-    // 'queue' demo requires packages.queue=true — should be filtered out.
+  it('emits no /demos routes (demos dropped from the scaffolder)', () => {
     const routes = getProfileRoutes(ctx({
-      demos: ['queue'],
+      packages: { ...noPkgs, auth: true, queue: true, mail: true, pennant: true },
     }))
     const paths = routes.map(r => r.path)
-    assert.ok(!paths.includes('/demos/queue'))
+    for (const p of paths) {
+      assert.ok(!p.startsWith('/demos'), `manifest should not emit demo URL "${p}"`)
+    }
   })
 
   it('mounts admin dashboards when packages are selected', () => {

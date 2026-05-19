@@ -1,5 +1,5 @@
 import '@/index.css'
-import { DEMOS, demoHref, demoTitle, type DemoSpec } from 'create-rudder-app/demos-registry'
+import { DEMOS, demoHref, demoTitle, type DemoSpec } from './registry.js'
 import { SiteHeader } from 'App/Components/SiteHeader.js'
 
 // Override the id-derived URL (`/demos/index`) so SPA nav matches the controller (`/demos`).

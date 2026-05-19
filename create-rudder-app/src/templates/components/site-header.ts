@@ -25,7 +25,6 @@ export function SiteHeader() {
           ${ctx.name}
         </a>
         <div className="nav-right">
-          <a href="/demos" className="nav-link">Demos</a>
         </div>
       </nav>
     </header>
@@ -65,7 +64,6 @@ export function SiteHeader() {
           ${ctx.name}
         </a>
         <div className="nav-right">
-          <a href="/demos" className="nav-link">Demos</a>
           {user ? (
             <>
               <span className="nav-badge">
@@ -106,7 +104,6 @@ usePageContext()
         ${ctx.name}
       </a>
       <div class="nav-right">
-        <a href="/demos" class="nav-link">Demos</a>
       </div>
     </nav>
   </header>
@@ -145,7 +142,6 @@ async function handleSignOut() {
         ${ctx.name}
       </a>
       <div class="nav-right">
-        <a href="/demos" class="nav-link">Demos</a>
         <template v-if="user">
           <span class="nav-badge">
             <strong>{{ user.name ?? user.email ?? 'Account' }}</strong>
@@ -177,8 +173,7 @@ export function SiteHeader() {
           ${ctx.name}
         </a>
         <div class="nav-right">
-          <a href="/demos" class="nav-link">Demos</a>
-        </div>
+          </div>
       </nav>
     </header>
   )
@@ -215,8 +210,7 @@ export function SiteHeader() {
           ${ctx.name}
         </a>
         <div class="nav-right">
-          <a href="/demos" class="nav-link">Demos</a>
-          <Show
+            <Show
             when={ctx.user}
             fallback={
               <>

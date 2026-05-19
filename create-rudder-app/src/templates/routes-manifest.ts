@@ -1,11 +1,9 @@
 import type { TemplateContext } from '../templates.js'
-import { shouldScaffoldAnyDemo, shouldScaffoldDemo } from '../templates.js'
-import { DEMOS } from './demos/registry.js'
 
 /**
  * One URL the render smoke should hit. Generated from the scaffolder profile
- * via {@link getProfileRoutes} — each contributor (welcome, auth, a demo, an
- * admin dashboard) lists its routes here so a Playwright pass can iterate them
+ * via {@link getProfileRoutes} — each contributor (welcome, auth, an admin
+ * dashboard) lists its routes here so a Playwright pass can iterate them
  * without a per-profile hand table.
  */
 export interface RouteSpec {
@@ -30,13 +28,19 @@ export interface RouteSpec {
  */
 export function getProfileRoutes(ctx: TemplateContext): RouteSpec[] {
   const routes: RouteSpec[] = []
+  const hasFrontend = ctx.frameworks.length >= 1
 
-  // Welcome page exists only for single-framework projects (routes/web.ts gates
-  // on `ctx.frameworks.length === 1`). Multi-framework scaffolds use
-  // pages/index/+Page.* instead, which also serves `/` — covered separately.
-  const welcomeRoute: RouteSpec = { path: '/', contributedBy: 'welcome' }
-  if (ctx.frameworks.length === 1) welcomeRoute.ssrMarker = 'Built with RudderJS'
-  routes.push(welcomeRoute)
+  if (hasFrontend) {
+    // Welcome page exists only for single-framework projects (routes/web.ts
+    // gates on `ctx.frameworks.length === 1`). Multi-framework scaffolds use
+    // pages/index/+Page.* instead, which also serves `/` — covered separately.
+    const welcomeRoute: RouteSpec = { path: '/', contributedBy: 'welcome' }
+    if (ctx.frameworks.length === 1) welcomeRoute.ssrMarker = 'Built with RudderJS'
+    routes.push(welcomeRoute)
+  }
+  // No-frontend (api-service) profile manifest TODO — the scaffold can't
+  // build today because Vike requires at least one page. Until that's fixed,
+  // there's no booting api-service to drive a manifest against.
 
   // Auth UI — login/register/forgot-password. RequireGuest middleware lets the
   // pages through for an unauthenticated session (which is what the smoke has).
@@ -44,24 +48,14 @@ export function getProfileRoutes(ctx: TemplateContext): RouteSpec[] {
   // views today; vue/solid scaffolds resolve to a missing view at boot. The
   // smoke's auth-view copy step (mirrors index.ts) only fires for react, so we
   // gate the manifest the same way to avoid asserting on routes whose template
-  // never reached the project.
-  if (ctx.packages.auth && ctx.primary === 'react') {
+  // never reached the project. Skipped on API-only profiles (no frontend → no
+  // auth pages even when the package is selected for POST endpoints only).
+  if (hasFrontend && ctx.packages.auth && ctx.primary === 'react') {
     routes.push(
       { path: '/login',           contributedBy: 'auth', ssrMarker: 'Welcome back' },
       { path: '/register',        contributedBy: 'auth', ssrMarker: 'Create an account' },
       { path: '/forgot-password', contributedBy: 'auth', ssrMarker: 'Forgot password' },
     )
-  }
-
-  // Demos index + each selected demo. Demos are react-primary-only today
-  // (shouldScaffoldDemo enforces ctx.primary === 'react') so the manifest
-  // doesn't need its own framework guard.
-  if (shouldScaffoldAnyDemo(ctx)) {
-    routes.push({ path: '/demos', contributedBy: 'demos.index', ssrMarker: 'Demos' })
-    for (const demo of DEMOS) {
-      if (!shouldScaffoldDemo(ctx, demo.value)) continue
-      routes.push({ path: `/demos/${demo.value}`, contributedBy: `demo:${demo.value}` })
-    }
   }
 
   // Admin dashboards — scaffolder configs leave them publicly mounted (no

@@ -47,24 +47,6 @@ import { siteHeaderComponent, siteHeaderExt } from './templates/components/site-
 import { pagesErrorConfig, pagesErrorPage } from './templates/pages/error.js'
 import { aiChatPageConfig, aiChatPage } from './templates/pages/ai-chat.js'
 import { demoPageConfig, demoPage } from './templates/pages/demo.js'
-import { demosIndexView } from './templates/demos/index-view.js'
-import { demosContactView } from './templates/demos/contact.js'
-import { demosTodosView, todoModelPrisma, todoSchema, todoService, todoServiceProvider } from './templates/demos/todos.js'
-import { commentModelTs, demosPolymorphicView, polymorphicPrismaBlock, postModelTs, tagModelTs, videoModelTs } from './templates/demos/polymorphic.js'
-import { demosFibonacciView } from './templates/demos/fibonacci.js'
-import { demosSystemInfoView } from './templates/demos/system-info.js'
-import { demosAvatarView } from './templates/demos/avatar.js'
-import { demosPennantView, demosPennantBetaView } from './templates/demos/pennant.js'
-import { demosCacheView } from './templates/demos/cache.js'
-import { demosQueueView, exampleJob } from './templates/demos/queue.js'
-import { demosMailView, demoMailable } from './templates/demos/mail.js'
-import { demosNotificationsView, demoNotification } from './templates/demos/notifications.js'
-import { demosLocalizationView, langMessages } from './templates/demos/localization.js'
-import { demosHttpView } from './templates/demos/http.js'
-import { demosWsView } from './templates/demos/ws.js'
-import { demosSyncView } from './templates/demos/sync.js'
-import { rudderSocketSource } from './templates/demos/rudder-socket.js'
-import { availableDemos } from './templates/demos/registry.js'
 import { packageJson } from './templates/package-json.js'
 import { tsconfigJson } from './templates/tsconfig.js'
 import { viteConfig } from './templates/vite.js'
@@ -111,8 +93,6 @@ export interface TemplateContext {
     concurrency:   boolean
     terminal:      boolean
   }
-  /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'sync'). See templates/demos/registry.ts. */
-  demos: string[]
 }
 
 export function getTemplates(ctx: TemplateContext): Record<string, string> {
@@ -190,89 +170,43 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files['app/Terminal/Dashboard.tsx'] = terminalDashboardView()
   }
 
-  const ext = pageExt(ctx.primary)
-  files['pages/+config.ts']              = pagesRootConfig(ctx)
-  if (ctx.frameworks.length === 1) {
-    // Single-framework projects use a controller view for `/` — rendered
-    // through @rudderjs/view and wired in routes/web.ts. The file lives in
-    // app/Views/ and is owned by the user from day one.
-    files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
-    // Shared header component used by Welcome + Demos. Kept outside app/Views/
-    // so the @rudderjs/vite scanner doesn't pick it up as a page.
-    files[`app/Components/SiteHeader.${siteHeaderExt(ctx.primary)}`] = siteHeaderComponent(ctx)
-  } else {
-    // Multi-framework projects keep pages/index/+Page.* with a per-page
-    // +config.ts that picks the primary renderer. The view scanner can't
-    // resolve a single framework when multiple vike-* are installed, so
-    // @rudderjs/view isn't usable in that setup yet.
-    files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
-    files['pages/index/+data.ts']        = pagesIndexData(ctx)
-    files[`pages/index/+Page${ext}`]     = pagesIndexPage(ctx)
-  }
-  files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
-  files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
+  // No frontend → skip every page-level scaffold. The api-service recipe
+  // lands here. Frontend assets (Welcome, SiteHeader, _error, ai-chat,
+  // multi-framework demo pages) all assume a vike-<framework> renderer is
+  // installed; without one, vite's build resolver throws on the imports.
+  const hasFrontend = ctx.frameworks.length >= 1
+  if (hasFrontend) {
+    const ext = pageExt(ctx.primary)
+    files['pages/+config.ts']              = pagesRootConfig(ctx)
+    if (ctx.frameworks.length === 1) {
+      // Single-framework projects use a controller view for `/` — rendered
+      // through @rudderjs/view and wired in routes/web.ts. The file lives in
+      // app/Views/ and is owned by the user from day one.
+      files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
+      // Shared header component used by Welcome + Demos. Kept outside app/Views/
+      // so the @rudderjs/vite scanner doesn't pick it up as a page.
+      files[`app/Components/SiteHeader.${siteHeaderExt(ctx.primary)}`] = siteHeaderComponent(ctx)
+    } else {
+      // Multi-framework projects keep pages/index/+Page.* with a per-page
+      // +config.ts that picks the primary renderer. The view scanner can't
+      // resolve a single framework when multiple vike-* are installed, so
+      // @rudderjs/view isn't usable in that setup yet.
+      files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
+      files['pages/index/+data.ts']        = pagesIndexData(ctx)
+      files[`pages/index/+Page${ext}`]     = pagesIndexPage(ctx)
+    }
+    files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
+    files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
 
-  if (ctx.packages.ai) {
-    files['pages/ai-chat/+config.ts']        = aiChatPageConfig(ctx)
-    files[`pages/ai-chat/+Page${ext}`]       = aiChatPage(ctx)
-  }
+    if (ctx.packages.ai) {
+      files['pages/ai-chat/+config.ts']        = aiChatPageConfig(ctx)
+      files[`pages/ai-chat/+Page${ext}`]       = aiChatPage(ctx)
+    }
 
-  for (const fw of ctx.frameworks.filter(f => f !== ctx.primary)) {
-    const dext = pageExt(fw)
-    files[`pages/${fw}-demo/+config.ts`]   = demoPageConfig(fw)
-    files[`pages/${fw}-demo/+Page${dext}`] = demoPage(fw, ctx)
-  }
-
-  // Demos — react primary only; per-demo opt-in via ctx.demos (see registry.ts).
-  if (shouldScaffoldAnyDemo(ctx)) {
-    files['app/Views/Demos/Index.tsx'] = demosIndexView(ctx)
-    if (shouldScaffoldDemo(ctx, 'contact')) files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
-    if (shouldScaffoldDemo(ctx, 'todos')) {
-      files['app/Views/Demos/Todos.tsx']                     = demosTodosView()
-      files['app/Modules/Todo/TodoSchema.ts']                = todoSchema()
-      files['app/Modules/Todo/TodoService.ts']               = todoService()
-      files['app/Modules/Todo/TodoServiceProvider.ts']       = todoServiceProvider()
-    }
-    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
-      files['app/Views/Demos/Polymorphic.tsx'] = demosPolymorphicView()
-      files['app/Models/Post.ts']              = postModelTs()
-      files['app/Models/Video.ts']             = videoModelTs()
-      files['app/Models/Comment.ts']           = commentModelTs()
-      files['app/Models/Tag.ts']               = tagModelTs()
-    }
-    if (shouldScaffoldDemo(ctx, 'fibonacci'))   files['app/Views/Demos/Fibonacci.tsx']  = demosFibonacciView()
-    if (shouldScaffoldDemo(ctx, 'system-info')) files['app/Views/Demos/SystemInfo.tsx'] = demosSystemInfoView()
-    if (shouldScaffoldDemo(ctx, 'avatar'))      files['app/Views/Demos/Avatar.tsx']     = demosAvatarView()
-    if (shouldScaffoldDemo(ctx, 'pennant')) {
-      files['app/Views/Demos/Pennant.tsx']     = demosPennantView()
-      files['app/Views/Demos/PennantBeta.tsx'] = demosPennantBetaView()
-    }
-    if (shouldScaffoldDemo(ctx, 'cache'))       files['app/Views/Demos/Cache.tsx']      = demosCacheView()
-    if (shouldScaffoldDemo(ctx, 'queue')) {
-      files['app/Views/Demos/Queue.tsx'] = demosQueueView()
-      files['app/Jobs/ExampleJob.ts']    = exampleJob()
-    }
-    if (shouldScaffoldDemo(ctx, 'mail')) {
-      files['app/Views/Demos/Mail.tsx'] = demosMailView()
-      files['app/Mail/DemoMail.ts']     = demoMailable()
-    }
-    if (shouldScaffoldDemo(ctx, 'notifications')) {
-      files['app/Views/Demos/Notifications.tsx']        = demosNotificationsView()
-      files['app/Notifications/WelcomeNotification.ts'] = demoNotification()
-    }
-    if (shouldScaffoldDemo(ctx, 'localization')) {
-      files['app/Views/Demos/Localization.tsx'] = demosLocalizationView()
-      files['lang/en/messages.json']            = langMessages('en')
-      files['lang/es/messages.json']            = langMessages('es')
-      files['lang/ar/messages.json']            = langMessages('ar')
-    }
-    if (shouldScaffoldDemo(ctx, 'http'))        files['app/Views/Demos/Http.tsx']       = demosHttpView()
-    if (shouldScaffoldDemo(ctx, 'ws')) {
-      files['app/Views/Demos/Ws.tsx'] = demosWsView()
-      files['src/RudderSocket.ts']        = rudderSocketSource()
-    }
-    if (shouldScaffoldDemo(ctx, 'sync')) {
-      files['app/Views/Demos/Sync.tsx'] = demosSyncView()
+    for (const fw of ctx.frameworks.filter(f => f !== ctx.primary)) {
+      const dext = pageExt(fw)
+      files[`pages/${fw}-demo/+config.ts`]   = demoPageConfig(fw)
+      files[`pages/${fw}-demo/+Page${dext}`] = demoPage(fw, ctx)
     }
   }
 
@@ -280,40 +214,13 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 }
 
 /**
- * Demos are React-primary only for v1 — vue/solid variants aren't written yet.
- * `name` is a demo ID from `templates/demos/registry.ts` (e.g. 'contact', 'ws', 'sync').
- * Returns true when the demo was selected AND its package gates are satisfied.
- */
-export function shouldScaffoldDemo(ctx: TemplateContext, name: string): boolean {
-  if (ctx.primary !== 'react') return false
-  if (!ctx.demos.includes(name)) return false
-  // Defense-in-depth: even if a stale demo id slipped through (e.g. user kept it
-  // checked while unticking the underlying package), filter by registry rules.
-  const allowed = availableDemos(ctx.orm, ctx.packages).map(d => d.value)
-  return allowed.includes(name)
-}
-
-export function shouldScaffoldAnyDemo(ctx: TemplateContext): boolean {
-  if (ctx.primary !== 'react') return false
-  return ctx.demos.some(name => shouldScaffoldDemo(ctx, name))
-}
-
-/**
  * Generates the multi-file `prisma/schema/modules.prisma` that holds
- * domain modules (added by `pnpm rudder make:module` or by demos that
- * ship a Prisma model). The `<rudderjs:modules:*>` markers are how the
- * `make:module` runtime command knows where to insert new model blocks.
+ * domain modules added via `pnpm rudder make:module`. The
+ * `<rudderjs:modules:*>` markers are how that runtime command knows where to
+ * insert new model blocks.
  */
-function modulesPrisma(ctx: TemplateContext): string {
-  const blocks: string[] = []
-  if (shouldScaffoldDemo(ctx, 'todos')) {
-    blocks.push(`// module: Todo (Todos demo)\n${todoModelPrisma()}`)
-  }
-  if (shouldScaffoldDemo(ctx, 'polymorphic')) {
-    blocks.push(polymorphicPrismaBlock())
-  }
-  const body = blocks.length > 0 ? '\n' + blocks.join('\n') : ''
-  return `// <rudderjs:modules:start>${body}\n// <rudderjs:modules:end>\n`
+function modulesPrisma(_ctx: TemplateContext): string {
+  return `// <rudderjs:modules:start>\n// <rudderjs:modules:end>\n`
 }
 
 

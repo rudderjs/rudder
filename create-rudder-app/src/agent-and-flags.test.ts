@@ -98,18 +98,6 @@ test('parseFlags — install boolean', () => {
   assert.strictEqual(r.partial.install, false)
 })
 
-test('parseFlags — --demos= is now a silent no-op (demos dropped from scaffolder)', () => {
-  const r = parseFlags(['my-app', '--demos='])
-  assert.deepStrictEqual(r.partial.demos, [])
-})
-
-test('parseFlags — --demos=* accepted for backwards compat but ignored', () => {
-  const r = parseFlags(['my-app', '--demos=*'])
-  // Recipe-driven flow always sets demos to []; the flag is accepted to not
-  // break existing scripts/CI but its value no longer matters.
-  assert.deepStrictEqual(r.partial.demos, [])
-})
-
 test('parseFlags — invalid orm rejected', () => {
   assert.throws(() => parseFlags(['my-app', '--orm=mongo']), FlagError)
 })
@@ -126,14 +114,6 @@ test('parseFlags — unknown framework rejected', () => {
   assert.throws(() => parseFlags(['my-app', '--frameworks=svelte']), FlagError)
 })
 
-test('parseFlags — unknown demo silently ignored (backwards-compat)', () => {
-  // Pre-recipe behavior was to throw FlagError on unknown demo values. Since
-  // demos were dropped from the default scaffolder, the flag is a no-op and
-  // doesn't validate its argument.
-  const r = parseFlags(['my-app', '--demos=bogus-demo'])
-  assert.deepStrictEqual(r.partial.demos, [])
-})
-
 // ─── validateJsonMode ───────────────────────────────────────
 
 test('validateJsonMode — empty input lists every required flag (legacy path)', () => {
@@ -144,8 +124,6 @@ test('validateJsonMode — empty input lists every required flag (legacy path)',
   assert.ok(missing.includes('--frameworks'))
   assert.ok(missing.includes('--tailwind'))
   assert.ok(missing.includes('--install'))
-  // --demos is no longer required — demos were dropped from the scaffolder.
-  assert.ok(!missing.includes('--demos'))
 })
 
 test('validateJsonMode — orm=false skips --db', () => {
@@ -157,7 +135,7 @@ test('validateJsonMode — orm=false skips --db', () => {
 test('validateJsonMode — single framework skips --primary-framework', () => {
   const missing = validateJsonMode('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList(['auth'], 'prisma'),
-    frameworks: ['react'], tailwind: true, shadcn: true, demos: [], install: false,
+    frameworks: ['react'], tailwind: true, shadcn: true, install: false,
   })
   assert.ok(!missing.includes('--primary-framework'))
   assert.deepStrictEqual(missing, [])
@@ -166,7 +144,7 @@ test('validateJsonMode — single framework skips --primary-framework', () => {
 test('validateJsonMode — multi-framework requires --primary-framework', () => {
   const missing = validateJsonMode('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList(['auth'], 'prisma'),
-    frameworks: ['react', 'vue'], tailwind: true, shadcn: true, demos: [], install: false,
+    frameworks: ['react', 'vue'], tailwind: true, shadcn: true, install: false,
   })
   assert.ok(missing.includes('--primary-framework'))
 })
@@ -174,7 +152,7 @@ test('validateJsonMode — multi-framework requires --primary-framework', () => 
 test('validateJsonMode — react + tailwind=true requires --shadcn', () => {
   const missing = validateJsonMode('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList([], 'prisma'),
-    frameworks: ['react'], tailwind: true, demos: [], install: false,
+    frameworks: ['react'], tailwind: true, install: false,
   })
   assert.ok(missing.includes('--shadcn'))
 })
@@ -182,7 +160,7 @@ test('validateJsonMode — react + tailwind=true requires --shadcn', () => {
 test('validateJsonMode — react + tailwind=false skips --shadcn', () => {
   const missing = validateJsonMode('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList([], 'prisma'),
-    frameworks: ['react'], tailwind: false, demos: [], install: false,
+    frameworks: ['react'], tailwind: false, install: false,
   })
   assert.ok(!missing.includes('--shadcn'))
 })
@@ -192,33 +170,15 @@ test('validateJsonMode — react + tailwind=false skips --shadcn', () => {
 test('resolveJsonAnswers — defaults primary to first framework when omitted', () => {
   const answers = resolveJsonAnswers('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList(['auth'], 'prisma'),
-    frameworks: ['vue'], tailwind: false, demos: [], install: false,
+    frameworks: ['vue'], tailwind: false, install: false,
   })
   assert.strictEqual(answers.primary, 'vue')
-})
-
-test('resolveJsonAnswers — demos is always [] (demos dropped from scaffolder)', () => {
-  const answers = resolveJsonAnswers('app', {
-    orm: 'prisma', db: 'sqlite',
-    packages: packagesFromList(['auth', 'queue', 'mail'], 'prisma'),
-    frameworks: ['react'], tailwind: false, demos: ['*'], install: false,
-  })
-  assert.deepStrictEqual(answers.demos, [])
-})
-
-test('resolveJsonAnswers — demos=* yields empty for non-react primary', () => {
-  const answers = resolveJsonAnswers('app', {
-    orm: 'prisma', db: 'sqlite',
-    packages: packagesFromList(['auth', 'queue'], 'prisma'),
-    frameworks: ['vue'], tailwind: false, demos: ['*'], install: false,
-  })
-  assert.deepStrictEqual(answers.demos, [])
 })
 
 test('resolveJsonAnswers — orm=false coerces db to sqlite (unused)', () => {
   const answers = resolveJsonAnswers('app', {
     orm: false, packages: packagesFromList([], false),
-    frameworks: ['react'], tailwind: false, demos: [], install: false,
+    frameworks: ['react'], tailwind: false, install: false,
   })
   assert.strictEqual(answers.db, 'sqlite')
   assert.strictEqual(answers.orm, false)
@@ -347,7 +307,6 @@ test('resolveJsonAnswers — recipe=web-app derives auth + prisma', () => {
   assert.strictEqual(answers.tailwind, true)
   assert.strictEqual(answers.shadcn,   true)
   assert.strictEqual(answers.recipe,   'web-app')
-  assert.deepStrictEqual(answers.demos, [])
 })
 
 test('resolveJsonAnswers — recipe=saas adds queue + mail + notifications', () => {
@@ -418,7 +377,7 @@ test('resolveJsonAnswers — recipe defaults git=true', () => {
 test('resolveJsonAnswers — legacy path defaults git+dbReady', () => {
   const answers = resolveJsonAnswers('app', {
     orm: 'prisma', db: 'sqlite', packages: packagesFromList(['auth'], 'prisma'),
-    frameworks: ['react'], tailwind: true, shadcn: true, demos: [], install: true,
+    frameworks: ['react'], tailwind: true, shadcn: true, install: true,
   })
   assert.strictEqual(answers.git,     true)
   assert.strictEqual(answers.dbReady, true)

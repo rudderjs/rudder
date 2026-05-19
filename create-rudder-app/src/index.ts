@@ -200,7 +200,7 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
 
   return {
     name: resolvedName, recipe, orm, db, packages, frameworks, primary, tailwind, shadcn,
-    demos: [], git, dbReady, install,
+    git, dbReady, install,
   }
 }
 
@@ -327,7 +327,7 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
     authSecret, appKey,
     frameworks: answers.frameworks, primary: answers.primary,
     tailwind: answers.tailwind, shadcn: answers.shadcn,
-    pm, packages: answers.packages, demos: answers.demos,
+    pm, packages: answers.packages,
   })
 
   for (const [filePath, content] of Object.entries(templates)) {

@@ -1,14 +1,4 @@
-import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
-import { demosFibonacciApiBlock } from '../demos/fibonacci.js'
-import { demosSystemInfoApiBlock } from '../demos/system-info.js'
-import { demosAvatarApiBlock } from '../demos/avatar.js'
-import { demosCacheApiBlock } from '../demos/cache.js'
-import { demosQueueApiBlock } from '../demos/queue.js'
-import { demosMailApiBlock } from '../demos/mail.js'
-import { demosNotificationsApiBlock } from '../demos/notifications.js'
-import { demosLocalizationApiBlock } from '../demos/localization.js'
-import { demosHttpApiBlock } from '../demos/http.js'
-import { demosPolymorphicApiBlock } from '../demos/polymorphic.js'
+import { type TemplateContext } from '../../templates.js'
 
 export function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
@@ -84,100 +74,6 @@ router.get('/api/passport/me', async (req, res) => {
     scopes: (req.raw as any)?.__passport_scopes ?? [],
   })
 }, [RequireBearer(), scope('read')])`)
-  }
-
-  if (shouldScaffoldAnyDemo(ctx)) {
-    const wantContact    = shouldScaffoldDemo(ctx, 'contact')
-    const wantWs         = shouldScaffoldDemo(ctx, 'ws')
-    const wantFibonacci  = shouldScaffoldDemo(ctx, 'fibonacci')
-    const wantSystemInfo = shouldScaffoldDemo(ctx, 'system-info')
-    const wantAvatar     = shouldScaffoldDemo(ctx, 'avatar')
-
-    if (wantContact) imports.push(`import { z } from '@rudderjs/core'`)
-    if (wantContact && ctx.packages.auth) imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
-    if (wantWs) imports.push(`import { broadcast, broadcastStats } from '@rudderjs/broadcast'`)
-
-    lines.push('')
-    lines.push(`// ── Demos ────────────────────────────────────────────────`)
-
-    if (wantContact) {
-      lines.push(`// POST /api/contact — Zod validation${ctx.packages.auth ? ' + CSRF' : ''}.
-const contactSchema = z.object({
-  name:    z.string().min(2,  'Name must be at least 2 characters.'),
-  email:   z.string().email('Please enter a valid email address.'),
-  message: z.string().min(10, 'Message must be at least 10 characters.'),
-})
-
-router.post('/api/contact', async (req, res) => {
-  const result = contactSchema.safeParse(req.body)
-  if (!result.success) {
-    const errors = Object.fromEntries(result.error.issues.map(i => [i.path[0], i.message]))
-    return res.status(422).json({ errors })
-  }
-  return res.json({ ok: true, message: \`Thanks \${result.data.name}, your message has been received!\` })
-}${ctx.packages.auth ? ', [CsrfMiddleware()]' : ''})`)
-    }
-
-    if (wantWs) {
-      lines.push('')
-      lines.push(`// POST /api/ws/broadcast — push a chat message to subscribers of the 'chat' channel.
-router.post('/api/ws/broadcast', async (req, res) => {
-  const { user, text } = req.body as { user: string; text: string }
-  broadcast('chat', 'message', { user, text, ts: Date.now() })
-  res.json({ ok: true })
-})
-
-// GET /api/ws/ping — current connection / channel counts.
-router.get('/api/ws/ping', (_req, res) => res.json(broadcastStats()))`)
-    }
-
-    if (wantFibonacci) {
-      lines.push('')
-      lines.push(demosFibonacciApiBlock())
-    }
-
-    if (wantSystemInfo) {
-      lines.push('')
-      lines.push(demosSystemInfoApiBlock())
-    }
-
-    if (wantAvatar) {
-      lines.push('')
-      lines.push(demosAvatarApiBlock())
-    }
-
-    if (shouldScaffoldDemo(ctx, 'cache')) {
-      lines.push('')
-      lines.push(demosCacheApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'queue')) {
-      lines.push('')
-      lines.push(demosQueueApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'mail')) {
-      lines.push('')
-      lines.push(demosMailApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'notifications')) {
-      lines.push('')
-      lines.push(demosNotificationsApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'localization')) {
-      lines.push('')
-      lines.push(demosLocalizationApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'http')) {
-      lines.push('')
-      lines.push(demosHttpApiBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
-      imports.push(`import { Model } from '@rudderjs/orm'`)
-      imports.push(`import { Post } from '../app/Models/Post.ts'`)
-      imports.push(`import { Video } from '../app/Models/Video.ts'`)
-      imports.push(`import { Comment } from '../app/Models/Comment.ts'`)
-      lines.push('')
-      lines.push(demosPolymorphicApiBlock())
-    }
   }
 
   lines.push('')

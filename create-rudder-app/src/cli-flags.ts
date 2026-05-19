@@ -17,15 +17,6 @@ export interface Answers {
   primary:    'react' | 'vue' | 'solid'
   tailwind:   boolean
   shadcn:     boolean
-  /**
-   * Demos selected for scaffolding.
-   *
-   * Deprecated as a user-facing concept: the recipe-driven flow always sets
-   * this to `[]`. Kept on the Answers shape so the templates pipeline and
-   * pre-recipe tests don't need to branch — `getTemplates` still iterates
-   * it, finds nothing, and skips every demo block.
-   */
-  demos:      string[]
   /** Whether to run `git init` + initial commit after scaffolding. */
   git:        boolean
   /** Whether the user's DB is currently reachable — set to false to skip `db:push`. */
@@ -185,11 +176,6 @@ export function parseFlags(argv: string[]): ParsedFlags {
     if (partial.shadcn   === undefined) partial.shadcn   = v === 'tailwind+shadcn'
   }
 
-  // --demos kept as a silent no-op for backwards compatibility — demos were dropped
-  // from the scaffolder default. Old scripts/CI passing `--demos=...` continue to
-  // work without error; nothing is scaffolded under /demos.
-  if (flags['demos'] !== undefined) { partial.demos = [] }
-
   return {
     name,
     partial,
@@ -268,7 +254,6 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
 
     return {
       name, recipe, orm, db, packages, frameworks, primary, tailwind, shadcn,
-      demos:   [],
       git:     p.git     ?? true,
       dbReady: p.dbReady ?? (db === 'sqlite'),
       install: p.install!,
@@ -286,7 +271,6 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
 
   return {
     name, recipe: 'custom', orm, db, packages, frameworks, primary, tailwind, shadcn,
-    demos:   [],
     git:     p.git     ?? true,
     dbReady: p.dbReady ?? (db === 'sqlite'),
     install: p.install!,

@@ -43,7 +43,6 @@ const ctx: TemplateContext = {
     concurrency:   true,
     terminal:      true,
   },
-  demos: ['contact', 'ws', 'sync'],
 }
 
 test('getTemplates() output is byte-stable across refactor', () => {
@@ -60,19 +59,19 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-19 — scaffolded AuthController template now
-  // sources PasswordBroker's `secret` from process.env.AUTH_SECRET so a fresh
-  // `pnpm build && pnpm start` boots without manual config in production.
-  // If you change any template's output deliberately, recapture all four assertions.
+  // Baseline last captured 2026-05-19 — demos dropped from scaffolder; the
+  // scaffolder no longer ships /demos/* templates or `app/Views/Demos/*`.
+  // If you change any template's output deliberately, recapture all four
+  // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
   assert.equal(contentHash, EXPECTED_CONTENT_HASH, 'content hash drifted (some file content changed)')
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 65673
-const EXPECTED_CONTENT_HASH = '2b8c187370eb20b050667e25aad06fcbae6eef95e3226c8b86928ce5fb5656b3'
+const EXPECTED_FILE_COUNT = 60
+const EXPECTED_TOTAL_BYTES = 49437
+const EXPECTED_CONTENT_HASH = '7173fe126033f0aff15311d081c8498fa99488b427960ed77cb5c6b81db4bdac'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -84,10 +83,6 @@ const EXPECTED_PATHS = [
   'app/Models/User.ts',
   'app/Providers/AppServiceProvider.ts',
   'app/Terminal/Dashboard.tsx',
-  'app/Views/Demos/Contact.tsx',
-  'app/Views/Demos/Index.tsx',
-  'app/Views/Demos/Sync.tsx',
-  'app/Views/Demos/Ws.tsx',
   'bootstrap/app.ts',
   'bootstrap/providers.ts',
   'config/ai.ts',
@@ -135,7 +130,6 @@ const EXPECTED_PATHS = [
   'routes/api.ts',
   'routes/console.ts',
   'routes/web.ts',
-  'src/RudderSocket.ts',
   'src/index.css',
   'tsconfig.json',
   'vite.config.ts',
