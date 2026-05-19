@@ -2,7 +2,11 @@ import { type TemplateContext } from '../../templates.js'
 
 export function routesWeb(ctx: TemplateContext): string {
   const hasAuth     = ctx.packages.auth
-  const hasWelcome  = ctx.frameworks.length === 1
+  // Welcome route fires for single-framework AND no-frontend (vanilla welcome
+  // built with @rudderjs/view's html`` tag — see `welcomeViewVanilla` in
+  // templates/views/welcome.ts). Multi-framework projects use the file-based
+  // pages/index/+Page.* page instead.
+  const hasWelcome  = ctx.frameworks.length <= 1
 
   // ── imports ─────────────────────────────────────────────
   const imports: string[] = [`import { Route } from '@rudderjs/router'`]
@@ -48,13 +52,16 @@ Route.registerController(AuthController)
   // ── welcome page wiring ─────────────────────────────────
   // SiteHeader reads `user` from pageContext (set by @rudderjs/auth's enhancer),
   // so the welcome controller no longer needs to pass it as a prop.
+  const welcomeFile = ctx.frameworks.length === 0
+    ? 'app/Views/Welcome.ts'
+    : `app/Views/Welcome.${welcomeExt(ctx.primary)}`
   const welcomeBlock = hasWelcome
     ? `
 // Read RudderJS version from @rudderjs/core's package.json at boot time.
 const _require = createRequire(import.meta.url)
 const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
 
-// Welcome page — delete this route and app/Views/Welcome.${welcomeExt(ctx.primary)} to replace it.
+// Welcome page — delete this route and ${welcomeFile} to replace it.
 Route.get('/', async () => view('welcome', {
   appName:       config<string>('app.name', 'RudderJS'),
   rudderVersion: rudderCorePkg.version,

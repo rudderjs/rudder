@@ -1,11 +1,64 @@
 import type { TemplateContext } from '../../templates.js'
 
 export function welcomeView(ctx: TemplateContext): string {
+  if (ctx.frameworks.length === 0) return welcomeViewVanilla(ctx)
   switch (ctx.primary) {
     case 'vue':   return welcomeViewVue(ctx)
     case 'solid': return welcomeViewSolid(ctx)
     default:      return welcomeViewReact(ctx)
   }
+}
+
+/**
+ * Vanilla welcome view for no-frontend recipes (api-service, minimal).
+ *
+ * Returns a SafeString built with @rudderjs/view's html`` tagged template
+ * (zero-client-JS, server-rendered HTML). No React/Vue/Solid imports → no
+ * vike-* renderer required. The @rudderjs/vite view scanner detects the
+ * .ts extension + no installed vike-renderer and generates the matching
+ * `pages/__view/welcome/+Page.ts` stub that returns the Page as a string.
+ *
+ * `pages/+config.ts` wraps the page's body in an `onRenderHtml` hook —
+ * see `templates/pages/index.ts` for the vanilla shell.
+ */
+export function welcomeViewVanilla(_ctx: TemplateContext): string {
+  return `import { html } from '@rudderjs/view'
+
+// URL this view is served at — MUST match the Route.get('/', ...) in routes/web.ts.
+export const route = '/'
+
+export interface WelcomeProps {
+  appName:       string
+  rudderVersion: string
+  nodeVersion:   string
+  env:           string
+}
+
+export default function Welcome(props: WelcomeProps) {
+  return html\`<main class="page">
+  <section class="hero">
+    <h1>\${props.appName}</h1>
+    <p>
+      Laravel's developer experience, Vike's performance, Node's ecosystem.
+      This is a no-frontend scaffold — every request is served by a controller in <code>routes/api.ts</code>.
+    </p>
+    <p>
+      <small>RudderJS v\${props.rudderVersion} &middot; Node \${props.nodeVersion} &middot; env=\${props.env}</small>
+    </p>
+  </section>
+  <section>
+    <h2>Try the API</h2>
+    <ul>
+      <li><a href="/api/health"><code>GET /api/health</code></a> — health probe</li>
+    </ul>
+  </section>
+  <footer>
+    Built with RudderJS. Edit <code>app/Views/Welcome.ts</code> to customize this page,
+    or delete it and rely on <code>/api/*</code> only.
+  </footer>
+</main>\`
+}
+`
 }
 
 const WELCOME_FEATURES = `const DEFAULT_DOCS   = 'https://github.com/rudderjs/rudder'

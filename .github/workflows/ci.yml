@@ -124,9 +124,8 @@ jobs:
     # Mirrors the user-facing recipes in `create-rudder-app/src/cli-flags.ts`:
     # every cell here is a profile a real user can pick at `pnpm create
     # rudder-app`. The matrix is react-heavy (all 5 recipes × react) +
-    # narrow on vue/solid (only minimal + web-app, the two profiles whose
-    # SiteHeader / Welcome render-checks meaningfully differ from react).
-    # demos-all/todos/no-db are gone — the scaffolder no longer ships demos.
+    # narrow on vue/solid (only web-app, since minimal/api-service are
+    # no-frontend and the framework override is ignored for `frameworks: []`).
     # The flow-check (register → home → sign-out) runs only on
     # react × web-app (smoke gates internally).
     name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }})
@@ -136,20 +135,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # React — every buildable recipe. `api-service` (no frontend) is
-          # tracked separately; the current scaffold can't build with
-          # `frameworks: []` because Vike requires at least one page.
-          - { framework: react, profile: minimal  }
-          - { framework: react, profile: web-app  }
-          - { framework: react, profile: saas     }
-          - { framework: react, profile: realtime }
-          # Vue — minimal + web-app (auth UI gated to react in the manifest, so
-          # vue cells are only useful for catching renderer / scanner drift).
-          - { framework: vue,   profile: minimal  }
-          - { framework: vue,   profile: web-app  }
-          # Solid — same shape as vue.
-          - { framework: solid, profile: minimal  }
-          - { framework: solid, profile: web-app  }
+          # React — every recipe.
+          - { framework: react, profile: minimal     }
+          - { framework: react, profile: web-app     }
+          - { framework: react, profile: saas        }
+          - { framework: react, profile: api-service }
+          - { framework: react, profile: realtime    }
+          # Vue / Solid — web-app only. minimal + api-service ignore the
+          # framework axis (no-frontend → vanilla welcome shell shared across).
+          - { framework: vue,   profile: web-app     }
+          - { framework: solid, profile: web-app     }
 
     steps:
       - name: Checkout

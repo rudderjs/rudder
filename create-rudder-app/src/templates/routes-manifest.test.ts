@@ -58,16 +58,20 @@ describe('getProfileRoutes()', () => {
     assert.ok(!paths.includes('/register'))
   })
 
-  it('emits no routes on an API-only profile (api-service recipe parked)', () => {
-    // The api-service recipe (frameworks: []) currently can't build because
-    // Vike requires at least one page. Until that's resolved upstream, the
-    // manifest emits nothing for no-frontend profiles — keep this pinned so
-    // we notice when the recipe becomes buildable.
+  it('hits welcome + /api/health on an API-only profile (vanilla welcome shell)', () => {
+    // No-frontend recipes (minimal, api-service) scaffold a vanilla welcome
+    // via @rudderjs/view's html`` tag — the @rudderjs/vite scanner detects
+    // no vike-* and generates the matching vanilla `+Page.ts` stub. Manifest
+    // hits `/` (welcome) + `/api/health` (always-scaffolded JSON probe).
     const routes = getProfileRoutes(ctx({
       frameworks: [],
       packages:   { ...noPkgs, auth: true, http: true },
     }))
-    assert.equal(routes.length, 0)
+    const paths = routes.map(r => r.path)
+    assert.ok( paths.includes('/'),                'vanilla welcome at /')
+    assert.ok( paths.includes('/api/health'),      '/api/health JSON probe')
+    assert.ok(!paths.includes('/login'),           'no auth UI without a frontend')
+    assert.ok(!paths.includes('/register'),        'no auth UI without a frontend')
   })
 
   it('emits no /demos routes (demos dropped from the scaffolder)', () => {

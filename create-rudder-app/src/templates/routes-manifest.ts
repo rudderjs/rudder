@@ -29,18 +29,22 @@ export interface RouteSpec {
 export function getProfileRoutes(ctx: TemplateContext): RouteSpec[] {
   const routes: RouteSpec[] = []
   const hasFrontend = ctx.frameworks.length >= 1
+  const isApiOnly   = ctx.frameworks.length === 0
 
-  if (hasFrontend) {
-    // Welcome page exists only for single-framework projects (routes/web.ts
-    // gates on `ctx.frameworks.length === 1`). Multi-framework scaffolds use
-    // pages/index/+Page.* instead, which also serves `/` — covered separately.
-    const welcomeRoute: RouteSpec = { path: '/', contributedBy: 'welcome' }
-    if (ctx.frameworks.length === 1) welcomeRoute.ssrMarker = 'Built with RudderJS'
-    routes.push(welcomeRoute)
+  // Welcome page exists for both single-framework (routes/web.ts) and
+  // no-frontend (vanilla welcome via @rudderjs/view's html``). Multi-framework
+  // scaffolds use pages/index/+Page.* instead — same URL, different shape.
+  if (ctx.frameworks.length === 1 || isApiOnly) {
+    routes.push({ path: '/', contributedBy: 'welcome', ssrMarker: 'Built with RudderJS' })
+  } else if (ctx.frameworks.length > 1) {
+    routes.push({ path: '/', contributedBy: 'welcome' })
   }
-  // No-frontend (api-service) profile manifest TODO — the scaffold can't
-  // build today because Vike requires at least one page. Until that's fixed,
-  // there's no booting api-service to drive a manifest against.
+
+  // No-frontend cells additionally hit /api/health — the always-scaffolded
+  // JSON probe — so the smoke exercises the api route stack end-to-end.
+  if (isApiOnly) {
+    routes.push({ path: '/api/health', contributedBy: 'api.health', ssrMarker: '"status":"ok"' })
+  }
 
   // Auth UI — login/register/forgot-password. RequireGuest middleware lets the
   // pages through for an unauthenticated session (which is what the smoke has).
