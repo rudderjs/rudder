@@ -220,20 +220,29 @@ pnpm build
 node dist/index.js                          # launches the full interactive CLI
 
 pnpm test                                   # template tests + snapshot baseline
-pnpm smoke                                  # default profile (Prisma + auth + react)
-pnpm smoke --profile=minimal                # ORM=none + nothing
-pnpm smoke --profile=todos                  # ORM=prisma + auth + todos demo
-pnpm smoke --profile=no-db                  # ORM=none + observability + utility kitchen sink
-pnpm smoke --profile=demos-all              # every demo at once
+pnpm smoke                                  # default profile (web-app — Prisma + auth + react)
+pnpm smoke --profile=minimal                # no packages, no ORM, no frontend (vanilla welcome)
+pnpm smoke --profile=saas                   # web-app + queue + mail + notifications
+pnpm smoke --profile=api-service            # auth + http, no frontend
+pnpm smoke --profile=realtime               # web-app + broadcast + sync
+pnpm smoke --framework=vue                  # swap the frontend renderer
+pnpm smoke --via=cli                        # spawn the real CLI binary instead of getTemplates()
+pnpm smoke --pm=npm                         # swap the package manager (npm, yarn)
 pnpm smoke --keep                           # don't delete the tmp dir on success
 ```
 
+Smoke profiles mirror the `RECIPES` constant in `src/cli-flags.ts` — keep them in sync when recipes change.
+
+**E2E coverage**: 9 cells per-PR (5 react recipes × direct + 2 vue/solid web-app × direct + 1 react/web-app × cli + 1 react/web-app × npm) plus a weekly canary against the published packages (`.github/workflows/scaffolder-canary.yml`).
+
+**Package-manager dimension**: pnpm is the per-recipe baseline; the `+ 1 react/web-app × npm` cell catches PM-specific install / exec / script regressions. The smoke is PM-aware in three places — install command (`pnpm install` vs `npm install` vs `yarn install`), exec command (`pnpm exec X` vs `npm exec -- X` vs `yarn exec -- X`), and `@rudderjs/*` linking strategy. For pnpm the linking is `link:` symlinks; for npm + yarn the smoke runs `pnpm -r pack` once + installs from packed tarballs (matches what published-registry installs look like). yarn classic (1.x) has a known hoister bug with vike + vite (see `feedback_yarn1_vike_hoist_bug` in memory) — yarn berry coverage with `nodeLinker: node-modules` is a follow-up.
+
 **Snapshot baseline**: `templates.snapshot.test.ts` asserts file count + total bytes + content hash + sorted paths. After a deliberate template-output change run `pnpm exec tsx scripts/recapture-snapshot.ts` and paste the new values into the test.
 
-**Fresh-worktree gotcha**: `pnpm smoke` needs the workspace's playground Prisma client generated once before it works:
+**Fresh-worktree gotcha**: `pnpm smoke` (the default, pnpm path) needs the workspace's playground Prisma client generated once before it works:
 
 ```bash
 cd playground && pnpm exec prisma generate
 ```
 
-Without it, the smoke's `command:list` boot step fails with `Cannot find module '.prisma/client/default'` (the smoke uses `link:` overrides into the workspace's `node_modules`, which shares a Prisma client cache).
+Without it, the smoke's `command:list` boot step fails with `Cannot find module '.prisma/client/default'` (the pnpm path uses `link:` overrides into the workspace's `node_modules`, which shares a Prisma client cache). `--pm=npm` doesn't need this — packed tarballs carry their own resolved deps.

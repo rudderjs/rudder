@@ -128,7 +128,13 @@ jobs:
     # no-frontend and the framework override is ignored for `frameworks: []`).
     # The flow-check (register → home → sign-out) runs only on
     # react × web-app (smoke gates internally).
-    name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }} / ${{ matrix.via }})
+    #
+    # Package manager axis: pnpm is the per-recipe baseline; +1 cell covers
+    # `npm` for the canonical react × web-app shape (catches PM-specific
+    # install/exec/script regressions). yarn classic has a known hoister bug
+    # with vike+vite (see feedback_yarn1_vike_hoist_bug); yarn berry coverage
+    # is a follow-up.
+    name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }} / ${{ matrix.via }} / ${{ matrix.pm }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -136,20 +142,24 @@ jobs:
       matrix:
         include:
           # React — every recipe (direct: getTemplates() → write files).
-          - { framework: react, profile: minimal,     via: direct }
-          - { framework: react, profile: web-app,     via: direct }
-          - { framework: react, profile: saas,        via: direct }
-          - { framework: react, profile: api-service, via: direct }
-          - { framework: react, profile: realtime,    via: direct }
+          - { framework: react, profile: minimal,     via: direct, pm: pnpm }
+          - { framework: react, profile: web-app,     via: direct, pm: pnpm }
+          - { framework: react, profile: saas,        via: direct, pm: pnpm }
+          - { framework: react, profile: api-service, via: direct, pm: pnpm }
+          - { framework: react, profile: realtime,    via: direct, pm: pnpm }
           # Vue / Solid — web-app only. minimal + api-service ignore the
           # framework axis (no-frontend → vanilla welcome shell shared across).
-          - { framework: vue,   profile: web-app,     via: direct }
-          - { framework: solid, profile: web-app,     via: direct }
+          - { framework: vue,   profile: web-app,     via: direct, pm: pnpm }
+          - { framework: solid, profile: web-app,     via: direct, pm: pnpm }
           # CLI entrypoint smoke — spawns `create-rudder-app` in JSON mode to
           # exercise parseFlags → validateJsonMode → resolveJsonAnswers →
           # scaffold end-to-end. One cell covers the path that real users
           # hit; the 7 above keep per-recipe template correctness coverage.
-          - { framework: react, profile: web-app,     via: cli    }
+          - { framework: react, profile: web-app,     via: cli,    pm: pnpm }
+          # Package-manager axis — npm gets the canonical recipe via the
+          # packed-tarball linking path. Catches PM-specific install / exec /
+          # script regressions a pnpm-only matrix misses.
+          - { framework: react, profile: web-app,     via: direct, pm: npm  }
 
     steps:
       - name: Checkout
@@ -197,4 +207,4 @@ jobs:
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Scaffold + boot + render-check
-        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }}
+        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}
