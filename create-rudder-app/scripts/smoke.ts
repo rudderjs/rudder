@@ -11,9 +11,13 @@
 //   (c) paths into node_modules/@rudderjs/* that use src/ instead of dist/
 //
 // Usage:
-//   pnpm --filter create-rudder-app smoke              # web-app profile
-//   pnpm --filter create-rudder-app smoke --keep       # keep tmp dir on success
+//   pnpm --filter create-rudder-app smoke                       # default: web-app + pnpm
+//   pnpm --filter create-rudder-app smoke --keep                # keep tmp dir on success
 //   pnpm --filter create-rudder-app smoke --profile=minimal
+//   pnpm --filter create-rudder-app smoke --framework=vue
+//   pnpm --filter create-rudder-app smoke --via=cli             # spawn the real CLI binary
+//   pnpm --filter create-rudder-app smoke --pm=npm              # swap package manager
+//   pnpm --filter create-rudder-app smoke --pm=yarn             # yarn classic (v1)
 //
 // Pre-req: `pnpm build` has been run from repo root so packages/*/dist exists.
 
@@ -61,6 +65,21 @@ if (VIA_RAW !== 'direct' && VIA_RAW !== 'cli') {
 }
 const VIA: Via = VIA_RAW as Via
 
+// `--pm` swaps every install / exec / script invocation to the matching
+// package manager AND drops the @rudderjs/* link overrides into the field
+// the PM understands (pnpm.overrides / overrides / resolutions). Catches
+// PM-specific failure modes — npm/yarn don't understand workspace:* the
+// way pnpm does, peer-dep enforcement differs, and the .pnpm/ isolation
+// trick we use for Prisma doesn't apply.
+type PM = 'pnpm' | 'npm' | 'yarn'
+const PM_VALID: readonly PM[] = ['pnpm', 'npm', 'yarn']
+const PM_RAW = argv.find((a) => a.startsWith('--pm='))?.split('=')[1] ?? 'pnpm'
+if (!PM_VALID.includes(PM_RAW as PM)) {
+  console.error(`unknown --pm "${PM_RAW}". options: ${PM_VALID.join(', ')}`)
+  process.exit(2)
+}
+const PM_FLAG = PM_RAW as PM
+
 // ─── Profiles ────────────────────────────────────────────
 //
 // Each profile mirrors a user-facing recipe in `src/cli-flags.ts` (RECIPES).
@@ -93,7 +112,7 @@ function baseProfile(overrides: Partial<TemplateContext> = {}): TemplateContext 
     primary:    'react',
     tailwind:   false,
     shadcn:     false,
-    pm:         'pnpm',
+    pm:         PM_FLAG,
     packages:   emptyPackages(),
     ...overrides,
   }
@@ -168,18 +187,122 @@ function step(name: string): (result: RunResult) => void {
   }
 }
 
-async function buildOverrides(): Promise<Record<string, string>> {
-  // Map every workspace @rudderjs/* package to a link: into the local checkout.
-  // Without this, pnpm install would try to fetch the published versions, missing
-  // any unreleased changes the smoke test should validate.
+// PM-specific command shapes. Keep these in one place so adding a PM (bun)
+// later means filling in one row per helper rather than hunting through main().
+
+function installArgs(pm: PM): { cmd: string; args: string[]; timeoutMs: number } {
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['install', '--no-frozen-lockfile', '--silent'], timeoutMs: 240_000 }
+  if (pm === 'npm')  return { cmd: 'npm',  args: ['install', '--no-audit', '--no-fund', '--loglevel=error'], timeoutMs: 240_000 }
+  // yarn classic (v1.x). Berry (v2+) defaults to Plug'n'Play which breaks Vite —
+  // we keep the supported cell narrow on purpose. If yarn berry coverage ever
+  // matters, add a separate `yarn-berry` PM and write a `.yarnrc.yml` with
+  // `nodeLinker: node-modules` before install.
+  return { cmd: 'yarn', args: ['install', '--silent'], timeoutMs: 240_000 }
+}
+
+function execArgs(pm: PM, bin: string, ...args: string[]): { cmd: string; args: string[] } {
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['exec', bin, ...args] }
+  if (pm === 'npm')  return { cmd: 'npm',  args: ['exec', '--', bin, ...args] }
+  return { cmd: 'yarn', args: ['exec', '--', bin, ...args] }
+}
+
+function scriptArgs(pm: PM, script: string, ...rest: string[]): { cmd: string; args: string[] } {
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: [script, ...rest] }
+  if (pm === 'npm')  return { cmd: 'npm',  args: ['run', script, '--', ...rest] }
+  return { cmd: 'yarn', args: [script, ...rest] }
+}
+
+/** Pack every workspace `@rudderjs/*` package via `pnpm -r pack` into a single
+ *  destination. The resulting tarballs have `workspace:^` refs resolved to
+ *  concrete versions — the same shape npm publishes, which sidesteps both
+ *  yarn-classic's link:+workspace hoister bug and npm's EOVERRIDE quirks on
+ *  direct deps. Returns a map of package name → absolute tarball path. */
+async function packWorkspacePackages(): Promise<Record<string, string>> {
+  const dest = await mkdtemp(path.join(tmpdir(), 'rudder-pack-'))
+  const packResult = await run(
+    'pnpm',
+    ['-r', '--filter=./packages/*', '--workspace-concurrency=8', 'pack', `--pack-destination=${dest}`],
+    REPO_ROOT,
+    { timeoutMs: 180_000 },
+  )
+  if (packResult.code !== 0) {
+    throw new Error(`pnpm -r pack failed:\n${packResult.stderr}\n${packResult.stdout}`)
+  }
+
+  // Tarball names are `<scope-without-@>-<name>-<version>.tgz`. Read the
+  // packages dir + each package.json to build the name → tarball map; no need
+  // to parse filenames since we know the version straight from the source.
   const dirs = await readdir(PACKAGES_DIR)
-  const overrides: Record<string, string> = {}
+  const map: Record<string, string> = {}
   for (const dir of dirs) {
     const pkgJson = path.join(PACKAGES_DIR, dir, 'package.json')
     if (!existsSync(pkgJson)) continue
-    const { name } = JSON.parse(await readFile(pkgJson, 'utf8'))
-    if (typeof name !== 'string') continue
-    overrides[name] = `link:${path.join(PACKAGES_DIR, dir)}`
+    const { name, version } = JSON.parse(await readFile(pkgJson, 'utf8'))
+    if (typeof name !== 'string' || typeof version !== 'string') continue
+    const tarName = `${name.replace('@', '').replace('/', '-')}-${version}.tgz`
+    const tarPath = path.join(dest, tarName)
+    if (!existsSync(tarPath)) continue
+    map[name] = `file:${tarPath}`
+  }
+  return map
+}
+
+/** Apply the @rudderjs/* + Prisma overrides to a scaffolded `package.json` in
+ *  the field the PM understands. Mutates pkg in place; caller writes the file.
+ *
+ *  - pnpm: `pnpm.overrides` works for both direct + transitive deps.
+ *  - npm: `overrides` rejects entries that conflict with direct deps (EOVERRIDE).
+ *    Rewrite the matching entries in `dependencies`/`devDependencies` directly.
+ *  - yarn (classic): `resolutions` covers transitive, but a direct dep with a
+ *    `latest` literal will resolve to the published version first. Rewrite
+ *    direct deps for parity with npm. */
+function applyOverrides(pkg: Record<string, unknown>, pm: PM, overrides: Record<string, string>): void {
+  if (pm === 'pnpm') {
+    const pnpm = (pkg['pnpm'] as Record<string, unknown> | undefined) ?? {}
+    pnpm['overrides'] = overrides
+    pkg['pnpm'] = pnpm
+    return
+  }
+
+  for (const field of ['dependencies', 'devDependencies'] as const) {
+    const deps = pkg[field] as Record<string, string> | undefined
+    if (!deps) continue
+    for (const name of Object.keys(deps)) {
+      const spec = overrides[name]
+      if (spec) deps[name] = spec
+    }
+  }
+
+  // yarn classic still honors `resolutions` for transitive deps that the linked
+  // packages drag in (e.g. peer @rudderjs/* refs). npm has no equivalent for
+  // file: paths, but transitive @rudderjs/* resolutions land on the same hoisted
+  // copy regardless because every linked package is already a `file:` ref.
+  if (pm === 'yarn') pkg['resolutions'] = overrides
+}
+
+async function buildOverrides(pm: PM): Promise<Record<string, string>> {
+  // Map every workspace @rudderjs/* package to a local spec. Without this,
+  // install would fetch published versions, missing any unreleased changes the
+  // smoke test should validate.
+  //
+  // - pnpm uses `link:` symlinks — the linked packages' `workspace:^` refs
+  //   resolve against the parent workspace transparently. Fast iteration.
+  // - npm / yarn use packed tarballs (via `pnpm pack`) where `workspace:^`
+  //   has already been rewritten to concrete versions. Avoids npm's EOVERRIDE
+  //   on direct deps and yarn-classic's link:+workspace hoister bug
+  //   ("could not find a copy of X to link"). Adds ~5-15s of pack time but
+  //   matches what published-registry installs look like.
+  const overrides: Record<string, string> = pm === 'pnpm' ? {} : await packWorkspacePackages()
+
+  if (pm === 'pnpm') {
+    const dirs = await readdir(PACKAGES_DIR)
+    for (const dir of dirs) {
+      const pkgJson = path.join(PACKAGES_DIR, dir, 'package.json')
+      if (!existsSync(pkgJson)) continue
+      const { name } = JSON.parse(await readFile(pkgJson, 'utf8'))
+      if (typeof name !== 'string') continue
+      overrides[name] = `link:${path.join(PACKAGES_DIR, dir)}`
+    }
   }
 
   // Pin @prisma/client + prisma to whatever the workspace install resolved to.
@@ -362,7 +485,7 @@ async function main(): Promise<void> {
     primary:    FRAMEWORK,
   }
 
-  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK} via=${VIA}`)
+  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK} via=${VIA} pm=${PM_FLAG}`)
 
   const work = await mkdtemp(path.join(tmpdir(), 'rudder-smoke-'))
   const target = path.join(work, ctx.name)
@@ -416,21 +539,25 @@ async function main(): Promise<void> {
       console.log(`  ${Object.keys(files).length} files written`)
     }
 
-    // Inject pnpm.overrides so the project resolves @rudderjs/* to the local checkout.
-    // The scaffolded package.json is a template fragment, not a workspace member, so
-    // overrides must live on the project itself (not the smoke script's package).
+    // Inject overrides so the project resolves @rudderjs/* + Prisma to the local
+    // checkout. The scaffolded package.json is a template fragment, not a workspace
+    // member, so overrides must live on the project itself. The field varies per PM:
+    // pnpm.overrides | overrides (npm) | resolutions (yarn). See applyOverrides().
     // Equally important for `--via=cli` runs — the CLI emits `latest` versions
-    // that pnpm would otherwise fetch from npm, missing any unreleased changes.
+    // that the PM would otherwise fetch from npm, missing any unreleased changes.
     const pkgJsonPath = path.join(target, 'package.json')
     const pkg = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
-    pkg.pnpm = pkg.pnpm ?? {}
-    pkg.pnpm.overrides = await buildOverrides()
+    const overrides = await buildOverrides(PM_FLAG)
+    applyOverrides(pkg, PM_FLAG, overrides)
     await writeFile(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n')
-    console.log(`  ${Object.keys(pkg.pnpm.overrides).length} packages linked into pnpm.overrides`)
+    console.log(`  ${Object.keys(overrides).length} packages linked into ${PM_FLAG} overrides`)
 
-    // pnpm needs a workspace marker even for a single project so it doesn't walk
-    // up and pick up the parent rudderjs workspace.
-    await writeFile(path.join(target, 'pnpm-workspace.yaml'), 'packages: ["."]\n')
+    // pnpm needs a workspace marker so it doesn't walk up and pick up the parent
+    // rudderjs workspace. npm + yarn use the `workspaces` field in package.json
+    // and never walk up, so the marker is pnpm-only.
+    if (PM_FLAG === 'pnpm') {
+      await writeFile(path.join(target, 'pnpm-workspace.yaml'), 'packages: ["."]\n')
+    }
 
     // Mirror the auth-view vendor step from create-rudder-app's interactive
     // scaffold flow — without it, /login resolves to a missing view at boot.
@@ -442,50 +569,60 @@ async function main(): Promise<void> {
     }
 
     // ── Steps ──
-    const done1 = step('pnpm install')
-    done1(await run('pnpm', ['install', '--no-frozen-lockfile', '--silent'], target, { timeoutMs: 240_000 }))
+    const install = installArgs(PM_FLAG)
+    const done1 = step(`${PM_FLAG} install`)
+    done1(await run(install.cmd, install.args, target, { timeoutMs: install.timeoutMs }))
 
     if (ctx.orm === 'prisma') {
+      const prismaGen = execArgs(PM_FLAG, 'prisma', 'generate')
       const done2 = step('prisma generate')
-      done2(await run('pnpm', ['exec', 'prisma', 'generate'], target, { timeoutMs: 120_000 }))
-      await mirrorPrismaGeneratedClient(target)
+      done2(await run(prismaGen.cmd, prismaGen.args, target, { timeoutMs: 120_000 }))
+      // .pnpm/ isolation only exists under pnpm; npm + yarn write the generated
+      // client straight into node_modules/.prisma/client/ and the mirror is a no-op.
+      if (PM_FLAG === 'pnpm') await mirrorPrismaGeneratedClient(target)
 
       // db push catches schema validity + Prisma generator parity.
+      const prismaPush = execArgs(PM_FLAG, 'prisma', 'db', 'push', '--accept-data-loss')
       const done3 = step('prisma db push')
-      done3(await run('pnpm', ['exec', 'prisma', 'db', 'push', '--accept-data-loss'], target, { timeoutMs: 120_000 }))
+      done3(await run(prismaPush.cmd, prismaPush.args, target, { timeoutMs: 120_000 }))
     }
 
     // providers:discover catches the rudder script path bug (src/ vs dist/) and
     // any provider-package metadata issues. Skips bootApp() so it's fast.
+    const provDisc = scriptArgs(PM_FLAG, 'rudder', 'providers:discover')
     const done4 = step('rudder providers:discover')
-    done4(await run('pnpm', ['rudder', 'providers:discover'], target, { timeoutMs: 60_000 }))
+    done4(await run(provDisc.cmd, provDisc.args, target, { timeoutMs: 60_000 }))
 
     // rudder db:generate + db:push exercise the chicken-and-egg-safe path used
     // by the create-rudder-app auto-cascade: both must succeed via the rudder
     // CLI (skip-boot) even before @prisma/client exists. Catches regressions
     // where db: commands accidentally fall back into bootApp().
     if (ctx.orm === 'prisma') {
+      const dbGen = scriptArgs(PM_FLAG, 'rudder', 'db:generate')
       const done4a = step('rudder db:generate (skip-boot)')
-      done4a(await run('pnpm', ['rudder', 'db:generate'], target, { timeoutMs: 60_000 }))
-      await mirrorPrismaGeneratedClient(target)
+      done4a(await run(dbGen.cmd, dbGen.args, target, { timeoutMs: 60_000 }))
+      if (PM_FLAG === 'pnpm') await mirrorPrismaGeneratedClient(target)
 
+      const dbPush = scriptArgs(PM_FLAG, 'rudder', 'db:push')
       const done4b = step('rudder db:push (skip-boot)')
-      done4b(await run('pnpm', ['rudder', 'db:push'], target, { timeoutMs: 60_000 }))
+      done4b(await run(dbPush.cmd, dbPush.args, target, { timeoutMs: 60_000 }))
     }
 
     // command:list does a full bootApp() — boots every provider with real config.
     // Catches: drift between Prisma schema and routes (ORM init), config string-
     // vs-class refs (provider register/boot), missing dist exports (resolveOptionalPeer).
+    const cmdList = scriptArgs(PM_FLAG, 'rudder', 'command:list')
     const done5 = step('rudder command:list (full boot)')
-    done5(await run('pnpm', ['rudder', 'command:list'], target, { timeoutMs: 60_000 }))
+    done5(await run(cmdList.cmd, cmdList.args, target, { timeoutMs: 60_000 }))
 
-    // pnpm build + node ./dist/server/index.mjs + GET / — the actual user path.
+    // build + node ./dist/server/index.mjs + GET / — the actual user path.
     // Catches prod-bundle drift the dev mode hides: missing `exports` conditions
     // (see feedback_esm_only_peer_require_bug.md), top-level node:* imports the
     // Vite build externalizes wrong, provider boot failures that surface only
     // when the HTTP server starts accepting connections.
-    const done6 = step('pnpm build')
-    done6(await run('pnpm', ['build'], target, { timeoutMs: 300_000 }))
+    const build = scriptArgs(PM_FLAG, 'build')
+    const done6 = step(`${PM_FLAG} build`)
+    done6(await run(build.cmd, build.args, target, { timeoutMs: 300_000 }))
 
     const port = await pickFreePort()
     const routes = getProfileRoutes(ctx)
