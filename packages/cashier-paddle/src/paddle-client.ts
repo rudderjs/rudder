@@ -16,8 +16,10 @@ interface PaddleClient {
 }
 
 let _client: PaddleClient | null = null
+let _testClient: PaddleClient | null = null
 
 export async function paddle(): Promise<PaddleClient> {
+  if (_testClient) return _testClient
   if (_client) return _client
 
   const apiKey = Cashier.apiKey()
@@ -49,4 +51,14 @@ export async function paddle(): Promise<PaddleClient> {
 /** @internal — drop the cached client (used by tests). */
 export function resetPaddleClient(): void {
   _client = null
+  _testClient = null
+}
+
+/**
+ * @internal — inject a stand-in client used by tests. Pass `null` to clear.
+ * Takes precedence over the cached SDK client; the same `paddle()` callers
+ * see the injected value without further plumbing.
+ */
+export function setPaddleClientForTesting(client: unknown): void {
+  _testClient = client as PaddleClient | null
 }

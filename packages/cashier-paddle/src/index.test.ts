@@ -29,6 +29,10 @@ import {
   fromSubscriptionPaused,
   fromSubscriptionCanceled,
   fromTransactionEvent,
+  Billable,
+  BillablePaddleError,
+  setPaddleClientForTesting,
+  resetPaddleClient,
 } from './index.js'
 
 import type {
@@ -389,5 +393,122 @@ describe('webhook transformers', () => {
   })
   test('fromTransactionEvent returns null without data.id', () => {
     assert.equal(fromTransactionEvent({}), null)
+  })
+})
+
+// ─── Billable.createAsCustomer (error handling) ───────────
+
+describe('Billable.createAsCustomer', () => {
+  // Stub Customer model that captures create() args without touching a DB.
+  class FakeCustomer {
+    static lastCreateArgs: Record<string, unknown> | null = null
+    static async create(attrs: Record<string, unknown>): Promise<Record<string, unknown>> {
+      this.lastCreateArgs = attrs
+      return { id: 'cust_local_1', ...attrs }
+    }
+  }
+
+  class StubUser {
+    id = 'user_1'
+    name = 'Alice'
+    email = 'alice@example.com'
+  }
+  // The Billable factory returns an abstract class (`abstract class _Billable extends Base`).
+  // Cast it to a concrete constructor for direct instantiation in tests.
+  const BilledUser = Billable(StubUser as unknown as abstract new (...args: unknown[]) => { id: unknown }) as unknown as new () => StubUser & {
+    createAsCustomer(opts?: { name?: string; email?: string; trialEndsAt?: Date }): Promise<unknown>
+  }
+
+  function setup(): void {
+    Cashier.reset()
+    Cashier.useCustomerModel(FakeCustomer as unknown as Parameters<typeof Cashier.useCustomerModel>[0])
+    FakeCustomer.lastCreateArgs = null
+    resetPaddleClient()
+  }
+
+  test('mock mode: no apiKey → SDK unavailable path → persists with paddleId=null', async () => {
+    setup()
+    // Cashier.apiKey() is null after reset, so paddle() throws — the outer
+    // try should swallow that and fall through with paddleId = null.
+    const user = new BilledUser()
+    const rec = await user.createAsCustomer() as unknown as { paddleId: string | null }
+    assert.equal(rec.paddleId, null)
+    assert.equal(FakeCustomer.lastCreateArgs?.['paddleId'], null)
+    assert.equal(FakeCustomer.lastCreateArgs?.['email'], 'alice@example.com')
+  })
+
+  test('SDK success: returned id is persisted on the local row', async () => {
+    setup()
+    setPaddleClientForTesting({
+      customers: {
+        create: async (_args: unknown) => ({ id: 'ctm_new' }),
+      },
+    })
+    const user = new BilledUser()
+    const rec = await user.createAsCustomer() as unknown as { paddleId: string | null }
+    assert.equal(rec.paddleId, 'ctm_new')
+    assert.equal(FakeCustomer.lastCreateArgs?.['paddleId'], 'ctm_new')
+  })
+
+  test('customer_email_in_use → BillablePaddleError with code, no local row written', async () => {
+    setup()
+    setPaddleClientForTesting({
+      customers: {
+        // Shape returned by the Paddle Billing API on 409.
+        create: async () => {
+          throw { error: { type: 'request_error', code: 'customer_email_in_use', detail: 'Already in use' } }
+        },
+      },
+    })
+    const user = new BilledUser()
+    await assert.rejects(
+      () => user.createAsCustomer(),
+      (err: unknown) => {
+        assert.ok(err instanceof BillablePaddleError, 'should be BillablePaddleError')
+        assert.equal((err as BillablePaddleError).code, 'customer_email_in_use')
+        return true
+      },
+    )
+    // Critical: the local row was NOT persisted in the broken state.
+    assert.equal(FakeCustomer.lastCreateArgs, null)
+  })
+
+  test('generic 5xx → BillablePaddleError (no code), original error preserved on .cause', async () => {
+    setup()
+    const upstream = new Error('boom — paddle internal error')
+    setPaddleClientForTesting({
+      customers: {
+        create: async () => { throw upstream },
+      },
+    })
+    const user = new BilledUser()
+    await assert.rejects(
+      () => user.createAsCustomer(),
+      (err: unknown) => {
+        assert.ok(err instanceof BillablePaddleError)
+        assert.equal((err as BillablePaddleError).code, undefined)
+        assert.equal((err as BillablePaddleError).cause, upstream)
+        return true
+      },
+    )
+    assert.equal(FakeCustomer.lastCreateArgs, null)
+  })
+
+  test('error code read from top-level .code (not just .error.code)', async () => {
+    setup()
+    setPaddleClientForTesting({
+      customers: {
+        create: async () => { throw { code: 'rate_limit_exceeded', message: 'Slow down.' } },
+      },
+    })
+    const user = new BilledUser()
+    await assert.rejects(
+      () => user.createAsCustomer(),
+      (err: unknown) => {
+        assert.ok(err instanceof BillablePaddleError)
+        assert.equal((err as BillablePaddleError).code, 'rate_limit_exceeded')
+        return true
+      },
+    )
   })
 })
