@@ -12,6 +12,41 @@ import type {
   TransactionRecord,
 } from './contracts.js'
 
+// ─── Errors ───────────────────────────────────────────────
+
+/**
+ * Thrown when a Paddle API call inside `createAsCustomer` fails for a reason
+ * other than "SDK unavailable" — duplicate email (`customer_email_in_use`),
+ * network, 5xx, validation, etc. Consumers catch this at the request boundary
+ * (e.g. `POST /subscribe`) to surface a friendly error instead of completing
+ * checkout against a local row with `paddleId = null`.
+ */
+export class BillablePaddleError extends Error {
+  public readonly cause: unknown
+  public readonly code: string | undefined
+
+  constructor(message: string, cause: unknown, code?: string) {
+    super(message)
+    this.name = 'BillablePaddleError'
+    this.cause = cause
+    this.code = code
+  }
+}
+
+/**
+ * Extract Paddle's API error code from whatever envelope the SDK surfaces.
+ * Checked across `.code` and `.error.code` — covers both the raw API response
+ * shape and the SDK's wrapped ApiError.
+ */
+function paddleErrorCode(err: unknown): string | undefined {
+  if (err && typeof err === 'object') {
+    const e = err as { code?: unknown; error?: { code?: unknown } }
+    if (typeof e.code === 'string') return e.code
+    if (e.error && typeof e.error === 'object' && typeof e.error.code === 'string') return e.error.code
+  }
+  return undefined
+}
+
 // ─── Types ────────────────────────────────────────────────
 
 export interface BillableInstance {
@@ -103,29 +138,48 @@ export function Billable<T extends abstract new (...args: any[]) => any>(
       const Customer = await Cashier.customerModel()
       const type = Cashier.billableTypeName()
       const id = String((this as any).id)
+      const name  = opts.name  ?? this.paddleName()
+      const email = opts.email ?? this.paddleEmail()
 
-      // Create the Paddle customer first; record the paddleId.
-      let paddleId: string | null = null
+      // Step 1: try to load the Paddle SDK. A throw here means the SDK isn't
+      // configured (no API key, package not installed) — that's a legitimate
+      // "mock mode" used by tests and apps doing only Paddle.js checkout. Fall
+      // through with `paddleId = null` so the local row still gets written.
+      let client: Awaited<ReturnType<typeof paddle>> | null = null
       try {
-        const client = await paddle()
+        client = await paddle()
+      } catch {
+        // SDK not configured. Persist the local row with paddleId = null.
+      }
+
+      // Step 2: if the SDK loaded, create the Paddle customer. Any failure
+      // here is a real API error (duplicate email, network, 5xx, etc.). DO
+      // NOT swallow it — silently persisting paddleId = null causes the
+      // canonical "user paid but webhook can't find them" bug.
+      let paddleId: string | null = null
+      if (client) {
         const fn = client.customers['create']
         if (fn) {
-          const result = await fn.call(client.customers, {
-            name:  opts.name  ?? this.paddleName(),
-            email: opts.email ?? this.paddleEmail(),
-          }) as { id?: string }
-          paddleId = result.id ?? null
+          try {
+            const result = await fn.call(client.customers, { name, email }) as { id?: string }
+            paddleId = result.id ?? null
+          } catch (err) {
+            const code = paddleErrorCode(err)
+            throw new BillablePaddleError(
+              `[RudderJS Cashier] Failed to create Paddle customer for ${email || '<no email>'}${code ? ` (${code})` : ''}.`,
+              err,
+              code,
+            )
+          }
         }
-      } catch {
-        // If the SDK is unavailable (e.g. tests, mock mode), still record locally.
       }
 
       return await Customer.create({
         paddleId,
         billableId:   id,
         billableType: type,
-        name:         opts.name  ?? this.paddleName(),
-        email:        opts.email ?? this.paddleEmail(),
+        name,
+        email,
         trialEndsAt:  opts.trialEndsAt ?? null,
       } as Record<string, unknown>) as unknown as CustomerRecord
     }

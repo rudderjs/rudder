@@ -28,7 +28,7 @@ export type {
   CheckoutItem, CheckoutOptions,
 } from './contracts.js'
 
-export { Billable } from './billable.js'
+export { Billable, BillablePaddleError } from './billable.js'
 export type { BillableInstance } from './billable.js'
 
 export { Checkout, normalizePrices } from './Checkout.js'
@@ -37,7 +37,7 @@ export type { SerializedCheckoutOptions } from './Checkout.js'
 export { SubscriptionResource } from './resources/SubscriptionResource.js'
 export { TransactionResource }  from './resources/TransactionResource.js'
 
-export { paddle, resetPaddleClient } from './paddle-client.js'
+export { paddle, resetPaddleClient, setPaddleClientForTesting } from './paddle-client.js'
 export { formatAmount } from './format.js'
 export { previewPrices } from './preview.js'
 export type { PreviewOptions, PreviewResult, PreviewItem, PreviewAddress } from './preview.js'
