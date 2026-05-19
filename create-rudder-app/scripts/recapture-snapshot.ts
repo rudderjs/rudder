@@ -47,7 +47,6 @@ const ctx: TemplateContext = {
     concurrency:   true,
     terminal:      true,
   },
-  demos: ['contact', 'ws', 'sync'],
 }
 
 const out = getTemplates(ctx)

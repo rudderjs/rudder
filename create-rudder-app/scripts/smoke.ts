@@ -11,7 +11,7 @@
 //   (c) paths into node_modules/@rudderjs/* that use src/ instead of dist/
 //
 // Usage:
-//   pnpm --filter create-rudder-app smoke              # default profile
+//   pnpm --filter create-rudder-app smoke              # web-app profile
 //   pnpm --filter create-rudder-app smoke --keep       # keep tmp dir on success
 //   pnpm --filter create-rudder-app smoke --profile=minimal
 //
@@ -36,7 +36,7 @@ const PACKAGES_DIR = path.join(REPO_ROOT, 'packages')
 
 const argv = process.argv.slice(2)
 const KEEP = argv.includes('--keep')
-const PROFILE = argv.find((a) => a.startsWith('--profile='))?.split('=')[1] ?? 'default'
+const PROFILE = argv.find((a) => a.startsWith('--profile='))?.split('=')[1] ?? 'web-app'
 
 type Framework = 'react' | 'vue' | 'solid'
 const FRAMEWORKS_VALID: readonly Framework[] = ['react', 'vue', 'solid']
@@ -48,130 +48,74 @@ if (FRAMEWORK_RAW !== undefined && !FRAMEWORKS_VALID.includes(FRAMEWORK_RAW as F
 const FRAMEWORK = (FRAMEWORK_RAW ?? 'react') as Framework
 
 // ─── Profiles ────────────────────────────────────────────
+//
+// Each profile mirrors a user-facing recipe in `src/cli-flags.ts` (RECIPES).
+// Keep these in sync — if a recipe's package set changes there, update here
+// too so the smoke exercises what real users actually get.
 
-const profiles: Record<string, TemplateContext> = {
-  default: {
+const APP_KEY = Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64')
+
+function emptyPackages(): TemplateContext['packages'] {
+  return {
+    auth: false, sanctum: false, passport: false, socialite: false,
+    queue: false, storage: false, scheduler: false, image: false,
+    mail: false, notifications: false, broadcast: false, sync: false,
+    ai: false, mcp: false, boost: false,
+    localization: false, pennant: false,
+    telescope: false, pulse: false, horizon: false,
+    crypt: false, http: false, process: false, concurrency: false,
+    terminal: false,
+  }
+}
+
+function baseProfile(overrides: Partial<TemplateContext> = {}): TemplateContext {
+  return {
     name:       'smoke-app',
     db:         'sqlite',
     orm:        'prisma',
     authSecret: 'smoke-test-secret-' + Date.now(),
-    appKey:     Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64'),
+    appKey:     APP_KEY,
     frameworks: ['react'],
     primary:    'react',
     tailwind:   false,
     shadcn:     false,
     pm:         'pnpm',
-    packages: {
-      auth: true, sanctum: false, passport: false, socialite: false,
-      queue: false, storage: false, scheduler: false, image: false,
-      mail: false, notifications: false, broadcast: false, sync: false,
-      ai: false, mcp: false, boost: false,
-      localization: false, pennant: false,
-      telescope: false, pulse: false, horizon: false,
-      crypt: false, http: false, process: false, concurrency: false,
-    },
-    demos: [],
-  },
-  minimal: {
-    name:       'smoke-app',
-    db:         'sqlite',
+    packages:   emptyPackages(),
+    ...overrides,
+  }
+}
+
+const profiles: Record<string, TemplateContext> = {
+  // `minimal` recipe — no packages, no ORM, no frontend.
+  minimal: baseProfile({
     orm:        false,
     authSecret: '',
     appKey:     '',
-    frameworks: ['react'],
-    primary:    'react',
-    tailwind:   false,
-    shadcn:     false,
-    pm:         'pnpm',
-    packages: {
-      auth: false, sanctum: false, passport: false, socialite: false,
-      queue: false, storage: false, scheduler: false, image: false,
-      mail: false, notifications: false, broadcast: false, sync: false,
-      ai: false, mcp: false, boost: false,
-      localization: false, pennant: false,
-      telescope: false, pulse: false, horizon: false,
-      crypt: false, http: false, process: false, concurrency: false,
-    },
-    demos: [],
-  },
-  todos: {
-    name:       'smoke-app',
-    db:         'sqlite',
-    orm:        'prisma',
-    authSecret: 'smoke-test-secret-' + Date.now(),
-    appKey:     Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64'),
-    frameworks: ['react'],
-    primary:    'react',
-    tailwind:   false,
-    shadcn:     false,
-    pm:         'pnpm',
-    packages: {
-      auth: true, sanctum: false, passport: false, socialite: false,
-      queue: false, storage: false, scheduler: false, image: false,
-      mail: false, notifications: false, broadcast: false, sync: false,
-      ai: false, mcp: false, boost: false,
-      localization: false, pennant: false,
-      telescope: false, pulse: false, horizon: false,
-      crypt: false, http: false, process: false, concurrency: false,
-    },
-    demos: ['todos'],
-  },
-  // ORM=none + every package that survives the multiselect filter. Catches
-  // packages that look DB-independent in their config defaults (memory storage,
-  // log driver, sync queue) but secretly require Prisma during provider boot.
-  // Telescope, Pulse, Horizon are the specific Phase-6 targets — their configs
-  // already default to in-memory storage, but their providers need to register
-  // observers, mount routes, and avoid asking the ORM for query timings.
-  'no-db': {
-    name:       'smoke-app',
-    db:         'sqlite',
-    orm:        false,
-    authSecret: '',
-    appKey:     Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64'),
-    frameworks: ['react'],
-    primary:    'react',
-    tailwind:   false,
-    shadcn:     false,
-    pm:         'pnpm',
-    packages: {
-      auth: false, sanctum: false, passport: false, socialite: false,
-      queue: true, storage: true, scheduler: true, image: true,
-      mail: true, notifications: true, broadcast: false, sync: false,
-      ai: false, mcp: false, boost: false,
-      localization: true, pennant: true,
-      telescope: true, pulse: true, horizon: true,
-      crypt: true, http: true, process: true, concurrency: true,
-    },
-    demos: [],
-  },
-  // Heavy: every Phase-4 + Phase-5 demo at once. Catches cross-demo collisions
-  // in routes/web.ts, routes/api.ts, AppServiceProvider boot ordering, and
-  // the modules.prisma schema generation.
-  'demos-all': {
-    name:       'smoke-app',
-    db:         'sqlite',
-    orm:        'prisma',
-    authSecret: 'smoke-test-secret-' + Date.now(),
-    appKey:     Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64'),
-    frameworks: ['react'],
-    primary:    'react',
-    tailwind:   false,
-    shadcn:     false,
-    pm:         'pnpm',
-    packages: {
-      auth: true, sanctum: false, passport: false, socialite: false,
-      queue: true, storage: true, scheduler: false, image: true,
-      mail: true, notifications: true, broadcast: false, sync: false,
-      ai: false, mcp: false, boost: false,
-      localization: true, pennant: true,
-      telescope: false, pulse: false, horizon: false,
-      crypt: false, http: true, process: true, concurrency: true,
-    },
-    demos: [
-      'contact', 'todos', 'polymorphic', 'avatar', 'fibonacci', 'system-info', 'pennant',
-      'cache', 'queue', 'mail', 'notifications', 'localization', 'http',
-    ],
-  },
+    frameworks: [],
+  }),
+
+  // `web-app` recipe — auth + ORM + frontend (the default canonical shape).
+  'web-app': baseProfile({
+    packages: { ...emptyPackages(), auth: true },
+  }),
+
+  // `saas` recipe — auth + queue + mail + notifications + ORM + frontend.
+  saas: baseProfile({
+    packages: { ...emptyPackages(), auth: true, queue: true, mail: true, notifications: true },
+  }),
+
+  // `realtime` recipe — auth + broadcast + sync + ORM + frontend.
+  realtime: baseProfile({
+    packages: { ...emptyPackages(), auth: true, broadcast: true, sync: true },
+  }),
+
+  // `api-service` recipe — DROPPED from the smoke. The scaffold currently
+  // can't build with `frameworks: []` because Vike requires at least one
+  // page ("At least one page should be defined"). Tracked for a follow-up
+  // scaffolder fix — either add a vanilla `pages/_error/+Page.ts` that
+  // returns plain HTML, or skip Vike entirely when the user picks the
+  // no-frontend recipe. Until then, the recipe is documented in
+  // `src/cli-flags.ts:RECIPES` but won't survive `pnpm build`.
 }
 
 // ─── Utilities ──────────────────────────────────────────
@@ -393,15 +337,14 @@ async function main(): Promise<void> {
     process.exit(2)
   }
 
-  // Apply --framework= override. Single-framework smoke (the matrix is the caller's
-  // job, not this script's). The demos-all profile defines a demos list that is
-  // currently react-only — when running against vue/solid we drop the demos so
-  // the scaffold compiles. See plan: docs/plans/2026-05-19-scaffolder-render-e2e.md.
+  // Apply --framework= override. Single-framework smoke (the matrix is the
+  // caller's job, not this script's). Preserve the profile's `frameworks: []`
+  // shape (api-service) — that's the no-frontend signal the manifest relies on.
+  const hasFrontend = baseCtx.frameworks.length > 0
   const ctx: TemplateContext = {
     ...baseCtx,
-    frameworks: [FRAMEWORK],
+    frameworks: hasFrontend ? [FRAMEWORK] : [],
     primary:    FRAMEWORK,
-    demos:      FRAMEWORK === 'react' ? baseCtx.demos : [],
   }
 
   console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK}`)
@@ -510,12 +453,11 @@ async function main(): Promise<void> {
         stderr: result.ok ? srvErr : `${result.summary}\n--- server stderr ---\n${srvErr}`,
       })
 
-      // Phase 4 — auth-flow E2E. Single-cell scope per the plan: react +
-      // default profile (auth: true, no demos). demos-all also installs auth
-      // but adds form-distracting noise; vue/solid lack vendored auth views.
-      // The selectors and flow are react-specific; we'll widen later if the
-      // value warrants it.
-      const runFlowCheck = FRAMEWORK === 'react' && PROFILE === 'default'
+      // Phase 4 — auth-flow E2E. Single-cell scope: react + web-app profile,
+      // the canonical auth-on shape every user-facing recipe inherits from.
+      // The selectors and flow are react-specific; vue/solid lack vendored
+      // auth views, and api-service has no frontend at all.
+      const runFlowCheck = FRAMEWORK === 'react' && PROFILE === 'web-app'
       if (runFlowCheck) {
         const done9 = step('flow-check (register → home → sign-out via chromium)')
         const flow = await flowCheck(server.baseUrl)

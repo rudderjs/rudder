@@ -1,5 +1,4 @@
-import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
-import { demosPolymorphicWebBlock } from '../demos/polymorphic.js'
+import { type TemplateContext } from '../../templates.js'
 
 export function routesWeb(ctx: TemplateContext): string {
   const hasAuth     = ctx.packages.auth
@@ -15,7 +14,6 @@ export function routesWeb(ctx: TemplateContext): string {
   if (hasAuth) {
     imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
     imports.push(`import { registerAuthRoutes } from '@rudderjs/auth/routes'`)
-    imports.push(`import { auth } from '@rudderjs/auth'`)
     imports.push(`import { AuthController } from '../app/Http/Controllers/AuthController.ts'`)
   }
 
@@ -66,74 +64,8 @@ Route.get('/', async () => view('welcome', {
 `
     : ''
 
-  // ── demos wiring ────────────────────────────────────────
-  // Controllers for /demos and /demos/<name>. Views live under app/Views/Demos/.
-  let demosBlock = ''
-  if (shouldScaffoldAnyDemo(ctx)) {
-    if (!hasWelcome) {
-      // Demo files exist but routesWeb already has `view` imports if hasWelcome.
-      // For multi-framework projects (no welcome) we still need the view import here.
-      imports.push(`import { view } from '@rudderjs/view'`)
-    }
-    if (shouldScaffoldDemo(ctx, 'todos')) {
-      imports.push(`import { resolve } from '@rudderjs/core'`)
-      imports.push(`import { TodoService } from '../app/Modules/Todo/TodoService.ts'`)
-    }
-    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
-      imports.push(`import { Post } from '../app/Models/Post.ts'`)
-      imports.push(`import { Video } from '../app/Models/Video.ts'`)
-      imports.push(`import { Tag } from '../app/Models/Tag.ts'`)
-      imports.push(`import type { Comment } from '../app/Models/Comment.ts'`)
-    }
-    if (shouldScaffoldDemo(ctx, 'pennant')) {
-      imports.push(`import { Feature, FeatureMiddleware } from '@rudderjs/pennant'`)
-      // auth().user() — Pennant demo gates on `auth` so the import is always available
-      // when this branch fires; it's also already imported above when hasAuth.
-    }
-    const lines = [
-      `// Demos — see app/Views/Demos/`,
-      `Route.get('/demos',         async () => view('demos.index'))`,
-    ]
-    if (shouldScaffoldDemo(ctx, 'contact'))     lines.push(`Route.get('/demos/contact', async () => view('demos.contact'))`)
-    if (shouldScaffoldDemo(ctx, 'todos')) {
-      lines.push(`Route.get('/demos/todos',   async () => {`)
-      lines.push(`  const todos = await resolve<TodoService>(TodoService).findAll()`)
-      lines.push(`  return view('demos.todos', { todos })`)
-      lines.push(`})`)
-    }
-    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
-      lines.push(demosPolymorphicWebBlock())
-    }
-    if (shouldScaffoldDemo(ctx, 'avatar'))        lines.push(`Route.get('/demos/avatar',        async () => view('demos.avatar'))`)
-    if (shouldScaffoldDemo(ctx, 'fibonacci'))     lines.push(`Route.get('/demos/fibonacci',     async () => view('demos.fibonacci'))`)
-    if (shouldScaffoldDemo(ctx, 'system-info'))   lines.push(`Route.get('/demos/system-info',   async () => view('demos.system-info'))`)
-    if (shouldScaffoldDemo(ctx, 'cache'))         lines.push(`Route.get('/demos/cache',         async () => view('demos.cache'))`)
-    if (shouldScaffoldDemo(ctx, 'queue'))         lines.push(`Route.get('/demos/queue',         async () => view('demos.queue'))`)
-    if (shouldScaffoldDemo(ctx, 'mail'))          lines.push(`Route.get('/demos/mail',          async () => view('demos.mail'))`)
-    if (shouldScaffoldDemo(ctx, 'notifications')) lines.push(`Route.get('/demos/notifications', async () => view('demos.notifications'))`)
-    if (shouldScaffoldDemo(ctx, 'localization'))  lines.push(`Route.get('/demos/localization',  async () => view('demos.localization'))`)
-    if (shouldScaffoldDemo(ctx, 'http'))          lines.push(`Route.get('/demos/http',          async () => view('demos.http'))`)
-    if (shouldScaffoldDemo(ctx, 'pennant')) {
-      lines.push(`Route.get('/demos/pennant', async () => {`)
-      lines.push(`  const current = await auth().user() as Record<string, unknown> | null`)
-      lines.push(`  const values = await Feature.values(`)
-      lines.push(`    ['dark-mode', 'max-uploads', 'beta-dashboard', 'new-checkout'],`)
-      lines.push(`    current as { id: string | number; [k: string]: unknown } | null,`)
-      lines.push(`  )`)
-      lines.push(`  const user = current`)
-      lines.push(`    ? { id: String(current['id']), name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }`)
-      lines.push(`    : null`)
-      lines.push(`  return view('demos.pennant', { user, values })`)
-      lines.push(`})`)
-      lines.push(`Route.get('/demos/pennant/beta', async () => view('demos.pennant-beta'), [FeatureMiddleware('beta-dashboard')])`)
-    }
-    if (shouldScaffoldDemo(ctx, 'ws'))          lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
-    if (shouldScaffoldDemo(ctx, 'sync'))        lines.push(`Route.get('/demos/sync',    async () => view('demos.sync'))`)
-    demosBlock = '\n' + lines.join('\n') + '\n'
-  }
-
   return `${imports.join('\n')}
-${webMwBlock}${authBlock}${welcomeBlock}${demosBlock}
+${webMwBlock}${authBlock}${welcomeBlock}
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
 // Use this file for: redirects, server-side auth guards, download routes, sitemaps, etc.

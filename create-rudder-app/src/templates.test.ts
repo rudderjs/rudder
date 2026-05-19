@@ -52,7 +52,6 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     shadcn:     false,
     pm:         'pnpm' as const,
     packages:   defaultPkgs,
-    demos:      [],
     ...overrides,
   }
 }
@@ -955,231 +954,48 @@ describe('getTemplates() — boost package', () => {
 
 // ─── demos package ───────────────────────────────────────
 
-describe('getTemplates() — demos', () => {
-  it('no demos selected → no Demos/* views, no /api/contact route', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: [] }))
-    assert.ok(!('app/Views/Demos/Index.tsx' in files))
-    assert.ok(!('app/Views/Demos/Contact.tsx' in files))
-    assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('app/Views/Demos/Sync.tsx' in files))
-    assert.ok(!files['routes/api.ts']!.includes('/api/contact'))
-    assert.ok(!files['routes/web.ts']!.includes("view('demos.index')"))
+describe('getTemplates() — demos dropped from scaffolder', () => {
+  // The scaffolder no longer ships /demos/* — every demo lives in the
+  // playground app instead. These tests pin the absence so a future regression
+  // (re-importing demo templates, re-adding /demos routes) fails loudly.
+  it('default React + auth profile scaffolds no Demos views', () => {
+    const files = getTemplates(ctx({ packages: defaultPkgs }))
+    for (const filename of Object.keys(files)) {
+      assert.ok(!filename.startsWith('app/Views/Demos/'), `scaffolder shouldn't ship demo view "${filename}"`)
+      assert.ok(!filename.startsWith('app/Modules/Todo/'), `scaffolder shouldn't ship the todos demo module "${filename}"`)
+    }
   })
 
-  it('contact demo → Index + Contact views, /demos and /api/contact routes', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
-    assert.ok('app/Views/Demos/Index.tsx' in files)
-    assert.ok('app/Views/Demos/Contact.tsx' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.index')"))
-    assert.ok(files['routes/web.ts']!.includes("view('demos.contact')"))
-    assert.ok(files['routes/api.ts']!.includes("router.post('/api/contact'"))
+  it('routes/web.ts has no demo URLs', () => {
+    const files = getTemplates(ctx({ packages: defaultPkgs }))
+    assert.ok(!files['routes/web.ts']!.includes("/demos"), 'routes/web.ts should not register any /demos routes')
+    assert.ok(!files['routes/web.ts']!.includes("view('demos."), "routes/web.ts should not call view('demos.*')")
   })
 
-  it('ws demo + broadcast → Ws view + RudderSocket + ws routes', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, broadcast: true }, demos: ['ws'] }))
-    assert.ok('app/Views/Demos/Ws.tsx' in files)
-    assert.ok('src/RudderSocket.ts' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.ws')"))
-    assert.ok(files['routes/api.ts']!.includes("/api/ws/broadcast"))
+  it('routes/api.ts has no demo endpoints (other than /api/health)', () => {
+    const files = getTemplates(ctx({ packages: defaultPkgs }))
+    const api = files['routes/api.ts']!
+    for (const url of ['/api/contact', '/api/ws/broadcast', '/api/fib', '/api/avatar', '/api/queue/dispatch', '/api/mail/send', '/api/notifications/send', '/api/i18n', '/api/http/fetch', '/api/polymorphic']) {
+      assert.ok(!api.includes(url), `routes/api.ts should not include demo endpoint "${url}"`)
+    }
   })
 
-  it('sync demo + sync → Sync view + y-websocket + yjs dep + /demos/sync route', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['sync'] }))
-    assert.ok('app/Views/Demos/Sync.tsx' in files)
-    const pkg = JSON.parse(files['package.json']!)
-    assert.ok('y-websocket' in pkg.dependencies)
-    assert.ok('yjs' in pkg.dependencies)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.sync')"))
+  it('SiteHeader has no "Demos" nav link', () => {
+    const files = getTemplates(ctx({ packages: defaultPkgs }))
+    const header = files[`app/Components/SiteHeader.tsx`]!
+    assert.ok(header, 'SiteHeader.tsx should exist for react primary')
+    assert.ok(!header.includes('"/demos"'), 'SiteHeader should not link to /demos')
+    assert.ok(!header.includes('>Demos<'), 'SiteHeader should not show the "Demos" label')
   })
 
-  it('todos demo + ORM → Todo module + Prisma model + /demos/todos controller', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['todos'] }))
-    assert.ok('app/Views/Demos/Todos.tsx' in files)
-    assert.ok('app/Modules/Todo/TodoSchema.ts' in files)
-    assert.ok('app/Modules/Todo/TodoService.ts' in files)
-    assert.ok('app/Modules/Todo/TodoServiceProvider.ts' in files)
-    assert.match(files['prisma/schema/modules.prisma']!, /model Todo \{/)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.todos'"))
-    assert.ok(files['routes/web.ts']!.includes('TodoService'))
-    assert.ok(files['app/Providers/AppServiceProvider.ts']!.includes('TodoServiceProvider'))
-  })
-
-  it('todos demo selected but ORM=none → demo dropped (registry gating)', () => {
-    const files = getTemplates(ctx({ orm: false, packages: noPkgs, demos: ['todos'] }))
-    assert.ok(!('app/Views/Demos/Todos.tsx' in files))
-    assert.ok(!('app/Modules/Todo/TodoService.ts' in files))
-    assert.ok(!files['routes/web.ts']!.includes("view('demos.todos'"))
-  })
-
-  it('polymorphic demo + ORM → Post/Video/Comment/Tag models + Prisma block + /demos/polymorphic + API', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['polymorphic'] }))
-    assert.ok('app/Views/Demos/Polymorphic.tsx' in files)
-    assert.ok('app/Models/Post.ts' in files)
-    assert.ok('app/Models/Video.ts' in files)
-    assert.ok('app/Models/Comment.ts' in files)
-    assert.ok('app/Models/Tag.ts' in files)
-    assert.match(files['app/Models/Comment.ts']!, /morphTo/)
-    assert.match(files['app/Models/Post.ts']!,    /morphMany/)
-    assert.match(files['app/Models/Post.ts']!,    /morphToMany/)
-    assert.match(files['app/Models/Video.ts']!,   /morphToMany/)
-    assert.match(files['app/Models/Tag.ts']!,     /morphedByMany/)
-    assert.match(files['prisma/schema/modules.prisma']!, /model Comment \{/)
-    assert.match(files['prisma/schema/modules.prisma']!, /commentableId/)
-    assert.match(files['prisma/schema/modules.prisma']!, /model Tag \{/)
-    assert.match(files['prisma/schema/modules.prisma']!, /model Taggable \{/)
-    assert.match(files['prisma/schema/modules.prisma']!, /taggableType/)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.polymorphic'"))
-    // Pinned because the route handler references Tag.all() — without the
-    // import, the prod-built handler hits ReferenceError on /demos/polymorphic.
-    assert.match(files['routes/web.ts']!, /import \{ Post \} from '\.\.\/app\/Models\/Post\.ts'/)
-    assert.match(files['routes/web.ts']!, /import \{ Video \} from '\.\.\/app\/Models\/Video\.ts'/)
-    assert.match(files['routes/web.ts']!, /import \{ Tag \} from '\.\.\/app\/Models\/Tag\.ts'/)
-    assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/state"))
-    assert.ok(files['routes/api.ts']!.includes("Model.morph('commentable'"))
-    assert.ok(files['routes/api.ts']!.includes("Model.morphToMany"))
-    assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/tags"))
-    assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/tags/:id/items"))
-  })
-
-  it('polymorphic demo selected but ORM=none → demo dropped (registry gating)', () => {
-    const files = getTemplates(ctx({ orm: false, packages: noPkgs, demos: ['polymorphic'] }))
-    assert.ok(!('app/Views/Demos/Polymorphic.tsx' in files))
-    assert.ok(!('app/Models/Post.ts' in files))
-    assert.ok(!files['routes/web.ts']!.includes("view('demos.polymorphic'"))
-  })
-
-  it('fibonacci demo + concurrency → view + /api/fib + /demos/fibonacci', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, concurrency: true }, demos: ['fibonacci'] }))
-    assert.ok('app/Views/Demos/Fibonacci.tsx' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.fibonacci')"))
-    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/fib'/)
-  })
-
-  it('system-info demo + process → view + /api/system-info + /demos/system-info', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, process: true }, demos: ['system-info'] }))
-    assert.ok('app/Views/Demos/SystemInfo.tsx' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.system-info')"))
-    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/system-info'/)
-  })
-
-  it('avatar demo + storage + image → view + /api/avatar + /demos/avatar', () => {
-    const files = getTemplates(ctx({
-      packages: { ...noPkgs, storage: true, image: true },
-      demos: ['avatar'],
-    }))
-    assert.ok('app/Views/Demos/Avatar.tsx' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.avatar')"))
-    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/avatar'/)
-  })
-
-  it('pennant demo + pennant + auth → views + Feature.define seed + /demos/pennant/beta with FeatureMiddleware', () => {
-    const files = getTemplates(ctx({
-      packages: { ...noPkgs, auth: true, pennant: true },
-      demos: ['pennant'],
-    }))
-    assert.ok('app/Views/Demos/Pennant.tsx' in files)
-    assert.ok('app/Views/Demos/PennantBeta.tsx' in files)
-    assert.match(files['app/Providers/AppServiceProvider.ts']!, /Feature\.define\('dark-mode'/)
-    assert.match(files['app/Providers/AppServiceProvider.ts']!, /Feature\.define\('beta-dashboard'/)
-    assert.match(files['routes/web.ts']!, /view\('demos\.pennant',/)
-    assert.ok(files['routes/web.ts']!.includes("FeatureMiddleware('beta-dashboard')"))
-  })
-
-  it('pennant demo selected without pennant package → demo dropped', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true }, demos: ['pennant'] }))
-    assert.ok(!('app/Views/Demos/Pennant.tsx' in files))
-    assert.ok(!/view\('demos\.pennant'/.test(files['routes/web.ts']!))
-  })
-
-  it('cache demo (always available — Tier A) → view + /api/cache/views routes', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['cache'] }))
-    assert.ok('app/Views/Demos/Cache.tsx' in files)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.cache')"))
-    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/cache\/views'/)
-  })
-
-  it('queue demo + queue → ExampleJob + /api/queue/dispatch + /demos/queue', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, queue: true }, demos: ['queue'] }))
-    assert.ok('app/Views/Demos/Queue.tsx' in files)
-    assert.ok('app/Jobs/ExampleJob.ts' in files)
-    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/queue\/dispatch'/)
-  })
-
-  it('mail demo + mail → DemoMail + /api/mail/send', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, mail: true }, demos: ['mail'] }))
-    assert.ok('app/Views/Demos/Mail.tsx' in files)
-    assert.ok('app/Mail/DemoMail.ts' in files)
-    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/mail\/send'/)
-  })
-
-  it('notifications demo + notifications + mail → WelcomeNotification + /api/notifications/send', () => {
-    const files = getTemplates(ctx({
-      packages: { ...noPkgs, notifications: true, mail: true },
-      demos: ['notifications'],
-    }))
-    assert.ok('app/Views/Demos/Notifications.tsx' in files)
-    assert.ok('app/Notifications/WelcomeNotification.ts' in files)
-    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/notifications\/send'/)
-  })
-
-  it('localization demo + localization → lang/<locale>/messages.json + /api/i18n', () => {
-    const files = getTemplates(ctx({
-      packages: { ...noPkgs, localization: true },
-      demos: ['localization'],
-    }))
-    assert.ok('app/Views/Demos/Localization.tsx' in files)
-    assert.ok('lang/en/messages.json' in files)
-    assert.ok('lang/es/messages.json' in files)
-    assert.ok('lang/ar/messages.json' in files)
-    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/i18n'/)
-  })
-
-  it('http demo + http → view + /api/http/fetch with Http.retry().get(url)', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, http: true }, demos: ['http'] }))
-    assert.ok('app/Views/Demos/Http.tsx' in files)
-    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/http\/fetch'/)
-    assert.match(files['routes/api.ts']!, /Http\.retry\(3, 200\)\.timeout\(5000\)\.get\(url\)/)
-  })
-
-  it('queue demo selected without queue package → demo dropped', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['queue'] }))
-    assert.ok(!('app/Views/Demos/Queue.tsx' in files))
-    assert.ok(!('app/Jobs/ExampleJob.ts' in files))
-  })
-
-  it('ws demo selected but broadcast not → demo dropped (registry gating)', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['ws'] }))
-    assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('src/RudderSocket.ts' in files))
-    assert.ok(!files['routes/web.ts']!.includes("view('demos.ws')"))
-  })
-
-  it('demos requested but primary !== react → demos silently skipped', () => {
-    const files = getTemplates(ctx({
-      packages: { ...noPkgs, broadcast: true, sync: true },
-      demos: ['contact', 'ws', 'sync'],
-      frameworks: ['vue'], primary: 'vue',
-    }))
-    assert.ok(!('app/Views/Demos/Index.tsx' in files))
-    assert.ok(!('app/Views/Demos/Contact.tsx' in files))
-    assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('app/Views/Demos/Sync.tsx' in files))
-    assert.ok(!('src/RudderSocket.ts' in files))
-    const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('y-websocket' in pkg.dependencies))
-    assert.ok(!('yjs' in pkg.dependencies))
-  })
-
-  it('contact demo + auth → contact API uses CsrfMiddleware', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true }, demos: ['contact'] }))
-    assert.ok(files['routes/api.ts']!.includes('CsrfMiddleware()'))
-    assert.ok(files['app/Views/Demos/Contact.tsx']!.includes('X-CSRF-Token'))
-  })
-
-  it('contact demo without auth → contact API has no CSRF middleware', () => {
-    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
-    const apiContact = files['routes/api.ts']!
-    const contactBlock = apiContact.slice(apiContact.indexOf("'/api/contact'"))
-    assert.ok(!contactBlock.slice(0, 400).includes('CsrfMiddleware'))
+  it('modules.prisma is just the empty marker block (no preloaded demo models)', () => {
+    const files = getTemplates(ctx({ packages: defaultPkgs }))
+    const schema = files['prisma/schema/modules.prisma']!
+    assert.ok(schema.includes('<rudderjs:modules:start>'))
+    assert.ok(schema.includes('<rudderjs:modules:end>'))
+    assert.ok(!schema.includes('model Todo'),    'modules.prisma should not preload the todos demo model')
+    assert.ok(!schema.includes('model Post'),    'modules.prisma should not preload polymorphic demo models')
+    assert.ok(!schema.includes('model Comment'), 'modules.prisma should not preload polymorphic demo models')
+    assert.ok(!schema.includes('model Tag'),     'modules.prisma should not preload polymorphic demo models')
   })
 })

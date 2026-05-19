@@ -89,7 +89,6 @@
     "@playwright/test": "^1.58.2",
     "@rudderjs/cli": "workspace:*",
     "@types/node": "^20.0.0",
-    "create-rudder-app": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
