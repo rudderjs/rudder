@@ -41,10 +41,20 @@ export interface RouteOptions<S extends ZodType = ZodType> {
 //
 // Route loaders (`routes/web.ts`, `routes/api.ts`) run synchronously at module
 // evaluation time — all `Route.get()` calls happen before the loader promise
-// resolves. A plain module-level variable is sufficient; no AsyncLocalStorage
-// needed, and nothing node-specific leaks into the browser bundle.
-
-let _currentGroup: RouteGroup | undefined
+// resolves.
+//
+// The slot is hosted on `globalThis` so it survives bundle duplication. In a
+// vite-built SSR app, `@rudderjs/router` can end up loaded twice — once via
+// `@rudderjs/core`'s `await import('@rudderjs/router')` (resolves to the
+// linked workspace dist) and once via the SSR chunk that `routes/web.ts`
+// statically imports (resolves to a vite-bundled copy). With a plain module-
+// level `let`, `runWithGroup` writes to one copy's slot and `currentGroup()`
+// (called by `_rb` / `registerController`) reads from the other — every route
+// gets `group: undefined`, all `web` group middleware (Session / Auth /
+// RateLimit / Csrf) silently no-ops. Caught by the Phase 4 scaffolder
+// auth-flow E2E. Same pattern as #498/#500–#507/#516.
+const CURRENT_GROUP_KEY = '__rudderjs_router_current_group__'
+const _groupSlotGlobal  = globalThis as unknown as Record<string, RouteGroup | undefined>
 
 /**
  * Tag every route registered while `fn` runs with `group` ('web' | 'api').
@@ -53,39 +63,38 @@ let _currentGroup: RouteGroup | undefined
  * `Route.get/post/...` at module-evaluation time — those calls complete
  * before `fn` resolves, even when `fn` is `async`. The implementation
  * supports an async `fn` (restoring the previous group in a `.finally()`),
- * but two concurrent `runWithGroup` invocations on the same module instance
- * will clobber each other: this is a single module-level variable, not an
- * AsyncLocalStorage scope. Callers must run loaders **serially** — see
- * `@rudderjs/core`'s `withRouting()` which sequentially `await`s each
- * loader.
+ * but two concurrent `runWithGroup` invocations will clobber each other:
+ * this is a single global slot, not an AsyncLocalStorage scope. Callers
+ * must run loaders **serially** — see `@rudderjs/core`'s `withRouting()`
+ * which sequentially `await`s each loader.
  *
  * Outside any `runWithGroup` scope, routes register without a group tag and
  * receive only global `m.use(...)` middleware (no `m.web(...)` / `m.api(...)`
  * stack).
  */
 export function runWithGroup<R>(group: RouteGroup, fn: () => R | Promise<R>): R | Promise<R> {
-  const prev = _currentGroup
-  _currentGroup = group
+  const prev = _groupSlotGlobal[CURRENT_GROUP_KEY]
+  _groupSlotGlobal[CURRENT_GROUP_KEY] = group
   try {
     const out = fn()
     if (out instanceof Promise) {
-      return out.finally(() => { _currentGroup = prev })
+      return out.finally(() => { _groupSlotGlobal[CURRENT_GROUP_KEY] = prev })
     }
-    _currentGroup = prev
+    _groupSlotGlobal[CURRENT_GROUP_KEY] = prev
     return out
   } catch (e) {
-    _currentGroup = prev
+    _groupSlotGlobal[CURRENT_GROUP_KEY] = prev
     throw e
   }
 }
 
 /**
- * Read the current group tag. Reads the module-level slot directly; returns
- * `undefined` outside any `runWithGroup(...)` block. Called by route
- * decorators to stamp each `RouteDefinition` with its group.
+ * Read the current group tag. Returns `undefined` outside any
+ * `runWithGroup(...)` block. Called by route decorators to stamp each
+ * `RouteDefinition` with its group.
  */
 export function currentGroup(): RouteGroup | undefined {
-  return _currentGroup
+  return _groupSlotGlobal[CURRENT_GROUP_KEY]
 }
 
 // ─── Metadata Keys ─────────────────────────────────────────

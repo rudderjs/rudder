@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 import { getTemplates, type TemplateContext } from '../src/templates.js'
 import { getProfileRoutes } from '../src/templates/routes-manifest.js'
 import { renderCheck } from './render-check.js'
+import { flowCheck } from './flow-check.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
@@ -508,6 +509,23 @@ async function main(): Promise<void> {
         stdout: srvOut,
         stderr: result.ok ? srvErr : `${result.summary}\n--- server stderr ---\n${srvErr}`,
       })
+
+      // Phase 4 — auth-flow E2E. Single-cell scope per the plan: react +
+      // default profile (auth: true, no demos). demos-all also installs auth
+      // but adds form-distracting noise; vue/solid lack vendored auth views.
+      // The selectors and flow are react-specific; we'll widen later if the
+      // value warrants it.
+      const runFlowCheck = FRAMEWORK === 'react' && PROFILE === 'default'
+      if (runFlowCheck) {
+        const done9 = step('flow-check (register → home → sign-out via chromium)')
+        const flow = await flowCheck(server.baseUrl)
+        const { stdout: fOut, stderr: fErr } = server.capture()
+        done9({
+          code:   flow.ok ? 0 : 1,
+          stdout: fOut,
+          stderr: flow.ok ? fErr : `${flow.summary}\n--- server stderr ---\n${fErr}`,
+        })
+      }
     } finally {
       await server.shutdown()
     }

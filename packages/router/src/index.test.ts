@@ -8,6 +8,7 @@ import {
   Controller, Middleware,
   Get, Post, Put, Patch, Delete, Options,
   route,
+  runWithGroup,
   ROUTE_PATTERN_NUMBER,
   ROUTE_PATTERN_ALPHA,
   ROUTE_PATTERN_ALPHANUM,
@@ -1127,3 +1128,75 @@ describe('Url — signed URLs', () => {
   })
 })
 
+
+// ─── runWithGroup tagging — Phase 4 regression ───────────────
+
+describe('runWithGroup tagging', () => {
+  let r: Router
+  beforeEach(() => { r = new Router() })
+
+  it('Route.get inside runWithGroup is tagged with the group', async () => {
+    await runWithGroup('web', async () => {
+      r.get('/x', () => 'ok')
+    })
+    assert.strictEqual(r.list()[0]?.group, 'web')
+  })
+
+  it('registerController inside runWithGroup tags every method', async () => {
+    @Controller('/auth')
+    class Ctrl {
+      @Post('/sign-in/email')  signIn()  {}
+      @Post('/sign-up/email')  signUp()  {}
+      @Post('/sign-out')       signOut() {}
+    }
+    await runWithGroup('web', async () => {
+      r.registerController(Ctrl)
+    })
+    const routes = r.list()
+    assert.strictEqual(routes.length, 3)
+    for (const route of routes) {
+      assert.strictEqual(route.group, 'web', `route ${route.method} ${route.path} should be tagged 'web', got ${route.group ?? 'undefined'}`)
+    }
+  })
+
+  it('mixes Route.get + registerController in one runWithGroup — both tagged', async () => {
+    @Controller('/auth')
+    class Ctrl { @Post('/sign-up/email') signUp() {} }
+    await runWithGroup('web', async () => {
+      r.get('/login', () => 'ok')
+      r.registerController(Ctrl)
+      r.get('/', () => 'ok')
+    })
+    for (const route of r.list()) {
+      assert.strictEqual(route.group, 'web', `route ${route.method} ${route.path} should be tagged 'web', got ${route.group ?? 'undefined'}`)
+    }
+  })
+
+  it('runWithGroup body returning a promise: sync sub-call still tags routes', async () => {
+    // Mirror the scaffold's exact pattern — runWithGroup wraps an async
+    // loader that synchronously calls registerController inside.
+    @Controller('/auth')
+    class Ctrl { @Post('/sign-up/email') signUp() {} }
+    const loader = async (): Promise<void> => {
+      r.registerController(Ctrl)
+    }
+    await runWithGroup('web', loader)
+    assert.strictEqual(r.list()[0]?.group, 'web')
+  })
+
+  it('group slot lives on globalThis under __rudderjs_router_current_group__', () => {
+    // Pin the contract — vite-bundled SSR apps can load @rudderjs/router
+    // twice (linked workspace dist + vite-bundled chunk). With a plain
+    // module-local `let`, runWithGroup writes to one copy's slot and
+    // currentGroup() reads from the other → every route gets `group:
+    // undefined`, web-group middleware silently no-ops. Caught by the
+    // Phase 4 scaffolder flow-check.
+    const g = globalThis as Record<string, unknown>
+    delete g['__rudderjs_router_current_group__']
+    runWithGroup('web', () => {
+      assert.strictEqual(g['__rudderjs_router_current_group__'], 'web')
+    })
+    // Slot is restored to its pre-runWithGroup value (undefined here).
+    assert.strictEqual(g['__rudderjs_router_current_group__'], undefined)
+  })
+})
