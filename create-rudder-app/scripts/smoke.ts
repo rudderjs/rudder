@@ -20,11 +20,14 @@
 import { spawn } from 'node:child_process'
 import { mkdtemp, readdir, readFile, rm, mkdir, writeFile, cp } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getTemplates, type TemplateContext } from '../src/templates.js'
+import { getProfileRoutes } from '../src/templates/routes-manifest.js'
+import { renderCheck } from './render-check.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
@@ -283,11 +286,22 @@ async function pickFreePort(): Promise<number> {
   })
 }
 
-async function bootAndProbe(target: string, port: number): Promise<RunResult> {
-  // Boots the scaffolded app via `node ./dist/server/index.mjs`, polls / for a
-  // 200 response, and asserts the welcome page marker is in the body. Catches
-  // prod-bundle drift (missing exports, top-level node: imports), Vike build
-  // output going wrong, and any provider that throws at HTTP-server start time.
+interface BootedServer {
+  baseUrl:   string
+  /** Best-effort log capture — for failure messages. */
+  capture:   () => { stdout: string; stderr: string }
+  /** Resolves once the child process has exited. */
+  exited:    Promise<number>
+  /** SIGTERM → wait 3s → SIGKILL. Safe to call more than once. */
+  shutdown:  () => Promise<void>
+}
+
+async function bootServer(target: string, port: number): Promise<BootedServer> {
+  // Boots the scaffolded app via `node ./dist/server/index.mjs` and polls / for
+  // a 200 response (readiness). Catches prod-bundle drift (missing exports,
+  // top-level node: imports), Vike build output going wrong, and any provider
+  // that throws at HTTP-server start time. The body assertion + cross-route
+  // hydration check live downstream in renderCheck().
   const child = spawn('node', ['./dist/server/index.mjs'], {
     cwd: target,
     stdio: 'pipe',
@@ -299,65 +313,73 @@ async function bootAndProbe(target: string, port: number): Promise<RunResult> {
   child.stdout?.on('data', (d) => { stdout += d.toString() })
   child.stderr?.on('data', (d) => { stderr += d.toString() })
 
-  const exitPromise = new Promise<number>((resolve) => {
+  const exited = new Promise<number>((resolve) => {
     child.on('close', (code) => resolve(code ?? 1))
     child.on('error', () => resolve(1))
   })
 
+  const baseUrl = `http://127.0.0.1:${port}`
+  const readinessUrl = `${baseUrl}/`
+  const deadline = Date.now() + 15_000
+  let lastErr: unknown = null
+  let ready = false
+
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(
+        `[smoke] server exited (code ${child.exitCode}) before serving /\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+      )
+    }
+    try {
+      const res = await fetch(readinessUrl, { signal: AbortSignal.timeout(2_000) })
+      if (res.status === 200) { ready = true; break }
+      lastErr = new Error(`HTTP ${res.status}`)
+    } catch (e) {
+      lastErr = e
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+
+  const shutdown = async () => {
+    if (child.exitCode !== null) return
+    child.kill('SIGTERM')
+    const result = await Promise.race([
+      exited,
+      new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 3_000)),
+    ])
+    if (result === 'timeout') child.kill('SIGKILL')
+  }
+
+  if (!ready) {
+    await shutdown()
+    throw new Error(
+      `[smoke] server did not serve 200 within 15s on port ${port}: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+    )
+  }
+
+  return {
+    baseUrl,
+    capture:  () => ({ stdout, stderr }),
+    exited,
+    shutdown,
+  }
+}
+
+async function vendorAuthViews(target: string, primary: 'react' | 'vue' | 'solid'): Promise<boolean> {
+  // Mirrors the auth-view copy step in create-rudder-app/src/index.ts. The
+  // smoke calls getTemplates() directly (not scaffold()), so without this the
+  // scaffolded /login route would resolve to a missing view at boot. Only
+  // packages/auth/views/react/ exists today — vue/solid scaffolds skip auth UI
+  // routes in the manifest, so the missing cp() here is silently OK for them.
+  const require = createRequire(import.meta.url)
   try {
-    const url = `http://127.0.0.1:${port}/`
-    const deadline = Date.now() + 15_000
-    let lastErr: unknown = null
-    let body: string | null = null
-
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) {
-        return {
-          code: 1,
-          stdout,
-          stderr: stderr + `\n[smoke] server exited (code ${child.exitCode}) before serving /`,
-        }
-      }
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(2_000) })
-        if (res.status === 200) {
-          body = await res.text()
-          break
-        }
-        lastErr = new Error(`HTTP ${res.status}`)
-      } catch (e) {
-        lastErr = e
-      }
-      await new Promise((r) => setTimeout(r, 250))
-    }
-
-    if (body === null) {
-      return {
-        code: 1,
-        stdout,
-        stderr: stderr + `\n[smoke] server did not serve 200 within 15s on port ${port}: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
-      }
-    }
-
-    const marker = 'Built with RudderJS'
-    if (!body.includes(marker)) {
-      return {
-        code: 1,
-        stdout,
-        stderr: stderr + `\n[smoke] response body missing marker "${marker}"\n--- body (first 500 chars) ---\n${body.slice(0, 500)}`,
-      }
-    }
-
-    return { code: 0, stdout, stderr }
-  } finally {
-    if (child.exitCode === null) {
-      child.kill('SIGTERM')
-      const result = await Promise.race([
-        exitPromise,
-        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 3_000)),
-      ])
-      if (result === 'timeout') child.kill('SIGKILL')
-    }
+    const authPkgPath = require.resolve('@rudderjs/auth/package.json')
+    const authViewsDir = path.join(path.dirname(authPkgPath), 'views', primary)
+    if (!existsSync(authViewsDir)) return false
+    await cp(authViewsDir, path.join(target, 'app', 'Views', 'Auth'), { recursive: true, force: true })
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -412,6 +434,15 @@ async function main(): Promise<void> {
     // up and pick up the parent rudderjs workspace.
     await writeFile(path.join(target, 'pnpm-workspace.yaml'), 'packages: ["."]\n')
 
+    // Mirror the auth-view vendor step from create-rudder-app's interactive
+    // scaffold flow — without it, /login resolves to a missing view at boot.
+    // Only react has vendored views today; for vue/solid the manifest skips
+    // auth routes, so a no-op here is fine.
+    if (ctx.packages.auth) {
+      const ok = await vendorAuthViews(target, ctx.primary)
+      console.log(`  auth views: ${ok ? `vendored from @rudderjs/auth/views/${ctx.primary}/` : 'skipped (no views for this framework)'}`)
+    }
+
     // ── Steps ──
     const done1 = step('pnpm install')
     done1(await run('pnpm', ['install', '--no-frozen-lockfile', '--silent'], target, { timeoutMs: 240_000 }))
@@ -459,8 +490,27 @@ async function main(): Promise<void> {
     done6(await run('pnpm', ['build'], target, { timeoutMs: 300_000 }))
 
     const port = await pickFreePort()
-    const done7 = step(`boot + GET / on port ${port}`)
-    done7(await bootAndProbe(target, port))
+    const routes = getProfileRoutes(ctx)
+    console.log(`  render-check manifest: ${routes.length} route(s) — ${routes.map(r => r.path).join(', ')}`)
+
+    const done7 = step(`boot server on port ${port}`)
+    const server = await bootServer(target, port).then(
+      (s) => { done7({ code: 0, stdout: '', stderr: '' }); return s },
+      (e: Error) => { done7({ code: 1, stdout: '', stderr: e.message }); throw e },
+    )
+
+    try {
+      const done8 = step(`render-check (${routes.length} routes via chromium)`)
+      const result = await renderCheck(server.baseUrl, routes)
+      const { stdout: srvOut, stderr: srvErr } = server.capture()
+      done8({
+        code:   result.ok ? 0 : 1,
+        stdout: srvOut,
+        stderr: result.ok ? srvErr : `${result.summary}\n--- server stderr ---\n${srvErr}`,
+      })
+    } finally {
+      await server.shutdown()
+    }
 
     success = true
     console.log(`\n[create-rudder-app smoke] OK\n`)
