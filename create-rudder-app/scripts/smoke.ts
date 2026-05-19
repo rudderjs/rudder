@@ -47,6 +47,20 @@ if (FRAMEWORK_RAW !== undefined && !FRAMEWORKS_VALID.includes(FRAMEWORK_RAW as F
 }
 const FRAMEWORK = (FRAMEWORK_RAW ?? 'react') as Framework
 
+// `--via=cli` invokes the real `create-rudder-app` binary in JSON mode and
+// hands the scaffolded directory back to the existing install + boot + render
+// pipeline. Catches regressions in parseFlags / validateJsonMode /
+// resolveJsonAnswers / scaffold that the direct getTemplates() path can't see.
+// `--via=direct` (default) keeps the current per-recipe coverage by calling
+// getTemplates() with a hand-built TemplateContext.
+type Via = 'direct' | 'cli'
+const VIA_RAW = argv.find((a) => a.startsWith('--via='))?.split('=')[1] ?? 'direct'
+if (VIA_RAW !== 'direct' && VIA_RAW !== 'cli') {
+  console.error(`unknown --via "${VIA_RAW}". options: direct, cli`)
+  process.exit(2)
+}
+const VIA: Via = VIA_RAW as Via
+
 // ─── Profiles ────────────────────────────────────────────
 //
 // Each profile mirrors a user-facing recipe in `src/cli-flags.ts` (RECIPES).
@@ -348,32 +362,71 @@ async function main(): Promise<void> {
     primary:    FRAMEWORK,
   }
 
-  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK}`)
+  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK} via=${VIA}`)
 
   const work = await mkdtemp(path.join(tmpdir(), 'rudder-smoke-'))
   const target = path.join(work, ctx.name)
-  await mkdir(target, { recursive: true })
+  // `--via=cli` lets the CLI create the directory (it errors if the target
+  // exists). `--via=direct` writes files itself, so it needs the dir up front.
+  if (VIA === 'direct') await mkdir(target, { recursive: true })
   console.log(`  tmp: ${target}`)
 
   let success = false
   try {
     // ── Scaffold ──
-    const files = getTemplates(ctx)
-    for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(target, rel)
-      await mkdir(path.dirname(abs), { recursive: true })
-      await writeFile(abs, content, 'utf8')
+    if (VIA === 'cli') {
+      // Drive the actual `create-rudder-app` CLI in JSON mode — exercises
+      // parseFlags → validateJsonMode → resolveJsonAnswers → scaffold, the
+      // path real users hit. Smoke profile maps to `--recipe=<profile>`.
+      // `--via=cli` only supports profiles that are valid recipe names.
+      const validRecipes = ['minimal', 'web-app', 'saas', 'api-service', 'realtime']
+      if (!validRecipes.includes(PROFILE)) {
+        throw new Error(`--via=cli requires a profile that matches a recipe (one of: ${validRecipes.join(', ')}); got "${PROFILE}"`)
+      }
+      const cliEntry = path.join(REPO_ROOT, 'create-rudder-app', 'dist', 'index.js')
+      const args = [
+        cliEntry, ctx.name,
+        '--json',
+        `--recipe=${PROFILE}`,
+        `--framework=${FRAMEWORK}`,
+        '--db=sqlite',
+        '--install=false',
+        '--git=false',
+      ]
+      const done0 = step(`create-rudder-app --recipe=${PROFILE}`)
+      const cliResult = await run('node', args, work, { timeoutMs: 60_000 })
+      done0(cliResult)
+      // The CLI prints one JSON line to stdout on success; surface it for
+      // diagnostics so a future regression's exact output lands in logs.
+      const lastLine = cliResult.stdout.trim().split('\n').filter(l => l.startsWith('{')).pop() ?? ''
+      try {
+        const payload = JSON.parse(lastLine) as { success: boolean; directory?: string; files?: number }
+        if (!payload.success) throw new Error(`CLI reported success=false: ${lastLine}`)
+        console.log(`  cli scaffold: ${payload.files ?? 0} files written to ${payload.directory ?? target}`)
+      } catch (e) {
+        throw new Error(`could not parse CLI JSON output: ${e instanceof Error ? e.message : String(e)}\nlast line: ${lastLine}`)
+      }
+    } else {
+      const files = getTemplates(ctx)
+      for (const [rel, content] of Object.entries(files)) {
+        const abs = path.join(target, rel)
+        await mkdir(path.dirname(abs), { recursive: true })
+        await writeFile(abs, content, 'utf8')
+      }
+      console.log(`  ${Object.keys(files).length} files written`)
     }
 
     // Inject pnpm.overrides so the project resolves @rudderjs/* to the local checkout.
     // The scaffolded package.json is a template fragment, not a workspace member, so
     // overrides must live on the project itself (not the smoke script's package).
+    // Equally important for `--via=cli` runs — the CLI emits `latest` versions
+    // that pnpm would otherwise fetch from npm, missing any unreleased changes.
     const pkgJsonPath = path.join(target, 'package.json')
     const pkg = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
     pkg.pnpm = pkg.pnpm ?? {}
     pkg.pnpm.overrides = await buildOverrides()
     await writeFile(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n')
-    console.log(`  ${Object.keys(files).length} files written, ${Object.keys(pkg.pnpm.overrides).length} packages linked`)
+    console.log(`  ${Object.keys(pkg.pnpm.overrides).length} packages linked into pnpm.overrides`)
 
     // pnpm needs a workspace marker even for a single project so it doesn't walk
     // up and pick up the parent rudderjs workspace.
