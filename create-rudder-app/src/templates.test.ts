@@ -648,10 +648,9 @@ describe('getTemplates() — +server.ts and vike-photon removal', () => {
     const config = files['pages/+config.ts']!
     assert.ok(!config.includes('vike-photon'))
     assert.ok(!config.includes('photon'))
-    // React path now uses plain `satisfies Config` — vikejs/vike#3251 was
-    // fixed by vike-react 0.6.23. Vue/Solid templates still emit the
-    // `as unknown as Config` workaround until those packages ship an
-    // equivalent fix.
+    // vikejs/vike#3251 is fixed in vike core; vike-react 0.6.23, vike-vue
+    // 0.9.11, and vike-solid 0.8.2 all use plain `satisfies Config` in
+    // their example `+config.ts` under `exactOptionalPropertyTypes: true`.
     assert.ok(config.includes('satisfies Config'))
     assert.ok(!config.includes('as unknown as Config'))
   })
