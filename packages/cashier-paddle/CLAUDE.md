@@ -35,6 +35,10 @@ Paddle billing for RudderJS — Billable mixin, subscription state machine, sign
 - **`static table` is the Prisma DELEGATE name** — camelCase (`paddleSubscription`), NOT the SQL `@@map` name. The ORM does `prisma[this.table]`.
 - **Past-due semantics match Cashier** — `subscribed()` is true for active, trialing, paused-on-grace, canceled-on-grace; flip past-due into "active too" with `Cashier.keepPastDueSubscriptionsActive()`.
 
+## Doctor checks
+
+Ships `src/doctor.ts`: `cashier-paddle:api-key`, `cashier-paddle:webhook-secret` — both warn when unset; the webhook-secret check was the post-mortem trigger for the doctor command itself (see [`docs/plans/2026-05-19-rudder-doctor-command.md`](../../docs/plans/2026-05-19-rudder-doctor-command.md)).
+
 ## Commands
 
 ```bash

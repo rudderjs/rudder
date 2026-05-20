@@ -52,7 +52,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
 - **Pay-as-you-go** — 47 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
-- **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages.
+- **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones.
 - **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
 
 ---
@@ -435,6 +435,8 @@ cd my-app && pnpm dev
 Visit `http://localhost:3000`. Done.
 
 > **Adding packages later.** `pnpm rudder add queue` installs the package, generates its config, registers it in `config/index.ts`, and refreshes the provider manifest. `pnpm rudder remove queue` reverses it. See the [CLI guide](./docs/guide/rudder.md).
+>
+> **Something not working?** `pnpm rudder doctor` checks env, structure, deps, ORM, and runtime — one line per failure plus a paste-able fix. Add `--fix` to auto-apply the safe ones. See the [Doctor guide](./docs/guide/doctor.md).
 
 ---
 
@@ -507,7 +509,7 @@ Visit `http://localhost:3000`. Done.
 
 **More**
 
-- [HTTP client](./docs/guide/http-client.md) · [Logging](./docs/guide/logging.md) · [Localization](./docs/guide/localization.md) · [Rudder CLI](./docs/guide/rudder.md) · [Testing](./docs/guide/testing.md) · [Deployment](./docs/guide/deployment.md)
+- [HTTP client](./docs/guide/http-client.md) · [Logging](./docs/guide/logging.md) · [Localization](./docs/guide/localization.md) · [Rudder CLI](./docs/guide/rudder.md) · [Rudder Doctor](./docs/guide/doctor.md) · [Testing](./docs/guide/testing.md) · [Deployment](./docs/guide/deployment.md)
 
 ---
 

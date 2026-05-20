@@ -55,6 +55,8 @@ export default function Welcome(props: WelcomeProps) {
   <footer>
     Built with RudderJS. Edit <code>app/Views/Welcome.ts</code> to customize this page,
     or delete it and rely on <code>/api/*</code> only.
+    <br />
+    <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
   </footer>
 </main>\`
 }
@@ -160,7 +162,10 @@ export default function Welcome(props: WelcomeProps) {
 
       <footer className="page-footer">
         <div className="footer-inner">
-          <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
+          <div>
+            Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
+            <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
+          </div>
           <div className="footer-links">
             <a href={docsUrl} className="footer-link">Docs</a>
             <a href={githubUrl} className="footer-link">GitHub</a>
@@ -242,7 +247,10 @@ const githubUrl = props.githubUrl ?? DEFAULT_GITHUB
 
     <footer class="page-footer">
       <div class="footer-inner">
-        <div>Built with RudderJS. Edit <code>app/Views/Welcome.vue</code> to customize this page.</div>
+        <div>
+          Built with RudderJS. Edit <code>app/Views/Welcome.vue</code> to customize this page.<br />
+          <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
+        </div>
         <div class="footer-links">
           <a :href="docsUrl" class="footer-link">Docs</a>
           <a :href="githubUrl" class="footer-link">GitHub</a>
@@ -318,7 +326,10 @@ export default function Welcome(props: WelcomeProps) {
 
       <footer class="page-footer">
         <div class="footer-inner">
-          <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
+          <div>
+            Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
+            <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
+          </div>
           <div class="footer-links">
             <a href={docsUrl()} class="footer-link">Docs</a>
             <a href={githubUrl()} class="footer-link">GitHub</a>

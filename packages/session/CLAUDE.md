@@ -8,6 +8,10 @@ Cookie-based session driver — `Session` facade, `sessionMiddleware(cfg)`, plug
 - **API routes are stateless** by default. If an api route needs session, mount `SessionMiddleware()` per-route.
 - **`Session.current()` throws** when no ALS context exists. Use `Session.maybeCurrent()` / `Session.active()` for a non-throwing check — consumers inside middleware that may run in stateless contexts (e.g. `SessionGuard`) should guard with try/catch.
 
+## Doctor checks
+
+Ships `src/doctor.ts`: `session:secret` — `SESSION_SECRET` set (soft-passes if absent, since sessions fall back to `APP_KEY`).
+
 ## Pitfalls
 
 - Don't call `m.use(sessionMiddleware(cfg))` globally — it doubles up with the auto-install and reads from two different `SessionInstance`s. Symptom: session data set in the handler doesn't persist across requests.

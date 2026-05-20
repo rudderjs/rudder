@@ -63,6 +63,10 @@ When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:d
 
 These rely on @rudderjs/cli having the matching commands in its **skip-boot list** (`db:generate`, `db:push`, `migrate*` were added in PR #519's bundled cli fix; `add`/`remove` were added in #520/#521). Without skip-boot, `rudder db:generate` would try to boot the app before `@prisma/client` exists and crash — that's why the framework fix is load-bearing for the scaffolder's first 60-second story.
 
+### Post-scaffold diagnostics
+
+A scaffolded app that doesn't `pnpm dev` cleanly has a known failure surface — missing env var, stale providers manifest, Prisma client behind the schema, auth views not vendored. **`pnpm rudder doctor`** pre-flights all of them in sub-second and prints a one-line fix per failure. When the user reports "the scaffolded app won't start", `cd my-app && pnpm rudder doctor` is the first thing to ask them to paste — same output across every recipe. See [`docs/guide/doctor.md`](../docs/guide/doctor.md) for the full check list.
+
 ### What about demos?
 
 **Dropped from the default scaffolder** (PR #519). The 15-demo multiselect is gone; no `app/Views/Demos/` folder is generated. Demos still exist in the framework `playground/` (canonical reference app). The original PR copy mentioned `rudderjs.com/examples` but that URL has never shipped — the scaffolder's final panel now links to the GitHub playground tree directly.
