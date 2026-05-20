@@ -28,6 +28,10 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
     }
   },
   "scripts": {
@@ -40,6 +44,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.38.0",
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",

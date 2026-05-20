@@ -25,6 +25,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
     }
   },
   "scripts": {
@@ -36,6 +40,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^"
   },

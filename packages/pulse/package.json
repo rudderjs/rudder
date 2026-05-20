@@ -25,6 +25,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
     }
   },
   "scripts": {
@@ -36,6 +40,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
   },
   "dependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/contracts": "workspace:^"
   },

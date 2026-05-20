@@ -65,34 +65,5 @@ registerDoctorCheck({
   },
 })
 
-registerDoctorCheck({
-  id:       'deps:auth-views',
-  category: 'deps',
-  title:    'Auth views vendored',
-  run(): DoctorResult {
-    if (!isResolvable('@rudderjs/auth')) {
-      // Skip silently — auth isn't installed, so vendoring isn't expected
-      return { status: 'ok', message: '@rudderjs/auth not installed — skip' }
-    }
-    // If a frontend renderer is installed, auth views must be vendored locally
-    // (the package ships the source under `views/<fw>/`, but resolving routes
-    // through the user's tree is what the scaffolder does).
-    const hasReact = isResolvable('vike-react')
-    const hasVue   = isResolvable('vike-vue')
-    const hasSolid = isResolvable('vike-solid')
-    if (!hasReact && !hasVue && !hasSolid) {
-      return { status: 'ok', message: '@rudderjs/auth installed, no frontend — skip' }
-    }
-    const have =
-      fileExists('app/Views/Auth/Login.tsx')  || fileExists('app/Views/Auth/Login.jsx') ||
-      fileExists('app/Views/Auth/Login.vue')  || fileExists('app/Views/Auth/Login.ts')
-    if (!have) {
-      return {
-        status:  'warn',
-        message: 'auth installed + frontend installed, but app/Views/Auth/* missing',
-        fix:     'Vendor the auth views from @rudderjs/auth/views/<fw>/ into app/Views/Auth/',
-      }
-    }
-    return { status: 'ok', message: 'app/Views/Auth/ populated' }
-  },
-})
+// `deps:auth-views` moved to @rudderjs/auth/doctor in Phase 3 — it's a
+// package-specific concern that lives with the package that owns it.
