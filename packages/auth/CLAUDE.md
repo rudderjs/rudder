@@ -13,3 +13,9 @@ Key exports: `AuthManager`, `AuthMiddleware`, `RequireAuth`, `AuthProvider`, `Ga
 - **Views**: ships `views/react/` and `views/vue/` — apps vendor them into `app/Views/Auth/`
 - **Route registration**: `registerAuthRoutes(router, opts)` pattern — not file-based routing
 - Requires `@rudderjs/session` and `@rudderjs/hash` as peer dependencies
+
+## Doctor checks
+
+Ships `src/doctor.ts` (loaded by `@rudderjs/cli`'s doctor command via the `./doctor` subpath):
+- `auth:secret` — `AUTH_SECRET` set + ≥ 32 chars
+- `auth:views-vendored` — `app/Views/Auth/` populated when a vike-* renderer is installed (has a fixer that copies `views/<fw>/` → `app/Views/Auth/`, never overwrites existing files)

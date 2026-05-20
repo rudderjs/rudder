@@ -13,6 +13,8 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 - `src/commands/providers-discover.ts` — Thin wrapper; scanning logic lives in `@rudderjs/core`
 - `src/commands/vendor-publish.ts` — Publishes provider assets
 - `src/commands/module.ts` — `module:make`, `module:publish`
+- `src/commands/doctor.ts` — `doctor` command wiring (`--deep`, `--fix`, `--yes`, `--verbose`, `--only`); fast-path stays in skip-boot list, `--deep` boots on demand
+- `src/doctor/` — `registry` (in `@rudderjs/console`), `orchestrator`, `reporter`, `fixer`, `boot-status`, `built-in/` (cli-owned env / structure / deps / runtime checks), `load-package-checks.ts` (lazy-import each package's `./doctor` subpath)
 
 ## Architecture Rules
 
@@ -38,6 +40,15 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 | `@rudderjs/sync` | `sync:docs`, `sync:clear`, `sync:inspect` |
 | `@rudderjs/broadcast` | `broadcast:connections` |
 | `@rudderjs/boost` | `boost:install`, `boost:update`, `boost:mcp` |
+| CLI + all framework packages | `doctor` — green/yellow/red pre-flight across 36 checks. CLI ships `env` / `structure` / `deps` / `runtime` checks; framework packages contribute via a `./doctor` subpath export (see `load-package-checks.ts`) |
+
+## Doctor pattern
+
+- **Registry** lives in `@rudderjs/console` (`registerDoctorCheck` / `getRegisteredChecks`); singleton on `globalThis` to survive Vite SSR re-eval, idempotent registration (last-writer-wins).
+- **Package contribution**: a `<package>/doctor` subpath whose side-effect import calls `registerDoctorCheck()` for that package's rules. Mirrors `<package>/commands/<name>` pattern but specifically for doctor. The CLI's loader walks `node_modules/@rudderjs/<pkg>/dist/doctor.js` directly — keeps the ESM-only-peer resolution out of the path.
+- **Adding a contributing package**: append to `PACKAGES_WITH_CHECKS` in `src/doctor/load-package-checks.ts` AND declare the subpath in the package's `package.json#exports`. Packages not installed in the user app are silently skipped.
+- **Fixers** are optional (`fixer()` on the check). Must be idempotent regenerate-style operations — never touch `.env`, `package.json`, or user-authored files. Today: providers-manifest (in-process), prisma-client (`pnpm exec prisma generate`), auth-views (copy + skip existing).
+- **`--deep`** boots the app once via the injected `bootApp()`; failure is captured as a single red `runtime:app-boot` check, never crashes doctor itself.
 
 ## Commands
 

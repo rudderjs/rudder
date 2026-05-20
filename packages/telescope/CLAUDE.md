@@ -39,6 +39,10 @@ pnpm build      # tsc
 pnpm typecheck  # tsc --noEmit
 ```
 
+## Doctor checks
+
+Ships `src/doctor.ts`: `telescope:dashboard` — warns when telescope is installed but `registerTelescopeRoutes()` isn't called in `routes/web.ts`.
+
 ## Pitfalls
 
 - `rm -rf dist && rm dist/.tsbuildinfo` before rebuilding — shared `tsBuildInfoFile` causes false cache hits

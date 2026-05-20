@@ -88,6 +88,10 @@ pnpm typecheck  # tsc --noEmit
 pnpm test       # tsx --test
 ```
 
+## Doctor checks
+
+Ships `src/doctor.ts`: `ai:provider-keys` — at least one provider in `config/ai.ts` has its API key set; warns when partial coverage (e.g. 1/3 cloud providers configured) and points at the missing env vars.
+
 ## Pitfalls
 
 - Provider SDKs are optional — install only the ones you use (`@anthropic-ai/sdk`, `openai`, `@google/genai`, `@aws-sdk/client-bedrock-runtime` for Bedrock)
