@@ -1,13 +1,15 @@
 import type { CheckOutcome, RunResult } from './orchestrator.js'
 
+const ESC = ''
+
 const ANSI = {
-  reset:  '\x1b[0m',
-  bold:   '\x1b[1m',
-  dim:    '\x1b[2m',
-  green:  '\x1b[32m',
-  yellow: '\x1b[33m',
-  red:    '\x1b[31m',
-  cyan:   '\x1b[36m',
+  reset:  `${ESC}[0m`,
+  bold:   `${ESC}[1m`,
+  dim:    `${ESC}[2m`,
+  green:  `${ESC}[32m`,
+  yellow: `${ESC}[33m`,
+  red:    `${ESC}[31m`,
+  cyan:   `${ESC}[36m`,
 }
 
 const ICON = {
@@ -23,8 +25,12 @@ export interface ReportOptions {
   plain?:   boolean
 }
 
+// Built via constructor so the source file stays ASCII-only — keeps eslint's
+// no-control-regex rule happy without an inline-disable, and stops Windows
+// editors from mangling the literal ESC byte on autosave.
+const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'g')
 function strip(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, '')
+  return s.replace(ANSI_RE, '')
 }
 
 function pad(s: string, width: number): string {

@@ -25,7 +25,10 @@ after(() => {
 })
 
 beforeEach(() => {
-  // Wipe + re-create the temp app dir so each test starts from blank slate
+  // Wipe + re-create the temp app dir so each test starts from blank slate.
+  // On Windows, `rmSync` fails with EBUSY if we're chdir'd into the target —
+  // step out to `originalCwd` first, then back in after re-creating.
+  process.chdir(originalCwd)
   fs.rmSync(tmpDir, { recursive: true, force: true })
   fs.mkdirSync(tmpDir, { recursive: true })
   process.chdir(tmpDir)
