@@ -50,6 +50,10 @@
     "./commands/make-mcp-prompt": {
       "import": "./dist/commands/make-mcp-prompt.js",
       "types": "./dist/commands/make-mcp-prompt.d.ts"
+    },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
     }
   },
   "scripts": {

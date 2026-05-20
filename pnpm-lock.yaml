@@ -63,6 +63,9 @@ importers:
 
   packages/ai:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       zod:
         specifier: ^4.0.0
         version: 4.3.6
@@ -70,9 +73,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.13.0
         version: 1.27.1(zod@4.3.6)
-      '@rudderjs/console':
-        specifier: workspace:^
-        version: link:../console
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
@@ -104,6 +104,9 @@ importers:
 
   packages/auth:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -199,6 +202,9 @@ importers:
       '@paddle/paddle-node-sdk':
         specifier: ^1.0.0
         version: 1.10.0
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -352,6 +358,9 @@ importers:
 
   packages/hash:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
@@ -378,6 +387,9 @@ importers:
 
   packages/horizon:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -575,6 +587,9 @@ importers:
       '@rudderjs/ai':
         specifier: workspace:^
         version: link:../ai
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -619,6 +634,9 @@ importers:
       '@rudderjs/ai':
         specifier: workspace:^
         version: link:../ai
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -728,6 +746,9 @@ importers:
       '@rudderjs/cache':
         specifier: workspace:^
         version: link:../cache
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
@@ -785,6 +806,9 @@ importers:
 
   packages/queue-bullmq:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/queue':
         specifier: workspace:^
         version: link:../queue
@@ -801,6 +825,9 @@ importers:
 
   packages/queue-inngest:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/queue':
         specifier: workspace:^
         version: link:../queue
@@ -905,6 +932,9 @@ importers:
 
   packages/session:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts

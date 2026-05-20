@@ -40,6 +40,10 @@
       "import": "./dist/gate-observers.js",
       "types": "./dist/gate-observers.d.ts"
     },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
+    },
     "./views/react/Login": "./views/react/Login.tsx",
     "./views/react/Register": "./views/react/Register.tsx",
     "./views/react/ForgotPassword": "./views/react/ForgotPassword.tsx",
@@ -55,6 +59,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^"
   },

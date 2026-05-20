@@ -44,6 +44,10 @@
       "import": "./dist/commands/ai-eval.js",
       "types": "./dist/commands/ai-eval.d.ts"
     },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
+    },
     "./observers": {
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
@@ -81,6 +85,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@rudderjs/console": "workspace:^",
     "zod": "^4.0.0"
   },
   "peerDependencies": {

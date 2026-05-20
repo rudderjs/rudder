@@ -37,6 +37,10 @@
       "import": "./dist/routes.js",
       "types": "./dist/routes.d.ts"
     },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
+    },
     "./views/react/CheckoutButton": "./views/react/CheckoutButton.tsx",
     "./views/react/InlineCheckout": "./views/react/InlineCheckout.tsx",
     "./views/react/PaddleScript": "./views/react/PaddleScript.tsx",
@@ -51,6 +55,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
   },
   "dependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^"
