@@ -9,6 +9,7 @@ import { providersDiscoverCommand } from './commands/providers-discover.js'
 import { commandListCommand } from './commands/command-list.js'
 import { addCommand } from './commands/add.js'
 import { removeCommand } from './commands/remove.js'
+import { doctorCommand } from './commands/doctor.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -268,6 +269,7 @@ async function main(): Promise<void> {
   providersDiscoverCommand(program)
   addCommand(program)
   removeCommand(program)
+  doctorCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -299,6 +301,9 @@ async function main(): Promise<void> {
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status',
     'add', 'remove',
+    // `doctor` fast-path runs filesystem/env checks only. `--deep` is handled
+    // inside the command's handler, which boots the app on demand (Phase 4).
+    'doctor',
   ])
   const NO_BOOT_PREFIX = ['make:']
   const skipBoot = process.argv.slice(2).some(arg =>

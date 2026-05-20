@@ -1,0 +1,167 @@
+import { describe, it, before, after, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
+import { runChecks } from '../orchestrator.js'
+import { loadBuiltInChecks } from './index.js'
+
+// Built-in checks register themselves via side-effect imports — fires once
+// per process. Load at file scope; the registry stays populated for the file,
+// and tests differentiate themselves via cwd + filesystem fixtures.
+loadBuiltInChecks()
+
+let tmpDir: string
+let originalCwd: string
+
+before(() => {
+  originalCwd = process.cwd()
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rudder-doctor-test-'))
+})
+
+after(() => {
+  process.chdir(originalCwd)
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+})
+
+beforeEach(() => {
+  // Wipe + re-create the temp app dir so each test starts from blank slate
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+  fs.mkdirSync(tmpDir, { recursive: true })
+  process.chdir(tmpDir)
+  // Built-in checks read process.env; clear the ones we touch so the tests
+  // don't accidentally inherit the parent process's value.
+  delete process.env['APP_KEY']
+  delete process.env['APP_ENV']
+})
+
+function writeFile(rel: string, content: string): void {
+  const full = path.join(tmpDir, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, content, 'utf-8')
+}
+
+function outcomeFor(outcomes: { id: string }[], id: string): { id: string; status: string; message: string; fix?: string } {
+  const o = outcomes.find(x => x.id === id)
+  assert.ok(o, `expected outcome '${id}', got: ${outcomes.map(x => x.id).join(', ')}`)
+  return o as { id: string; status: string; message: string; fix?: string }
+}
+
+describe('built-in checks — golden path', () => {
+  it('all green on a well-formed scaffold', async () => {
+    writeFile('package.json', JSON.stringify({
+      name: 'demo', engines: { node: '>=20.0.0' },
+      dependencies: { '@rudderjs/cli': '*' },
+    }))
+    writeFile('pnpm-lock.yaml', '')
+    writeFile('.env', 'APP_KEY=' + Buffer.alloc(32, 0xab).toString('base64') + '\nAPP_ENV=local\n')
+    writeFile('bootstrap/app.ts',       'Application.configure({}).create()')
+    writeFile('bootstrap/providers.ts', 'export default []')
+    writeFile('routes/web.ts',          'export default () => {}')
+    writeFile('app/Views/Welcome.tsx',  'export default () => null')
+    // node_modules entries the checks resolve against
+    writeFile('node_modules/@rudderjs/cli/package.json',
+      JSON.stringify({ name: '@rudderjs/cli', version: '0.0.0' }))
+    writeFile('bootstrap/cache/providers.json', '{}')
+    // Manifest mtime must be >= package.json mtime
+    const pkgPath = path.join(tmpDir, 'package.json')
+    const manifestPath = path.join(tmpDir, 'bootstrap/cache/providers.json')
+    const future = (fs.statSync(pkgPath).mtimeMs + 1000) / 1000
+    fs.utimesSync(manifestPath, future, future)
+
+    process.env['APP_KEY'] = Buffer.alloc(32, 0xab).toString('base64')
+    process.env['APP_ENV'] = 'local'
+
+    const result = await runChecks()
+    assert.strictEqual(result.counts.error, 0,
+      `expected no errors, got: ${result.outcomes.filter(o => o.status === 'error').map(o => `${o.id}: ${o.message}`).join(', ')}`)
+  })
+})
+
+describe('built-in checks — broken state', () => {
+  it('env:dotenv-loadable fails when .env is missing', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.message.includes('missing'))
+  })
+
+  it('env:app-key fails when unset', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:app-key')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.fix)
+  })
+
+  it('env:app-key warns when too short', async () => {
+    writeFile('package.json', '{}')
+    process.env['APP_KEY'] = 'short'
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:app-key')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.message.includes('bytes'))
+  })
+
+  it('env:package-manager errors on no lockfile', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:package-manager')
+    assert.strictEqual(o.status, 'error')
+  })
+
+  it('env:package-manager warns on multiple lockfiles', async () => {
+    writeFile('package.json', '{}')
+    writeFile('pnpm-lock.yaml',    '')
+    writeFile('package-lock.json', '')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:package-manager')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.message.includes('multiple lockfiles'))
+  })
+
+  it('structure:bootstrap-app errors when file missing', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:bootstrap-app')
+    assert.strictEqual(o.status, 'error')
+  })
+
+  it('structure:bootstrap-providers warns when default export missing', async () => {
+    writeFile('package.json', '{}')
+    writeFile('bootstrap/providers.ts', 'const x = []\n')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:bootstrap-providers')
+    assert.strictEqual(o.status, 'warn')
+  })
+
+  it('structure:routes errors when no routes/* exists', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:routes')
+    assert.strictEqual(o.status, 'error')
+  })
+
+  it('deps:providers-manifest warns when missing', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'deps:providers-manifest')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.fix?.includes('providers:discover'))
+  })
+
+  it('deps:declared-installed errors when declared @rudderjs/* not in node_modules', async () => {
+    writeFile('package.json', JSON.stringify({
+      name: 'demo',
+      dependencies: { '@rudderjs/cli': '*', '@rudderjs/ghost': '*' },
+    }))
+    // Only one of the two is installed
+    writeFile('node_modules/@rudderjs/cli/package.json',
+      JSON.stringify({ name: '@rudderjs/cli', version: '0.0.0' }))
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'deps:declared-installed')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.message.includes('@rudderjs/ghost'))
+  })
+})
