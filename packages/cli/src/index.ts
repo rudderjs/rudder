@@ -269,7 +269,7 @@ async function main(): Promise<void> {
   providersDiscoverCommand(program)
   addCommand(program)
   removeCommand(program)
-  doctorCommand(program)
+  doctorCommand(program, { bootApp })
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).

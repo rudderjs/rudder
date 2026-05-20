@@ -479,6 +479,9 @@ importers:
 
   packages/mail:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
