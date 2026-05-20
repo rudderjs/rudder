@@ -2,18 +2,18 @@
 layout: home
 
 hero:
-  name: "RudderJS"
+  name: "Rudder"
   text: "The fullstack Node.js framework with structure, speed, and AI built in."
   tagline: "Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent — from one monorepo."
   image:
-    src: /logo.png
-    alt: RudderJS
+    src: /logo.svg
+    alt: Rudder
   actions:
     - theme: brand
       text: Get Started
       link: /guide/installation
     - theme: alt
-      text: Why RudderJS?
+      text: Why Rudder?
       link: /guide/
     - theme: alt
       text: View on GitHub

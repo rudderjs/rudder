@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./logo.png" alt="Rudder — Boost Your Node App" width="240" />
+  <img src="./logo.svg" alt="Rudder — Boost Your Node App" width="240" />
 </p>
 
 <p align="center">
