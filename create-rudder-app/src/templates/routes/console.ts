@@ -17,10 +17,9 @@ export function routesConsole(ctx: TemplateContext): string {
     `  console.log(\`\\n  "\${quote}"\\n\`)`,
     `}).description('Display an inspiring quote')`,
     ``,
-    `rudder.command('db:seed', async () => {`,
-    `  // TODO: add your seed data here`,
-    `  console.log('No seed data configured. Edit routes/console.ts to add seed logic.')`,
-    `}).description('Seed the database with sample data')`,
+    `// db:seed is provided by @rudderjs/orm. To add seed data, create`,
+    `// database/seeders/DatabaseSeeder.ts with a default-exported Seeder`,
+    `// subclass (or async function). Then \`pnpm rudder db:seed\` runs it.`,
     ...(ctx.packages.terminal ? [
       ``,
       `rudder.command('dashboard', async () => {`,

@@ -59,8 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-19 — demos dropped from scaffolder; the
-  // scaffolder no longer ships /demos/* templates or `app/Views/Demos/*`.
+  // Baseline last captured 2026-05-20 — scaffolder no longer emits a
+  // `rudder.command('db:seed', ...)` stub in routes/console.ts (collided with
+  // @rudderjs/orm's built-in db:seed in production boots).
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -70,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 60
-const EXPECTED_TOTAL_BYTES = 49437
-const EXPECTED_CONTENT_HASH = '7173fe126033f0aff15311d081c8498fa99488b427960ed77cb5c6b81db4bdac'
+const EXPECTED_TOTAL_BYTES = 49429
+const EXPECTED_CONTENT_HASH = '8ea968d26997fbf9fa0c8157e20997aebdacd1460016fb6fac92e1efdd1d6f25'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
