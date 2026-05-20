@@ -140,6 +140,7 @@ The framework ships several built-in commands that show up automatically. The se
 | `route:list` | router | List all registered routes with name + middleware |
 | `command:list` | rudder | List all registered commands. `--all` includes built-in + package commands; `--json` emits a machine-readable envelope used by `@rudderjs/boost`'s MCP tools |
 | `doctor` | cli + all framework packages | Green/yellow/red pre-flight of every layer — env, structure, deps, ORM, runtime. `--deep` adds runtime checks (DB connect, port, SMTP); `--fix` auto-applies safe regenerate-style fixes. See [Rudder Doctor](./doctor.md). |
+| `tinker` | cli | Interactive REPL with the app booted — `User`, `Route`, `app()`, every model in `app/Models/` pre-imported. Top-level await; persistent history. See [Tinker](./tinker.md). |
 | `add`, `remove` | core | Install / uninstall a `@rudderjs/*` package end-to-end (see below) |
 | `vendor:publish` | core | Publish package assets (configs, views, schemas) |
 | `providers:discover` | core | Refresh the provider manifest |

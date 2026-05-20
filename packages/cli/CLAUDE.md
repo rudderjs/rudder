@@ -14,6 +14,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 - `src/commands/vendor-publish.ts` — Publishes provider assets
 - `src/commands/module.ts` — `module:make`, `module:publish`
 - `src/commands/doctor.ts` — `doctor` command wiring (`--deep`, `--fix`, `--yes`, `--verbose`, `--only`); fast-path stays in skip-boot list, `--deep` boots on demand
+- `src/commands/tinker.ts` — `tinker` REPL command. Sets `RUDDERJS_TINKER=1` before boot (parallel to `RUDDERJS_QUEUE_WORKER` sentinel). Walks `app/Models/` for context population; framework facades imported dynamically so missing optional peers don't crash the REPL.
 - `src/doctor/` — `registry` (in `@rudderjs/console`), `orchestrator`, `reporter`, `fixer`, `boot-status`, `built-in/` (cli-owned env / structure / deps / runtime checks), `load-package-checks.ts` (lazy-import each package's `./doctor` subpath)
 
 ## Architecture Rules
@@ -29,7 +30,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 
 | Owner | Commands |
 |---|---|
-| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper) |
+| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker` |
 | `@rudderjs/ai` | `make:agent`, `ai:eval` |
 | `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
 | `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `db:push`, `db:generate`, `model:prune` |

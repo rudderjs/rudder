@@ -10,6 +10,7 @@ import { commandListCommand } from './commands/command-list.js'
 import { addCommand } from './commands/add.js'
 import { removeCommand } from './commands/remove.js'
 import { doctorCommand } from './commands/doctor.js'
+import { tinkerCommand } from './commands/tinker.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -270,6 +271,7 @@ async function main(): Promise<void> {
   addCommand(program)
   removeCommand(program)
   doctorCommand(program, { bootApp })
+  tinkerCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -316,6 +318,15 @@ async function main(): Promise<void> {
   // defensively, but doing it here guarantees the var is visible during boot.
   if (process.argv.slice(2).includes('queue:work')) {
     process.env['RUDDERJS_QUEUE_WORKER'] = '1'
+  }
+
+  // Same shape for `tinker` — providers that actively poll / open connections
+  // on boot (horizon's WorkerCollector is the canonical example) can short-
+  // circuit when this is set. Most providers don't need to check it — the
+  // framework's boot is mostly passive — but the sentinel is here for the
+  // ones that do, and it's the documented escape hatch for future ones.
+  if (process.argv.slice(2).includes('tinker')) {
+    process.env['RUDDERJS_TINKER'] = '1'
   }
 
   // Eagerly load make specs from installed packages so make:* works without boot.

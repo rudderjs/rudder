@@ -84,6 +84,7 @@ export default defineConfig({
           items: [
             { text: 'Rudder Console', link: '/guide/rudder' },
             { text: 'Rudder Doctor', link: '/guide/doctor' },
+            { text: 'Tinker', link: '/guide/tinker' },
             { text: 'Broadcasting', link: '/guide/broadcasting' },
             { text: 'Cache', link: '/guide/cache' },
             { text: 'Contracts', link: '/guide/contracts' },
