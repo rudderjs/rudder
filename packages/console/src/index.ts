@@ -59,7 +59,19 @@ export class CommandRegistry {
 
   command(name: string, handler: ConsoleHandler): CommandBuilder {
     const cmd = new CommandBuilder(name, handler)
-    this._commands.push(cmd)
+    // Last-writer-wins. Without this, two `rudder.command('db:seed', ...)`
+    // calls (e.g. @rudderjs/orm's built-in + a user override in routes/console.ts)
+    // would both reach the commander.js layer and crash with
+    // `cannot add command 'X' as already have command 'X'`. Dev masks the
+    // collision via rudder.reset() between provider boot and route loading;
+    // prod doesn't reset, so the crash only surfaces after deploy.
+    const existing = this._commands.findIndex(c => c.name === name)
+    if (existing !== -1) {
+      console.warn(`[RudderJS] command '${name}' was already registered; the later definition overrides the earlier one. Remove one of the registrations to silence this warning.`)
+      this._commands[existing] = cmd
+    } else {
+      this._commands.push(cmd)
+    }
     return cmd
   }
 

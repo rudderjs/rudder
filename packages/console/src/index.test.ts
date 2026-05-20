@@ -81,6 +81,46 @@ describe('CommandRegistry', () => {
     assert.strictEqual(registry.getCommands()[0]!.name, 'a')
     assert.strictEqual(registry.getCommands()[1]!.name, 'b')
   })
+
+  it('command() with duplicate name overrides + warns (last writer wins)', () => {
+    let firstRan = false
+    let secondRan = false
+    registry.command('db:seed', () => { firstRan = true })
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (msg: string) => warnings.push(msg)
+    try {
+      const builder = registry.command('db:seed', () => { secondRan = true })
+        .description('user override')
+      // Exactly one command, with the second handler + description
+      assert.strictEqual(registry.getCommands().length, 1)
+      assert.strictEqual(registry.getCommands()[0], builder)
+      assert.strictEqual(builder.getDescription(), 'user override')
+      // The override fired a warn pointing at the colliding name
+      assert.strictEqual(warnings.length, 1)
+      assert.ok(warnings[0]!.includes("'db:seed'"))
+      assert.ok(warnings[0]!.includes('already registered'))
+    } finally {
+      console.warn = originalWarn
+    }
+    // Run the surviving handler — confirm it's the second one, not the first
+    registry.getCommands()[0]!['handler']([], {})
+    assert.strictEqual(firstRan, false)
+    assert.strictEqual(secondRan, true)
+  })
+
+  it('command() without duplicate does not warn', () => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (msg: string) => warnings.push(msg)
+    try {
+      registry.command('first', () => undefined)
+      registry.command('second', () => undefined)
+      assert.strictEqual(warnings.length, 0)
+    } finally {
+      console.warn = originalWarn
+    }
+  })
 })
 
 // ─── Global rudder singleton ──────────────────────────────
