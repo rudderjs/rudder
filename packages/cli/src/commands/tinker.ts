@@ -19,6 +19,7 @@ import * as nodeRepl from 'node:repl'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 const C = {
   green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -198,8 +199,13 @@ export async function loadModels(ctx: TinkerContext, modelsDir: string): Promise
     if (!file.endsWith('.ts') && !file.endsWith('.js') && !file.endsWith('.mts') && !file.endsWith('.mjs')) continue
     const abs   = path.join(modelsDir, file)
     const stem  = path.basename(file, path.extname(file))
+    // On Windows, Node's ESM loader refuses `import('C:\\path\\file.js')` —
+    // absolute paths must be file:// URLs. macOS/Linux accept either form;
+    // pathToFileURL is the portable normalizer (same pattern as the doctor's
+    // load-package-checks.ts).
+    const href = pathToFileURL(abs).href
     try {
-      const mod = await import(/* @vite-ignore */ abs) as Record<string, unknown>
+      const mod = await import(/* @vite-ignore */ href) as Record<string, unknown>
       let registered = 0
       for (const [key, val] of Object.entries(mod)) {
         if (key === 'default') {
