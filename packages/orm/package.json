@@ -29,6 +29,14 @@
     "./commands/prune": {
       "import": "./dist/commands/prune.js",
       "types": "./dist/commands/prune.d.ts"
+    },
+    "./commands/make-factory": {
+      "import": "./dist/commands/make-factory.js",
+      "types": "./dist/commands/make-factory.d.ts"
+    },
+    "./commands/make-seeder": {
+      "import": "./dist/commands/make-seeder.js",
+      "types": "./dist/commands/make-seeder.d.ts"
     }
   },
   "scripts": {
@@ -40,7 +48,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/contracts": "workspace:^"
+    "@rudderjs/contracts": "workspace:^",
+    "@rudderjs/console": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -574,6 +574,9 @@ importers:
 
   packages/orm:
     dependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts

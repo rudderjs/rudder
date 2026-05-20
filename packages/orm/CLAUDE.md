@@ -12,6 +12,8 @@ Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, f
 - `src/factory.ts` — `ModelFactory` for testing with states and sequences
 - `src/resource.ts` — `JsonResource` / `ResourceCollection` for API response transformation
 - `src/seeder.ts` — `Seeder` base class for `db:seed` runner
+- `src/commands/make-factory.ts` — `makeFactorySpec` MakeSpec for `pnpm rudder make:factory <Name>` (writes `app/Factories/<Name>Factory.ts`)
+- `src/commands/make-seeder.ts` — `makeSeederSpec` MakeSpec for `pnpm rudder make:seeder <Name>` (writes `database/seeders/<Name>Seeder.ts`)
 
 ## Architecture Rules
 

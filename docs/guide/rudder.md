@@ -132,6 +132,8 @@ The framework ships several built-in commands that show up automatically. The se
 | `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
 | `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
+| `make:factory` | orm | Scaffold a `ModelFactory` subclass at `app/Factories/<Name>Factory.ts` |
+| `make:seeder` | orm | Scaffold a `Seeder` subclass at `database/seeders/<Name>Seeder.ts` |
 | `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM) |
 | `model:prune` | orm | Walk `prunable()` models and delete matching rows. Honors `pruneMode: 'instance' \| 'mass'` |
 | `queue:work` | queue | Worker process |
@@ -166,6 +168,8 @@ pnpm rudder make:event UserRegistered        # → app/Events/UserRegistered.ts
 pnpm rudder make:listener SendWelcome        # → app/Listeners/SendWelcome.ts
 pnpm rudder make:mail Welcome                # → app/Mail/WelcomeMail.ts
 pnpm rudder make:command Backup              # → app/Commands/BackupCommand.ts
+pnpm rudder make:factory User                # → app/Factories/UserFactory.ts
+pnpm rudder make:seeder Users                # → database/seeders/UsersSeeder.ts
 ```
 
 Pass `--force` to overwrite an existing file. Every generated stub uses your project's framework selection (React for `.tsx`, Vue for `.vue`, etc.) and tsconfig.

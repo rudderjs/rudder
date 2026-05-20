@@ -20,7 +20,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 ## Architecture Rules
 
 - **CLI is the runner, not the command owner**: packages register their own commands via `rudder.command()` in provider `boot()` or via `MakeSpec` objects
-- **Package command loading**: `loadPackageCommands()` eagerly imports command modules from `@rudderjs/ai`, `@rudderjs/mcp`, `@rudderjs/orm`, `@rudderjs/router` via dynamic subpath imports (try/catch if not installed)
+- **Package command loading**: `loadPackageCommands()` eagerly imports command modules from `@rudderjs/ai`, `@rudderjs/mcp`, `@rudderjs/orm`, `@rudderjs/router`, `@rudderjs/terminal`, `@rudderjs/vite`. **Resolution is cwd-relative**: walks `<cwd>/node_modules/<pkg>/dist/<subpath>.js` directly + `pathToFileURL` (same shape as doctor's `load-package-checks.ts`). Bare-specifier `import('<pkg>/<subpath>')` was the old shape and silently failed in dev because tsx resolves dynamic imports from the source file's location (`packages/cli/src/`), where pnpm-strict has no peer-package entries — every package-contributed make:* was a no-op in dev. The cwd-walk fix landed in the Phase-4 PR (#TBD).
 - **Skip-boot commands**: `make:*`, `providers:discover`, `module:publish` skip `bootApp()` — faster + avoids chicken-and-egg
 - **Two command styles**: inline via `rudder.command()` or class-based extending `Command`
 - **MakeSpec pattern**: `@rudderjs/console` provides `MakeSpec` interface, `registerMakeSpecs()`, `executeMakeSpec()`. Packages export specs, CLI collects them.
@@ -33,7 +33,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 | CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker` |
 | `@rudderjs/ai` | `make:agent`, `ai:eval` |
 | `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
-| `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `db:push`, `db:generate`, `model:prune` |
+| `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `make:factory`, `make:seeder`, `db:push`, `db:generate`, `model:prune` |
 | `@rudderjs/router` | `route:list` |
 | `@rudderjs/queue` | `queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry` |
 | `@rudderjs/schedule` | `schedule:run`, `schedule:work`, `schedule:list` |
