@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="240" />
+  <img src="./logo.png" alt="Rudder — Boost Your Node App" width="240" />
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 
 ---
 
-RudderJS is a **batteries-included, modular TypeScript framework for Node.js**. Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent from one monorepo — wired through a DI container, an active-record ORM, and a single `rudder` CLI.
+Rudder is a **batteries-included, modular TypeScript framework for Node.js**. Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent from one monorepo — wired through a DI container, an active-record ORM, and a single `rudder` CLI.
 
 ```ts
 // routes/web.ts
@@ -57,7 +57,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ---
 
-## A taste of RudderJS
+## A taste of Rudder
 
 Thirteen features, thirteen snippets. Each one is real code from the playground — copy, run, ship.
 
@@ -88,7 +88,7 @@ export default Application.configure({ server: hono(configs.server), config: con
 
 One file — server adapter, config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. No nested config trees, no decorators-at-the-root, no surprise files.
 
-### 2. Routing — web & API in one router
+### 2. Routing — web & API in one router, end-to-end typed
 
 ```ts
 // routes/web.ts
@@ -99,14 +99,30 @@ Route.get('/dashboard', async () => view('dashboard'))
 ```
 
 ```ts
-// routes/api.ts
-import { Route } from '@rudderjs/router'
+// routes/api.ts — typed path, query, AND body in one declaration
+import { Route, route } from '@rudderjs/router'
+import { z } from 'zod'
 
-Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
-Route.post('/api/users', async (req, res) => res.json({ created: req.body }))
+Route.post(
+  '/api/users/:id',
+  {
+    query: z.object({ notify: z.coerce.boolean().default(false) }),
+    body:  z.object({ name: z.string(), email: z.string().email() }),
+  },
+  (req, res) => {
+    const id:     string  = req.params.id     // from the path
+    const notify: boolean = req.query.notify  // coerced from ?notify=1
+    const name:   string  = req.body.name     // validated body
+    return res.json({ id, notify, updated: name })
+  },
+).name('users.update')
+
+// `route()` URL generator — type-check params against the path (opt-in)
+route('users.update', { id: 1, notify: true })
+// → '/api/users/1?notify=true'
 ```
 
-Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default.
+Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default. Path params, query, and body all infer from a single Zod declaration; failure surfaces as `422 { errors: {...} }` automatically. Declare your named routes in `RouteRegistry` (see [Typed Routes](./docs/guide/typed-routes.md)) and `route()` calls type-check too.
 
 ### 3. Controllers, middleware & views
 
@@ -174,6 +190,23 @@ export default function Dashboard({ users, orders }: { users: number; orders: nu
 
 Run with `pnpm rudder users:count` or `pnpm rudder dashboard`. Scaffold new ones with `make:command` (plain handlers) or `make:terminal` (Ink components). Class-based commands extend `Command` for DI + signature parsing.
 
+Need to poke at the DB or a service interactively? `pnpm rudder tinker` boots the app and drops into a Node REPL with `app()`, `Route`, every model in `app/Models/`, and the facades pre-imported — Laravel `php artisan tinker` parity:
+
+```bash
+$ pnpm rudder tinker
+Rudder Tinker — node v22.14.0, env=local
+
+> await User.count()
+12
+> const alice = await User.where('email', 'alice@example.com').first()
+> alice.posts().count()
+5
+> route('users.show', { id: alice.id })
+'/users/42'
+```
+
+Top-level `await`, persistent history in `~/.rudder-tinker-history`, `.boot` meta-command to pick up code changes.
+
 ### 5. ORM — active record, Prisma or Drizzle
 
 ```ts
@@ -192,7 +225,7 @@ export class Post extends Model {
 // Anywhere — query, mutate, paginate
 const recent = await Post.where('published', true).orderBy('createdAt', 'desc').paginate(1, 20)
 const post   = await Post.create({ title: 'Hello', body: 'World', authorId: 1 })
-await post.update({ title: 'Hello, RudderJS' })
+await post.update({ title: 'Hello, Rudder' })
 ```
 
 Same API on top of Prisma or Drizzle — swap adapters without touching model code.
@@ -359,7 +392,7 @@ export class EchoTool extends McpTool {
 }
 ```
 
-Mount over HTTP or stdio. Inspect tool calls live with `pnpm rudder mcp:inspector`. Bridge an `Agent` straight to MCP with `mcpServerFromAgent(MyAgent)` — Laravel doesn't ship this; RudderJS does.
+Mount over HTTP or stdio. Inspect tool calls live with `pnpm rudder mcp:inspector`. Bridge an `Agent` straight to MCP with `mcpServerFromAgent(MyAgent)` — Laravel doesn't ship this; Rudder does.
 
 ### 12. Queue — typed jobs, retries, priorities
 
@@ -513,13 +546,13 @@ Visit `http://localhost:3000`. Done.
 
 ---
 
-## Why RudderJS?
+## Why Rudder?
 
 Modern Node.js forces a choice: **great DX in a framework-locked box** (Next.js), **freedom with weeks of wiring** (Express / Hono), **structure without fullstack views** (NestJS / Adonis).
 
-RudderJS is the middle ground — batteries-included, modular, UI-agnostic, fullstack-first.
+Rudder is the middle ground — batteries-included, modular, UI-agnostic, fullstack-first.
 
-| | Next.js | NestJS | AdonisJS | RudderJS |
+| | Next.js | NestJS | AdonisJS | Rudder |
 |---|---|---|---|---|
 | Philosophy | Component-first | Angular-style DI | Full MVC port | Service-oriented, modular |
 | Build tool | Webpack / Turbopack | Webpack / esbuild | Webpack (stencil) | **Vite** |
@@ -534,9 +567,9 @@ RudderJS is the middle ground — batteries-included, modular, UI-agnostic, full
 
 ## Status
 
-RudderJS is **fully on 1.0+** as of 2026-05-02. Every published `@rudderjs/*` package has a stable public API; breaking changes from here on require explicit major bumps and migration notes.
+Rudder is **fully on 1.0+** as of 2026-05-02. Every published `@rudderjs/*` package has a stable public API; breaking changes from here on require explicit major bumps and migration notes.
 
-RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line, matching the norm across the npm ecosystem. A higher major reflects iteration history, not "more important."
+Rudder uses **independent versioning** — each `@rudderjs/*` package has its own version line, matching the norm across the npm ecosystem. A higher major reflects iteration history, not "more important."
 
 ---
 
@@ -554,4 +587,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for dependency conventions and the pack
 
 ## License
 
-MIT © [RudderJS](https://github.com/rudderjs/rudder)
+MIT © [Rudder](https://github.com/rudderjs/rudder)

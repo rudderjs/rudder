@@ -51,7 +51,7 @@ export function renderReport(result: RunResult, opts: ReportOptions = {}): strin
     : ICON
 
   const lines: string[] = []
-  lines.push(`${c.bold}RudderJS Doctor${c.reset}`)
+  lines.push(`${c.bold}Rudder Doctor${c.reset}`)
   lines.push('')
 
   if (result.outcomes.length === 0) {

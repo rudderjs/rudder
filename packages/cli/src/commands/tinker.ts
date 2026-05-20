@@ -50,7 +50,7 @@ export function tinkerCommand(program: CommanderCommand): void {
       if (showBanner) {
         const env = process.env['APP_ENV'] ?? 'local'
         console.log('')
-        console.log(`  ${C.bold('RudderJS Tinker')} ${C.dim(`— node ${process.version}, env=${env}`)}`)
+        console.log(`  ${C.bold('Rudder Tinker')} ${C.dim(`— node ${process.version}, env=${env}`)}`)
         console.log('')
       }
 

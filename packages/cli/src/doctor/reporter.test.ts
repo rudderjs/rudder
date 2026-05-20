@@ -17,7 +17,7 @@ function makeResult(partial: Partial<RunResult> & { outcomes: RunResult['outcome
 describe('renderReport', () => {
   it('renders the empty state cleanly', () => {
     const out = renderReport(makeResult({ outcomes: [] }), { plain: true })
-    assert.ok(out.includes('RudderJS Doctor'))
+    assert.ok(out.includes('Rudder Doctor'))
     assert.ok(out.includes('No checks registered'))
     assert.ok(out.includes('0 checks'))
   })

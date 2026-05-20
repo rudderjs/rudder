@@ -7,7 +7,7 @@ pnpm rudder doctor
 ```
 
 ```
-RudderJS Doctor
+Rudder Doctor
 
 env
   ✓ Node version             v22.14.0 (matches ^20.19.0 || >=22.12.0)
@@ -80,7 +80,7 @@ Fixes
   ⚠ → ✓ providers manifest   regenerated (23 providers)
 1 fixable · 1 fixed · 0 failed · 0 skipped
 
-RudderJS Doctor
+Rudder Doctor
 deps
   ✓ providers manifest   present and current
 ```
