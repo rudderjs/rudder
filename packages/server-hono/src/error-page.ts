@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { buildEditorUrl, resolveEditor } from './editor-launch.js'
 
 interface StackFrame {
   func: string
@@ -217,10 +218,23 @@ export function renderErrorPage(
     rudderjsVersion,
   })).replace(/[<>&\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
 
+  // Editor-launch on stack frames — wraps the file:line label in an anchor
+  // when `APP_EDITOR` resolves to a known editor (default 'vscode'). Click
+  // dispatches `vscode://file/...` / `cursor://file/...` / `webstorm://open?...`
+  // etc. — the browser hands the scheme to the OS, which routes to the IDE.
+  // Set `APP_EDITOR=none` to disable wrapping (renders as plain text).
+  const editor = resolveEditor()
+  const frameLabel = (f: StackFrame) => {
+    const label = `${esc(rel(f.file))}:${f.line}`
+    const url   = buildEditorUrl(editor, f.file, f.line)
+    return url
+      ? `<a class="frame-file-link" href="${esc(url)}" title="Open in editor">${label}</a>`
+      : label
+  }
   const frameRow = (f: StackFrame, isApp: boolean) => `
     <div class="frame${isApp ? ' app' : ''}">
       <span class="frame-func">${esc(f.func)}</span>
-      <span class="frame-file">${esc(rel(f.file))}:${f.line}</span>
+      <span class="frame-file">${frameLabel(f)}</span>
     </div>`
 
   return `<!DOCTYPE html>
@@ -254,6 +268,8 @@ h1{font-size:28px;font-weight:700;color:#f4f4f5;margin:0}
 .frame:last-child{border-bottom:none}
 .frame-func{font-family:ui-monospace,monospace;font-size:12px;color:#71717a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .frame-file{font-family:ui-monospace,monospace;font-size:12px;color:#52525b;flex-shrink:0}
+.frame-file-link{color:inherit;text-decoration:none;border-bottom:1px dotted transparent;transition:border-color .1s}
+.frame-file-link:hover{border-bottom-color:currentColor}
 .frame.app .frame-func{color:#e4e4e7}
 .frame.app .frame-file{color:#60a5fa}
 .vendor-toggle{color:#52525b;font-size:12px;cursor:pointer;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:#18181b;border-top:1px solid #27272a}

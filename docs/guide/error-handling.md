@@ -79,6 +79,32 @@ The pipeline runs in this order:
 4. **`HttpException`** renders with its status code (JSON for API requests, HTML for browser navigations).
 5. **Anything else** is reported and rendered as 500 (HTML stack trace if `APP_DEBUG=true`, generic page otherwise).
 
+## Dev error page
+
+In development (`APP_ENV=local|dev`), uncaught errors render an Ignition-style HTML page with the message, parsed stack trace, source-code context around the throw, and the request envelope. The page is browser-rendered for HTML requests; JSON requests still get a structured error response.
+
+The **stack frames are clickable** — click any frame's `file:line` and your editor jumps to that location. The URL scheme is picked by the `APP_EDITOR` env var:
+
+| `APP_EDITOR` | URL scheme |
+|---|---|
+| `vscode` (default) | `vscode://file/<path>:<line>` |
+| `cursor` | `cursor://file/<path>:<line>` |
+| `webstorm` | `webstorm://open?file=<path>&line=<line>` |
+| `phpstorm` | `phpstorm://open?file=<path>&line=<line>` |
+| `idea` | `idea://open?file=<path>&line=<line>` (JetBrains family) |
+| `sublime` | `subl://open?url=file://<path>&line=<line>` |
+| `atom` | `atom://core/open/file?filename=<path>&line=<line>` |
+| `none` | Plain text (no anchor wrapping) |
+
+```bash
+# .env
+APP_EDITOR=cursor
+```
+
+Unknown values fall back to `vscode` with a single dev-time warning. Windows paths are forward-slashed automatically before being embedded in the URL.
+
+Above the stack, a **Copy as Markdown** button captures the whole error context (message, location, source window, parsed stack, request envelope) as a single Markdown blob suitable for pasting into Claude/Cursor/GPT.
+
 ## Custom error pages
 
 The framework's default 4xx and 5xx pages are reasonable, but for branded experiences add a Vike error page at `pages/_error/+Page.tsx`:
