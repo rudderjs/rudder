@@ -1,34 +1,63 @@
+# Consolidated CI workflow.
+#
+# Previously the repo had ci.yml + ci-skip.yml — two workflows sharing the
+# same `name: CI` and identical job names, with mutually-exclusive `paths` /
+# `paths-ignore` filters meant to keep branch-protection check names firing
+# on docs-only PRs without running the full pipeline. The filter pair
+# wasn't truly exclusive though: any PR mixing code + markdown (every PR
+# with a changeset) tripped BOTH workflows, doubling CI minutes.
+#
+# This file collapses them into one. The workflow always triggers on
+# main/PR; a leading `changes` job detects whether any non-docs file
+# changed, and heavy jobs (lint, build-test matrix, scaffolder-e2e) skip
+# themselves on docs-only PRs via job-level `if:`. GitHub treats a skipped
+# required check as a passing check for branch protection, so docs-only PRs
+# stay mergeable without a parallel mirror workflow.
+#
+# Adding a new required check: add the job + an `if:` referencing
+# `needs.changes.outputs.code`. Don't introduce a second workflow file.
+
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/CODEOWNERS'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/CODEOWNERS'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # `code` is true when ANY changed file is NOT in the docs/meta
+          # set. Inverse-match (`!`) lets paths-filter express the
+          # "non-docs touched" predicate that `paths-ignore` couldn't.
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!**/*.mdx'
+              - '!docs/**'
+              - '!LICENSE'
+              - '!.gitignore'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/CODEOWNERS'
+
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -53,6 +82,8 @@ jobs:
 
   build-test:
     name: Build & Test (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -92,6 +123,10 @@ jobs:
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
 
   docs-build:
+    # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the
+    # only place that catches `.md` parser breakage (plan docs landing
+    # `Promise<T>` or `<5%` patterns) at PR time before the release workflow
+    # hits the same bug post-merge.
     name: Docs Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -113,11 +148,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build docs site
-        # Docs build catches VitePress/Vue-parser breakage in `.md` files
-        # (plan docs accidentally landing `Promise<T>` or `<5%` patterns, etc.).
-        # The release workflow runs this as part of `pnpm build` and used to
-        # be the first place such breakage surfaced — now it's caught at PR time.
-        # Pulled out of build-test so it doesn't run 4× per matrix cell.
         run: pnpm --filter @rudderjs/docs build
 
   scaffolder-e2e:
@@ -135,6 +165,8 @@ jobs:
     # with vike+vite (see feedback_yarn1_vike_hoist_bug); yarn berry coverage
     # is a follow-up.
     name: Scaffolder E2E (${{ matrix.framework }} / ${{ matrix.profile }} / ${{ matrix.via }} / ${{ matrix.pm }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
