@@ -1,5 +1,71 @@
 # @rudderjs/cli
 
+## 4.6.0
+
+### Minor Changes
+
+- e118f0d: feat(cli): `rudder tinker` — interactive REPL with the app booted
+
+  Laravel `php artisan tinker` equivalent. Drops into a Node REPL after a full app boot; pre-populates the context with the DI container accessor, route helpers, and every model under `app/Models/`. Top-level `await` works; history persists to `~/.rudder-tinker-history`.
+
+  ```bash
+  $ pnpm rudder tinker
+  RudderJS Tinker — node v22.14.0, env=local
+
+  > await User.count()
+  12
+
+  > const u = await User.where('email', 'alice@example.com').first()
+  > u.posts().count()
+  5
+
+  > route('users.show', { id: u.id })
+  '/users/42'
+  ```
+
+  Context entries:
+
+  - `app()` — DI container accessor
+  - `config` — typed config reader
+  - `Route`, `route()`, `Url` — router + URL helpers (from `@rudderjs/router` when installed)
+  - `rudder` / `Rudder` — command registry
+  - Every model class under `app/Models/` (named + default exports)
+
+  Flags: `--no-banner`, `--no-history`. Meta-command: `.boot` to re-run the app boot after a code change.
+
+  The CLI sets `RUDDERJS_TINKER=1` before booting so providers that actively poll or open connections on `boot()` (`@rudderjs/horizon`'s `WorkerCollector` is the canonical case) can short-circuit. Same shape as the existing `RUDDERJS_QUEUE_WORKER=1` sentinel set for `queue:work` — zero new core API surface.
+
+  Phase 1 of the DX-completion roadmap (`docs/plans/2026-05-20-dx-completion.md`). Subsequent phases: editor-launch on error frames, typed `route()` URL generator, `make:factory` + `make:seeder` scaffolders.
+
+### Patch Changes
+
+- e8707af: feat: `make:factory` + `make:seeder` scaffolders, plus dev-mode loader fix
+
+  Completes the `make:*` family. Both scaffolders mirror existing patterns (`make:migration` / `make:agent` / `make:terminal`):
+
+  ```bash
+  $ pnpm rudder make:factory User
+  ✓ Factory created: app/Factories/UserFactory.ts
+
+  $ pnpm rudder make:seeder Users
+  ✓ Seeder created: database/seeders/UsersSeeder.ts
+  ```
+
+  Generated stubs match the **real** `ModelFactory` + `Seeder` abstract-class APIs (not the `Factory.define()` callback shape the plan doc misremembered): subclass + `protected modelClass` + `definition()` for factories, subclass + `async run()` for seeders. Factory stems infer the model name (`UserFactory` imports `User`). Seeder stems show the matching `<Name>Factory` import + `this.call(...)` composition example commented out.
+
+  Phase 4 of the DX-completion roadmap (`docs/plans/2026-05-20-dx-completion.md`). Final phase — all four DX gaps now closed.
+
+  ## Bundled fix (load-bearing): `loadPackageCommands` cwd-walks
+
+  The cli's `tryImport(pkg, subpath)` was building bare specifiers (`<pkg>/<subpath>`) and dispatching to `import()`. When the cli runs in dev mode via `tsx node_modules/@rudderjs/cli/src/index.ts` (the pnpm symlink target), Node resolves those specifiers relative to the SOURCE file — `packages/cli/src/`, where pnpm-strict has no peer-package entries. The catch in `Promise.all(loaders.map(fn => fn().catch(() => {})))` silently swallowed every failure. **Every package-contributed `make:*` was a no-op in dev:** `make:agent`, `make:mcp-tool`, `make:terminal`, `make:migration` — all silently broken.
+
+  Phase 4 surfaced it (my new `make:factory` wasn't registering); without the fix, this PR ships a non-functional scaffolder. Bundled per the load-bearing-fix rule.
+
+  Fix: walk `<cwd>/node_modules/<pkg>/dist/<subpath>.js` directly + `pathToFileURL` for Windows portability. Same shape doctor's `load-package-checks.ts` already uses for the identical reason.
+
+- Updated dependencies [34b008f]
+  - @rudderjs/router@1.5.0
+
 ## 4.5.0
 
 ### Minor Changes
