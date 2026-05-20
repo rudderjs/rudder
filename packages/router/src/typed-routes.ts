@@ -105,27 +105,31 @@ type Prettify<T> = { [K in keyof T]: T[K] } & {}
 // ─── Typed request + handler ───────────────────────────────
 
 /**
- * `AppRequest` with `params` and `query` overridden to the inferred shapes.
- * All other fields (including module-augmented `user`, `session`, `token`)
- * are inherited via `Omit + extend`.
+ * `AppRequest` with `params`, `query`, and `body` overridden to the inferred
+ * shapes. All other fields (including module-augmented `user`, `session`,
+ * `token`) are inherited via `Omit + extend`.
  */
 export interface TypedRequest<
   P extends Record<string, string | undefined> = Record<string, string>,
   Q = Record<string, string>,
-> extends Omit<AppRequest, 'params' | 'query'> {
+  B = unknown,
+> extends Omit<AppRequest, 'params' | 'query' | 'body'> {
   params: P
   query:  Q
+  body:   B
 }
 
 /**
- * Handler whose `req.params` is derived from the literal path `P`, and whose
+ * Handler whose `req.params` is derived from the literal path `P`, whose
  * `req.query` is `Q` (defaulted to `Record<string, string>`; replaced via
- * `{ query: schema }` opts in the route declaration).
+ * `{ query: schema }` opts), and whose `req.body` is `B` (defaulted to
+ * `unknown`; replaced via `{ body: schema }` opts).
  */
 export type TypedHandler<
   P extends string,
   Q = Record<string, string>,
+  B = unknown,
 > = (
-  req: TypedRequest<ExtractParams<P>, Q>,
+  req: TypedRequest<ExtractParams<P>, Q, B>,
   res: AppResponse,
 ) => unknown | Promise<unknown>

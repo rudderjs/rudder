@@ -81,14 +81,70 @@ Route.get('/users/:id', handler)
 
 The validator runs at request time exactly like the opts form. The handler's closure type is *not* re-narrowed, though, because TypeScript can't go back and re-type a closure that was already passed. For type-safe query at the closure, use the opts form above.
 
+## Typed body — opts form
+
+`{ body: zodSchema }` types `req.body` the same way `{ query }` types `req.query`:
+
+```ts
+Route.post(
+  '/posts',
+  { body: z.object({ title: z.string(), tags: z.array(z.string()).default([]) }) },
+  (req, res) => {
+    const title: string   = req.body.title    // typed
+    const tags:  string[] = req.body.tags     // typed (schema default applied)
+    return res.json({ title, tags })
+  },
+)
+```
+
+What it does:
+
+1. **Types the handler.** `req.body` is `z.infer<typeof schema>` — narrower than the default `unknown`.
+2. **Installs validation middleware** that parses the *already-parsed* `req.body` (the server adapter populates `req.body` from JSON or form-encoded payloads before middleware runs). Parsed result replaces `req.body` in place, so `z.coerce.*`, `z.transform()`, and `.default()` are visible at the handler.
+3. **Throws on failure.** Same `ValidationError` → `422` path as the query validator. Errors are keyed by Zod path: `{ "title": ["..."], "tags.0": ["..."] }`.
+
+You can also combine both:
+
+```ts
+Route.put(
+  '/posts/:id',
+  {
+    query: z.object({ draft: z.coerce.boolean().default(false) }),
+    body:  z.object({ title: z.string(), body: z.string() }),
+  },
+  (req) => {
+    const id:    string  = req.params.id   // from the path
+    const draft: boolean = req.query.draft // from query schema
+    const title: string  = req.body.title  // from body schema
+    return { id, draft, title }
+  },
+)
+```
+
+### Runtime-only `.body()` chain
+
+Mirrors `.query()` — runtime parsing, no closure re-typing:
+
+```ts
+Route.post('/posts', handler)
+  .name('posts.store')
+  .body(z.object({ title: z.string() }))
+```
+
+### Note on GET bodies
+
+The opts form accepts `body` on every verb, including `GET` / `DELETE`. HTTP allows bodies on those methods but they're rarely used — the validator will simply find an empty `req.body` and fail (or pass, depending on whether the schema permits it). Prefer `{ query }` for `GET` / `DELETE` parameters.
+
 ## Adopting incrementally
 
-There's no migration. Existing routes keep compiling unchanged — the new generic signatures default `req.params` to a derived shape (often `{}` for routes with no `:params`), and `req.query` stays `Record<string, string>` until you opt into `{ query: schema }`.
+There's no migration. Existing routes keep compiling unchanged — the new generic signatures default `req.params` to a derived shape (often `{}` for routes with no `:params`), `req.query` stays `Record<string, string>`, and `req.body` stays `unknown` until you opt into the relevant schema.
 
 You can adopt the convention one route at a time:
 
 - Add a `:param` to a path — `req.params.<name>` becomes typed.
-- Wrap a handler in the opts form — `req.query` becomes typed against the schema.
+- Wrap a handler in the opts form with `{ query: schema }` — `req.query` becomes typed.
+- Wrap with `{ body: schema }` — `req.body` becomes typed.
+- Combine both `{ query, body }` — both fields typed at the same call site.
 - Switch to `FormRequest` if you need rich validation (custom rules, lifecycle hooks, separate authorize/messages). Typed routes are the lightweight path; `FormRequest` is the heavyweight one. Both can coexist in the same app.
 
 ## How it works
@@ -101,9 +157,9 @@ type T2 = ExtractParams<'/users/:id/posts/:postId'>  // { id: string; postId: st
 type T3 = ExtractParams<'/files/:name?'>             // { name?: string }
 ```
 
-The handler argument is `TypedRequest<ExtractParams<P>, Q>` — same as `AppRequest` but with `params` and `query` overridden to the inferred shapes. Module-augmented fields (`req.user`, `req.session`, `req.token`, anything custom) come along automatically via `Omit + extend`.
+The handler argument is `TypedRequest<ExtractParams<P>, Q, B>` — same as `AppRequest` but with `params`, `query`, and `body` overridden to the inferred shapes. Module-augmented fields (`req.user`, `req.session`, `req.token`, anything custom) come along automatically via `Omit + extend`.
 
-For the opts form, the second overload captures the Zod schema's type parameter and threads `z.infer<S>` into the handler's `TypedRequest`. At runtime, the validator middleware is installed first in the per-route chain.
+For the opts form, each verb has four overloads ordered most-specific to least-specific: bare, `{ query, body }`, `{ query }`, `{ body }`. TypeScript picks the first matching one — the `{ query, body }` form must come before the single-schema forms or it would be shadowed. Validators install in order `query → body → user middleware` so the handler sees both fields parsed.
 
 ## Comparison
 

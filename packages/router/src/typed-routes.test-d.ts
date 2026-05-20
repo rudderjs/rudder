@@ -100,6 +100,69 @@ router.get(
   },
 )
 
+// ─── Opts form: req.body inferred from Zod schema ──────────
+
+router.post(
+  '/posts',
+  { body: z.object({ title: z.string(), views: z.coerce.number() }) },
+  (req) => {
+    const title: string = req.body.title
+    const views: number = req.body.views
+    return { title, views }
+  },
+)
+
+router.post(
+  '/posts',
+  { body: z.object({ title: z.string() }) },
+  (req) => {
+    // @ts-expect-error `slug` is not in the body schema
+    return req.body.slug
+  },
+)
+
+router.post(
+  '/posts',
+  { body: z.object({ title: z.string() }) },
+  (req) => {
+    // @ts-expect-error `title` is `string`, not `number`
+    const title: number = req.body.title
+    return title
+  },
+)
+
+// ─── Opts form: query + body together — both inferred ──────
+
+router.post(
+  '/posts',
+  {
+    query: z.object({ draft: z.coerce.boolean() }),
+    body:  z.object({ title: z.string() }),
+  },
+  (req) => {
+    const draft: boolean = req.query.draft
+    const title: string  = req.body.title
+    return { draft, title }
+  },
+)
+
+// ─── .body() chain — narrows the returned RouteBuilder's B ─
+
+const _bodyChained = router
+  .post('/posts', () => null)
+  .body(z.object({ title: z.string() }))
+// Just confirm the chain compiles; runtime semantics covered by body-validator.test.ts.
+void _bodyChained
+
+// ─── Bare form: req.body remains `unknown` ─────────────────
+
+router.post('/posts', (req) => {
+  const body: unknown = req.body
+  // @ts-expect-error `req.body` is `unknown`; can't dot-access without narrowing
+  void req.body.title
+  return body
+})
+
 // ─── Other AppRequest fields still accessible ──────────────
 
 router.get('/health', (req) => {
