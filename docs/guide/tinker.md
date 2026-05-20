@@ -5,7 +5,7 @@
 ```bash
 $ pnpm rudder tinker
 
-  RudderJS Tinker — node v22.14.0, env=local
+  Rudder Tinker — node v22.14.0, env=local
 
   Available:
     Comment, Post, Route, Rudder, Tag, Todo, Url, User, Video, app, config
