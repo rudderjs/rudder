@@ -25,18 +25,13 @@ export default {
         ? `import vikeSolid from 'vike-solid/config'`
         : `import vikeReact from 'vike-react/config'`
     const rendererVar = ctx.primary === 'vue' ? 'vikeVue' : ctx.primary === 'solid' ? 'vikeSolid' : 'vikeReact'
-    // vike-react 0.6.23+ fixed vikejs/vike#3251 (extends rejected
-    // vike-*/config under exactOptionalPropertyTypes), so the React path
-    // uses plain `satisfies Config`. vike-vue and vike-solid don't ship
-    // an equivalent fix yet, so they keep the `as unknown as Config` cast.
-    const closer = ctx.primary === 'react' ? '} satisfies Config' : '} as unknown as Config'
     return `import type { Config } from 'vike/types'
 ${rendererImport}
 
 export default {
   extends:      [${rendererVar}],
   passToClient: ['user', 'locale', 'flash'],
-${closer}
+} satisfies Config
 `
   }
 
@@ -58,7 +53,7 @@ import vikeVue from 'vike-vue/config'
 
 export default {
   extends: vikeVue,
-} as unknown as Config
+} satisfies Config
 `
     case 'solid':
       return `import type { Config } from 'vike/types'
@@ -66,7 +61,7 @@ import vikeSolid from 'vike-solid/config'
 
 export default {
   extends: vikeSolid,
-} as unknown as Config
+} satisfies Config
 `
     default: // react
       return `import type { Config } from 'vike/types'

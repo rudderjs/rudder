@@ -8,7 +8,7 @@ import vikeVue from 'vike-vue/config'
 
 export default {
   extends: vikeVue,
-} as unknown as Config
+} satisfies Config
 `
     case 'solid':
       return `import type { Config } from 'vike/types'
@@ -16,10 +16,9 @@ import vikeSolid from 'vike-solid/config'
 
 export default {
   extends: vikeSolid,
-} as unknown as Config
+} satisfies Config
 `
     default:
-      // vike-react 0.6.23+ fixed vikejs/vike#3251 — no cast needed.
       return `import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 

@@ -59,9 +59,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-20 — scaffolder no longer emits a
-  // `rudder.command('db:seed', ...)` stub in routes/console.ts (collided with
-  // @rudderjs/orm's built-in db:seed in production boots).
+  // Baseline last captured 2026-05-20 — vue/solid `+config.ts` now emit
+  // plain `satisfies Config` (vikejs/vike#3251 fixed upstream).
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +70,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 60
-const EXPECTED_TOTAL_BYTES = 49429
-const EXPECTED_CONTENT_HASH = '8ea968d26997fbf9fa0c8157e20997aebdacd1460016fb6fac92e1efdd1d6f25'
+const EXPECTED_TOTAL_BYTES = 49425
+const EXPECTED_CONTENT_HASH = '3eb7922fd9264a54fcaaf7c9956a37e53321ceb92561f36e934da4eb1f4de7b3'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
