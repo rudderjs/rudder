@@ -13,19 +13,23 @@ import type { ZodType, z } from 'zod'
 
 import type { TypedHandler } from './typed-routes.js'
 import { buildQueryValidator } from './query-validator.js'
+import { buildBodyValidator } from './body-validator.js'
 export type { ExtractParams, TypedRequest, TypedHandler } from './typed-routes.js'
 
 /**
  * Per-route options accepted in the 3-arg form of `Router.get/post/etc`.
  *
  * The 3-arg form exists so the handler closure can be typed against the
- * Zod-inferred query shape *at write time* — the bare 2-arg form types
- * `req.query` as `Record<string, string>`, and chaining `.query(schema)`
- * after that can't go back and re-type the closure.
+ * Zod-inferred query/body shapes *at write time* — the bare 2-arg form
+ * types `req.query` as `Record<string, string>` and `req.body` as
+ * `unknown`, and chaining `.query()` / `.body()` after that can't go back
+ * and re-type the closure.
  */
-export interface RouteOptions<S extends ZodType = ZodType> {
+export interface RouteOptions<Q extends ZodType = ZodType, B extends ZodType = ZodType> {
   /** Zod schema to validate `req.query` against. Parsed result replaces `req.query`. */
-  query?:      S
+  query?:      Q
+  /** Zod schema to validate `req.body` against. Parsed result replaces `req.body`. */
+  body?:       B
   /** Per-route middleware (prepended before the handler). */
   middleware?: MiddlewareHandler[]
 }
@@ -243,13 +247,15 @@ export const ROUTE_PATTERN_ULID     = '[0-7][0-9A-HJKMNP-TV-Z]{25}'
  * route('users.show', { id: 1 })  // → '/users/1'
  */
 export class RouteBuilder<
-  P extends string = string,  // path literal — preserved for .query() / future .body() chains
+  P extends string = string,  // path literal — preserved for .query() / .body() chains
   Q = Record<string, string>, // query shape — replaced by .query(schema) overload
+  B = unknown,                // body shape  — replaced by .body(schema) overload
 > {
-  // Phantom branding so `P`/`Q` participate in structural typing — keeps
+  // Phantom branding so `P`/`Q`/`B` participate in structural typing — keeps
   // distinct `RouteBuilder<'/a'>` and `RouteBuilder<'/b'>` from collapsing.
   declare readonly _path:  P
   declare readonly _query: Q
+  declare readonly _body:  B
 
   constructor(
     private readonly definition: RouteDefinition,
@@ -394,10 +400,36 @@ export class RouteBuilder<
    * // Runtime-only (validation runs, but `req.query.page` is still typed string)
    * Route.get('/users', (req) => req.query.page).query(z.object({ page: z.coerce.number() }))
    */
-  query<S extends ZodType>(schema: S): RouteBuilder<P, z.infer<S>> {
+  query<S extends ZodType>(schema: S): RouteBuilder<P, z.infer<S>, B> {
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildQueryValidator(schema))
-    return this as unknown as RouteBuilder<P, z.infer<S>>
+    return this as unknown as RouteBuilder<P, z.infer<S>, B>
+  }
+
+  /**
+   * Install a Zod validator on `req.body` for this route. Mirrors `.query()`:
+   * the parsed result replaces `req.body` so the handler sees the inferred
+   * shape end-to-end (including `z.coerce.*` / `z.transform()` / `.default()`).
+   *
+   * **Note on typing:** the handler was already passed (and typed) when this
+   * route was registered. Chaining `.body(schema)` AFTER cannot re-type a
+   * closure that's already been bound. The returned `RouteBuilder<P, Q, z.infer<S>>`
+   * carries the inferred body for downstream chain methods, but the
+   * already-registered handler still sees its original body typing.
+   *
+   * For type-safe body at the handler closure, use the opts-object form:
+   *
+   * @example
+   * // Type-safe (handler closure sees `req.body.title: string`)
+   * Route.post('/posts', { body: z.object({ title: z.string() }) }, (req) => req.body.title)
+   *
+   * // Runtime-only (validation runs, but `req.body` is still typed unknown)
+   * Route.post('/posts', (req) => req.body).body(z.object({ title: z.string() }))
+   */
+  body<S extends ZodType>(schema: S): RouteBuilder<P, Q, z.infer<S>> {
+    // Prepend so the validator runs before any other per-route middleware.
+    this.definition.middleware.unshift(buildBodyValidator(schema))
+    return this as unknown as RouteBuilder<P, Q, z.infer<S>>
   }
 }
 
@@ -620,56 +652,86 @@ export class Router {
 
   // ── Shorthand methods — return RouteBuilder for .name() support ──
   //
-  // Two overloads per verb:
+  // Four overloads per verb, ordered most-specific to least-specific (TS picks
+  // the FIRST matching overload — listing the broader `{ query }` / `{ body }`
+  // forms first would shadow the `{ query, body }` form and `req.body` would
+  // collapse to `unknown`):
+  //
   //   1. `get(path, handler, middleware?)` — bare form. `req.params` is typed
-  //      from `:param` segments in `path`. `req.query` is `Record<string, string>`.
-  //   2. `get(path, opts, handler)` — opts form. `opts.query` is a Zod schema
-  //      whose `z.infer<>` types `req.query`. Validation middleware is installed
-  //      automatically; parsed result replaces `req.query` at request time.
+  //      from `:param` segments. `req.query` is `Record<string, string>`,
+  //      `req.body` is `unknown`.
+  //   2. `get(path, { query, body }, handler)` — both schemas. Both `req.query`
+  //      and `req.body` typed from Zod inference.
+  //   3. `get(path, { query }, handler)` — typed query only.
+  //   4. `get(path, { body }, handler)` — typed body only.
+  //
+  // Validator middleware is installed automatically and replaces the parsed
+  // field at request time so `z.coerce.*`/`z.transform()` work end-to-end.
 
   get   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  get   <P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  get   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('GET', path, a, b) }
+  get   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  get   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  get   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  // Impl signature — `b` is intentionally `unknown` so all four typed
+  // overload-handler shapes (bare / query / body / both) are assignment-
+  // compatible. The runtime cast back to `RouteHandler` happens in `_verb`.
+  get   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('GET', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   post  <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  post  <P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  post  <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('POST', path, a, b) }
+  post  <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  post  <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  post  <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  post  <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('POST', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   put   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  put   <P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  put   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('PUT', path, a, b) }
+  put   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  put   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  put   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  put   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('PUT', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   patch <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  patch <P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  patch <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('PATCH', path, a, b) }
+  patch <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  patch <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  patch <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  patch <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('PATCH', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   delete<P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  delete<P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  delete<P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('DELETE', path, a, b) }
+  delete<P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  delete<P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  delete<P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  delete<P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('DELETE', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   all   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  all   <P extends string, S extends ZodType>(path: P, opts: RouteOptions<S> & { query: S }, handler: TypedHandler<P, z.infer<S>>): RouteBuilder<P, z.infer<S>>
-  all   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: MiddlewareHandler[] | TypedHandler<P, unknown>): RouteBuilder<P> { return this._verb('ALL', path, a, b) }
+  all   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
+  all   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
+  all   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  all   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('ALL', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   /**
-   * Internal dispatcher for the two-overload shorthand methods. Decides
+   * Internal dispatcher for the four-overload shorthand methods. Decides
    * between bare and opts form by whether the second arg is callable.
+   *
+   * Middleware order in the opts form: query validator (if any) → body
+   * validator (if any) → user middleware. Validators run first so the
+   * handler's typed `req.query` / `req.body` are parsed before any
+   * user-supplied middleware runs.
    */
   private _verb<P extends string>(
     method: HttpMethod,
     path: P,
     a: TypedHandler<P> | RouteOptions,
-    b?: MiddlewareHandler[] | TypedHandler<P, unknown>,
+    b?: MiddlewareHandler[] | RouteHandler,
   ): RouteBuilder<P> {
     if (typeof a === 'function') {
       // Bare form: (path, handler, middleware?)
       return this._rb(method, path, a as RouteHandler, b as MiddlewareHandler[] | undefined) as RouteBuilder<P>
     }
-    // Opts form: (path, { query, middleware }, handler)
+    // Opts form: (path, { query, body, middleware }, handler)
     const opts = a
     const handler = b as RouteHandler
     const mw: MiddlewareHandler[] = []
-    if (opts.query) mw.push(buildQueryValidator(opts.query))
+    if (opts.query)      mw.push(buildQueryValidator(opts.query))
+    if (opts.body)       mw.push(buildBodyValidator(opts.body))
     if (opts.middleware) mw.push(...opts.middleware)
     return this._rb(method, path, handler, mw) as RouteBuilder<P>
   }
