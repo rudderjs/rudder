@@ -11,10 +11,56 @@ import type {
 
 import type { ZodType, z } from 'zod'
 
-import type { TypedHandler } from './typed-routes.js'
+import type { TypedHandler, ExtractParams } from './typed-routes.js'
 import { buildQueryValidator } from './query-validator.js'
 import { buildBodyValidator } from './body-validator.js'
 export type { ExtractParams, TypedRequest, TypedHandler } from './typed-routes.js'
+
+// ─── Type-safe route() URL generator ──────────────────────
+//
+// `RouteRegistry` is an empty interface by default. Apps augment it via
+// declaration merging (typically in `env.d.ts`) to map named-route IDs to
+// the literal path strings — `route(name, params)` then type-checks
+// `params` against the path's `:params`.
+//
+// **Name strictness is soft, params strictness is hard.** The `name`
+// parameter is always `string` so framework-internal callers + runtime-
+// registered routes keep working. When the supplied name matches a key in
+// the registry, `params` narrows to the typed shape (required `:params`
+// must be present; values must be `string | number`). When the name isn't
+// registered, `params` stays the loose `Record<string, string | number>`
+// — today's behavior, fully backward compatible.
+//
+// Trade-off: typos in registered names (`'users.shwo'`) don't surface as
+// TS errors — they fall through to the loose params path. Mitigation: the
+// runtime check (`router.getNamedRoute(name) === undefined`) throws on
+// unknown names, so the failure is loud at first use. Apps that want
+// stricter name-checking can wrap `route()` in their own helper that
+// constrains `N extends keyof RouteRegistry`.
+//
+// `ExtractParams<P>` is reused from `typed-routes.ts` (typed `req.params`
+// for handlers); we widen its `string` value type to `string | number`
+// here because `route()` accepts numeric params and `String()`s them.
+
+/** Augment this interface to type-check `route(name, params)` calls. */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface RouteRegistry {}
+
+/**
+ * Params type for a given route name. When the name is in the registry and
+ * its value is a string path, extract `:params` and widen each to
+ * `string | number`. Otherwise fall through to a loose record so
+ * runtime-registered names + unaugmented apps keep working.
+ *
+ * Always intersected with `Record<string, string | number>` so callers can
+ * pass extra keys that become query-string parameters.
+ */
+export type ParamsForName<N> =
+  N extends keyof RouteRegistry
+    ? RouteRegistry[N] extends string
+      ? { [K in keyof ExtractParams<RouteRegistry[N]>]: string | number } & Record<string, string | number>
+      : Record<string, string | number>
+    : Record<string, string | number>
 
 /**
  * Per-route options accepted in the 3-arg form of `Router.get/post/etc`.
@@ -964,7 +1010,35 @@ export const Route = router
  * @example
  * route('users.show', { id: 42 })           // '/users/42'
  * route('search', { q: 'hello', page: 2 })  // '/search?q=hello&page=2'
+ *
+ * ## Type-safe names (opt-in)
+ *
+ * Augment the `RouteRegistry` interface in a `.d.ts` somewhere in your app:
+ *
+ * ```ts
+ * declare module '@rudderjs/router' {
+ *   interface RouteRegistry {
+ *     'users.show':    '/users/:id'
+ *     'comments.show': '/posts/:slug/comments/:cid'
+ *   }
+ * }
+ * ```
+ *
+ * Calls to `route()` now type-check against the registered paths:
+ *
+ * ```ts
+ * route('users.show', { id: 1 })                    // ✓
+ * route('users.show', { id: 1, page: 2 })           // ✓ — extras allowed (query string)
+ * route('users.show', {})                           // ✗ TS: missing 'id'
+ * route('comments.show', { slug: 'x' })             // ✗ TS: missing 'cid'
+ * route('users.shwo', { id: 1 })                    // ✗ TS: unknown route name
+ * ```
+ *
+ * When `RouteRegistry` is empty (default, no augmentation), `route()` accepts any
+ * `string` name with a loose `Record<string, string | number>` params object —
+ * today's behavior, fully backward compatible.
  */
+export function route<N extends string>(name: N, params?: ParamsForName<N>): string
 export function route(name: string, params: Record<string, string | number> = {}): string {
   const path = router.getNamedRoute(name)
   if (path === undefined) throw new Error(`[RudderJS] Named route "${name}" is not defined.`)
