@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, spawnSync } from 'node:child_process'
 import { registerDoctorCheck, type DoctorResult } from '@rudderjs/console'
 
 /** Redact the password from a Prisma DATABASE_URL for safe error messages. */
@@ -81,6 +81,29 @@ registerDoctorCheck({
       }
     }
     return { status: 'ok', message: 'present and current' }
+  },
+  fixer(): DoctorResult {
+    // Same path as `rudder db:generate` — shell-out to `pnpm exec prisma
+    // generate`. The migrate.ts command hardcodes pnpm; we match so behavior
+    // is consistent (a non-pnpm doctor user wouldn't have working db:generate
+    // either, so the fixer doesn't introduce a new constraint).
+    const result = spawnSync('pnpm', ['exec', 'prisma', 'generate'], {
+      cwd:     process.cwd(),
+      stdio:   ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    })
+    if (result.status === 0) {
+      return { status: 'ok', message: 'client regenerated' }
+    }
+    const stderr = (result.stderr?.toString() ?? '').trim()
+    const stdout = (result.stdout?.toString() ?? '').trim()
+    const detail = stderr || stdout
+    const out: DoctorResult = {
+      status:  'error',
+      message: `prisma generate failed (exit ${result.status ?? 'null'})`,
+    }
+    if (detail) out.detail = detail.slice(0, 800)
+    return out
   },
 })
 

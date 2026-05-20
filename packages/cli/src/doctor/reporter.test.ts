@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { renderReport, exitCodeFor } from './reporter.js'
+import { renderReport, renderFixReport, exitCodeFor } from './reporter.js'
 import type { RunResult } from './orchestrator.js'
+import type { FixResult } from './fixer.js'
 
 function makeResult(partial: Partial<RunResult> & { outcomes: RunResult['outcomes'] }): RunResult {
   const counts = { ok: 0, warn: 0, error: 0 }
@@ -94,6 +95,69 @@ describe('renderReport', () => {
     assert.ok(out.includes('1 warn'))
     assert.ok(out.includes('1 errors'))
     assert.ok(out.includes('42ms'))
+  })
+})
+
+describe('renderFixReport', () => {
+  it('renders empty state cleanly when nothing was fixable', () => {
+    const out = renderFixReport({ outcomes: [], eligible: 0, applied: 0 }, { plain: true })
+    assert.ok(out.includes('Fixes'))
+    assert.ok(out.includes('No fixable failures'))
+  })
+
+  it('shows before → after status per outcome', () => {
+    const fix: FixResult = {
+      outcomes: [
+        { id: 'a', title: 'Manifest', before: 'error', after: 'ok', skipped: false,
+          message: 'regenerated', durationMs: 5 },
+      ],
+      eligible: 1, applied: 1,
+    }
+    const out = renderFixReport(fix, { plain: true })
+    assert.ok(out.includes('✗') && out.includes('→') && out.includes('✓'))
+    assert.ok(out.includes('Manifest'))
+    assert.ok(out.includes('regenerated'))
+  })
+
+  it('marks skipped outcomes with a dash and "skipped" label', () => {
+    const fix: FixResult = {
+      outcomes: [
+        { id: 'a', title: 'Manifest', before: 'error', after: 'error', skipped: true,
+          message: 'skipped', durationMs: 0 },
+      ],
+      eligible: 1, applied: 0,
+    }
+    const out = renderFixReport(fix, { plain: true })
+    assert.ok(out.includes('skipped'))
+    assert.ok(out.includes('Manifest'))
+  })
+
+  it('summary counts fixed / failed / skipped', () => {
+    const fix: FixResult = {
+      outcomes: [
+        { id: 'a', title: 'A', before: 'error', after: 'ok',    skipped: false, message: '', durationMs: 1 },
+        { id: 'b', title: 'B', before: 'error', after: 'error', skipped: false, message: '', durationMs: 1, error: 'oops' },
+        { id: 'c', title: 'C', before: 'warn',  after: 'warn',  skipped: true,  message: 'skipped', durationMs: 0 },
+      ],
+      eligible: 3, applied: 2,
+    }
+    const out = renderFixReport(fix, { plain: true })
+    assert.ok(out.includes('3 fixable'))
+    assert.ok(out.includes('1 fixed'))
+    assert.ok(out.includes('1 failed'))
+    assert.ok(out.includes('1 skipped'))
+  })
+
+  it('renders fixer error block under failed outcomes', () => {
+    const fix: FixResult = {
+      outcomes: [
+        { id: 'a', title: 'A', before: 'error', after: 'error', skipped: false,
+          message: 'fixer threw: boom', error: 'boom', durationMs: 1 },
+      ],
+      eligible: 1, applied: 1,
+    }
+    const out = renderFixReport(fix, { plain: true })
+    assert.ok(out.includes('boom'))
   })
 })
 
