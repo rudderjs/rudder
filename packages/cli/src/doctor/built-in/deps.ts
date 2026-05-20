@@ -37,6 +37,22 @@ registerDoctorCheck({
     }
     return { status: 'ok', message: 'present and current' }
   },
+  async fixer(): Promise<DoctorResult> {
+    // Same logic as `rudder providers:discover` but invoked in-process so
+    // --fix doesn't shell out. `@rudderjs/core/commands/providers-discover`
+    // re-exports the two pure pieces — scanner + writer.
+    try {
+      const { scanProviders, writeProviderManifest } = await import(
+        /* @vite-ignore */ '@rudderjs/core/commands/providers-discover'
+      ) as typeof import('@rudderjs/core/commands/providers-discover')
+      const sorted = scanProviders(process.cwd())
+      writeProviderManifest(process.cwd(), sorted)
+      return { status: 'ok', message: `regenerated (${sorted.length} provider${sorted.length === 1 ? '' : 's'})` }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { status: 'error', message: `could not regenerate: ${msg}` }
+    }
+  },
 })
 
 registerDoctorCheck({

@@ -1,4 +1,5 @@
 import type { CheckOutcome, RunResult } from './orchestrator.js'
+import type { FixResult } from './fixer.js'
 
 const ESC = ''
 
@@ -114,4 +115,65 @@ function footer(result: RunResult, c: typeof ANSI | Record<string, string>): str
 /** Map outcome counts to a process exit code: 0 if no errors, 1 otherwise. */
 export function exitCodeFor(result: RunResult): number {
   return result.counts.error > 0 ? 1 : 0
+}
+
+/**
+ * Render the per-fix outcomes from `applyFixes()` as a single block.
+ * Shows before → after status for each eligible check + a summary line.
+ */
+export function renderFixReport(result: FixResult, opts: ReportOptions = {}): string {
+  const plain = opts.plain ?? (!process.stdout.isTTY || !!process.env['NO_COLOR'])
+  const c = plain ? new Proxy(ANSI, { get: () => '' }) : ANSI
+  const i = plain
+    ? { ok: '✓', warn: '⚠', error: '✗' }
+    : ICON
+
+  const lines: string[] = []
+  lines.push(`${c.bold}Fixes${c.reset}`)
+  lines.push('')
+
+  if (result.outcomes.length === 0) {
+    lines.push(`  ${c.dim}No fixable failures.${c.reset}`)
+    lines.push('')
+    return lines.join('\n')
+  }
+
+  const titleWidth = Math.max(...result.outcomes.map(o => o.title.length)) + 2
+
+  for (const o of result.outcomes) {
+    if (o.skipped) {
+      const titleColored = `${c.dim}${o.title}${c.reset}`
+      lines.push(`  ${c.dim}-${c.reset} ${pad(titleColored, titleWidth)} ${c.dim}skipped${c.reset}`)
+      continue
+    }
+    const arrow      = `${arrowIcon(o.before, c)} → ${i[o.after]}`
+    const titleColor = o.after === 'error' ? c.red : o.after === 'warn' ? c.yellow : c.green
+    const titleColored = `${titleColor}${o.title}${c.reset}`
+    lines.push(`  ${arrow} ${pad(titleColored, titleWidth)} ${c.dim}${o.message}${c.reset}`)
+    if (o.error) {
+      for (const dl of o.error.split('\n').slice(0, 4)) {
+        lines.push(`     ${c.dim}${dl}${c.reset}`)
+      }
+    }
+  }
+  lines.push('')
+  const fixed   = result.outcomes.filter(o => !o.skipped && o.after === 'ok').length
+  const failed  = result.outcomes.filter(o => !o.skipped && o.after === 'error').length
+  const skipped = result.outcomes.filter(o => o.skipped).length
+  const parts = [
+    `${result.eligible} fixable`,
+    `${c.green}${fixed} fixed${c.reset}`,
+    failed  > 0 ? `${c.red}${failed} failed${c.reset}`  : `${c.dim}0 failed${c.reset}`,
+    skipped > 0 ? `${c.yellow}${skipped} skipped${c.reset}` : `${c.dim}0 skipped${c.reset}`,
+  ]
+  lines.push(parts.join(`${c.dim} · ${c.reset}`))
+  return lines.join('\n')
+}
+
+function arrowIcon(status: CheckOutcome['status'], c: typeof ANSI | Record<string, string>): string {
+  return status === 'error'
+    ? `${c.red}✗${c.reset}`
+    : status === 'warn'
+      ? `${c.yellow}⚠${c.reset}`
+      : `${c.green}✓${c.reset}`
 }
