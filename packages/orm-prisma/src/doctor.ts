@@ -32,6 +32,73 @@ function findSchemaFiles(): string[] {
   return out
 }
 
+/**
+ * Locate the directory `prisma generate` actually wrote into. Tries (in order):
+ *
+ * 1. The `output = "..."` declared in a `generator client {}` block in any
+ *    user schema file. Resolved relative to that schema's directory (Prisma
+ *    docs). This is the Prisma 7 `prisma-client` generator path and any
+ *    explicit `output` config.
+ * 2. `node_modules/@prisma/client/node_modules/.prisma/client/` — Prisma 7
+ *    default with pnpm. `prisma generate` writes a nested `.prisma/client/`
+ *    INSIDE the resolved `@prisma/client` package. fs.statSync follows the
+ *    outer symlink so this path works regardless of where the pnpm-real
+ *    directory lives.
+ * 3. `node_modules/.prisma/client/` — legacy / hoisted layout (Prisma 5/6,
+ *    or npm/yarn flat node_modules).
+ *
+ * Returns the absolute path to the generated dir, or null if no generated
+ * client is found. Exported for testing.
+ */
+export function findGeneratedClientDir(schemas: string[], cwd: string = process.cwd()): string | null {
+  // 1. Schema-declared output. Walk each schema looking for the first
+  //    `generator <name> { ... output = "..." ... }` block. Non-greedy `[^}]*?`
+  //    keeps us inside one block.
+  const outputRe = /generator\s+\w+\s*\{[^}]*?output\s*=\s*"([^"]+)"/s
+  for (const schemaRel of schemas) {
+    const schemaAbs = path.join(cwd, schemaRel)
+    let content: string
+    try { content = fs.readFileSync(schemaAbs, 'utf-8') } catch { continue }
+    const match = content.match(outputRe)
+    if (match?.[1]) {
+      const resolved = path.resolve(path.dirname(schemaAbs), match[1])
+      if (fs.existsSync(resolved)) return resolved
+    }
+  }
+  // 2. Resolve `@prisma/client` and look for a sibling `.prisma/client/`
+  //    inside its own node_modules container. Works for:
+  //      - pnpm: realpath is .pnpm/<id>/node_modules/@prisma/client/; the
+  //        siblings live at .pnpm/<id>/node_modules/.prisma/client/.
+  //      - npm/yarn flat: realpath is node_modules/@prisma/client/; siblings
+  //        live at node_modules/.prisma/client/.
+  //    `prisma generate` writes the generated artifacts there in both shapes.
+  try {
+    const realClient = fs.realpathSync(path.join(cwd, 'node_modules', '@prisma', 'client'))
+    // realClient = <container>/node_modules/@prisma/client → siblings at
+    // <container>/node_modules/.prisma/client (two levels up + .prisma/client).
+    const sibling = path.join(realClient, '..', '..', '.prisma', 'client')
+    if (fs.existsSync(sibling)) return sibling
+  } catch { /* @prisma/client not installed (Prisma 7 prisma-client generator only) */ }
+  // 3. Legacy / hoisted layout at the project root.
+  const topLevel = path.join(cwd, 'node_modules', '.prisma', 'client')
+  if (fs.existsSync(topLevel)) return topLevel
+  return null
+}
+
+/** Newest file mtime in a directory. 0 if dir is empty or unreadable. */
+function newestFileMtime(dir: string): number {
+  let max = 0
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      try {
+        const m = fs.statSync(path.join(dir, f)).mtimeMs
+        if (m > max) max = m
+      } catch { /* skip */ }
+    }
+  } catch { /* unreadable */ }
+  return max
+}
+
 registerDoctorCheck({
   id:       'orm-prisma:schema',
   category: 'orm',
@@ -58,21 +125,24 @@ registerDoctorCheck({
     if (schemas.length === 0) {
       return { status: 'ok', message: 'no schema — skip (covered by orm-prisma:schema)' }
     }
-    // Prisma generates either node_modules/.prisma/client (legacy default) or
-    // node_modules/@prisma/client (newer) — accept either.
-    const clientDirs = ['node_modules/.prisma/client', 'node_modules/@prisma/client']
-    const clientPath = clientDirs.find(d => exists(`${d}/package.json`)) ?? null
-    if (clientPath === null) {
+    // Locate the directory `prisma generate` actually wrote to. Handles:
+    // schema-declared `output = "..."`, Prisma 7 + pnpm nested layout, and
+    // the legacy `node_modules/.prisma/client/` flat layout. Comparing against
+    // `node_modules/@prisma/client/package.json` (the previous approach) was
+    // unreliable under Prisma 7 + pnpm — the symlinked package.json mtime
+    // never moves on regenerate; the actual artifacts land in the nested
+    // .prisma/client/ directory instead.
+    const dir = findGeneratedClientDir(schemas)
+    if (dir === null) {
       return {
         status:  'error',
-        message: 'not generated — schema exists but no @prisma/client in node_modules',
+        message: 'not generated — no .prisma/client/ directory found',
         fix:     'pnpm rudder db:generate',
       }
     }
-    // mtime sanity — client should be at least as new as the latest schema file
-    const clientMtime = mtime(`${clientPath}/package.json`)
+    const clientMtime  = newestFileMtime(dir)
     const newestSchema = schemas.reduce<number>((acc, f) => Math.max(acc, mtime(f) ?? 0), 0)
-    if (clientMtime !== null && newestSchema > 0 && clientMtime < newestSchema) {
+    if (clientMtime > 0 && newestSchema > 0 && clientMtime < newestSchema) {
       const minsBehind = Math.round((newestSchema - clientMtime) / 1000 / 60)
       return {
         status:  'warn',
@@ -80,7 +150,14 @@ registerDoctorCheck({
         fix:     'pnpm rudder db:generate',
       }
     }
-    return { status: 'ok', message: 'present and current' }
+    // pnpm puts the generated client deep under .pnpm/<id>/… — the full
+    // relative path is noise. Collapse it to a short "via pnpm" tag and
+    // show the real path only when it's a custom output or a flat layout.
+    const rel = path.relative(process.cwd(), dir)
+    const short = rel.includes(`node_modules${path.sep}.pnpm${path.sep}`)
+      ? 'node_modules/.prisma/client (via pnpm)'
+      : rel
+    return { status: 'ok', message: `present and current (${short})` }
   },
   fixer(): DoctorResult {
     // Same path as `rudder db:generate` — shell-out to `pnpm exec prisma
