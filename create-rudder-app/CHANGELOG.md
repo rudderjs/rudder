@@ -1,5 +1,15 @@
 # create-rudder-app
 
+## 1.2.2
+
+### Patch Changes
+
+- f79ef73: Welcome view footer now nudges users to `pnpm rudder doctor` when something isn't working. Applies to all four variants (vanilla / React / Vue / Solid).
+- ecdfcaf: Scaffolded `pages/**/+config.ts` for vue/solid now emit plain `} satisfies Config` instead of the `as unknown as Config` workaround. The underlying upstream issue (vikejs/vike#3251) is fixed in vike core — vike-react 0.6.23, vike-vue 0.9.11, and vike-solid 0.8.2 all typecheck cleanly under `exactOptionalPropertyTypes: true` against plain `satisfies Config`.
+- Updated dependencies [108c7a2]
+- Updated dependencies [a3a7368]
+  - @rudderjs/auth@6.1.0
+
 ## 1.2.1
 
 ### Patch Changes
