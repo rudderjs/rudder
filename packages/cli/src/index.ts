@@ -126,10 +126,33 @@ async function observeCommand(
  */
 async function loadPackageCommands(): Promise<void> {
   const { registerMakeSpecs, rudder } = await import('@rudderjs/console')
+  const { pathToFileURL } = await import('node:url')
+  const fsm = await import('node:fs')
 
-  // Helper: import a subpath from a package, swallow if not installed
-  const tryImport = (pkg: string, subpath: string): Promise<Record<string, unknown>> =>
-    import(/* @vite-ignore */ `${pkg}/${subpath}`) as Promise<Record<string, unknown>>
+  // Helper: import a `<package>/<subpath>` from the user's app, not from
+  // cli's own node_modules. The cli is consumed in two shapes —
+  //
+  //   - Built: `node_modules/@rudderjs/cli/dist/index.js` (published form).
+  //     `import('@rudderjs/ai')` from inside that file resolves correctly
+  //     because the user's app DOES have `@rudderjs/ai` in its
+  //     `node_modules`, and Node walks upward from `dist/`.
+  //
+  //   - Source via tsx: `node_modules/@rudderjs/cli/src/index.ts` (pnpm
+  //     symlink → workspace `packages/cli/src/index.ts`). From there
+  //     `import('@rudderjs/ai')` resolves against `packages/cli/...`,
+  //     which under pnpm strict mode has no `@rudderjs/ai` (it's a peer,
+  //     not a dep). Every package-contributed make:* / runtime command
+  //     silently fails to register.
+  //
+  // The fix matches doctor's `load-package-checks.ts`: walk the user's
+  // `node_modules/<pkg>/dist/<subpath>.js` directly + `pathToFileURL`
+  // for Windows portability. ESM-only-peer resolution (no `require`
+  // condition in subpath exports) flows through cleanly.
+  const tryImport = async (pkg: string, subpath: string): Promise<Record<string, unknown>> => {
+    const target = path.join(process.cwd(), 'node_modules', pkg, 'dist', `${subpath}.js`)
+    if (!fsm.existsSync(target)) throw new Error(`[cli] ${pkg}/${subpath} not installed`)
+    return await import(/* @vite-ignore */ pathToFileURL(target).href) as Record<string, unknown>
+  }
 
   const loaders = [
     // @rudderjs/ai → make:agent
@@ -169,6 +192,16 @@ async function loadPackageCommands(): Promise<void> {
       const mod = await tryImport('@rudderjs/orm', 'commands/prune')
       const register = mod['registerPruneCommand'] as (r: typeof rudder) => void
       register(rudder)
+    },
+    // @rudderjs/orm → make:factory
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/make-factory')
+      registerMakeSpecs(mod['makeFactorySpec'] as import('@rudderjs/console').MakeSpec)
+    },
+    // @rudderjs/orm → make:seeder
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/make-seeder')
+      registerMakeSpecs(mod['makeSeederSpec'] as import('@rudderjs/console').MakeSpec)
     },
     // @rudderjs/router → route:list
     async () => {
