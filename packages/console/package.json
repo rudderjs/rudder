@@ -33,7 +33,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/doctor.test.js"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.0"

@@ -353,3 +353,8 @@ export const commandObservers = _g['__rudderjs_command_observers__'] as CommandO
 
 export type { MakeSpec, MakeResult } from './make.js'
 export { registerMakeSpecs, getMakeSpecs, executeMakeSpec } from './make.js'
+
+// ─── Doctor registry ──────────────────────────────────────
+
+export type { DoctorCheck, DoctorResult, DoctorStatus } from './doctor.js'
+export { DoctorRegistry, registerDoctorCheck, getRegisteredChecks, resetDoctorRegistry } from './doctor.js'
