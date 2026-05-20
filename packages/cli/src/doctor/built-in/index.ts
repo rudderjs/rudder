@@ -8,6 +8,7 @@ import './package-manager.js'
 import './env-vars.js'
 import './structure.js'
 import './deps.js'
+import './runtime.js'
 
 export function loadBuiltInChecks(): void {
   // Module loading is sufficient — side-effect imports above call

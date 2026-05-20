@@ -63,7 +63,10 @@ export async function runChecks(opts: RunOptions = {}): Promise<RunResult> {
 
   const all = getRegisteredChecks().filter(c => {
     if (!opts.deep && c.needsBoot) return false
-    if (opts.filter && !c.id.includes(opts.filter)) return false
+    // --only <substring> matches EITHER id OR category — `--only orm`
+    // catches `orm-prisma:db-connect` AND `orm-drizzle:schema`; `--only runtime`
+    // catches every `category: 'runtime'` check regardless of its package prefix.
+    if (opts.filter && !c.id.includes(opts.filter) && !c.category.includes(opts.filter)) return false
     return true
   })
 
