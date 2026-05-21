@@ -109,18 +109,35 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
       const initialUid = session?.get('auth_user_id') as string | undefined
       if (initialUid) await syncUser()
 
-      await next()
+      // try/finally so a handler that signs the user in (or out) and then
+      // throws still produces a consistent `req.user` snapshot for the error
+      // renderer — without it the sync block was skipped and the renderer
+      // saw stale (or empty) auth state.
+      let handlerError: unknown
+      let handlerThrew = false
+      try {
+        await next()
+      } catch (err) {
+        handlerError = err
+        handlerThrew = true
+      }
 
-      // Re-sync only if auth_user_id changed during the handler (sign-in / sign-out).
-      // Avoids a duplicate User SELECT on every authenticated page load.
       const finalUid = session?.get('auth_user_id') as string | undefined
       if (finalUid !== initialUid) {
-        if (finalUid) await syncUser()
-        else {
-          delete rawReq['__rjs_user']
-          try { delete (req as unknown as Record<string, unknown>)['user'] } catch { /* read-only */ }
+        try {
+          if (finalUid) await syncUser()
+          else {
+            delete rawReq['__rjs_user']
+            try { delete (req as unknown as Record<string, unknown>)['user'] } catch { /* read-only */ }
+          }
+        } catch (syncErr) {
+          // Never let a sync failure mask the original handler error; only
+          // surface the sync error when the handler itself succeeded.
+          if (!handlerThrew) throw syncErr
         }
       }
+
+      if (handlerThrew) throw handlerError
     })
   }
 }
