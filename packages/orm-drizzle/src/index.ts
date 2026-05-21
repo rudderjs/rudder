@@ -653,10 +653,14 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async find(id: number | string): Promise<T | null> {
     this._assertNotSubBuilder()
     const pkCol    = this.col(this.primaryKey) as Column
-    const softExpr = this.softDeleteExpr()
     const pkExpr   = eq(pkCol, id) as SQL
-    const cond     = softExpr ? and(pkExpr, softExpr) as SQL : pkExpr
-    const fields   = this.buildAggregateSelectFields()
+    // Compose with the full chain (wheres + orWheres + soft-delete + extra
+    // EXISTS / whereGroup subqueries) — `buildConditions()` already merges
+    // all of those. Without this, `User.where('tenantId', t).find(5)` would
+    // cross tenants.
+    const accumulated = this.buildConditions()
+    const cond = accumulated ? and(pkExpr, accumulated) as SQL : pkExpr
+    const fields = this.buildAggregateSelectFields()
 
     const sel = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
     const result = await exec<T[]>(sel.where(cond).limit(1))

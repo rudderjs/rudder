@@ -179,6 +179,27 @@ describe('DrizzleQueryBuilder — real SQLite', () => {
       assert.equal(await softDelQuery<User>(adapter, 'users').find(id), null)
     })
 
+    it('find() composes with prior where() clauses — bug fix (cross-tenant leak)', async () => {
+      // Reproduces the cross-tenant scenario: previously, find(id) bypassed
+      // the where chain entirely, so a tenant-scoped query like
+      // `User.where('tenantId', t).find(5)` would return rows across tenants.
+      const all     = await adapter.query<User>('users').get()
+      const aliceId = all.find(u => u.name === 'Alice')!.id
+
+      // Composing where() with find() — Alice's age=30, so where(age, >=, 31)
+      // should miss her even when finding by her PK.
+      const wrongAge = await adapter.query<User>('users')
+        .where('age', '>=', 31)
+        .find(aliceId)
+      assert.equal(wrongAge, null, 'find(id) must respect prior where() clauses')
+
+      // Sanity: matching where + correct id resolves the row
+      const rightAge = await adapter.query<User>('users')
+        .where('age', '>=', 30)
+        .find(aliceId)
+      assert.equal(rightAge?.name, 'Alice')
+    })
+
     it('all() respects wheres + soft-delete filter — bug fix #3', async () => {
       const allRows = await adapter.query<User>('users').get()
       const id      = allRows[0]!.id
