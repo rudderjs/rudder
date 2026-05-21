@@ -27,6 +27,7 @@ import type {
   VectorStoreFileList,
 } from '../types.js'
 import type { FileSearchFilter } from '../file-search.js'
+import { base64ToUtf8 } from '../base64.js'
 import {
   GoogleCacheRegistry,
   buildGoogleCacheKey,
@@ -242,16 +243,28 @@ function contentToGeminiParts(content: string | import('../types.js').ContentPar
     if (p.mimeType === 'application/pdf') {
       return { inlineData: { mimeType: p.mimeType, data: p.data } }
     }
-    return { text: Buffer.from(p.data, 'base64').toString('utf-8') }
+    return { text: base64ToUtf8(p.data) }
   })
 }
 
-function toGeminiContents(messages: AiMessage[]): { system: string | undefined; contents: unknown[] } {
+export function toGeminiContents(messages: AiMessage[]): { system: string | undefined; contents: unknown[] } {
   const systemMsgs = messages.filter(m => m.role === 'system')
   const rest = messages.filter(m => m.role !== 'system')
   const system = systemMsgs.length > 0
     ? systemMsgs.map(m => contentToString(m.content)).join('\n\n')
     : undefined
+
+  // Gemini's `functionResponse.name` must match the originating `functionCall.name`
+  // (the function name like "search"), not the synthetic call id the adapter
+  // generates per stream. Pre-build a (toolCallId → name) lookup by walking
+  // every prior assistant message's `toolCalls`. Without this the receiving
+  // model sees `name: "call_1234_abc"` and can't pair the result with the call.
+  const toolNameByCallId = new Map<string, string>()
+  for (const m of rest) {
+    if (m.role === 'assistant' && m.toolCalls?.length) {
+      for (const tc of m.toolCalls) toolNameByCallId.set(tc.id, tc.name)
+    }
+  }
 
   const contents = rest.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
@@ -267,11 +280,13 @@ function toGeminiContents(messages: AiMessage[]): { system: string | undefined; 
       }
     }
     if (m.role === 'tool') {
+      const callId = m.toolCallId
+      const name = (callId && toolNameByCallId.get(callId)) ?? 'unknown'
       return {
         role: 'user',
         parts: [{
           functionResponse: {
-            name: m.toolCallId ?? 'unknown',
+            name,
             response: typeof m.content === 'string' ? { result: m.content } : m.content,
           },
         }],

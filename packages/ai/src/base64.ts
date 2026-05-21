@@ -34,3 +34,8 @@ export function fromBase64(base64: string): Uint8Array {
     (globalThis as { Buffer?: { from: (s: string, e: string) => Uint8Array } }).Buffer!.from(base64, 'base64'),
   )
 }
+
+/** Decode a base64-encoded UTF-8 string. Runtime-agnostic (no `Buffer` global). */
+export function base64ToUtf8(base64: string): string {
+  return new TextDecoder('utf-8').decode(fromBase64(base64))
+}

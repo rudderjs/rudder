@@ -1,4 +1,4 @@
-import { AiRegistry } from './registry.js'
+import { AiRegistry, _onAiRegistryReset } from './registry.js'
 import { agent as agentHelper } from './agent.js'
 import { ImageGenerator } from './image.js'
 import { AudioGenerator } from './audio.js'
@@ -124,10 +124,11 @@ export class AI {
       )
     }
 
-    let adapter: EmbeddingAdapter = factory.createEmbedding(modelId)
-
+    let adapter: EmbeddingAdapter
     if (options?.cache) {
-      adapter = AI.getCachedAdapter(adapter)
+      adapter = AI.getCachedAdapter(providerName, modelId, () => factory.createEmbedding!(modelId))
+    } else {
+      adapter = factory.createEmbedding(modelId)
     }
 
     // Batch chunking for large arrays
@@ -153,15 +154,37 @@ export class AI {
     return adapter.embed(inputs.length === 1 ? inputs[0]! : inputs, modelId)
   }
 
-  /** Cache adapter instances so the in-memory cache persists across calls. */
-  private static cachedAdapters = new WeakMap<EmbeddingAdapter, CachedEmbeddingAdapter>()
+  /**
+   * Cache `CachedEmbeddingAdapter` instances keyed by `<provider>::<model>` so
+   * the in-memory cache persists across `AI.embed(..., { cache: true })` calls.
+   *
+   * The earlier `WeakMap<EmbeddingAdapter, CachedEmbeddingAdapter>` keyed on
+   * adapter identity, but every `embed()` call constructed a fresh inner
+   * adapter via `factory.createEmbedding(modelId)` — so the WeakMap lookup
+   * always missed and `{ cache: true }` was a silent no-op. Keying by
+   * `(provider, model)` is the only stable identity we have at this layer.
+   *
+   * Tied to `AiRegistry.reset()` so tests that swap fakes between resets
+   * don't bind to a stale inner adapter.
+   */
+  private static cachedAdapters = new Map<string, CachedEmbeddingAdapter>()
 
-  private static getCachedAdapter(inner: EmbeddingAdapter): CachedEmbeddingAdapter {
-    let cached = AI.cachedAdapters.get(inner)
+  private static getCachedAdapter(
+    provider: string,
+    model: string,
+    create: () => EmbeddingAdapter,
+  ): CachedEmbeddingAdapter {
+    const key = `${provider}::${model}`
+    let cached = AI.cachedAdapters.get(key)
     if (!cached) {
-      cached = new CachedEmbeddingAdapter(inner)
-      AI.cachedAdapters.set(inner, cached)
+      cached = new CachedEmbeddingAdapter(create())
+      AI.cachedAdapters.set(key, cached)
     }
     return cached
   }
+
+  /** @internal — exposed for the reset-listener subscription below. */
+  static _clearEmbeddingCache(): void { AI.cachedAdapters.clear() }
 }
+
+_onAiRegistryReset(() => AI._clearEmbeddingCache())

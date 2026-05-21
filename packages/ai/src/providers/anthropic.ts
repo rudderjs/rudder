@@ -14,6 +14,7 @@ import type {
   ToolCall,
   ToolChoice,
 } from '../types.js'
+import { base64ToUtf8 } from '../base64.js'
 
 export interface AnthropicConfig {
   apiKey: string
@@ -182,7 +183,7 @@ function contentToAnthropicParts(content: string | import('../types.js').Content
       return { type: 'document', source: { type: 'base64', media_type: p.mimeType, data: p.data } }
     }
     // For text-based documents, decode and send as text
-    return { type: 'text', text: Buffer.from(p.data, 'base64').toString('utf-8') }
+    return { type: 'text', text: base64ToUtf8(p.data) }
   })
 }
 
