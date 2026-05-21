@@ -295,7 +295,21 @@ function isRateLimitAsset(path: string): boolean {
   return (path.split('/').pop() ?? '').includes('.')
 }
 
-function makeRateLimitHandler(opts: RateLimitOptions): MiddlewareHandler {
+// Per-limiter cache-key namespace. Every `RateLimit.perMinute(...)` call
+// (and every chained `.by(...).message(...)` derivation) gets its own slot.
+// Without this, two limiters keyed by the same client identifier (e.g. IP)
+// would share a single bucket — a global `RateLimit.perMinute(60)` on the
+// `web` group would consume the same counter as a route-scoped
+// `RateLimit.perMinute(5)` on `/auth/sign-up`, so 5 web-group GETs would
+// burn the 6th sign-up attempt's quota even though the user has done one.
+// Each handler-instance now namespaces its bucket so siblings stay isolated.
+let _rateLimitInstanceCounter = 0
+function nextRateLimitId(): string {
+  _rateLimitInstanceCounter++
+  return `rl${_rateLimitInstanceCounter}`
+}
+
+function makeRateLimitHandler(opts: RateLimitOptions, instanceId: string): MiddlewareHandler {
   return async function RateLimit(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
     if (isRateLimitAsset(req.path)) return next()
     if (opts.skipIf?.(req))         return next()
@@ -305,7 +319,7 @@ function makeRateLimitHandler(opts: RateLimitOptions): MiddlewareHandler {
 
     const now    = Date.now()
     const ttlSec = Math.max(1, Math.ceil(opts.windowMs / 1000))
-    const cKey   = `rudderjs:rl:${buildKey(opts.keyBy, req)}`
+    const cKey   = `rudderjs:rl:${instanceId}:${buildKey(opts.keyBy, req)}`
     const mKey   = `${cKey}:exp`
 
     // Atomic counter — race-free under concurrent requests (RFC 6819 §5.2.2.3
@@ -367,13 +381,19 @@ export interface RateLimitHandler extends MiddlewareHandler {
 }
 
 function buildRateLimit(opts: RateLimitOptions): RateLimitHandler {
-  const fn = makeRateLimitHandler(opts) as RateLimitHandler
+  const id = nextRateLimitId()
+  const fn = makeRateLimitHandler(opts, id) as RateLimitHandler
+  // Chainable methods construct fresh limiters with fresh ids — the chained
+  // result is the one attached to the route, so each chain produces an
+  // independent bucket. Configurations meant to share a bucket (one handler
+  // reused across multiple routes) keep doing so naturally because the same
+  // handler reference carries the same id.
   fn.byIp    = ()  => buildRateLimit({ ...opts, keyBy: 'ip' })
   fn.byRoute = ()  => buildRateLimit({ ...opts, keyBy: 'route' })
   fn.by      = (f) => buildRateLimit({ ...opts, keyBy: f })
   fn.message = (m) => buildRateLimit({ ...opts, message: m })
   fn.skipIf  = (f) => buildRateLimit({ ...opts, skipIf: f })
-  fn.toHandler = () => makeRateLimitHandler(opts)
+  fn.toHandler = () => makeRateLimitHandler(opts, id)
   return fn
 }
 

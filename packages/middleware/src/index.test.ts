@@ -564,4 +564,53 @@ describe('RateLimit', () => {
     assert.strictEqual(allowed, 5,  `expected 5 to pass, got ${allowed}`)
     assert.strictEqual(blocked, 45, `expected 45 to be blocked, got ${blocked}`)
   })
+
+  // Regression — separate limiter instances must own separate buckets even
+  // when they key by the same identifier (e.g. IP). Before per-instance ID
+  // namespacing landed, the cache key was `rudderjs:rl:<ip>` and every
+  // ip-keyed limiter in the app shared a single bucket — so a tight 5/min
+  // sign-up limiter would burn its quota on unrelated 60/min global GETs.
+  // Surfaced by the scaffolder-render E2E once `BaseAuthController` default
+  // rate-limits landed alongside the playground's global `RateLimit.perMinute(60)`.
+  it('separate RateLimit instances do not share a bucket when keyed by the same identifier', async () => {
+    const tight = RateLimit.perMinute(2)
+    const loose = RateLimit.perMinute(50)
+    const headers = { 'x-real-ip': '7.7.7.7' }
+
+    // Fill `loose` to 10 requests — would push the shared bucket past `tight`'s
+    // limit of 2 if buckets were shared.
+    for (let i = 0; i < 10; i++) {
+      await loose(makeReq({ headers }), makeRes().res, async () => {})
+    }
+
+    // `tight`'s own bucket should be empty — first 2 hits pass, 3rd 429s.
+    const statuses: number[] = []
+    for (let i = 0; i < 3; i++) {
+      const bag = makeRes()
+      await tight(makeReq({ headers }), bag.res, async () => {})
+      statuses.push(bag.getStatus())
+    }
+
+    assert.notStrictEqual(statuses[0], 429, `tight #1: ${statuses.join(',')}`)
+    assert.notStrictEqual(statuses[1], 429, `tight #2: ${statuses.join(',')}`)
+    assert.strictEqual(statuses[2],    429, `tight #3 should 429 on its own bucket: ${statuses.join(',')}`)
+  })
+
+  it('a shared RateLimit handler reference DOES share a bucket across routes (Laravel-style named limiter)', async () => {
+    // Whoever needs a shared limit constructs ONE handler and applies it
+    // multiple times — same instance id → same bucket. This is the
+    // documented use case `m.web(RateLimit.perMinute(60))` relies on.
+    const shared = RateLimit.perMinute(3)
+    const headers = { 'x-real-ip': '8.8.8.8' }
+
+    // Two routes, same handler reference — 4th call should 429 regardless
+    // of which "route" it came from.
+    await shared(makeReq({ headers, url: '/a' }), makeRes().res, async () => {})
+    await shared(makeReq({ headers, url: '/b' }), makeRes().res, async () => {})
+    await shared(makeReq({ headers, url: '/a' }), makeRes().res, async () => {})
+
+    const bag = makeRes()
+    await shared(makeReq({ headers, url: '/b' }), bag.res, async () => {})
+    assert.strictEqual(bag.getStatus(), 429)
+  })
 })
