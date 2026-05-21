@@ -84,11 +84,26 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     scopes = requested
   }
 
-  // Revoke old tokens. Goes through QueryBuilder.updateAll() — bypasses the
-  // mass-assignment filter (`revoked` is no longer in fillable on either
-  // model) and avoids paying for a second hydration round-trip per
-  // refresh.
-  await RefreshTokenCls.where('id', refreshToken.id).updateAll({ revoked: true } as Record<string, unknown>)
+  // Atomically claim the refresh token. Mirrors the auth-code grant pattern:
+  // only one of N concurrent requests will flip `revoked` from false → true.
+  // The losers' updateAll returns 0 — we treat that as reuse, mint nothing,
+  // and (when familyId is present) revoke the whole rotation family. Without
+  // this guard the prior read-then-update sequence allowed two concurrent
+  // refreshes to both succeed and both mint a new token pair.
+  const claimed = await RefreshTokenCls
+    .where('id', refreshToken.id)
+    .where('revoked', false)
+    .updateAll({ revoked: true } as Record<string, unknown>)
+  if (claimed === 0) {
+    if (refreshToken.familyId) {
+      await revokeFamily(RefreshTokenCls, AccessTokenCls, refreshToken.familyId)
+    }
+    throw new OAuthError('invalid_grant', 'Refresh token has been revoked.')
+  }
+
+  // Revoke the paired access token now that we hold the claim. Same shape as
+  // the refresh-token write — bulk QueryBuilder.updateAll() to bypass the
+  // mass-assignment filter (`revoked` not in fillable).
   await AccessTokenCls.where('id', accessToken.id).updateAll({ revoked: true } as Record<string, unknown>)
 
   // Issue new pair — propagate the existing familyId so the rotation chain

@@ -184,16 +184,29 @@ export async function pollDeviceCode(params: {
     return { status: 'access_denied' }
   }
 
-  // Approved — issue tokens
+  // Atomically claim the device code by deleting the row in a single SQL
+  // statement conditioned on `approved = true`. Only one of N concurrent
+  // pollers will see `claimed === 1`; the rest see 0 and report invalid_grant
+  // (same surface the route returns when the device row was never found).
+  // Without this guard the prior read-approve-issue-delete sequence allowed
+  // two concurrent polls of an approved code to both mint token pairs.
+  const claimed = await DeviceCodeCls
+    .where('id', device.id)
+    .where('approved', true)
+    .deleteAll()
+  if (claimed === 0) {
+    throw new OAuthError('invalid_grant', 'Device code has already been used.')
+  }
+
+  // Issue tokens using the device data we already loaded — the row is gone
+  // from the DB now, but `device` is the in-memory snapshot from before the
+  // claim, which is exactly what we want for the response.
   const tokens = await issueTokens({
     userId:   device.userId,
     clientId: params.clientId,
     scopes:   deviceCodeHelpers.getScopes(device),
     includeRefresh: true,
   })
-
-  // Clean up the device code
-  await DeviceCodeCls.delete(device.id)
 
   return { status: 'authorized', tokens }
 }
