@@ -103,20 +103,30 @@ function exec<R>(q: unknown): Promise<R> {
   return q as Promise<R>
 }
 
+/** SQL dialect threaded through the adapter to drive capability branching —
+ *  `RETURNING` support on Postgres/SQLite vs `affectedRows` on MySQL. */
+export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
+
 /**
- * @internal — for batch UPDATE/DELETE queries: invoke `.returning()` when the
- * driver supports it (Postgres, SQLite), else await the bare query.
+ * @internal — affected-row count for UPDATE/DELETE.
  *
- * Used by `deleteAll()` / `updateAll()` to report row counts via the returned
- * array length. MySQL drivers ignore `.returning()` and silently return zero
- * — adapter consumers needing precise MySQL counts should switch to a
- * Postgres or SQLite Drizzle driver until we surface driver capability flags.
+ * Postgres + SQLite expose row counts via `.returning()` (which we then take
+ * `.length` of). MySQL drivers don't support `RETURNING`; their result
+ * metadata carries the count on `affectedRows` (mysql2) or `rowsAffected`
+ * (planetscale-serverless). We branch on dialect rather than sniffing the
+ * result shape because MySQL `.returning()` is a no-op that silently returns
+ * the empty array — there's no way to distinguish "zero rows matched" from
+ * "driver didn't support it" at the value level.
  */
-async function awaitReturningOrPlain(q: unknown): Promise<unknown[]> {
-  const r = (q as { returning?: () => unknown }).returning
-  const target = typeof r === 'function' ? r.call(q) : q
-  const result = await (target as Promise<unknown[]>)
-  return Array.isArray(result) ? result : []
+async function affectedRowCount(q: unknown, dialect: DrizzleDialect): Promise<number> {
+  if (dialect === 'mysql') {
+    const result = await (q as Promise<unknown>)
+    const r = result as { affectedRows?: number; rowsAffected?: number }
+    return r.affectedRows ?? r.rowsAffected ?? 0
+  }
+  const r = (q as { returning: () => Promise<unknown[]> }).returning
+  const result = await r.call(q)
+  return Array.isArray(result) ? result.length : 0
 }
 
 /** @internal — combine SQL exprs with AND. Single-element returns as-is so
@@ -225,6 +235,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
      *  whereRelationExists to build correlated subqueries against the
      *  related (and pivot) tables. */
     private readonly resolveTable: (name: string) => unknown,
+    /** SQL dialect — drives RETURNING vs affectedRows branching for
+     *  `increment` / `decrement` / `deleteAll` / `updateAll`. */
+    private readonly dialect:    DrizzleDialect = 'pg',
   ) {}
 
   /** @internal — mark this builder as a sub-builder so terminals throw. */
@@ -257,7 +270,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
-    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable)
+    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable, this.dialect)
       ._markSubBuilder()
     fn(sub)
     const expr = sub.buildConditions()
@@ -266,7 +279,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   orWhereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
-    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable)
+    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable, this.dialect)
       ._markSubBuilder()
     fn(sub)
     const expr = sub.buildConditions()
@@ -895,39 +908,56 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond = this.buildConditions()
     let q = this.db.delete(this.table)
     if (cond) q = q.where(cond)
-    return (await awaitReturningOrPlain(q)).length
+    return affectedRowCount(q, this.dialect)
   }
 
   async updateAll(data: Partial<T>): Promise<number> {
     const cond = this.buildConditions()
     let q = this.db.update(this.table).set(data)
     if (cond) q = q.where(cond)
-    return (await awaitReturningOrPlain(q)).length
+    return affectedRowCount(q, this.dialect)
   }
 
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
-    this._assertNotSubBuilder()
-    const pkCol = this.col(this.primaryKey) as Column
-    const col   = this.col(column) as Column
-    const result = await exec<T[]>(this.db
-      .update(this.table)
-      .set({ [column]: sql`${col} + ${amount}`, ...extra })
-      .where(eq(pkCol, id))
-      .returning())
-    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] increment() returned no rows.')
-    return result[0]
+    return this._delta(id, column, amount, extra, '+')
   }
 
   async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    return this._delta(id, column, amount, extra, '-')
+  }
+
+  /** @internal — shared increment/decrement path. MySQL has no RETURNING,
+   *  so we run the update then re-select the row. Postgres + SQLite use
+   *  RETURNING in the same statement (one round-trip, atomic). */
+  private async _delta(
+    id: number | string,
+    column: string,
+    amount: number,
+    extra: Record<string, unknown>,
+    op: '+' | '-',
+  ): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column
+    const delta = op === '+' ? sql`${col} + ${amount}` : sql`${col} - ${amount}`
+    const label = op === '+' ? 'increment' : 'decrement'
+
+    if (this.dialect === 'mysql') {
+      await exec<unknown>(this.db
+        .update(this.table)
+        .set({ [column]: delta, ...extra })
+        .where(eq(pkCol, id)))
+      const after = await exec<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1))
+      if (!after[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() target row not found.`)
+      return after[0]
+    }
+
     const result = await exec<T[]>(this.db
       .update(this.table)
-      .set({ [column]: sql`${col} - ${amount}`, ...extra })
+      .set({ [column]: delta, ...extra })
       .where(eq(pkCol, id))
       .returning())
-    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] decrement() returned no rows.')
+    if (!result[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() returned no rows.`)
     return result[0]
   }
 
@@ -974,10 +1004,12 @@ export class DrizzleAdapter implements OrmAdapter {
     readonly db:                 DrizzleDb,
     private readonly tables:     Record<string, unknown>,
     private readonly primaryKey: string,
+    readonly dialect:            DrizzleDialect,
   ) {}
 
   static async make(config: DrizzleConfig): Promise<DrizzleAdapter> {
     let db = config.client as DrizzleDb | undefined
+    let resolvedDialect: DrizzleDialect | undefined = config.dialect
 
     if (!db) {
       const url    = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
@@ -989,21 +1021,37 @@ export class DrizzleAdapter implements OrmAdapter {
         const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
         const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
         db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(postgres(url))
+        resolvedDialect ??= 'pg'
       } else if (driver === 'libsql') {
         const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
         const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
         db = dzLibsql(createClient({ url })) as unknown as DrizzleDb
+        resolvedDialect ??= 'sqlite'
+      } else if (driver === 'mysql') {
+        // mysql2 ships its own promise wrapper at `mysql2/promise`. The drizzle
+        // mysql core expects the promise pool (not the callback-style client).
+        const mysqlModule             = await import('mysql2/promise') as { createPool: (url: string) => unknown }
+        const pool                    = mysqlModule.createPool(url)
+        const { drizzle: dzMysql }    = await import('drizzle-orm/mysql2') as typeof import('drizzle-orm/mysql2')
+        db = (dzMysql as unknown as (pool: unknown) => DrizzleDb)(pool)
+        resolvedDialect ??= 'mysql'
       } else {
         // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
         const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
         const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
         const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
         db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(new Database(url.replace(/^file:/, '')))
+        resolvedDialect ??= 'sqlite'
       }
     }
 
     if (!db) throw new Error('[RudderJS ORM Drizzle] Failed to initialize database client.')
-    return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id')
+    // When the user supplies `client:` without `dialect:`, default to 'pg'.
+    // Postgres is the most common pre-built Drizzle setup and the `.returning()`
+    // code paths work on both Postgres and SQLite — the explicit dialect knob
+    // only changes behavior for MySQL, where omitting it would silently break
+    // increment/deleteAll/updateAll.
+    return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id', resolvedDialect ?? 'pg')
   }
 
   query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
@@ -1020,7 +1068,7 @@ export class DrizzleAdapter implements OrmAdapter {
     // columns (e.g. `users.id` + `subscriptions.uuid`) work without forcing
     // every model onto the same PK.
     const pk = opts?.primaryKey ?? this.primaryKey
-    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name))
+    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name), this.dialect)
   }
 
   /** @internal — resolve a table by name across both the constructor-provided
@@ -1046,7 +1094,7 @@ export interface DrizzleConfig {
   /** Pre-built drizzle db instance — skips driver setup */
   client?: unknown
   /** Database driver. Defaults to 'sqlite' */
-  driver?: 'sqlite' | 'postgresql' | 'libsql'
+  driver?: 'sqlite' | 'postgresql' | 'libsql' | 'mysql'
   /** Connection URL. Falls back to DATABASE_URL env var */
   url?: string
   /**
@@ -1063,6 +1111,22 @@ export interface DrizzleConfig {
   tables?: Record<string, unknown>
   /** Primary key column name. Defaults to 'id' */
   primaryKey?: string
+  /**
+   * SQL dialect — drives capability branching for batch updates and
+   * counter operations. MySQL has no `RETURNING`, so increment/decrement
+   * re-fetch the row and updateAll/deleteAll read `affectedRows` from the
+   * driver result metadata.
+   *
+   * Inferred from `driver` when omitted:
+   * - `'postgresql'` → `'pg'`
+   * - `'sqlite'` / `'libsql'` → `'sqlite'`
+   * - `'mysql'` → `'mysql'`
+   *
+   * When passing a pre-built `client`, set this explicitly. Defaults to
+   * `'pg'` (no `client` + no `driver` + no `dialect` is treated as Postgres,
+   * matching the previous code path).
+   */
+  dialect?: DrizzleDialect
 }
 
 /**
@@ -1105,8 +1169,12 @@ import {
 } from '@rudderjs/orm'
 
 export interface DatabaseConnectionConfig {
-  driver: 'sqlite' | 'postgresql' | 'libsql'
-  url?:   string
+  driver:   'sqlite' | 'postgresql' | 'libsql' | 'mysql'
+  url?:     string
+  /** Override the inferred SQL dialect. Use when passing a pre-built
+   *  `client` whose driver name doesn't map cleanly (e.g. planetscale
+   *  serverless → 'mysql', neon serverless → 'pg'). */
+  dialect?: DrizzleDialect
 }
 
 /**
@@ -1148,6 +1216,7 @@ export class DatabaseProvider extends ServiceProvider {
       if (conn) {
         drizzleConfig.driver = conn.driver
         if (conn.url !== undefined) drizzleConfig.url = conn.url
+        if (conn.dialect !== undefined) drizzleConfig.dialect = conn.dialect
       }
       if (cfg.tables) drizzleConfig.tables = cfg.tables
       if (cfg.client) drizzleConfig.client = cfg.client
