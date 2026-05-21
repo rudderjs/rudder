@@ -1006,7 +1006,7 @@ export class DrizzleAdapter implements OrmAdapter {
     return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id')
   }
 
-  query<T>(table: string): QueryBuilder<T> {
+  query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
     const schema = this.tables[table] ?? DrizzleTableRegistry.get(table)
     if (!schema) {
       throw new Error(
@@ -1015,7 +1015,12 @@ export class DrizzleAdapter implements OrmAdapter {
         `DrizzleTableRegistry.register("${table}", myTable).`
       )
     }
-    return new DrizzleQueryBuilder<T>(this.db, schema, this.primaryKey, (name) => this.resolveTable(name))
+    // Per-query `primaryKey` (threaded from `Model.primaryKey`) overrides
+    // the adapter-global `config.primaryKey` so monorepos with mixed PK
+    // columns (e.g. `users.id` + `subscriptions.uuid`) work without forcing
+    // every model onto the same PK.
+    const pk = opts?.primaryKey ?? this.primaryKey
+    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name))
   }
 
   /** @internal — resolve a table by name across both the constructor-provided

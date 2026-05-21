@@ -97,8 +97,13 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _selectVectorDist: { column: string; query: number[]; alias: string } | null = null
 
   constructor(
-    private prisma: PrismaClient,
-    private table:  string
+    private prisma:     PrismaClient,
+    private table:      string,
+    /** Primary-key column name, threaded from `Model.primaryKey` via the
+     *  adapter contract's `OrmAdapterQueryOpts`. Falls back to `'id'` when
+     *  the contract opts aren't provided so older test fakes + third-party
+     *  callers keep working without explicit threading. */
+    private primaryKey: string = 'id',
   ) {}
 
   /** @internal — mark this builder as a sub-builder so terminals throw. */
@@ -843,9 +848,10 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     // rest of the chain. Without this, `User.where('tenantId', t).find(5)`
     // would cross tenants.
     const composed = this.buildWhere()
-    const where = Object.keys(composed).length > 0
-      ? { AND: [{ id }, composed] }
-      : { id }
+    const pkMatch  = { [this.primaryKey]: id }
+    const where    = Object.keys(composed).length > 0
+      ? { AND: [pkMatch, composed] }
+      : pkMatch
     const row = await this.delegate.findFirst({ where, include: this.buildInclude() }) as Record<string, unknown> | null
     if (!row) return null
     await this._stampAggregates([row])
@@ -900,26 +906,26 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
-    return this.delegate.update({ where: { id }, data }) as Promise<T>
+    return this.delegate.update({ where: { [this.primaryKey]: id }, data }) as Promise<T>
   }
 
   async delete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     if (this._softDeletes) {
-      await this.delegate.update({ where: { id }, data: { deletedAt: new Date() } })
+      await this.delegate.update({ where: { [this.primaryKey]: id }, data: { deletedAt: new Date() } })
     } else {
-      await this.delegate.delete({ where: { id } })
+      await this.delegate.delete({ where: { [this.primaryKey]: id } })
     }
   }
 
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
-    return this.delegate.update({ where: { id }, data: { deletedAt: null } }) as Promise<T>
+    return this.delegate.update({ where: { [this.primaryKey]: id }, data: { deletedAt: null } }) as Promise<T>
   }
 
   async forceDelete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
-    await this.delegate.delete({ where: { id } })
+    await this.delegate.delete({ where: { [this.primaryKey]: id } })
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
@@ -947,7 +953,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
     this._assertNotSubBuilder()
     return this.delegate.update({
-      where: { id },
+      where: { [this.primaryKey]: id },
       data:  { [column]: { increment: amount }, ...extra },
     }) as Promise<T>
   }
@@ -955,7 +961,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
     this._assertNotSubBuilder()
     return this.delegate.update({
-      where: { id },
+      where: { [this.primaryKey]: id },
       data:  { [column]: { decrement: amount }, ...extra },
     }) as Promise<T>
   }
@@ -1080,8 +1086,8 @@ class PrismaAdapter implements OrmAdapter {
     return new PrismaAdapter(new PC(opts), config.driver)
   }
 
-  query<T>(table: string): QueryBuilder<T> {
-    return new PrismaQueryBuilder<T>(this.prisma, table)
+  query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
+    return new PrismaQueryBuilder<T>(this.prisma, table, opts?.primaryKey ?? 'id')
   }
 
   async connect(): Promise<void> {

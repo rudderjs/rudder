@@ -330,8 +330,21 @@ export interface PaginatedResult<T> {
   to:          number
 }
 
+/** Per-query opts threaded from `Model._q()` so the adapter can honor
+ *  per-model state (currently just the primary-key column). Optional —
+ *  adapters that ignore it still work for `id`-PK models. */
+export interface OrmAdapterQueryOpts {
+  /**
+   * Primary-key column for this model. Defaults to `'id'` when the adapter
+   * needs a fallback. Required for non-`id` PK models (`static primaryKey =
+   * 'uuid'`) — without it, `find` / `update` / `delete` / `increment` etc.
+   * hardcode `where: { id }` and silently target the wrong column.
+   */
+  primaryKey?: string
+}
+
 export interface OrmAdapter {
-  query<T>(table: string): QueryBuilder<T>
+  query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T>
   connect(): Promise<void>
   disconnect(): Promise<void>
 }
