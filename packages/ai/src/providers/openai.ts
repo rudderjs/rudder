@@ -35,6 +35,7 @@ import type {
   VectorStoreFileList,
 } from '../types.js'
 import { cyrb53Hex } from '../util/hash.js'
+import { base64ToUtf8 } from '../base64.js'
 
 export interface OpenAIConfig {
   apiKey: string
@@ -205,11 +206,11 @@ function contentToOpenAIParts(content: string | import('../types.js').ContentPar
     if (p.mimeType === 'application/pdf') {
       return { type: 'file', file: { data: p.data, mime_type: p.mimeType } }
     }
-    return { type: 'text', text: Buffer.from(p.data, 'base64').toString('utf-8') }
+    return { type: 'text', text: base64ToUtf8(p.data) }
   })
 }
 
-function toOpenAIMessages(messages: AiMessage[]): unknown[] {
+export function toOpenAIMessages(messages: AiMessage[]): unknown[] {
   return messages.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
       return {

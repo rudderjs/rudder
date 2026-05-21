@@ -1,4 +1,5 @@
 import { AiRegistry, tryWithFailover } from './registry.js'
+import { fromBase64 } from './base64.js'
 import type { ImageGenerationOptions, ImageGenerationResult } from './types.js'
 
 /**
@@ -100,12 +101,12 @@ export class ImageGenerator {
       const Storage = mod.Storage
 
       if (image.base64) {
-        const buffer = Buffer.from(image.base64, 'base64')
-        await Storage.put(path, buffer)
+        const bytes = fromBase64(image.base64)
+        await Storage.put(path, bytes)
       } else if (image.url) {
         const response = await fetch(image.url)
-        const buffer = Buffer.from(await response.arrayBuffer())
-        await Storage.put(path, buffer)
+        const bytes = new Uint8Array(await response.arrayBuffer())
+        await Storage.put(path, bytes)
       }
 
       return path

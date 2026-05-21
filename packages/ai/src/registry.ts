@@ -66,6 +66,17 @@ if (!_g['__rudderjs_ai_registry__']) {
 }
 const _store = _g['__rudderjs_ai_registry__'] as AiRegistryStore
 
+// Reset listeners — modules that hold registry-shaped caches (e.g. the
+// facade's embedding-adapter cache) subscribe here so `AiRegistry.reset()`
+// clears them in lock-step. Survives reload via the same global slot.
+if (!_g['__rudderjs_ai_reset_listeners__']) {
+  _g['__rudderjs_ai_reset_listeners__'] = new Set<() => void>()
+}
+const _resetListeners = _g['__rudderjs_ai_reset_listeners__'] as Set<() => void>
+
+/** @internal — subscribe to `AiRegistry.reset()` to clear adjacent caches. */
+export function _onAiRegistryReset(fn: () => void): void { _resetListeners.add(fn) }
+
 export class AiRegistry {
   /** Register a provider factory */
   static register(factory: ProviderFactory): void {
@@ -157,5 +168,6 @@ export class AiRegistry {
     _store.factories.clear()
     _store.default = null
     _store.models = []
+    for (const fn of _resetListeners) fn()
   }
 }
