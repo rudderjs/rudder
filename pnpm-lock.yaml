@@ -120,9 +120,15 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/cache':
+        specifier: workspace:^
+        version: link:../cache
       '@rudderjs/hash':
         specifier: workspace:^
         version: link:../hash
+      '@rudderjs/middleware':
+        specifier: workspace:^
+        version: link:../middleware
       '@rudderjs/router':
         specifier: workspace:^
         version: link:../router

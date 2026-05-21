@@ -55,7 +55,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/middleware-and-verification-fixes.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/middleware-and-verification-fixes.test.js dist-test/base-auth-controller-rate-limits.test.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -65,6 +65,7 @@
   },
   "peerDependencies": {
     "@rudderjs/hash": "workspace:^",
+    "@rudderjs/middleware": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@rudderjs/session": "workspace:^",
     "@rudderjs/view": "workspace:^",
@@ -72,6 +73,9 @@
   },
   "peerDependenciesMeta": {
     "@rudderjs/hash": {
+      "optional": false
+    },
+    "@rudderjs/middleware": {
       "optional": false
     },
     "@rudderjs/router": {
@@ -89,10 +93,12 @@
   },
   "devDependencies": {
     "@rudderjs/hash": "workspace:^",
+    "@rudderjs/middleware": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@rudderjs/session": "workspace:^",
     "@rudderjs/view": "workspace:^",
     "@rudderjs/vite": "workspace:^",
+    "@rudderjs/cache": "workspace:^",
     "@types/node": "^20.0.0",
     "reflect-metadata": "^0.2.2",
     "typescript": "^5.4.0"
