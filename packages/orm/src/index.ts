@@ -1010,7 +1010,10 @@ export abstract class Model {
     const excludedScopes = new Set<string>()
 
     const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
-      let raw = ModelRegistry.getAdapter().query<InstanceType<T>>(modelClass.getTable())
+      let raw = ModelRegistry.getAdapter().query<InstanceType<T>>(
+        modelClass.getTable(),
+        { primaryKey: modelClass.primaryKey },
+      )
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (raw as any)._enableSoftDeletes?.()
@@ -1044,7 +1047,10 @@ export abstract class Model {
   private static _q<T extends typeof Model>(self: T): HydratingQueryBuilder<InstanceType<T>> {
     ModelRegistry.register(self)
     const ModelClass = self as typeof Model
-    let q = ModelRegistry.getAdapter().query<InstanceType<T>>(ModelClass.getTable())
+    let q = ModelRegistry.getAdapter().query<InstanceType<T>>(
+      ModelClass.getTable(),
+      { primaryKey: ModelClass.primaryKey },
+    )
     if (ModelClass.softDeletes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (q as any)._enableSoftDeletes?.()
