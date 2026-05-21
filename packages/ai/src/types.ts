@@ -16,6 +16,16 @@ export interface AiMessage {
   toolCallId?: string
   /** Present when role === 'assistant' and model wants to call tools */
   toolCalls?: ToolCall[]
+  /**
+   * @internal — `true` on placeholder `tool` messages synthesized by
+   * `resumePendingToolCalls` when an assistant message has multiple
+   * `tool_use` blocks and one (or more) is still pending user approval.
+   * Without placeholders, Anthropic rejects the next request because every
+   * `tool_use` must have a matching `tool_result`. The placeholder is
+   * stripped + re-walked on the next resume, never reaching the wire as a
+   * real result.
+   */
+  _pending?: boolean
 }
 
 /** A tool call from the model */
@@ -80,6 +90,15 @@ export interface StreamChunk {
   text?: string
   /** Tool call info (when type === 'tool-call', 'tool-call-delta', 'tool-result', 'tool-update', or 'pending-approval') */
   toolCall?: Partial<ToolCall>
+  /**
+   * Position of the streamed tool call in the parallel-call array (when
+   * `type === 'tool-call-delta'`). Set by adapters that interleave parallel
+   * tool calls by index — OpenAI ships every `delta.tool_calls[i]` with its
+   * `index`; the agent loop routes arg-delta chunks to the matching partial
+   * by this field rather than guessing from insertion order. Adapters whose
+   * tool calls arrive whole per block (Anthropic, Google) don't set this.
+   */
+  toolCallIndex?: number
   /** Tool execution result (when type === 'tool-result') */
   result?: unknown
   /**

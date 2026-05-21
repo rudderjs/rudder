@@ -166,11 +166,25 @@ export class OpenAIAdapter implements ProviderAdapter {
 
       if (delta?.tool_calls?.length) {
         for (const tc of delta.tool_calls) {
+          // OpenAI guarantees `index` on every tool_calls delta — it's the
+          // only stable correlator across the start-delta (carries `id`) and
+          // subsequent arg-only deltas. We thread it through StreamChunk so
+          // the agent loop can route arg fragments to the right partial
+          // under parallel tool calls.
+          const index = typeof tc.index === 'number' ? tc.index : undefined
           if (tc.id) {
-            yield { type: 'tool-call-delta', toolCall: { id: tc.id, name: tc.function?.name } }
+            yield {
+              type: 'tool-call-delta',
+              toolCall: { id: tc.id, name: tc.function?.name },
+              ...(index !== undefined ? { toolCallIndex: index } : {}),
+            }
           }
           if (tc.function?.arguments) {
-            yield { type: 'tool-call-delta', text: tc.function.arguments }
+            yield {
+              type: 'tool-call-delta',
+              text: tc.function.arguments,
+              ...(index !== undefined ? { toolCallIndex: index } : {}),
+            }
           }
         }
       }

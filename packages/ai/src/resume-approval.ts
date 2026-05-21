@@ -32,15 +32,47 @@ export async function resumePendingToolCalls(deps: {
   approvalStillRequired: { toolCall: ToolCall; isClientTool: boolean } | undefined
 }> {
   const { messages, toolMap, options } = deps
-  const last = messages[messages.length - 1]
+
+  // Strip trailing pending-approval placeholders from a prior partial resume.
+  // They were synthesized so every `tool_use` in the parent assistant message
+  // had a matching `tool_result` during the pause; on resume we re-walk the
+  // parent and append fresh results (real or placeholder) based on the
+  // latest approval state.
+  while (messages.length > 0) {
+    const tail = messages[messages.length - 1]!
+    if (tail.role === 'tool' && tail._pending) {
+      messages.pop()
+    } else break
+  }
+
+  // Find the parent assistant message — it's the most recent assistant
+  // message immediately followed only by tool messages. On a fresh pause
+  // there are no tools yet; on a subsequent resume the parent is buried
+  // under the real tool results we appended last time.
+  let parentIdx = messages.length - 1
+  while (parentIdx >= 0 && messages[parentIdx]!.role === 'tool') parentIdx--
+  const last = parentIdx >= 0 ? messages[parentIdx] : undefined
   if (!last || last.role !== 'assistant' || !last.toolCalls || last.toolCalls.length === 0) {
     return { resumed: [], approvalStillRequired: undefined }
+  }
+
+  // Collect tool-call ids already resolved in a prior partial resume — those
+  // trail the parent assistant as non-`_pending` tool messages. Skipping
+  // them on the next walk avoids double-executing approved tools.
+  const alreadyResolved = new Set<string>()
+  for (let i = parentIdx + 1; i < messages.length; i++) {
+    const m = messages[i]!
+    if (m.role !== 'tool') break
+    if (!m._pending && m.toolCallId) alreadyResolved.add(m.toolCallId)
   }
 
   const resumed: AiMessage[] = []
   let approvalStillRequired: { toolCall: ToolCall; isClientTool: boolean } | undefined
 
-  for (const tc of last.toolCalls) {
+  for (let i = 0; i < last.toolCalls.length; i++) {
+    const tc = last.toolCalls[i]!
+    if (alreadyResolved.has(tc.id)) continue
+
     const tool = toolMap.get(tc.name)
     if (!tool) {
       const err = `Error: Unknown tool "${tc.name}"`
@@ -68,9 +100,23 @@ export async function resumePendingToolCalls(deps: {
       continue
     }
     if (decision === 'pending') {
-      // Still pending — the user has not yet approved this call. Re-emit
-      // the pending state and stop processing further tools.
+      // Still pending — the user hasn't decided on this call yet. Stop
+      // executing further tools AND synthesize placeholder tool messages for
+      // every unresolved sibling (including this one), so Anthropic's
+      // "every tool_use needs a matching tool_result" invariant holds while
+      // the loop is paused. The next resume strips these placeholders and
+      // re-walks based on the fresh approval state.
       approvalStillRequired = { toolCall: tc, isClientTool: false }
+      for (let j = i; j < last.toolCalls.length; j++) {
+        const sib = last.toolCalls[j]!
+        if (alreadyResolved.has(sib.id)) continue
+        messages.push({
+          role:       'tool',
+          content:    'Tool call pending user approval — execution deferred.',
+          toolCallId: sib.id,
+          _pending:   true,
+        })
+      }
       break
     }
 

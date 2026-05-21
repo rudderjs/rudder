@@ -1658,7 +1658,15 @@ function runAgentLoopStreamingOnce(a: Agent, input: string, options?: AgentPromp
         let currentToolCalls: ToolCall[] = []
         let stepUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         let finishReason: AgentStep['finishReason'] = 'stop'
-        const partialToolCalls = new Map<string, { id: string; name: string; argChunks: string[] }>()
+        type PartialToolCall = { id: string; name: string; argChunks: string[] }
+        const partialToolCalls = new Map<string, PartialToolCall>()
+        // Parallel-arg routing — OpenAI streams ≥2 tool calls interleaved by
+        // `index`. Without an index-keyed map the previous "pop last partial"
+        // attached `index=1`'s arg fragments to `index=0`'s partial (or vice
+        // versa), producing `{}` args or wrong args silently. Partials live in
+        // both maps by reference, so the final `JSON.parse` loop below
+        // continues to read from `partialToolCalls`.
+        const partialsByIndex = new Map<number, PartialToolCall>()
 
         for await (const chunk of streamSource) {
           // onChunk — middleware can transform or drop chunks
@@ -1673,15 +1681,25 @@ function runAgentLoopStreamingOnce(a: Agent, input: string, options?: AgentPromp
           if (chunk.type === 'text-delta' && chunk.text) {
             text += chunk.text
           } else if (chunk.type === 'tool-call-delta' && chunk.toolCall?.id) {
-            partialToolCalls.set(chunk.toolCall.id, {
+            const partial: PartialToolCall = {
               id: chunk.toolCall.id,
               name: chunk.toolCall.name ?? '',
               argChunks: [],
-            })
+            }
+            partialToolCalls.set(chunk.toolCall.id, partial)
+            if (typeof chunk.toolCallIndex === 'number') {
+              partialsByIndex.set(chunk.toolCallIndex, partial)
+            }
           } else if (chunk.type === 'tool-call-delta' && chunk.text) {
-            // Accumulate argument JSON chunks to the last partial tool call
-            const last = Array.from(partialToolCalls.values()).pop()
-            if (last) last.argChunks.push(chunk.text)
+            // Route arg-delta to the matching partial by `toolCallIndex` when
+            // the adapter provides it (OpenAI). Fall back to the most recent
+            // partial only for adapters that don't track index — those don't
+            // currently stream parallel tool calls via arg-only deltas, so
+            // the legacy path is still safe.
+            const partial = typeof chunk.toolCallIndex === 'number'
+              ? partialsByIndex.get(chunk.toolCallIndex)
+              : Array.from(partialToolCalls.values()).pop()
+            if (partial) partial.argChunks.push(chunk.text)
           } else if (chunk.type === 'tool-call' && chunk.toolCall) {
             const tc = chunk.toolCall as ToolCall
             currentToolCalls.push(tc)
