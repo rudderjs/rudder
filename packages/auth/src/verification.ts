@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto'
 import { Url } from '@rudderjs/router'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
+import { Auth } from './auth-manager.js'
 import type { Authenticatable, AuthUser } from './contracts.js'
 
 // ─── MustVerifyEmail ────────────────────────────────────────
@@ -43,21 +44,61 @@ export function mustVerifyEmail(user: unknown): user is Authenticatable & MustVe
  */
 export function EnsureEmailIsVerified(): MiddlewareHandler {
   return async function EnsureEmailIsVerified(req, res, next) {
-    const user = (req as unknown as { user?: AuthUser }).user
+    // Re-resolve via the live guard first — `req.user` is a serialized
+    // snapshot produced by `userToPlain()`. The snapshot drops methods and
+    // its `emailVerifiedAt` is whatever survived JSON serialization (a Date
+    // becomes a string; a mass-assigned column could be anything). The live
+    // Model still has typed columns AND any `MustVerifyEmail` mixin
+    // contract. Fall back to the snapshot only when no auth context is set
+    // (e.g. apps wiring this without `AuthMiddleware` / `RequireAuth`) or
+    // the guard couldn't resolve a user but the snapshot still has one.
+    let user: Authenticatable | null
+    try {
+      user = await Auth.user()
+    } catch {
+      user = null
+    }
+    if (!user) {
+      const snapshot = (req as unknown as { user?: AuthUser }).user
+      user = (snapshot ?? null) as Authenticatable | null
+    }
 
     if (!user) {
       res.status(401).json({ message: 'Unauthorized.' })
       return
     }
 
-    // If the user has emailVerifiedAt, they're verified
-    if (user['emailVerifiedAt'] !== null && user['emailVerifiedAt'] !== undefined) {
-      await next()
+    // Preferred path — the User Model implements `MustVerifyEmail`. The
+    // mixin owns the truth ("is this user verified?") and rules out the
+    // truthy-anything bug entirely.
+    if (mustVerifyEmail(user)) {
+      if (user.hasVerifiedEmail()) { await next(); return }
+      res.status(403).json({ message: 'Your email address is not verified.' })
       return
     }
 
+    // Fallback — User without the mixin. Tighten the snapshot check so a
+    // mass-assigned `"false"` / `0` / non-date string can never pass.
+    const verifiedAt = (user as unknown as Record<string, unknown>)['emailVerifiedAt']
+    if (isVerifiedTimestamp(verifiedAt)) { await next(); return }
+
     res.status(403).json({ message: 'Your email address is not verified.' })
   }
+}
+
+/**
+ * Verified-state predicate — accepts a real `Date` or an ISO-shaped string
+ * `Date.parse` can consume. Rejects every other truthy value (the snapshot
+ * could otherwise carry `"false"`, `0`, `"unverified"`, etc. through a
+ * mass-assignable column and silently pass the gate).
+ */
+function isVerifiedTimestamp(v: unknown): boolean {
+  if (v instanceof Date) return !isNaN(v.getTime())
+  if (typeof v === 'string' && v.length > 0) {
+    const t = Date.parse(v)
+    return !isNaN(t)
+  }
+  return false
 }
 
 // ─── Verification URL helper ────────────────────────────────
