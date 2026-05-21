@@ -837,7 +837,16 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   async find(id: number | string): Promise<T | null> {
     this._assertNotSubBuilder()
     await this._resolveDeferred()
-    const row = await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) as Record<string, unknown> | null
+    // Compose accumulated wheres + global scopes + soft-delete + relation
+    // predicates with the PK match — `findUnique` only accepts unique columns
+    // as the where filter, so we shift to `findFirst` to AND the PK with the
+    // rest of the chain. Without this, `User.where('tenantId', t).find(5)`
+    // would cross tenants.
+    const composed = this.buildWhere()
+    const where = Object.keys(composed).length > 0
+      ? { AND: [{ id }, composed] }
+      : { id }
+    const row = await this.delegate.findFirst({ where, include: this.buildInclude() }) as Record<string, unknown> | null
     if (!row) return null
     await this._stampAggregates([row])
     return row as T

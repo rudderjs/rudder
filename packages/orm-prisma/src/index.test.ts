@@ -172,6 +172,80 @@ describe('PrismaQueryBuilder — increment / decrement', () => {
   })
 })
 
+describe('PrismaQueryBuilder — find(id) composes with prior wheres', () => {
+  // Regression: find(id) used to call findUnique({ where: { id } }) directly,
+  // ignoring the chain. `User.where('tenantId', t).find(5)` returned rows
+  // across tenants — cross-tenant data leak by default. find() now uses
+  // findFirst with an AND-composed where.
+
+  function makeFindCapturingClient() {
+    let lastArgs: { where?: Record<string, unknown>; include?: unknown } = {}
+    let findFirstCalls = 0
+    let findUniqueCalls = 0
+    const delegate = {
+      findMany:   async (args: { where?: Record<string, unknown>; include?: unknown }) => { lastArgs = args; return [] },
+      findFirst:  async (args: { where?: Record<string, unknown>; include?: unknown }) => {
+        findFirstCalls++
+        lastArgs = args
+        return null
+      },
+      findUnique: async (args: { where?: Record<string, unknown>; include?: unknown }) => {
+        findUniqueCalls++
+        lastArgs = args
+        return null
+      },
+      count:      async () => 0,
+      create:     async () => ({}),
+      createMany: async () => ({ count: 0 }),
+      update:     async () => ({}),
+      updateMany: async () => ({ count: 0 }),
+      delete:     async () => undefined,
+      deleteMany: async () => ({ count: 0 }),
+    }
+    const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
+    return {
+      fakeClient,
+      getLastArgs:        () => lastArgs,
+      getFindFirstCalls:  () => findFirstCalls,
+      getFindUniqueCalls: () => findUniqueCalls,
+    }
+  }
+
+  it('uses findFirst (not findUnique) so wheres can compose', async () => {
+    const { fakeClient, getFindFirstCalls, getFindUniqueCalls } = makeFindCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').find(5)
+
+    assert.equal(getFindFirstCalls(),  1)
+    assert.equal(getFindUniqueCalls(), 0)
+  })
+
+  it('composes prior where() clauses with the PK match', async () => {
+    const { fakeClient, getLastArgs } = makeFindCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await (adapter.query('user') as never as { where: (col: string, v: unknown) => { find: (id: number) => Promise<unknown> } })
+      .where('tenantId', 'a')
+      .find(5)
+
+    const where = getLastArgs().where as Record<string, unknown>
+    // Composed shape: { AND: [{ id: 5 }, { tenantId: 'a' }] }
+    assert.ok(Array.isArray(where['AND']))
+    const and = where['AND'] as Record<string, unknown>[]
+    assert.ok(and.some(clause => clause['id'] === 5),       'PK match in AND chain')
+    assert.ok(and.some(clause => clause['tenantId'] === 'a'), 'where clause in AND chain')
+  })
+
+  it('plain find(id) with no chain stays as { id } (no needless AND)', async () => {
+    const { fakeClient, getLastArgs } = makeFindCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').find(5)
+
+    const where = getLastArgs().where as Record<string, unknown>
+    assert.equal(where['id'], 5)
+    assert.equal(where['AND'], undefined, 'no AND wrapper when chain is empty')
+  })
+})
+
 describe('prisma() factory', () => {
   it('is a function', () => {
     assert.strictEqual(typeof prisma, 'function')
