@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { getTemplates, detectPackageManager, pmRun, pmInstall, type PackageManager, type TemplateContext } from './templates.js'
 import { detectAgent } from './agent-detect.js'
+import { printLogo } from './logo.js'
 import {
   parseFlags, validateJsonMode, resolveJsonAnswers, packagesFromList,
   FlagError, DB_GATED, RECIPES,
@@ -574,6 +575,8 @@ async function main(): Promise<void> {
   }
 
   // ── Interactive flow ────────────────────────────────────
+  console.log()
+  printLogo()
   console.log()
   // Soft deprecation nudge — only when the user invoked the old bin directly.
   // The `create-rudder` stub sets RUDDER_INVOKED_AS=create-rudder so we skip
