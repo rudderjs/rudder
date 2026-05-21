@@ -575,7 +575,13 @@ async function main(): Promise<void> {
 
   // ── Interactive flow ────────────────────────────────────
   console.log()
-  intro(' create-rudder-app ')
+  // Soft deprecation nudge — only when the user invoked the old bin directly.
+  // The `create-rudder` stub sets RUDDER_INVOKED_AS=create-rudder so we skip
+  // the nudge for users who are already on the new command.
+  if (process.env['RUDDER_INVOKED_AS'] !== 'create-rudder') {
+    log.info('This scaffolder now ships as `create-rudder` — use `npm create rudder@latest` next time.')
+  }
+  intro(' create-rudder ')
 
   const answers = await gatherInteractive(parsed.name, parsed.partial)
 

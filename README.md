@@ -453,10 +453,10 @@ Run the scheduler with `pnpm rudder schedule:work` (long-lived) or `schedule:run
 Pick any package manager — the installer auto-detects it:
 
 ```bash
-pnpm create rudder-app my-app
-# or: npm create rudder-app@latest my-app
-# or: yarn create rudder-app my-app
-# or: bunx create-rudder-app my-app
+pnpm create rudder my-app
+# or: npm create rudder@latest my-app
+# or: yarn create rudder my-app
+# or: bunx create-rudder my-app
 ```
 
 The installer asks one question — _"What are you building?"_ — and picks a recipe (Web app · SaaS · API service · Realtime · Minimal · Custom), a database, a frontend framework, and styling. Then it installs deps, generates the Prisma client, pushes the schema, publishes auth views, and initializes git — all without leaving the prompt.

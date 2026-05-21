@@ -4,7 +4,7 @@ AI developer-experience layer for RudderJS. Exposes your project's internals to 
 
 ## Installation
 
-New projects can opt in via `create-rudder-app` — Boost appears in the optional-package multiselect during scaffolding. To add it to an existing project:
+New projects can opt in via `create-rudder` — Boost appears in the optional-package multiselect during scaffolding. To add it to an existing project:
 
 ```bash
 pnpm add -D @rudderjs/boost

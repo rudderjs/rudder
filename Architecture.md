@@ -151,7 +151,7 @@ rudderjs/
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
 │   └── cli/                # Rudder-style CLI (make:*, add, remove, module:*, module:publish,
 │                           #   db:generate, db:push, migrate*, providers:discover, user commands)
-├── create-rudder-app/      # Interactive CLI scaffolder (pnpm create rudder-app)
+├── create-rudder-app/      # Interactive CLI scaffolder (source of truth — invoked via `pnpm create rudder`)
 │                           #   Recipe-driven prompts (Web app / SaaS / API service / Realtime /
 │                           #   Minimal / Custom) replace the legacy 25-option multiselect — Custom
 │                           #   still walks the full picker. Frontend collapsed to framework + styling
@@ -180,14 +180,14 @@ rudderjs/
 
 **GitHub Actions workflows** at `.github/workflows/`:
 
-- **`ci.yml`** — runs on every push/PR to main: `pnpm build` → `pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder-app'` → `pnpm lint` → `pnpm test`. Scoped to packages (excludes playgrounds which may reference WIP exports).
+- **`ci.yml`** — runs on every push/PR to main: `pnpm build` → `pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'` → `pnpm lint` → `pnpm test`. Scoped to packages (excludes playgrounds which may reference WIP exports).
 - **`release.yml`** — runs on push to main. Uses `changesets/action@v1` to either create a "Version Packages" PR (when changesets exist) or publish to npm (when the version PR is merged). Requires `NPM_TOKEN` secret with 2FA bypass enabled.
 
 **Incremental TypeScript builds** — `tsconfig.base.json` has `incremental: true` and `tsBuildInfoFile: "./dist/.tsbuildinfo"`. Cold build ~32s, single-package change ~10s, full cache hit ~400ms. Build artifacts (`*.tsbuildinfo`) are gitignored.
 
 **Release workflow gotchas:**
 - Org-level AND repo-level "Workflow permissions" must be set to **Read and write** with **"Allow GitHub Actions to create and approve pull requests"** checked
-- NPM token must be **Granular Access Token** with **"Bypass two-factor authentication"** enabled, scoped to **All packages** (covers both `@rudderjs/*` and `create-rudder-app`)
+- NPM token must be **Granular Access Token** with **"Bypass two-factor authentication"** enabled, scoped to **All packages** (covers `@rudderjs/*`, `create-rudder-app`, and `create-rudder`)
 
 **Release flow:**
 1. `pnpm changeset` locally → select packages + semver bump + summary
@@ -385,7 +385,8 @@ RudderJS Framework
 │    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mcp:*, passport:*, etc.
 │
 ├─── Scaffolding
-│    └── create-rudder-app            Interactive project scaffolder
+│    ├── create-rudder                Stub package — `npm create rudder@latest` invokes this
+│    └── create-rudder-app            Interactive project scaffolder — source of truth
 │
 └─── Build
      └── @rudderjs/vite               Vike integration, SSR externals, WS patch, route watcher
