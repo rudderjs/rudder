@@ -1044,12 +1044,24 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.14
       '@types/ws':
         specifier: ^8.0.0
         version: 8.18.1
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+      y-indexeddb:
+        specifier: ^9.0.0
+        version: 9.0.12(yjs@13.6.29)
+      y-websocket:
+        specifier: ^3.0.0
+        version: 3.0.0(yjs@13.6.29)
     optionalDependencies:
       '@prisma/client':
         specifier: ^7.0.0
@@ -8823,6 +8835,12 @@ packages:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
 
+  y-indexeddb@9.0.12:
+    resolution: {integrity: sha512-9oCFRSPPzBK7/w5vOkJBaVCQZKHXB/v6SIT+WYhnJxlEC61juqG0hBrAf+y3gmSMLFLwICNH9nQ53uscuse6Hg==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    peerDependencies:
+      yjs: ^13.0.0
+
   y-leveldb@0.1.2:
     resolution: {integrity: sha512-6ulEn5AXfXJYi89rXPEg2mMHAyyw8+ZfeMMdOtBbV8FJpQ1NOrcgi6DTAcXof0dap84NjHPT2+9d0rb6cFsjEg==}
     peerDependencies:
@@ -8838,6 +8856,12 @@ packages:
     resolution: {integrity: sha512-WHYDRqomaGkkaujtowCDwL8KYk+t1zQCGIgKyvxvchhjTQlMgWXRHJK+FDEcWmHA7I7o/4fy0eniOrtmz0e4mA==}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     hasBin: true
+    peerDependencies:
+      yjs: ^13.5.6
+
+  y-websocket@3.0.0:
+    resolution: {integrity: sha512-mUHy7AzkOZ834T/7piqtlA8Yk6AchqKqcrCXjKW8J1w2lPtRDjz8W5/CvXz9higKAHgKRKqpI3T33YkRFLkPtg==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     peerDependencies:
       yjs: ^13.5.6
 
@@ -17509,6 +17533,11 @@ snapshots:
 
   xtend@4.0.2: {}
 
+  y-indexeddb@9.0.12(yjs@13.6.29):
+    dependencies:
+      lib0: 0.2.117
+      yjs: 13.6.29
+
   y-leveldb@0.1.2(yjs@13.6.29):
     dependencies:
       level: 6.0.1
@@ -17533,6 +17562,12 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  y-websocket@3.0.0(yjs@13.6.29):
+    dependencies:
+      lib0: 0.2.117
+      y-protocols: 1.0.7(yjs@13.6.29)
+      yjs: 13.6.29
 
   y18n@5.0.8: {}
 
