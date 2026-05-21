@@ -1,0 +1,47 @@
+import { useEffect, useState }    from 'react'
+import { CollabRoomManager }      from './CollabRoomManager.js'
+import type {
+  CollabRoom,
+  UseCollabRoomOptions,
+}                                  from './types.js'
+
+const DEFAULT_WS_URL = '/ws-sync'
+
+/**
+ * Connect to a collab room and return the live `CollabRoom` handle.
+ *
+ * Returns `null` while the connection is in flight (dynamic imports +
+ * initial handshake) and on the server (SSR no-op). Consumers should
+ * render a placeholder for the `null` case.
+ *
+ * Re-renders when:
+ * - The room becomes available (`null` → `CollabRoom`)
+ * - The room key changes (old room destroyed, new room constructed)
+ * - The component unmounts (room destroyed, hook returns `null` once)
+ *
+ * @example
+ * const room = useCollabRoom(`doc:${id}`, { offline: true })
+ * if (!room) return <Spinner />
+ * // …bind to room.ydoc / room.provider…
+ */
+export function useCollabRoom(
+  roomKey: string,
+  options: UseCollabRoomOptions = {},
+): CollabRoom | null {
+  const { wsUrl = DEFAULT_WS_URL, offline = false } = options
+  const [room, setRoom] = useState<CollabRoom | null>(null)
+
+  useEffect(() => {
+    // SSR — never connect. Check via `globalThis` so we don't depend on
+    // the DOM lib being in the framework's tsconfig (it isn't).
+    if (typeof (globalThis as { window?: unknown }).window === 'undefined') return
+
+    const manager = new CollabRoomManager({ roomKey, wsUrl, offline })
+    manager.onRoomChange(setRoom)
+    void manager.start()
+
+    return () => { manager.stop() }
+  }, [roomKey, wsUrl, offline])
+
+  return room
+}

@@ -218,6 +218,33 @@ provider.awareness.on('change', () => {
 })
 ```
 
+### React hooks
+
+For React apps, `@rudderjs/sync/react` exports `useCollabRoom` + `useCollabSeed` so you don't have to hand-roll the Y.Doc + provider + IndexedDB lifecycle in every editor component:
+
+```bash
+pnpm add y-websocket y-indexeddb        # optional peers — install when using the hooks
+```
+
+```tsx
+import { useCollabRoom, useCollabSeed } from '@rudderjs/sync/react'
+
+function Editor({ id, defaultValue }) {
+  const room   = useCollabRoom(`doc:${id}`, { offline: true })
+  const seeded = useCollabSeed(room, 'content', (doc, fragment) => {
+    const initial = new Y.XmlText()
+    initial.insert(0, defaultValue)
+    fragment.insert(0, [initial])
+  })
+
+  if (!room || !seeded) return <Placeholder />
+  // …bind your editor to room.ydoc / room.provider…
+}
+```
+
+- `useCollabRoom(roomKey, options)` — connects + returns the live room; `null` on SSR and while the WebSocket handshake is in flight. Re-keys cleanly when `roomKey` changes.
+- `useCollabSeed(room, fragmentKey, seedFn)` — seeds an empty `Y.XmlFragment` on first sync; idempotent across peers. `seedFn` is captured via ref — no `useCallback` needed.
+
 ### React + Valtio
 
 For a nicer state management experience in React, pair with `valtio-yjs`:
