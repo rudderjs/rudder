@@ -39,7 +39,7 @@ The two coexist: a single app can have `pages/index/+Page.tsx` (Vike) and `app/V
 
 ## Installation
 
-This package is part of the RudderJS monorepo and is included by default in projects scaffolded with `create-rudder-app`. To add it manually:
+This package is part of the RudderJS monorepo and is included by default in projects scaffolded with `create-rudder`. To add it manually:
 
 ```bash
 pnpm add @rudderjs/view @rudderjs/vite vike

@@ -117,10 +117,10 @@ jobs:
             turbo-${{ runner.os }}-node${{ matrix.node-version }}-
 
       - name: Build
-        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
       - name: Test
-        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
+        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
   docs-build:
     # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the

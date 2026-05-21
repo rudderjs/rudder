@@ -254,7 +254,7 @@ Doctor will pick it up automatically — `--fix` discovers fixers from the regis
 
 ## When to run doctor
 
-- **After scaffolding** — `pnpm create rudder-app` runs `providers:discover` for you, but the rest of the green/yellow/red picture is one command away.
+- **After scaffolding** — `pnpm create rudder` runs `providers:discover` for you, but the rest of the green/yellow/red picture is one command away.
 - **After `pnpm rudder add <pkg>`** — confirm the new package's checks all pass.
 - **In CI** — fast path is sub-second on a built tree; runs without booting anything.
 - **When something breaks** — green doctor isn't a guarantee, but a red doctor is the answer in 90 % of "the app won't start" cases.

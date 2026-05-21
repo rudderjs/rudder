@@ -7,14 +7,16 @@
 
 ## Scaffold a new project
 
-The fastest way to start is the `create-rudder-app` scaffolder. It detects your package manager and adapts every generated file accordingly.
+The fastest way to start is the `create-rudder` scaffolder. It detects your package manager and adapts every generated file accordingly.
 
 ```bash
-pnpm create rudder-app my-app
-# or: npm create rudder-app@latest my-app
-# or: yarn create rudder-app my-app
-# or: bunx create-rudder-app my-app
+pnpm create rudder my-app
+# or: npm create rudder@latest my-app
+# or: yarn create rudder my-app
+# or: bunx create-rudder my-app
 ```
+
+> The legacy `create-rudder-app` invocation still works — it now prints a one-line nudge to switch to `create-rudder` and otherwise scaffolds identically.
 
 The scaffolder asks a short recipe-driven sequence, then generates only the code for the choices you made. Selected packages get added to `package.json`, registered via auto-discovery, and have their config files generated. Unselected packages are excluded entirely — no dead code, no orphan config.
 
@@ -70,10 +72,10 @@ shadcn/ui is offered only when React and Tailwind are both selected.
 
 ### Non-interactive (CI / AI agents)
 
-When `create-rudder-app` runs inside an AI coding agent — Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, or Windsurf — it auto-detects via env vars and switches from interactive prompts to a flag-driven flow with structured JSON output to stdout. Agents get a parseable success/failure result instead of garbled TTY redraws.
+When `create-rudder` runs inside an AI coding agent — Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, or Windsurf — it auto-detects via env vars and switches from interactive prompts to a flag-driven flow with structured JSON output to stdout. Agents get a parseable success/failure result instead of garbled TTY redraws.
 
 ```bash
-CLAUDECODE=1 npx create-rudder-app my-app \
+CLAUDECODE=1 npx create-rudder my-app \
   --recipe=web-app --db=sqlite \
   --framework=react --styling=tailwind+shadcn \
   --install=true

@@ -2,6 +2,7 @@ packages:
   - packages/*
   - tests/*
   - create-rudder-app
+  - create-rudder
   - playground
   - playground-web
   - docs

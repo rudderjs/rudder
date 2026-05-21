@@ -33,6 +33,12 @@ importers:
         specifier: ^8.57.1
         version: 8.57.1(eslint@10.0.3(jiti@2.6.1))(typescript@5.9.3)
 
+  create-rudder:
+    dependencies:
+      create-rudder-app:
+        specifier: workspace:^
+        version: link:../create-rudder-app
+
   create-rudder-app:
     dependencies:
       '@clack/prompts':
