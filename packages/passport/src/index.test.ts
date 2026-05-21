@@ -1118,6 +1118,51 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
     Passport.reset()
   })
 
+  test('concurrent refreshes of the same token — only one wins; the loser revokes the family', async () => {
+    // Race regression: previously, refreshTokenGrant read the row, checked
+    // `revoked === false`, then unconditionally flipped revoked=true. Two
+    // concurrent calls both passed the read-time check and both issued new
+    // pairs. The fix is an atomic conditional update — only one of N
+    // concurrent calls flips false→true; the rest see count=0 and trip the
+    // family-revocation path.
+    Passport.reset()
+    await ensureTestKeys()
+    Passport.useClientModel(fakeClient({
+      id: 'C-1', name: 'app', secret: null, confidential: false,
+      redirectUris: '[]', grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+    const accessRows: Record<string, Record<string, unknown>> = {
+      'AT-1': { id: 'AT-1', userId: 'U-1', clientId: 'C-1', scopes: '["read"]', revoked: false, expiresAt: new Date(Date.now() + 60_000) },
+    }
+    Passport.useTokenModel(fakeAccessTokenForIssue('AT-1', accessRows))
+    const refreshRows: Record<string, Record<string, unknown>> = {
+      'RT-RACE': { id: 'RT-RACE', tokenHash: sync256Hex('RT-RACE'), accessTokenId: 'AT-1', familyId: 'FAM-R', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+    }
+    const FakeRefresh = fakeRefreshToken(refreshRows)
+    Passport.useRefreshTokenModel(FakeRefresh)
+
+    // Two concurrent grants — neither pre-await the other.
+    const results = await Promise.allSettled([
+      refreshTokenGrant({ grantType: 'refresh_token', refreshToken: 'RT-RACE', clientId: 'C-1' }),
+      refreshTokenGrant({ grantType: 'refresh_token', refreshToken: 'RT-RACE', clientId: 'C-1' }),
+    ])
+
+    const winners = results.filter(r => r.status === 'fulfilled')
+    const losers  = results.filter(r => r.status === 'rejected')
+    assert.equal(winners.length, 1, 'exactly one concurrent refresh should succeed')
+    assert.equal(losers.length,  1, 'the other must reject with invalid_grant')
+    const rejected = losers[0] as PromiseRejectedResult
+    assert.ok(rejected.reason instanceof OAuthError && rejected.reason.error === 'invalid_grant')
+
+    // The atomic claim flipped revoked=true on the original row; the loser
+    // saw count=0 and triggered the family-revocation path. Net effect:
+    // only one new pair minted, family marked compromised.
+    assert.equal(refreshRows['RT-RACE']!.revoked, true, 'original refresh token must be revoked')
+    assert.equal(FakeRefresh.created.length, 1, 'exactly one new refresh token created (no double-mint)')
+
+    Passport.reset()
+  })
+
   test('first issuance generates a fresh familyId on the new refresh token', async () => {
     // Direct issueTokens() call — proves the contract that any caller
     // that doesn't pass an existing familyId gets a freshly minted one.
@@ -4447,6 +4492,144 @@ describe('Passport config on globalThis', () => {
     assert.equal(store.scopes.get('read'), 'Read access')
     assert.equal(store.tokenLifetime, 123_456)
     assert.equal(store.issuer, 'https://app.example.com')
+    Passport.reset()
+  })
+})
+
+describe('pollDeviceCode — concurrent polling race', () => {
+  // Race regression: previously, pollDeviceCode read the approved row, issued
+  // tokens, then deleted the row. Two concurrent polls of the same approved
+  // code both passed the in-memory `approved === true` check and both called
+  // issueTokens. The fix is an atomic conditional delete — only one of N
+  // concurrent polls deletes the row; the rest get count=0 and report
+  // invalid_grant.
+
+  function makeRaceableDevice(row: Record<string, unknown>) {
+    function makeBuilder(initialPredicate: (r: Record<string, unknown>) => boolean) {
+      let predicate = initialPredicate
+      const builder = {
+        where(col: string, val: unknown) {
+          const prev = predicate
+          predicate = (r) => prev(r) && r[col] === val
+          return builder
+        },
+        // Return a shallow clone so each concurrent poll gets its own
+        // snapshot — matches Model.first()'s real-world behavior (separate
+        // object identities per call), so a mutation via update() doesn't
+        // bleed into another in-flight call's local `device` variable.
+        first: async () => predicate(row) ? { ...row } : null,
+        async deleteAll(): Promise<number> {
+          // Atomic claim: evaluate predicate + mark deleted in one sync step.
+          // The second concurrent caller sees __deleted=true → predicate
+          // fails → returns 0.
+          if (!predicate(row) || row['__deleted']) return 0
+          row['__deleted'] = true
+          return 1
+        },
+      }
+      return builder
+    }
+    class FakeDeviceCode {
+      static where(col: string, val: unknown) {
+        return makeBuilder((r) => r[col] === val && !r['__deleted'])
+      }
+      static async update(_id: string, data: Record<string, unknown>) {
+        Object.assign(row, data)
+      }
+      static async delete(_id: string) {
+        row['__deleted'] = true
+      }
+    }
+    return FakeDeviceCode as unknown as Parameters<typeof Passport.useDeviceCodeModel>[0]
+  }
+
+  function fakeClientForDevice() {
+    class FakeClient {
+      static where() {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'd', secret: null, confidential: false, revoked: false,
+            redirectUris: '[]',
+            grantTypes:   '["urn:ietf:params:oauth:grant-type:device_code"]',
+            scopes:       '[]',
+          }) as unknown,
+        }
+      }
+    }
+    return FakeClient as unknown as Parameters<typeof Passport.useClientModel>[0]
+  }
+
+  test('concurrent polls of an approved code — only one issues tokens', async () => {
+    Passport.reset()
+    await (async () => {
+      const { generateKeyPairSync } = await import('node:crypto')
+      const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+      })
+      Passport.setKeys(privateKey, publicKey)
+    })()
+    Passport.useClientModel(fakeClientForDevice())
+
+    const deviceCodeHash = await hashDeviceSecret('plain-device')
+    const row = {
+      id: 'D-RACE', clientId: 'C-1',
+      deviceCodeHash,
+      userCodeHash: 'usrhash',
+      scopes:       '["read"]',
+      userId:       'U-1',
+      approved:     true,
+      interval:     5,
+      expiresAt:    new Date(Date.now() + 60_000),
+      lastPolledAt: null,
+    } as Record<string, unknown>
+    Passport.useDeviceCodeModel(makeRaceableDevice(row))
+
+    // Stub access + refresh token issuance so we can count mints without
+    // pulling in the full token-model fakes from the refresh-token tests.
+    let accessTokensCreated = 0
+    let refreshTokensCreated = 0
+    class FakeAccessIssue {
+      static where() { return { first: async () => null, get: async () => [] } }
+      static query() { return { where() { return this }, get: async () => [] } }
+      static async create(_data: Record<string, unknown>) {
+        accessTokensCreated++
+        return { id: `AT-${accessTokensCreated}`, ..._data }
+      }
+    }
+    class FakeRefreshIssue {
+      static where() { return { first: async () => null, get: async () => [] } }
+      static async create(_data: Record<string, unknown>) {
+        refreshTokensCreated++
+        return { id: `RT-${refreshTokensCreated}`, ..._data }
+      }
+    }
+    Passport.useTokenModel(FakeAccessIssue as unknown as Parameters<typeof Passport.useTokenModel>[0])
+    Passport.useRefreshTokenModel(FakeRefreshIssue as unknown as Parameters<typeof Passport.useRefreshTokenModel>[0])
+
+    const results = await Promise.allSettled([
+      pollDeviceCode({ grantType: 'urn:ietf:params:oauth:grant-type:device_code', deviceCode: 'plain-device', clientId: 'C-1' }),
+      pollDeviceCode({ grantType: 'urn:ietf:params:oauth:grant-type:device_code', deviceCode: 'plain-device', clientId: 'C-1' }),
+    ])
+
+    const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ status: string }>[]
+    const rejected  = results.filter(r => r.status === 'rejected')  as PromiseRejectedResult[]
+
+    // One call wins the atomic claim → returns 'authorized'. The other
+    // sees count=0 → throws invalid_grant. The wire status the device flow
+    // surfaces ('already used') is more informative than re-shaping into a
+    // poll-status enum and matches the auth-code grant's behavior.
+    assert.equal(fulfilled.length, 1, 'exactly one poll should return authorized')
+    assert.equal(rejected.length,  1, 'the other must throw invalid_grant')
+    assert.equal(fulfilled[0]!.value.status, 'authorized')
+    assert.ok(rejected[0]!.reason instanceof OAuthError && rejected[0]!.reason.error === 'invalid_grant')
+
+    // Exactly one token pair minted — no double-issue.
+    assert.equal(accessTokensCreated,  1, 'exactly one access token minted')
+    assert.equal(refreshTokensCreated, 1, 'exactly one refresh token minted')
+    assert.equal(row['__deleted'], true, 'device code row is consumed')
+
     Passport.reset()
   })
 })
