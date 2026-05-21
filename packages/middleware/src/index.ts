@@ -279,11 +279,6 @@ interface RateLimitOptions {
   skipIf?:  (req: AppRequest) => boolean
 }
 
-interface RateRecord {
-  count:     number
-  expiresAt: number   // epoch ms — end of the current window
-}
-
 function clientIp(req: AppRequest): string {
   return (req as unknown as Record<string, unknown>)['ip'] as string ?? 'unknown'
 }
@@ -309,31 +304,40 @@ function makeRateLimitHandler(opts: RateLimitOptions): MiddlewareHandler {
     if (!cache) return next()
 
     const now    = Date.now()
+    const ttlSec = Math.max(1, Math.ceil(opts.windowMs / 1000))
     const cKey   = `rudderjs:rl:${buildKey(opts.keyBy, req)}`
-    const record = await cache.get<RateRecord>(cKey)
+    const mKey   = `${cKey}:exp`
 
-    let count:     number
+    // Atomic counter — race-free under concurrent requests (RFC 6819 §5.2.2.3
+    // class of bug). The previous get → modify → set let two parallel hits
+    // both observe `count = N` and both write `N + 1`, doubling the effective
+    // limit. INCRBY on Redis (or the in-process atomic on the Memory driver)
+    // closes that window.
+    const count = await cache.increment(cKey, 1, ttlSec)
+
+    // Window expiry is tracked in a sibling key so the X-RateLimit-Reset
+    // header reflects the same moment for every request in the window. The
+    // first hit (count === 1) writes it; later hits read it. A vanishingly
+    // small race between A's `increment` returning 1 and A's meta write
+    // can make B (with `count === 2`) miss the meta — we fall back to
+    // `now + windowMs`, off by milliseconds and corrected on the next hit.
     let expiresAt: number
-
-    if (!record || now > record.expiresAt) {
-      count     = 1
+    if (count === 1) {
       expiresAt = now + opts.windowMs
+      await cache.set(mKey, expiresAt, ttlSec)
     } else {
-      count     = record.count + 1
-      expiresAt = record.expiresAt
+      expiresAt = (await cache.get<number>(mKey)) ?? (now + opts.windowMs)
     }
 
-    const ttlSec = Math.max(1, Math.ceil((expiresAt - now) / 1000))
-    await cache.set(cKey, { count, expiresAt } satisfies RateRecord, ttlSec)
-
     const remaining = Math.max(0, opts.max - count)
+    const retryAfter = Math.max(1, Math.ceil((expiresAt - now) / 1000))
 
     res.header('X-RateLimit-Limit',     String(opts.max))
     res.header('X-RateLimit-Remaining', String(remaining))
     res.header('X-RateLimit-Reset',     String(Math.ceil(expiresAt / 1000)))
 
     if (count > opts.max) {
-      res.header('Retry-After', String(ttlSec))
+      res.header('Retry-After', String(retryAfter))
       res.status(429).json({ message: opts.message })
       return
     }
