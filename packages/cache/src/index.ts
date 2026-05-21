@@ -13,6 +13,15 @@ export interface CacheAdapter {
   forget(key: string): Promise<void>
   has(key: string): Promise<boolean>
   flush(): Promise<void>
+  /**
+   * Atomically add `by` (default `1`) to the integer counter at `key` and
+   * return the new value. When the key does not exist, it is initialized to
+   * `by` and `ttlSeconds` is applied to the new key; subsequent increments
+   * preserve the original expiry (the TTL is NOT refreshed). Essential for
+   * race-free rate limiting and counters — the prior `get → modify → set`
+   * pattern allowed concurrent requests to silently undercount.
+   */
+  increment(key: string, by?: number, ttlSeconds?: number): Promise<number>
   /** Build a lock backed by this driver. Does NOT acquire — call .get() or .block(). */
   lock(name: string, seconds: number): Lock
   /** Rebuild a lock with a specific owner token (cross-process release). */
@@ -81,6 +90,21 @@ export class Cache {
   /** Store a value, optionally with a TTL in seconds. */
   static set(key: string, value: unknown, ttl?: number): Promise<void> {
     return this.store().set(key, value, ttl)
+  }
+
+  /**
+   * Atomically increment the integer counter at `key` by `by` (default `1`)
+   * and return the new value. When the key is missing it is created with the
+   * given `ttl` (seconds); subsequent increments preserve the original expiry
+   * (the TTL is NOT refreshed) — matches Redis `INCRBY` + first-write `EXPIRE`
+   * semantics. Race-free under concurrent callers.
+   *
+   * @example
+   *   const count = await Cache.increment('rate:1.2.3.4', 1, 60)
+   *   if (count > 5) throw new TooManyRequestsError()
+   */
+  static increment(key: string, by?: number, ttl?: number): Promise<number> {
+    return this.store().increment(key, by, ttl)
   }
 
   /**
@@ -199,6 +223,18 @@ export class MemoryAdapter implements CacheAdapter {
     this.store.set(key, { value, expiresAt })
   }
 
+  async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    const existing = this.store.get(key)
+    if (existing && !this.expired(existing) && typeof existing.value === 'number') {
+      const next = existing.value + by
+      this.store.set(key, { value: next, expiresAt: existing.expiresAt })
+      return next
+    }
+    const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
+    this.store.set(key, { value: by, expiresAt })
+    return by
+  }
+
   async forget(key: string): Promise<void>  { this.store.delete(key) }
 
   async has(key: string): Promise<boolean> {
@@ -285,6 +321,26 @@ class RedisAdapter implements CacheAdapter {
     } else {
       await client.set(this.k(key), serialised)
     }
+  }
+
+  async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    const client = await this.getClient()
+    // Atomic INCRBY + EXPIRE-only-on-create via Lua. Setting EXPIRE only when
+    // the existing TTL is -1 (no TTL set) preserves the window's original
+    // expiry across subsequent increments — matches Laravel's `Cache::increment`
+    // semantics.
+    const script = ttlSeconds && ttlSeconds > 0
+      ? `local new = redis.call('INCRBY', KEYS[1], ARGV[1])
+         if redis.call('TTL', KEYS[1]) == -1 then
+           redis.call('EXPIRE', KEYS[1], ARGV[2])
+         end
+         return new`
+      : `return redis.call('INCRBY', KEYS[1], ARGV[1])`
+    const args = ttlSeconds && ttlSeconds > 0
+      ? [String(by), String(ttlSeconds)]
+      : [String(by)]
+    const result = await client.eval(script, 1, this.k(key), ...args)
+    return Number(result)
   }
 
   async forget(key: string): Promise<void> {

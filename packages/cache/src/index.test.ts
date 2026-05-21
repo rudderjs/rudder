@@ -90,6 +90,42 @@ describe('MemoryAdapter', () => {
     await adapter.set('k', 'second')
     assert.strictEqual(await adapter.get('k'), 'second')
   })
+
+  it('increment() seeds a missing key to `by` and returns it', async () => {
+    assert.strictEqual(await adapter.increment('hits', 1), 1)
+    assert.strictEqual(await adapter.get<number>('hits'), 1)
+  })
+
+  it('increment() adds to an existing numeric value', async () => {
+    await adapter.increment('hits', 3)
+    assert.strictEqual(await adapter.increment('hits', 4), 7)
+  })
+
+  it('increment() preserves the original TTL across calls (no refresh)', async () => {
+    await adapter.increment('hits', 1, 0.1)
+    await adapter.increment('hits', 1, 60)   // larger TTL should NOT extend
+    await sleep(200)
+    assert.strictEqual(await adapter.get<number>('hits'), null)
+  })
+
+  it('increment() reseeds when the existing value is non-numeric', async () => {
+    await adapter.set('hits', 'oops')
+    assert.strictEqual(await adapter.increment('hits', 5), 5)
+  })
+
+  it('increment() after expiry seeds a fresh counter with the new TTL', async () => {
+    await adapter.increment('hits', 1, 0.05)
+    await sleep(100)
+    assert.strictEqual(await adapter.increment('hits', 2, 60), 2)
+  })
+
+  it('increment() under serial concurrent calls produces a deterministic total', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 25 }, () => adapter.increment('hits', 1, 60)),
+    )
+    assert.strictEqual(await adapter.get<number>('hits'), 25)
+    assert.strictEqual(new Set(results).size, 25, 'each call should observe a unique value')
+  })
 })
 
 // ─── CacheRegistry ─────────────────────────────────────────

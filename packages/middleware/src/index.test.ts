@@ -64,6 +64,17 @@ function makeMemoryCache() {
     async set(key: string, value: unknown, ttlSeconds = 60): Promise<void> {
       store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 })
     },
+    async increment(key: string, by = 1, ttlSeconds = 60): Promise<number> {
+      const rec = store.get(key)
+      const now = Date.now()
+      if (rec && now <= rec.expiresAt && typeof rec.value === 'number') {
+        const next = rec.value + by
+        store.set(key, { value: next, expiresAt: rec.expiresAt })
+        return next
+      }
+      store.set(key, { value: by, expiresAt: now + ttlSeconds * 1000 })
+      return by
+    },
     async forget(key: string): Promise<void> { store.delete(key) },
     async has(key: string): Promise<boolean> {
       const rec = store.get(key)
@@ -529,5 +540,28 @@ describe('RateLimit', () => {
     await handler(req, bag.res, async () => { count++ })
     assert.strictEqual(count, 1)
     assert.strictEqual(bag.getStatus(), 429)
+  })
+
+  // Regression — 50 concurrent requests against `perMinute(5)` must let
+  // exactly 5 pass through. Before atomic increment landed the counter was
+  // get → modify → set, so racing requests would both read N and both write
+  // N+1, doubling (or worse) the effective limit. RFC 6819 §5.2.2.3.
+  it('rejects all but the configured limit under concurrent load', async () => {
+    const handler = RateLimit.perMinute(5)
+    const headers = { 'x-real-ip': '9.9.9.9' }
+
+    const results = await Promise.all(
+      Array.from({ length: 50 }, async () => {
+        const bag = makeRes()
+        let reached = false
+        await handler(makeReq({ headers }), bag.res, async () => { reached = true })
+        return { status: bag.getStatus(), reached }
+      }),
+    )
+
+    const allowed = results.filter((r: { reached: boolean }) => r.reached).length
+    const blocked = results.filter((r: { status: number }) => r.status === 429).length
+    assert.strictEqual(allowed, 5,  `expected 5 to pass, got ${allowed}`)
+    assert.strictEqual(blocked, 45, `expected 45 to be blocked, got ${blocked}`)
   })
 })

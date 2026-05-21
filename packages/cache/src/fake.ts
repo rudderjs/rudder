@@ -6,7 +6,7 @@ import { BaseLock, newOwnerToken, type Lock } from './lock.js'
 // ─── Types ────────────────────────────────────────────────
 
 export interface CacheOperation {
-  type:   'get' | 'set' | 'forget' | 'has' | 'flush' | 'lock-acquire' | 'lock-release' | 'lock-force-release'
+  type:   'get' | 'set' | 'forget' | 'has' | 'flush' | 'increment' | 'lock-acquire' | 'lock-release' | 'lock-force-release'
   key?:   string | undefined
   value?: unknown
   ttl?:   number | undefined
@@ -59,6 +59,20 @@ export class FakeCacheAdapter implements CacheAdapter {
     this._operations.push({ type: 'set', key, value, ttl: ttlSeconds })
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this._store.set(key, { value, expiresAt })
+  }
+
+  async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    this._operations.push({ type: 'increment', key, value: by, ttl: ttlSeconds })
+    const existing = this._store.get(key)
+    const now = Date.now()
+    if (existing && (existing.expiresAt === null || now <= existing.expiresAt) && typeof existing.value === 'number') {
+      const next = existing.value + by
+      this._store.set(key, { value: next, expiresAt: existing.expiresAt })
+      return next
+    }
+    const expiresAt = ttlSeconds ? now + ttlSeconds * 1_000 : null
+    this._store.set(key, { value: by, expiresAt })
+    return by
   }
 
   async forget(key: string): Promise<void> {
