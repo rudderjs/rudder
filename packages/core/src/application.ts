@@ -19,6 +19,20 @@ export interface BootConfig {
 
 export type ProviderClass = new (app: Application) => ServiceProvider
 
+/**
+ * @internal — return true if `fn` is an async function (declared with the
+ * `async` keyword). Used by the deferred-provider lifecycle to reject
+ * providers whose `boot()` can't be awaited from the synchronous missing
+ * handler path. Bound `async () => {}` instances drop the AsyncFunction
+ * constructor name, so we fall through to a `[object AsyncFunction]`
+ * `toString` check for that case.
+ */
+function _isAsyncFunction(fn: unknown): boolean {
+  if (typeof fn !== 'function') return false
+  if (fn.constructor.name === 'AsyncFunction') return true
+  return Object.prototype.toString.call(fn) === '[object AsyncFunction]'
+}
+
 export class Application {
   private static instance: Application | undefined
   readonly container: Container
@@ -179,11 +193,33 @@ export class Application {
       const provider = this.providers[i]!
       const tokens = provider.provides?.()
       if (tokens && tokens.length > 0) {
-        // Deferred — map each token to the provider's constructor for lazy boot
+        // Deferred — map each token to the provider's constructor for lazy boot.
+        // Validate boot() is synchronous: the deferred lifecycle invokes boot
+        // inside `_missingHandler`, which itself runs synchronously inside a
+        // `container.make()` call. An async boot would return a Promise that
+        // the handler can't await — the consumer would see a half-booted
+        // service. Catch this at registration so the failure surfaces near
+        // the provider author's intent, not at a confusing late-resolve site.
+        if (provider.boot && _isAsyncFunction(provider.boot)) {
+          throw new Error(
+            `[RudderJS] Deferred provider "${provider.constructor.name}" has an async boot() — ` +
+            `provides() requires synchronous boot because lazy resolution can't await across container.make(). ` +
+            `Move async work into the bound services themselves (lazy-init pattern), or drop provides() if eager boot is acceptable.`,
+          )
+        }
         const Ctor = provider.constructor as ProviderClass
         for (const token of tokens) {
           this._deferredProviders.set(token, Ctor)
         }
+        // Mark the original instance as booted so `_bootAll()` skips it. The
+        // lazy resolution path creates a fresh instance and runs its register/
+        // boot inside the missing handler; without this skip the original
+        // instance's boot fires eagerly during `_bootAll()` too — duplicate
+        // work and (worse) the eager path is `await`ed, so an async boot here
+        // would silently land before the async-boot validator above could
+        // catch it on a future re-bootstrap. Belt-and-braces: validator
+        // throws first, and the skip seals the no-eager-boot contract.
+        this._bootedProviders.add(provider)
         continue
       }
       if (this._registeredInstances.has(provider)) continue
@@ -193,26 +229,46 @@ export class Application {
 
     // Wire the missing handler so deferred providers boot on first resolve
     if (this._deferredProviders.size > 0) {
+      // Cycle-detection state — tokens being resolved right now. Re-entering
+      // the handler with a token already in this set indicates a deferred
+      // provider's register/boot reached for one of its own tokens before
+      // that token was bound, or a cross-provider chain where every token
+      // is still mid-registration. Without this guard, the handler bottoms
+      // out by hitting the deferred-map miss path (the same provider's
+      // tokens are eagerly deleted at the top of resolution to prevent
+      // re-entry), and `container.make()` then throws the generic
+      // "Cannot resolve <token>" — masking the real cause.
+      const _resolving = new Set<string>()
       this.container.setMissingHandler((token) => {
         const key = typeof token === 'symbol' ? undefined : token
         if (!key) return
+        if (_resolving.has(key)) {
+          throw new Error(
+            `[RudderJS] Circular deferred resolution: "${key}" requires itself during register/boot. ` +
+            `Break the cycle by lazy-resolving via app().make("${key}") inside a method body instead of at register/boot time.`,
+          )
+        }
         const Provider = this._deferredProviders.get(key)
         if (!Provider) return
 
-        // Remove all tokens for this provider to prevent re-entry
-        for (const [t, P] of this._deferredProviders) {
-          if (P === Provider) this._deferredProviders.delete(t)
-        }
+        _resolving.add(key)
+        try {
+          // Remove all tokens for this provider to prevent re-entry
+          for (const [t, P] of this._deferredProviders) {
+            if (P === Provider) this._deferredProviders.delete(t)
+          }
 
-        const instance = new Provider(this)
-        this.providers.push(instance)
-        instance.register()
-        // Deferred providers must have sync boot (or none)
-        const bootResult = instance.boot?.()
-        if (bootResult instanceof Promise) {
-          console.warn(`[RudderJS] Deferred provider "${instance.constructor.name}" returned a Promise from boot() — deferred providers must be synchronous. The async work will be dropped.`)
+          const instance = new Provider(this)
+          this.providers.push(instance)
+          instance.register()
+          // Deferred providers must have sync boot — validated at register
+          // time above. A subclass with `provides()` and a sync boot is the
+          // expected shape here.
+          instance.boot?.()
+          this._bootedProviders.add(instance)
+        } finally {
+          _resolving.delete(key)
         }
-        this._bootedProviders.add(instance)
       })
     }
   }

@@ -289,6 +289,212 @@ describe('Application.register()', () => {
   })
 })
 
+// ─── Deferred provider lifecycle ──────────────────────────
+//
+// `provides()` opts a provider into lazy initialisation: tokens stay
+// unregistered until the first `container.make(token)` call, at which
+// point the framework's missing handler invokes the provider's
+// register() + boot() inside the resolution path. Phase 3 hardens two
+// silent-failure modes:
+//
+// 1. Async boot() on a deferred provider: the missing handler can't
+//    await across `container.make()`, so the Promise used to be dropped
+//    with a warning and the consumer got a half-booted service. Now
+//    rejected at registration time with a clear error.
+//
+// 2. Cross-provider re-entry where both providers' register/boot reach
+//    for each other's tokens before binding their own: the previous
+//    "delete all my tokens on re-entry" mitigation only covered the
+//    same-provider case; cross-provider chains bottomed out at the
+//    generic "Cannot resolve <token>" error from container.make(),
+//    masking the real cause. Now caught with a "Circular deferred
+//    resolution" error naming the offending token.
+
+describe('Application — deferred provider lifecycle (provides())', () => {
+  beforeEach(reset)
+
+  it('happy path: sync boot + provides() registers lazily on first make()', async () => {
+    const calls: string[] = []
+
+    class LazyService {
+      readonly id = 'lazy'
+    }
+
+    class DeferredProvider extends ServiceProvider {
+      override provides(): string[] { return ['lazy-service'] }
+      register() {
+        calls.push('register')
+        this.app.singleton('lazy-service', () => new LazyService())
+      }
+      override boot() { calls.push('boot') }
+    }
+
+    const a = Application.create({ env: 'production', providers: [DeferredProvider] })
+    await a.bootstrap()
+
+    // Bootstrap completes without invoking register/boot — provides() defers them
+    assert.deepStrictEqual(calls, [],
+      'deferred provider must NOT run register/boot during bootstrap')
+
+    // First resolve triggers lazy registration
+    const svc = a.make<LazyService>('lazy-service')
+    assert.deepStrictEqual(calls, ['register', 'boot'])
+    assert.strictEqual(svc.id, 'lazy')
+
+    // Subsequent resolves reuse the binding without re-running register/boot
+    a.make('lazy-service')
+    assert.deepStrictEqual(calls, ['register', 'boot'],
+      'lazy resolve must be idempotent — register/boot run exactly once')
+  })
+
+  it('throws at registration when a deferred provider has an async boot()', async () => {
+    class AsyncDeferredProvider extends ServiceProvider {
+      override provides(): string[] { return ['async-token'] }
+      register(): void {}
+      override async boot(): Promise<void> {
+        // No-op — the throw should fire at registration, never reach this.
+        await Promise.resolve()
+      }
+    }
+
+    const a = Application.create({ env: 'production', providers: [AsyncDeferredProvider] })
+    await assert.rejects(
+      () => a.bootstrap(),
+      /Deferred provider "AsyncDeferredProvider" has an async boot\(\)/,
+    )
+  })
+
+  it('error message explains the lazy-init pattern as the migration path', async () => {
+    class BadProvider extends ServiceProvider {
+      override provides(): string[] { return ['bad-token'] }
+      register(): void {}
+      override async boot(): Promise<void> { /* async by signature */ }
+    }
+    const a = Application.create({ env: 'production', providers: [BadProvider] })
+    await assert.rejects(
+      () => a.bootstrap(),
+      /provides\(\) requires synchronous boot.*Move async work into the bound services themselves/,
+    )
+  })
+
+  it('sync boot() defined as a property-arrow-function is also accepted', async () => {
+    // Coverage for the AsyncFunction detection: plain arrow + plain
+    // function are equally valid sync forms. Edge case worth pinning.
+    let booted = false
+    class ArrowBootProvider extends ServiceProvider {
+      override provides(): string[] { return ['arrow-token'] }
+      register(): void { this.app.instance('arrow-token', 'ok') }
+      override boot = (): void => { booted = true }
+    }
+    const a = Application.create({ env: 'production', providers: [ArrowBootProvider] })
+    await a.bootstrap()
+    assert.strictEqual(a.make('arrow-token'), 'ok')
+    assert.ok(booted, 'sync arrow-function boot must run on first resolve')
+  })
+
+  it('non-deferred providers with async boot() are unaffected', async () => {
+    // Sanity: the async-boot throw is scoped to `provides()` — eager
+    // providers can still be async in boot, that's the common case.
+    const calls: string[] = []
+    class EagerAsyncProvider extends ServiceProvider {
+      register(): void { calls.push('register') }
+      override async boot(): Promise<void> { calls.push('boot') }
+    }
+    const a = Application.create({ env: 'production', providers: [EagerAsyncProvider] })
+    await a.bootstrap()
+    assert.deepStrictEqual(calls, ['register', 'boot'])
+  })
+
+  it('self-cycle: provider.register() reaches for its own token → "Circular deferred resolution"', async () => {
+    class SelfCycleProvider extends ServiceProvider {
+      override provides(): string[] { return ['self'] }
+      register(): void {
+        // Re-enter — register hasn't bound the token yet, so make()
+        // hits the missing handler with 'self' already in flight.
+        this.app.make('self')
+      }
+    }
+    const a = Application.create({ env: 'production', providers: [SelfCycleProvider] })
+    await a.bootstrap()
+    assert.throws(
+      () => a.make('self'),
+      /Circular deferred resolution: "self"/,
+    )
+  })
+
+  it('cross-provider cycle: A.register → make(b), B.register → make(a) → "Circular deferred resolution"', async () => {
+    class A extends ServiceProvider {
+      override provides(): string[] { return ['a'] }
+      register(): void { this.app.make('b') }
+    }
+    class B extends ServiceProvider {
+      override provides(): string[] { return ['b'] }
+      register(): void { this.app.make('a') }
+    }
+    const app = Application.create({ env: 'production', providers: [A, B] })
+    await app.bootstrap()
+    assert.throws(
+      () => app.make('a'),
+      // The exact cycle entry point depends on resolution order — both
+      // "a" and "b" are valid surfaces. Match on the marker prefix.
+      /Circular deferred resolution: "(a|b)"/,
+    )
+  })
+
+  it('legitimate cross-provider chain: A.boot → make(b) where B is independent — works', async () => {
+    const calls: string[] = []
+    class B extends ServiceProvider {
+      override provides(): string[] { return ['b'] }
+      register(): void { calls.push('B.register'); this.app.instance('b', 'B-bound') }
+      override boot(): void { calls.push('B.boot') }
+    }
+    class A extends ServiceProvider {
+      override provides(): string[] { return ['a'] }
+      register(): void { calls.push('A.register'); this.app.instance('a', 'A-bound') }
+      override boot(): void { calls.push('A.boot'); this.app.make('b') }
+    }
+    const app = Application.create({ env: 'production', providers: [A, B] })
+    await app.bootstrap()
+
+    // Resolve A — A.register binds 'a' → A.boot → make(b) → missing
+    // handler fires for 'b' → B.register binds 'b' → B.boot → returns.
+    const aValue = app.make('a')
+    assert.strictEqual(aValue, 'A-bound')
+    assert.deepStrictEqual(calls, ['A.register', 'A.boot', 'B.register', 'B.boot'],
+      'cross-provider chain must resolve A → B in order, no false cycle')
+  })
+
+  it('cycle detection cleanup: a throw during one resolve does not poison the next', async () => {
+    let throwOnce = true
+    class FlakyProvider extends ServiceProvider {
+      override provides(): string[] { return ['flaky'] }
+      register(): void {
+        // First make() during register: throws on the first call only.
+        if (throwOnce) {
+          throwOnce = false
+          throw new Error('boom in register')
+        }
+        this.app.instance('flaky', 'recovered')
+      }
+    }
+    const a = Application.create({ env: 'production', providers: [FlakyProvider] })
+    await a.bootstrap()
+
+    // First resolve: register throws → finally clause deletes 'flaky'
+    // from _resolving so the next attempt doesn't trip cycle detection.
+    assert.throws(() => a.make('flaky'), /boom in register/)
+
+    // Second resolve: would falsely report "Circular deferred resolution"
+    // if the resolving Set leaked. With try/finally, the set is clean.
+    // Note: after the first throw, the deferred-token map has already
+    // been pruned (the missing handler runs that step before invoking
+    // register()), so this second call surfaces the standard
+    // "Cannot resolve" path — which proves the Set is empty (no cycle
+    // error) AND the deferred entry is gone (no second attempt).
+    assert.throws(() => a.make('flaky'), /Cannot resolve/)
+  })
+})
+
 // ─── Container proxy methods ──────────────────────────────
 
 describe('Application container proxies', () => {
