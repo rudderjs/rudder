@@ -53,6 +53,7 @@ export default defineConfig({
             { text: 'Frontend', link: '/guide/frontend' },
             { text: 'Typed Views', link: '/guide/typed-views' },
             { text: 'Typed Routes', link: '/guide/typed-routes' },
+            { text: 'Prerendering', link: '/guide/prerender' },
             { text: 'Deployment', link: '/guide/deployment' },
           ],
         },
