@@ -3,8 +3,10 @@ import {
   initWsServer,
   getUpgradeHandler,
   registerAuth,
+  registerConnectionAuth,
   broadcastStats,
   type AuthCallback,
+  type ConnectionAuthCallback,
 } from './ws-server.js'
 
 // ─── Config ─────────────────────────────────────────────────
@@ -12,6 +14,25 @@ import {
 export interface BroadcastConfig {
   /** URL path the WebSocket server listens on (default: `/ws`) */
   path?: string
+  /**
+   * Origin allowlist for WebSocket upgrade requests. When set, the
+   * `Origin` header is compared against this list and mismatches receive
+   * HTTP 403. When unset, all origins are accepted (with a one-time
+   * startup warning). Set this in production to close the CSRF-style
+   * cross-origin attack window on cookie-auth'd channels.
+   */
+  allowedOrigins?: string[]
+  /**
+   * Per-IP connection cap. Rejects upgrades from an IP that already has
+   * this many open connections with HTTP 429. `undefined` / `0` disables.
+   */
+  maxConnectionsPerIp?: number
+  /**
+   * Server-side heartbeat. The server sends a WebSocket PING every
+   * `interval` ms; if no PONG arrives within `timeout` ms the socket is
+   * terminated. Pass `false` to disable. Default: `{ interval: 30000, timeout: 60000 }`.
+   */
+  heartbeat?: { interval: number; timeout: number } | false
 }
 
 // ─── globalThis key for the upgrade handler ─────────────────
@@ -46,6 +67,22 @@ export const Broadcast = {
    * Return a member-info object (or `false`) for presence channels.
    */
   channel: registerAuth as (pattern: string, callback: AuthCallback) => void,
+
+  /**
+   * Register a per-connection auth callback. Invoked once at WebSocket
+   * upgrade time, before the socket is upgraded. Returning `false`
+   * rejects the upgrade with HTTP 401 — useful for requiring a valid
+   * session cookie, bearer token, or other gate before any subscribe
+   * is even possible.
+   *
+   * Only one callback may be registered at a time; calling again replaces.
+   *
+   * @example
+   * Broadcast.authConnection(async (req) => {
+   *   return Boolean(req.headers.cookie?.includes('session='))
+   * })
+   */
+  authConnection: registerConnectionAuth as (callback: ConnectionAuthCallback) => void,
 }
 
 // ─── Provider ───────────────────────────────────────────────
@@ -57,7 +94,11 @@ export class BroadcastingProvider extends ServiceProvider {
     const cfg  = config<BroadcastConfig>('broadcast', {})
     const path = cfg.path ?? '/ws'
 
-    initWsServer()
+    initWsServer({
+      ...(cfg.allowedOrigins      ? { allowedOrigins:      cfg.allowedOrigins      } : {}),
+      ...(cfg.maxConnectionsPerIp ? { maxConnectionsPerIp: cfg.maxConnectionsPerIp } : {}),
+      ...(cfg.heartbeat !== undefined ? { heartbeat: cfg.heartbeat } : {}),
+    })
 
       // Register upgrade handler on globalThis so @rudderjs/vite and
       // @rudderjs/server-hono can attach it to the http.Server without
