@@ -145,9 +145,11 @@ The Vite scanner reads the export at build time and wires the Vike page to the e
 
 ---
 
-## Static prerender
+## Prerender
 
-For views with no per-request data — marketing pages, docs index, terms / privacy — opt into Vike's build-time static prerender by exporting `prerender = true`:
+Opt views into build-time static rendering by exporting a `prerender` constant. Two forms — static (`= true`) and dynamic (`= [...]` or a function) — sharing the same export name; the scanner picks the right output from the RHS shape.
+
+**Static.** For views with no per-request data — marketing pages, docs index, terms / privacy:
 
 ```ts
 // app/Views/Marketing/Landing.tsx
@@ -161,14 +163,30 @@ export default function Landing() {
 }
 ```
 
-The scanner picks the flag up the same way as `route`, emits a `+prerender.ts` next to the generated `+Page.*`, and `pnpm build` writes the pre-rendered HTML to `dist/client/<url>/index.html`. The production server serves the static file before falling back to SSR — zero per-request cost.
+**Dynamic.** For parameterized routes (`/blog/@slug`), enumerate the URLs to materialize. Array literal for inline lists; async function for DB-driven slugs:
+
+```ts
+// app/Views/Blog/Post.tsx
+export const route     = '/blog/@slug'
+export const prerender = ['/blog/hello-world', '/blog/another-post']
+// Or: async () => Post.query().select(['slug']).all().then(rows => rows.map(r => `/blog/${r.slug}`))
+
+export default function Post() {
+  const { slug } = usePageContext().routeParams
+  return <article>{/* … */}</article>
+}
+```
+
+`pnpm build` writes one HTML per URL to `dist/client/<url>/index.html`. The production server serves the static file before falling back to SSR — zero per-request cost.
 
 **Constraints:**
 
-- Static URLs only (no `:param` segments). Dynamic prerender (one URL per slug, etc.) needs `onBeforePrerenderStart` — out of scope for v1.
 - Dev mode is unaffected — `pnpm dev` still SSRs every request. Prerender is build-time only.
-- The view should not depend on per-request `viewProps` since the controller doesn't run at build time. Use defaults inside the component if needed.
+- Controllers don't run at prerender time. For dynamic prerender, route params come back on `pageContext.routeParams` — read them via `usePageContext()`, or return `{ url, pageContext: { viewProps: … } }` entries from the function form to inject view props at build time.
 - Auth-guarded views are incompatible — opt them out (the flag is per-view, so this is the default).
+- Variable-reference RHS (`export const prerender = MY_LIST`) is intentionally not detected. Inline the value or wrap in a function.
+
+Full guide at [`/guide/prerender`](https://rudderjs.com/guide/prerender).
 
 ---
 
