@@ -73,12 +73,22 @@ class BullMQAdapter implements QueueAdapter {
   readonly supportsBatch    = false
 
   private readonly queues            = new Map<string, Queue>()
+  /** @internal — track active workers so `disconnect()` can close them. Public
+   *  read-only access is fine for tests; never mutate externally. */
+  readonly         workers:           Worker[] = []
   private readonly jobRegistry       = new Map<string, new (...args: never[]) => Job>()
   private readonly connection:        Record<string, unknown>
   private readonly prefix:            string
   private readonly concurrency:       number
   private readonly removeOnComplete:  number
   private readonly removeOnFail:      number
+  /** Bound once per adapter instance so `process.off(...)` in `disconnect()`
+   *  matches the registered listener — re-creating the closure per call would
+   *  silently leak it. */
+  private readonly _shutdown:         () => void
+  /** Resolves when `disconnect()` completes; used by `work()` to keep the
+   *  CLI process blocked until shutdown. */
+  private          _shutdownResolve: (() => void) | undefined
 
   constructor(config: BullMQConfig) {
     this.connection        = redisOpts(config)
@@ -86,6 +96,7 @@ class BullMQAdapter implements QueueAdapter {
     this.concurrency       = config.concurrency      ?? 1
     this.removeOnComplete  = config.removeOnComplete ?? 100
     this.removeOnFail      = config.removeOnFail     ?? 500
+    this._shutdown         = () => { void this.disconnect() }
 
     for (const JobClass of (config.jobs ?? [])) {
       this.jobRegistry.set(JobClass.name, JobClass)
@@ -192,9 +203,9 @@ class BullMQAdapter implements QueueAdapter {
     // the dev/web process that also boots HorizonProvider.
     process.env['RUDDERJS_QUEUE_WORKER'] = '1'
 
-    const names   = queues.split(',').map(q => q.trim()).filter(Boolean)
-    const workers = names.map(name => ({
-      queue: name,
+    const names = queues.split(',').map(q => q.trim()).filter(Boolean)
+    const pairs = names.map(name => ({
+      queue:  name,
       worker: new Worker(name, this.processor.bind(this), {
         connection:  this.connection as never,
         prefix:      this.prefix,
@@ -202,7 +213,9 @@ class BullMQAdapter implements QueueAdapter {
       }),
     }))
 
-    for (const { queue, worker } of workers) {
+    for (const { worker } of pairs) this.workers.push(worker)
+
+    for (const { queue, worker } of pairs) {
       worker.on('error', (err) => {
         const code = (err as NodeJS.ErrnoException).code
         if (code === 'ECONNREFUSED') {
@@ -233,7 +246,11 @@ class BullMQAdapter implements QueueAdapter {
         console.log(`[BullMQ] ✓ "${bullJob.name}" completed (queue: ${queue}, id: ${bullJob.id})`)
       })
 
-      worker.on('failed', async (bullJob, error) => {
+      // BullMQ fires this on every failed attempt. `instance.failed()` is
+      // routed via `executeJob` inside `processor()` (Phase 1), so we do
+      // NOT re-invoke it here — doing so would double-fire the hook per
+      // attempt. This listener owns observer emission + the console log only.
+      worker.on('failed', (bullJob, error) => {
         if (!bullJob) return
         const finishedAt = bullJob.finishedOn  ? new Date(bullJob.finishedOn)  : new Date()
         const startedAt  = bullJob.processedOn ? new Date(bullJob.processedOn) : undefined
@@ -250,12 +267,6 @@ class BullMQAdapter implements QueueAdapter {
           ...(startedAt ? { duration: finishedAt.getTime() - startedAt.getTime() } : {}),
           error:        error.stack ?? error.message,
         })
-
-        const JobClass = this.jobRegistry.get(bullJob.name)
-        if (JobClass) {
-          const instance = Object.assign(new (JobClass as new () => Job)(), bullJob.data)
-          await instance.failed?.(error)
-        }
         console.error(
           `[BullMQ] ✗ "${bullJob.name}" failed ` +
           `(attempt ${bullJob.attemptsMade}/${String(bullJob.opts.attempts ?? '?')}): ${error.message}`,
@@ -263,16 +274,21 @@ class BullMQAdapter implements QueueAdapter {
       })
     }
 
+    // Register SIGTERM / SIGINT exactly once per adapter instance — previous
+    // `process.once('SIGTERM', ...)` inside this `work()` body re-attached on
+    // every call, accumulating listeners under multi-tenant boot or test re-runs
+    // and never being removed. `disconnect()` removes both listeners.
+    if (this.workers.length === pairs.length) {
+      process.on('SIGTERM', this._shutdown)
+      process.on('SIGINT',  this._shutdown)
+    }
+
     console.log(`[BullMQ] Worker ready — queues: "${names.join(', ')}", concurrency: ${this.concurrency}`)
 
-    await new Promise<void>((resolve) => {
-      const shutdown = () => {
-        console.log(`[BullMQ] Shutting down ${workers.length} worker(s)...`)
-        void Promise.all(workers.map(w => w.worker.close())).then(() => resolve())
-      }
-      process.once('SIGTERM', shutdown)
-      process.once('SIGINT',  shutdown)
-    })
+    // Block until `disconnect()` resolves — keeps the CLI process alive while
+    // workers poll. Multiple `work()` calls share the same shutdown promise so
+    // they all unblock together when a signal arrives.
+    await new Promise<void>((resolve) => { this._shutdownResolve = resolve })
   }
 
   async status(queueName = 'default'): Promise<QueueStats> {
@@ -311,8 +327,39 @@ class BullMQAdapter implements QueueAdapter {
   }
 
   async disconnect(): Promise<void> {
-    await Promise.all([...this.queues.values()].map(q => q.close()))
+    // Remove signal handlers FIRST so a second SIGTERM during shutdown doesn't
+    // re-enter `disconnect()`. `process.off` is a no-op if the listener
+    // wasn't registered (work() was never called).
+    process.off('SIGTERM', this._shutdown)
+    process.off('SIGINT',  this._shutdown)
+
+    if (this.workers.length > 0) {
+      console.log(`[BullMQ] Shutting down ${this.workers.length} worker(s)...`)
+    }
+
+    // Close workers BEFORE queues — a worker mid-BRPOP holds a Redis
+    // connection from the same pool, and closing the queue first throws
+    // "Connection is closed" inside the worker's polling loop, producing
+    // a confusing unhandled rejection during k8s rolling restarts.
+    // `allSettled` so a single worker rejection doesn't abandon the others.
+    const workerResults = await Promise.allSettled(this.workers.map(w => w.close()))
+    for (const r of workerResults) {
+      if (r.status === 'rejected') {
+        console.error('[BullMQ] Worker close failed:', r.reason)
+      }
+    }
+    this.workers.length = 0
+
+    const queueResults = await Promise.allSettled([...this.queues.values()].map(q => q.close()))
+    for (const r of queueResults) {
+      if (r.status === 'rejected') {
+        console.error('[BullMQ] Queue close failed:', r.reason)
+      }
+    }
     this.queues.clear()
+
+    this._shutdownResolve?.()
+    this._shutdownResolve = undefined
   }
 }
 

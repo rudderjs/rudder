@@ -355,20 +355,36 @@ export class QueueProvider extends ServiceProvider {
       QueueRegistry.set(adapter)
       this.app.instance('queue', adapter)
 
+      // All commands resolve the adapter at invocation via `QueueRegistry.get()`
+      // instead of closing over `adapter` captured at boot — Vite SSR re-eval
+      // calls `boot()` again, the dedup in `rudder.command()` replaces our
+      // closure with a fresh one, but any stale handler that survived would
+      // operate against the previous adapter. Lazy lookup means the latest
+      // adapter is always the one acted on, and tests that swap the adapter
+      // via `QueueRegistry.set(...)` work end-to-end with no boot re-run.
+      const currentAdapter = (): QueueAdapter => {
+        const a = QueueRegistry.get()
+        if (!a) throw new Error('[RudderJS Queue] No queue adapter registered')
+        return a
+      }
+      const driverName = (): string => driver
+
       rudder.command('queue:work', async (args) => {
-        if (typeof adapter.work !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
+        const a = currentAdapter()
+        if (typeof a.work !== 'function') {
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
         }
         const queues = args[0] ?? 'default'
-        await adapter.work(queues)
+        await a.work(queues)
       }).description('Start a queue worker — pnpm rudder queue:work [queues=default]')
 
       rudder.command('queue:status', async (args) => {
-        if (typeof adapter.status !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:status.`)
+        const a = currentAdapter()
+        if (typeof a.status !== 'function') {
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:status.`)
         }
         const queueName = args[0] ?? 'default'
-        const stats = await adapter.status(queueName)
+        const stats = await a.status(queueName)
         console.log(`\nQueue: ${queueName}`)
         console.log(`  Waiting:   ${stats.waiting}`)
         console.log(`  Active:    ${stats.active}`)
@@ -379,20 +395,22 @@ export class QueueProvider extends ServiceProvider {
       }).description('Show queue stats — pnpm rudder queue:status [queue=default]')
 
       rudder.command('queue:clear', async (args) => {
-        if (typeof adapter.flush !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:clear.`)
+        const a = currentAdapter()
+        if (typeof a.flush !== 'function') {
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:clear.`)
         }
         const queueName = args[0] ?? 'default'
-        await adapter.flush(queueName)
+        await a.flush(queueName)
         console.log(`Queue "${queueName}" cleared.`)
       }).description('Drain waiting + delayed jobs — pnpm rudder queue:clear [queue=default]')
 
       rudder.command('queue:failed', async (args) => {
-        if (typeof adapter.failures !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:failed.`)
+        const a = currentAdapter()
+        if (typeof a.failures !== 'function') {
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:failed.`)
         }
         const queueName = args[0] ?? 'default'
-        const jobs = await adapter.failures(queueName)
+        const jobs = await a.failures(queueName)
         if (jobs.length === 0) {
           console.log(`No failed jobs in queue "${queueName}".`)
           return
@@ -409,11 +427,12 @@ export class QueueProvider extends ServiceProvider {
       }).description('List failed jobs — pnpm rudder queue:failed [queue=default]')
 
       rudder.command('queue:retry', async (args) => {
-        if (typeof adapter.retryFailed !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:retry.`)
+        const a = currentAdapter()
+        if (typeof a.retryFailed !== 'function') {
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:retry.`)
         }
         const queueName = args[0] ?? 'default'
-        const count = await adapter.retryFailed(queueName)
+        const count = await a.retryFailed(queueName)
         console.log(`Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
       }).description('Retry all failed jobs — pnpm rudder queue:retry [queue=default]')
 
