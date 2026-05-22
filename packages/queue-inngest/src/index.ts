@@ -32,6 +32,23 @@ function eventName(JobClass: { name: string }): string {
   return `rudderjs/job.${JobClass.name}`
 }
 
+/** Inngest accepts only integer `retries` in [0, 20]. The framework's `Job.retries`
+ *  is typed `number`, so user code can set 25 or -1 or `Infinity` without a
+ *  compile-time signal — Inngest then rejects at registration with a confusing
+ *  error. Validate + warn + clamp at the boundary.
+ */
+type InngestRetries = 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20
+function clampRetries(jobName: string, raw: unknown): InngestRetries {
+  const n = Number(raw ?? 3)
+  if (!Number.isInteger(n) || n < 0 || n > 20) {
+    console.warn(
+      `[RudderJS Queue/Inngest] retries=${String(raw)} on job "${jobName}" is invalid ` +
+      `(must be integer in [0, 20]); clamping to ${Math.max(0, Math.min(20, Math.floor(Number.isFinite(n) ? n : 3)))}.`,
+    )
+  }
+  return Math.max(0, Math.min(20, Math.floor(Number.isFinite(n) ? n : 3))) as InngestRetries
+}
+
 // ─── Inngest Adapter ───────────────────────────────────────
 
 class InngestAdapter implements QueueAdapter {
@@ -59,18 +76,24 @@ class InngestAdapter implements QueueAdapter {
         {
           id:      JobClass.name,
           name:    JobClass.name,
-          retries: ((JobClass as unknown as typeof Job).retries ?? 3) as 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20,
+          retries: clampRetries(JobClass.name, (JobClass as unknown as typeof Job).retries),
         },
         { event: eventName(JobClass) },
         async ({ event }) => {
-          const payload = (event.data as Record<string, unknown>)['payload'] ?? {}
+          const data    = event.data as Record<string, unknown>
+          const payload = data['payload'] ?? {}
           // Reconstruct the job instance from the serialized payload, then
-          // hand off to `executeJob` so middleware, `failed()`, and
-          // ShouldBeUnique lock release fire — previously Inngest only
-          // invoked `handle()` and skipped them all.
-          const decoded = decodePayload(payload as Record<string, unknown>) as Record<string, unknown>
+          // hand off to `executeJob` so middleware, `failed()`, ShouldBeUnique
+          // lock release, AND request-context hydration all fire — previously
+          // Inngest invoked `handle()` only (Phase 1) and even after that the
+          // `__context` was dropped (Phase 4).
+          const decoded  = decodePayload(payload as Record<string, unknown>) as Record<string, unknown>
           const instance = Object.assign(new (JobClass as new () => Job)(), decoded)
-          await executeJob(instance, {})
+          const ctx      = data['__context']
+          await executeJob(
+            instance,
+            ctx && typeof ctx === 'object' ? { __context: ctx as Record<string, unknown> } : {},
+          )
         },
       ),
     )
@@ -100,9 +123,14 @@ class InngestAdapter implements QueueAdapter {
     await this.client.send({
       name: eventName({ name }),
       data: {
-        job:  name,
+        job:   name,
         payload,
         queue: options.queue ?? 'default',
+        // Embed serialized request context (tenant/user/locale ALS via
+        // `@rudderjs/context`) so the worker can rehydrate it through
+        // `executeJob`. Without this, switching from BullMQ → Inngest
+        // silently drops context and risks wrong-tenant DB writes.
+        ...(options.__context ? { __context: options.__context } : {}),
       },
       ...(options.delay ? { ts: Date.now() + options.delay } : {}),
     })
