@@ -11,15 +11,35 @@
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
+  "files": [
+    "dist"
+  ],
   "description": "Scaffold a new Rudder application — `npm create rudder@latest`",
   "bin": {
-    "create-rudder": "./bin/index.mjs"
+    "create-rudder": "./dist/index.js"
   },
-  "files": [
-    "bin"
-  ],
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "smoke": "tsx scripts/smoke.ts",
+    "clean": "rm -rf dist"
+  },
   "dependencies": {
-    "create-rudder-app": "workspace:^"
+    "@rudderjs/auth": "workspace:*",
+    "@clack/prompts": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "playwright": "^1.60.0",
+    "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"
 }

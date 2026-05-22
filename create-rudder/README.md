@@ -8,7 +8,13 @@ cd my-app && pnpm dev
 # → http://localhost:3000 — welcome page + register/login working end-to-end
 ```
 
-Works with every major package manager — the installer detects which one you used and adapts every generated file, install command, and post-scaffold hint.
+The installer asks four to six questions, then runs `pnpm install`, generates the Prisma client, pushes the schema (for SQLite) or asks first (for Postgres/MySQL), publishes auth views, generates Passport keys (when selected), and initializes git — all in one shot.
+
+---
+
+## Install
+
+All four major package managers work. The installer detects which one you used and adapts every generated file, install command, and post-scaffold hint.
 
 ```bash
 pnpm create rudder [name]
@@ -17,13 +23,15 @@ yarn create rudder [name]
 bunx create-rudder [name]
 ```
 
-Skip `[name]` to be prompted for one. The installer then asks four to six questions, runs `pnpm install`, generates the Prisma client, pushes the schema (for SQLite) or asks first (for Postgres/MySQL), publishes auth views, generates Passport keys (when selected), and initializes git — all in one shot.
+Skip `[name]` to be prompted for one.
+
+> The legacy `create-rudder-app` invocation (`pnpm create rudder-app …`) still works — it now prints a one-line nudge to switch to `create-rudder` and otherwise scaffolds identically.
 
 ---
 
 ## Full documentation
 
-Recipe table, prompt-by-prompt walkthrough, generated structure, non-interactive (CI/AI agent) flag list, after-scaffold cascade — all live with the framework guide:
+The detailed scaffolder docs — recipe table, prompt-by-prompt walkthrough, generated structure, non-interactive (CI/AI agent) flag list, after-scaffold cascade — live with the framework guide:
 
 - **Installation guide**: <https://github.com/rudderjs/rudder/blob/main/docs/guide/installation.md>
 - **Main framework**: <https://github.com/rudderjs/rudder>
@@ -31,9 +39,19 @@ Recipe table, prompt-by-prompt walkthrough, generated structure, non-interactive
 
 ---
 
-## About this package
+## Contributing to the scaffolder
 
-`create-rudder` is the package you reach for when you run `npm create rudder@latest`. It's a thin alias around [`create-rudder-app`](https://www.npmjs.com/package/create-rudder-app), which still exists for backwards compatibility — both spawn the same scaffolder. New docs use the shorter `create-rudder` form to match the brand.
+The scaffolder source lives at `create-rudder/` in the framework monorepo (the `create-rudder-app` package is a thin stub that re-spawns this one):
+
+```bash
+git clone https://github.com/rudderjs/rudder.git
+cd rudder/create-rudder
+pnpm install
+pnpm build
+node dist/index.js                              # launches the interactive CLI from source
+pnpm test                                       # template tests + snapshot baseline
+pnpm smoke                                      # default end-to-end smoke
+```
 
 ---
 
