@@ -67,12 +67,36 @@ import { broadcast } from '@rudderjs/broadcast'
 
 Route.post('/orders/:id/ship', async (req) => {
   await shipOrder(req.params.id)
-  broadcast(`orders.${req.params.id}`, 'order.shipped', { id: req.params.id })
+  await broadcast(`orders.${req.params.id}`, 'order.shipped', { id: req.params.id })
   return { ok: true }
 })
 ```
 
-`broadcast(channel, event, payload)` is fire-and-forget — it doesn't wait for delivery. Subscribed clients get the event asynchronously over the WebSocket.
+`broadcast(channel, event, payload)` returns a `Promise<void>` — it resolves once the configured driver has accepted the message. On the default `LocalDriver` that's same-tick, effectively fire-and-forget. With a multi-instance driver (see below) it resolves after one Redis round-trip. Subscribed clients receive the event asynchronously over the WebSocket.
+
+## Multi-instance deployments
+
+`@rudderjs/broadcast` ships an in-process `LocalDriver` by default. It walks the local subscriber map — fine for a single Node process, but a `broadcast()` call from any other instance silently delivers to nobody as soon as you scale beyond one process.
+
+Install [`@rudderjs/broadcast-redis`](https://www.npmjs.com/package/@rudderjs/broadcast-redis) and point the broadcast config at it:
+
+```bash
+pnpm add @rudderjs/broadcast-redis ioredis
+```
+
+```ts
+// config/broadcast.ts
+import type { BroadcastConfig } from '@rudderjs/broadcast'
+import { RedisDriver }           from '@rudderjs/broadcast-redis'
+
+const config: BroadcastConfig = {
+  driver: () => new RedisDriver({ redis: process.env.REDIS_URL! }),
+}
+
+export default config
+```
+
+That's it. Channel auth, presence, telescope, the rudder commands — all unchanged. Run `pnpm rudder doctor --deep` to verify `REDIS_URL` is set and reachable.
 
 ## The browser client
 

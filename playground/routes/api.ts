@@ -82,7 +82,7 @@ Route.get('/api/hello', async (req) => {
 // WebSocket demo routes
 Route.post('/api/ws/broadcast', async (req, res) => {
   const { user, text, ts } = req.body as { user: string; text: string; ts: number }
-  broadcast('chat', 'message', { user, text, ts })
+  await broadcast('chat', 'message', { user, text, ts })
   return res.json({ ok: true })
 })
 

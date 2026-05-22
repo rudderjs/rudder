@@ -1,0 +1,54 @@
+{
+  "name": "@rudderjs/broadcast-redis",
+  "version": "1.0.0",
+  "description": "Redis pub/sub driver for @rudderjs/broadcast — multi-instance WebSocket broadcast fan-out.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rudderjs/rudder",
+    "directory": "packages/broadcast-redis"
+  },
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import":  "./dist/index.js",
+      "default": "./dist/index.js",
+      "types":   "./dist/index.d.ts"
+    },
+    "./doctor": {
+      "import":  "./dist/doctor.js",
+      "default": "./dist/doctor.js",
+      "types":   "./dist/doctor.d.ts"
+    }
+  },
+  "scripts": {
+    "build":     "tsc -p tsconfig.build.json",
+    "dev":       "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "lint":      "eslint src",
+    "clean":     "rm -rf dist",
+    "test":      "tsc -p tsconfig.test.json && node --test --experimental-test-module-mocks dist-test/redis-driver.test.js"
+  },
+  "peerDependencies": {
+    "@rudderjs/broadcast": "workspace:^",
+    "ioredis":             "^5.0.0"
+  },
+  "dependencies": {
+    "@rudderjs/console":   "workspace:^"
+  },
+  "devDependencies": {
+    "@rudderjs/broadcast": "workspace:^",
+    "@types/node":         "^20.0.0",
+    "ioredis":             "^5.0.0",
+    "typescript":          "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

@@ -146,7 +146,7 @@ type DispatchFn = (
   fn: () => void | Promise<void>,
   options?: { queue?: string; delay?: number },
 ) => Promise<void>
-type BroadcastFn = (channel: string, event: string, data: unknown) => void
+type BroadcastFn = (channel: string, event: string, data: unknown) => void | Promise<void>
 
 let _dispatchLoader:  () => Promise<DispatchFn>          = defaultLoadDispatch
 let _broadcastLoader: () => Promise<BroadcastFn | null>  = defaultLoadBroadcast
@@ -220,16 +220,16 @@ async function runStreamingAndBroadcast(
 
   const { stream, response } = agentRef.stream(input, options)
   for await (const chunk of stream as AsyncIterable<StreamChunk>) {
-    broadcastFn(channel, eventPrefix + 'chunk', chunk)
+    await broadcastFn(channel, eventPrefix + 'chunk', chunk)
   }
   const final = await response
-  broadcastFn(channel, eventPrefix + 'done', final)
+  await broadcastFn(channel, eventPrefix + 'done', final)
   return final
 }
 
 async function safeBroadcast(channel: string, event: string, data: unknown): Promise<void> {
   try {
     const broadcastFn = await loadBroadcast()
-    broadcastFn?.(channel, event, data)
+    await broadcastFn?.(channel, event, data)
   } catch { /* best-effort — don't let broadcast errors mask the original failure */ }
 }

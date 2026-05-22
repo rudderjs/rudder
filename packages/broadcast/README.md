@@ -57,14 +57,14 @@ RudderJS WebSockets are organized into three types:
 
 ### `broadcast(channel, event, data)`
 
-Push an event to all subscribers of a channel from anywhere in your application:
+Push an event to all subscribers of a channel from anywhere in your application. Returns `Promise<void>` — resolves once the configured [driver](#multi-instance-fan-out) has accepted the message.
 
 ```ts
 import { broadcast } from '@rudderjs/broadcast'
 
 // In a route handler, job, or event listener
-broadcast('orders', 'order.shipped', { orderId: 123 })
-broadcast('private-orders.42', 'status.updated', { status: 'delivered' })
+await broadcast('orders', 'order.shipped', { orderId: 123 })
+await broadcast('private-orders.42', 'status.updated', { status: 'delivered' })
 ```
 
 ### `Broadcast.channel(pattern, callback)`
@@ -89,6 +89,30 @@ import { broadcastStats } from '@rudderjs/broadcast'
 
 broadcastStats()  // → { connections: 5, channels: 3 }
 ```
+
+## Multi-instance fan-out
+
+The default `LocalDriver` walks an in-process subscriber map — fine for a single Node process. For 2+ instance deployments (load-balanced behind a proxy, autoscaled containers, Fly machines, etc.) install [`@rudderjs/broadcast-redis`](https://www.npmjs.com/package/@rudderjs/broadcast-redis):
+
+```bash
+pnpm add @rudderjs/broadcast-redis ioredis
+```
+
+```ts
+// config/broadcast.ts
+import type { BroadcastConfig } from '@rudderjs/broadcast'
+import { RedisDriver }           from '@rudderjs/broadcast-redis'
+
+const config: BroadcastConfig = {
+  driver: () => new RedisDriver({ redis: process.env.REDIS_URL! }),
+}
+
+export default config
+```
+
+Every `broadcast()` call now fans out across every instance via Redis pub/sub. Channel auth, presence, telescope observability, the `broadcast.connections` rudder command — all unchanged.
+
+Custom drivers implement `BroadcastDriver` (`publish(channel, event, data, meta?) → Promise<void>` + `subscribe(handler) → unsubscribe`). See `@rudderjs/broadcast-redis` for a reference implementation.
 
 ## Client (BKSocket)
 
