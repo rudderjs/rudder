@@ -1,5 +1,11 @@
 # create-rudder
 
+## 1.4.1
+
+### Patch Changes
+
+- create-rudder-app@1.4.1
+
 ## 1.4.0
 
 ### Minor Changes
