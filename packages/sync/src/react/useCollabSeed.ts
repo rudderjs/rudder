@@ -81,9 +81,9 @@ function useSeedShareType<Share extends SeedableShare>(
     })
 
     return () => { cancelled = true }
-    // `getShare` is a module-level function (`doc.getXmlFragment` or
-    // `doc.getText`) so its identity is stable across renders; safe to omit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `getShare` deliberately omitted — both call sites pass a stable
+    // module-level binding (`doc.getXmlFragment` / `doc.getText`); per-render
+    // identity is irrelevant to the effect's correctness.
   }, [room, key])
 
   return seeded
