@@ -35,6 +35,13 @@ function eventName(JobClass: { name: string }): string {
 // ─── Inngest Adapter ───────────────────────────────────────
 
 class InngestAdapter implements QueueAdapter {
+  // Inngest serialises every event through JSON, so closure / chain / batch
+  // wrappers (which carry the user's `handle` as a function property) lose
+  // the handler on the wire. Surface the limitation explicitly.
+  readonly supportsClosures = false
+  readonly supportsChain    = false
+  readonly supportsBatch    = false
+
   private readonly client:  Inngest
   private readonly handler: (ctx: unknown) => Promise<Response>
 

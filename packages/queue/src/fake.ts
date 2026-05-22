@@ -19,6 +19,13 @@ import { Job } from './index.js'
  * fake.restore()
  */
 export class FakeQueueAdapter implements QueueAdapter {
+  // Behaves like an in-process driver for capability gating — closure /
+  // chain / batch dispatchers can record under the fake the same way they
+  // would on SyncAdapter.
+  readonly supportsClosures = true
+  readonly supportsChain    = true
+  readonly supportsBatch    = true
+
   private readonly _jobs: Array<{ job: Job; options?: DispatchOptions | undefined }> = []
 
   // ─── QueueAdapter interface ──────────────────────────────

@@ -64,6 +64,14 @@ function redisOpts(config: BullMQConfig): Record<string, unknown> {
 // ─── Adapter ───────────────────────────────────────────────
 
 class BullMQAdapter implements QueueAdapter {
+  // Closure / chain / batch wrappers store the user's `handle` function on a
+  // plain object, then go through JSON serialisation when BullMQ enqueues
+  // them — the function silently becomes `undefined` and the worker has no
+  // handler to call. Surface the limitation explicitly via capability flags.
+  readonly supportsClosures = false
+  readonly supportsChain    = false
+  readonly supportsBatch    = false
+
   private readonly queues            = new Map<string, Queue>()
   private readonly jobRegistry       = new Map<string, new (...args: never[]) => Job>()
   private readonly connection:        Record<string, unknown>
