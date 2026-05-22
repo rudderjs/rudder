@@ -67,10 +67,23 @@ export class Chain {
     const adapter = QueueRegistry.get()
     if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
 
+    // Native chain support overrides the capability flag — a driver might
+    // not support the default closure-wrapped chain runner yet still expose
+    // its own `dispatchChain`.
     if (_supportsChain(adapter)) {
       const opts: Parameters<ChainableAdapter['dispatchChain']>[1] = { queue: this._queue }
       if (this._onFailureFn) opts.onFailure = this._onFailureFn
       return adapter.dispatchChain(this._jobs, opts)
+    }
+
+    if (!adapter.supportsChain) {
+      throw new Error(
+        `[RudderJS Queue] Chain.of([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
+        `the default runner wraps the job array in a closure, and the function reference is dropped when the ` +
+        `payload is serialised onto the wire. ` +
+        `Dispatch the jobs individually (with each one calling the next on completion), or switch the queue driver ` +
+        `to "sync" for this code path.`,
+      )
     }
 
     // Default: sequential in-process execution via a single dispatched job

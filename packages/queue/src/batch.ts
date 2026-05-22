@@ -104,6 +104,9 @@ export class PendingBatch {
     const batchId = `batch_${++_batchIdCounter}_${Date.now()}`
     const batch   = new Batch(batchId, this._jobs.length)
 
+    // Native batch support overrides the capability flag — a driver might
+    // ship its own `dispatchBatch` even if the default wrapped-closure
+    // runner wouldn't survive its wire format.
     if (_supportsBatch(adapter)) {
       const opts: Parameters<BatchableAdapter['dispatchBatch']>[1] = {
         batchId,
@@ -114,6 +117,16 @@ export class PendingBatch {
       if (this._catchFn)   opts.catch   = this._catchFn
       if (this._finallyFn) opts.finally = this._finallyFn
       return adapter.dispatchBatch(this._jobs, opts)
+    }
+
+    if (!adapter.supportsBatch) {
+      throw new Error(
+        `[RudderJS Queue] Bus.batch([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
+        `the default runner wraps each job in a tracking closure, and the function reference is dropped when ` +
+        `the payload is serialised onto the wire. ` +
+        `Dispatch the jobs individually (and track success/failure yourself), or switch the queue driver to ` +
+        `"sync" for this code path.`,
+      )
     }
 
     // Default: dispatch each job and track via a wrapper
@@ -153,7 +166,10 @@ async function _runBatchDefault(
   catchFn?: (error: unknown, batch: Batch) => void | Promise<void>,
   finallyFn?: (batch: Batch) => void | Promise<void>,
 ): Promise<void> {
-  // Wrap each job to track success/failure
+  // Wrap each job to track success/failure. catchFn intentionally NOT
+  // invoked here — a multi-failure batch would call it once per failure.
+  // Laravel parity is "fires once for the batch", which we do below after
+  // `Promise.allSettled` returns.
   const wrappedJobs = jobs.map(job => ({
     handle: async () => {
       if (batch.cancelled) return
@@ -162,9 +178,6 @@ async function _runBatchDefault(
         batch._recordSuccess()
       } catch (err) {
         batch._recordFailure()
-        if (!allowFailures && catchFn) {
-          await catchFn(err, batch)
-        }
         if (!allowFailures) throw err
       }
     },
@@ -177,10 +190,18 @@ async function _runBatchDefault(
 
   // For sync adapter, jobs already ran. For async adapters, they're just enqueued.
   // Check if any rejected
-  const firstError = results.find(r => r.status === 'rejected')
+  const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
 
   if (batch.failedJobs === 0 && !firstError) {
     if (thenFn) await thenFn(batch)
+  } else if (catchFn) {
+    // Single catchFn call for the whole batch (Laravel parity) — pass the
+    // first rejection reason or a synthesised error when failures were
+    // recorded inside wrappers that swallowed them (allowFailures: true).
+    const err = firstError
+      ? firstError.reason
+      : new Error(`[RudderJS Queue] Batch "${batch.id}" had ${batch.failedJobs} failed job(s)`)
+    await catchFn(err, batch)
   }
 
   if (finallyFn) await finallyFn(batch)

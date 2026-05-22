@@ -24,6 +24,14 @@ export async function dispatch(
   const adapter = QueueRegistry.get()
   if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
 
+  if (!adapter.supportsClosures) {
+    throw new Error(
+      `[RudderJS Queue] dispatch(fn) closure jobs are not supported by the "${adapter.constructor.name}" driver — ` +
+      `the function would be dropped when the payload is serialised onto the wire. ` +
+      `Define a concrete Job class with a class-method handle(), or switch the queue driver to "sync" for this code path.`,
+    )
+  }
+
   const job: Job = {
     handle: fn,
   } as Job

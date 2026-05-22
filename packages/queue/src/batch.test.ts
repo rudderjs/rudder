@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Job, QueueRegistry, SyncAdapter } from './index.js'
+import { Job, QueueRegistry, SyncAdapter, type QueueAdapter, type DispatchOptions } from './index.js'
 import { Batch, Bus } from './batch.js'
 
 class CountingJob extends Job {
@@ -16,6 +16,13 @@ class ThrowingJob extends Job {
   async handle(): Promise<void> {
     throw new Error('boom')
   }
+}
+
+class AsyncOnlyAdapter implements QueueAdapter {
+  readonly supportsClosures = false
+  readonly supportsChain    = false
+  readonly supportsBatch    = false
+  async dispatch(_job: Job, _options?: DispatchOptions): Promise<void> { /* noop */ }
 }
 
 describe('Batch', () => {
@@ -131,6 +138,42 @@ describe('Batch', () => {
       const batch = new Batch('empty', 0)
       assert.strictEqual(batch.progress, 100)
       assert.strictEqual(batch.finished, true)
+    })
+  })
+
+  describe('catch() — fires exactly once for the whole batch', () => {
+    it('catch() fires once even when three jobs fail (allowFailures)', async () => {
+      const calls: unknown[] = []
+      const batch = await Bus.batch([new ThrowingJob(), new ThrowingJob(), new ThrowingJob()])
+        .allowFailures()
+        .catch((err) => { calls.push(err) })
+        .dispatch()
+
+      assert.equal(calls.length, 1, 'catch must fire once per batch, not once per failure')
+      assert.equal(batch.failedJobs, 3)
+      assert.equal(batch.finished, true)
+    })
+
+    it('catch() fires once with the first error when failures cascade without allowFailures', async () => {
+      const calls: unknown[] = []
+      await Bus.batch([new ThrowingJob(), new CountingJob()])
+        .catch((err) => { calls.push(err) })
+        .dispatch()
+
+      assert.equal(calls.length, 1)
+      assert.ok(calls[0] instanceof Error)
+      assert.match((calls[0] as Error).message, /boom/)
+    })
+  })
+
+  describe('capability gating', () => {
+    it('throws a clear error on an adapter that does not support batch', async () => {
+      QueueRegistry.reset()
+      QueueRegistry.set(new AsyncOnlyAdapter())
+      await assert.rejects(
+        () => Bus.batch([new CountingJob()]).dispatch(),
+        /Bus\.batch.*not supported.*AsyncOnlyAdapter/,
+      )
     })
   })
 })

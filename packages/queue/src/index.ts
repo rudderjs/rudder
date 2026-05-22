@@ -132,6 +132,32 @@ export interface QueueAdapter {
   /** Dispatch a job */
   dispatch(job: Job, options?: DispatchOptions): Promise<void>
 
+  /**
+   * Whether closure-style `dispatch(fn)` is supported. The default runner
+   * stuffs the user's function into a `{ handle: fn }` object and dispatches
+   * it — that survives only on in-process drivers (Sync, Fake). Async drivers
+   * serialize the wrapper through JSON, dropping the function silently and
+   * leaving the worker with no `handle` to call. Drivers that can run closures
+   * (in-process) set this `true`; everyone else `false`.
+   */
+  readonly supportsClosures?: boolean
+
+  /**
+   * Whether `Chain.of([...]).dispatch()` is supported. The default chain
+   * runner wraps the job array in a closure — same JSON-loses-functions
+   * trap as `supportsClosures`. Adapters that ship a native `dispatchChain`
+   * (or whose default runner is safe, i.e. Sync) flip this `true`.
+   */
+  readonly supportsChain?: boolean
+
+  /**
+   * Whether `Bus.batch([...]).dispatch()` is supported. The default batch
+   * runner wraps each job in a closure-tracked dispatcher — again, the
+   * JSON-loses-functions trap. Adapters with a native `dispatchBatch` (or
+   * in-process drivers) flip this `true`.
+   */
+  readonly supportsBatch?: boolean
+
   /** Start processing jobs (for self-hosted adapters like BullMQ) — comma-separated queue names */
   work?(queues?: string): Promise<void>
 
@@ -227,6 +253,13 @@ function safePayload(job: Job): Record<string, unknown> {
 }
 
 export class SyncAdapter implements QueueAdapter {
+  // In-process driver runs the job in the same tick as dispatch, so the
+  // wrapped closures in `dispatch(fn)` / `Chain` / `Bus.batch` keep their
+  // `handle` reference intact (no JSON round-trip).
+  readonly supportsClosures = true
+  readonly supportsChain    = true
+  readonly supportsBatch    = true
+
   async dispatch(job: Job, options?: DispatchOptions): Promise<void> {
     const jobId        = randomUUID()
     const name         = job.constructor.name

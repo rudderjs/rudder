@@ -1,7 +1,14 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Job, QueueRegistry, SyncAdapter } from './index.js'
+import { Job, QueueRegistry, SyncAdapter, type QueueAdapter, type DispatchOptions } from './index.js'
 import { Chain, getChainState } from './chain.js'
+
+class AsyncOnlyAdapter implements QueueAdapter {
+  readonly supportsClosures = false
+  readonly supportsChain    = false
+  readonly supportsBatch    = false
+  async dispatch(_job: Job, _options?: DispatchOptions): Promise<void> { /* noop */ }
+}
 
 class StatefulJob extends Job {
   ran = false
@@ -83,5 +90,14 @@ describe('Chain', () => {
   it('getChainState returns empty for jobs not in a chain', () => {
     const orphan = new StatefulJob()
     assert.deepStrictEqual(getChainState(orphan), {})
+  })
+
+  it('throws a clear error on an adapter that does not support chain', async () => {
+    QueueRegistry.reset()
+    QueueRegistry.set(new AsyncOnlyAdapter())
+    await assert.rejects(
+      () => Chain.of([new StatefulJob()]).dispatch(),
+      /Chain\.of.*not supported.*AsyncOnlyAdapter/,
+    )
   })
 })
