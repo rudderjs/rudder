@@ -1,5 +1,42 @@
 # @rudderjs/live
 
+## 1.3.0
+
+### Minor Changes
+
+- 335a2e3: Harden the persistence layer + atomic `Sync.seed` (Phase 7 of the 2026-05-22 eventing/realtime plan):
+
+  - **`Sync.seed()` empty-doc gate is now atomic** — the check moved inside `transact` and runs against the actual `fields.size`, not the doc's state vector. Pre-fix, the state-vector check skipped seeding for any doc that had previously been opened (state vector grew on first connect, even with no field writes). Two concurrent `seed()` callers now serialise on Yjs's per-doc transact queue. Return type changed from `Promise<void>` to `Promise<boolean>` — `true` if this call wrote, `false` if the doc was already seeded.
+  - **`room.ready` rejects on persistence load failure** — was previously silenced with `.catch + resolve`, leaving a broken in-memory room cached forever. Now the WS upgrade closes the socket cleanly (RFC 6455 code 1011) and `Sync.snapshotAsync` / `readMapAsync` / `readTextAsync` / `seed` propagate the rejection to user code. Subsequent calls reload from persistence instead of operating against an empty doc.
+  - **`persistence.storeUpdate` failures emit `sync.error`** — fire-and-forget storeUpdate on server-originated updates (via `doc.on('update')` in `getOrCreateRoom`) and awaited storeUpdate on client messages both surface errors as `sync.error` events with the new `op: 'storeUpdate'` field. Telescope picks them up unchanged.
+  - **`onChange` callback failures emit `sync.error`** — was previously `await onChange?.()` with no try/catch, producing unhandled-rejection noise. Now caught and surfaced as `sync.error` with `op: 'onChange'`.
+  - **AI awareness clock survives HMR / process restart** — was a module-level counter that reset to 0 on Vite SSR re-eval, causing y-protocols to filter "older" clocks and silently drop AI cursor updates. Now lives on `globalThis['__rudderjs_sync_ai_clock__']`.
+  - **`SyncEvent['sync.error']` gains optional `op` field** — `'getYDoc' | 'storeUpdate' | 'onChange' | 'seed' | 'firstConnect'`. Backward-compatible (optional); telescope's SyncCollector picks it up via the generic `[key: string]: unknown` shape.
+
+  The `room.ready` and `Sync.seed` return-type changes are the only public-surface shifts. No existing in-repo callers exercise either change point.
+
+- c59990d: `@rudderjs/sync/react` — `useCollabSeedText` + `enabled` option on `useCollabRoom`.
+
+  Two additive hooks/options that unblock CodeMirror-style adapters and conditional-connection patterns. Both pieces are mechanically small and fully backwards-compatible — existing call sites see no behavior change.
+
+  - **`useCollabSeedText(room, textKey, seedFn)`** — sibling of `useCollabSeed` for `Y.Text`-shaped editors (CodeMirror via `y-codemirror.next`, Monaco, plain `Y.Text` bindings). The existing `useCollabSeed` calls `doc.getXmlFragment(key)` unconditionally, which is correct for Tiptap / ProseMirror but throws / corrupts the doc on a name already bound as `Y.Text`. Same synced-await + `'rudder-sync-seed'` transact-origin semantics; the share-type-aware decision is the only difference. The two hooks now share an internal `seedShareTypeOnSync` helper that's exported for testing.
+
+  - **`UseCollabRoomOptions.enabled?: boolean`** — default `true`. Set to `false` to gate the WebSocket handshake + IndexedDB open without a render-time branch around the hook (illegal under Rules of Hooks). Standard shape — matches `useSWR({ enabled })` / `useQuery({ enabled })`. Flipping `false → true` mounts the manager; `true → false` runs the same `manager.stop()` path as unmount (and `room` flips back to `null` via the existing `onRoomChange(null)` callback). Use for "render fields locally until prerequisites are met" — e.g. `enabled: !!wsPath`.
+
+  Both hooks remain thin React wrappers; the framework continues to put testable logic in non-hook helpers (`CollabRoomManager` / `seedShareTypeOnSync`) so no React testing harness is required.
+
+### Patch Changes
+
+- ea5b53d: Awareness lifecycle + globals hygiene (Phase 8 of the 2026-05-22 eventing/realtime plan):
+
+  - **Dead sockets pruned from `awarenessMap` on replay.** Force-killed sockets (proxy timeout, tab kill) never fire the `close` event, so their stored awareness entry would linger and replay ghost cursors to every late joiner. The Step-2 awareness replay loop now deletes entries whose `readyState !== OPEN`.
+  - **AI awareness replay TTL.** Stored `aiAwarenessMsg` was replayed to every new joiner forever; if the AI agent crashed without calling `clearAiAwareness`, the stale cursor never went away. Stored AI awareness now carries an `aiAwarenessAt` timestamp and the handler skips replay (and drops the buffer) once it's older than 60 seconds.
+  - **`Sync.clearAiAwareness(docName)` server helper.** Explicit recovery path keyed by `docName` for when an AI agent crashes without a Y.Doc reference handy. Drops the stored replay buffer; the lexical-side `clearAiAwareness(doc)` is still the way to also broadcast a null awareness frame to currently connected clients.
+  - **Centralized globalThis keys.** `packages/sync/src/globals.ts` now owns the slot names — `rooms`, `persistence`, `firstConnect`, `observers`, `aiAwarenessClock`. The package was renamed `live` → `sync` last year but two slots still carried the `__rudderjs_live_*` prefix and were re-declared independently across `index.ts` and `lexical/awareness.ts` — rename either side and AI cursors silently broke. All slots now use the `__rudderjs_sync_*` prefix and there's only one source of truth.
+  - **`CollabRoomManager.start()` throws on second call.** Was a silent no-op; if the first call was cancelled mid-`loadYjs` (React strict-mode double-invoke, route change), the `synced` promise was already rejected and the second call returned `undefined` against a dead state. Construct a fresh manager to retry — `useCollabRoom` already does this per effect, so the in-tree consumer is unaffected.
+
+  External consumers reaching into `globalThis['__rudderjs_live__']` or `globalThis['__rudderjs_live_persistence__']` directly will need to switch to `globalThis['__rudderjs_sync_rooms__']` / `globalThis['__rudderjs_sync_persistence__']`. Nothing inside the workspace did so.
+
 ## 1.2.0
 
 ### Minor Changes
