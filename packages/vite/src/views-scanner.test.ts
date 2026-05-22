@@ -447,6 +447,128 @@ describe('views-scanner — prerender opt-in', () => {
   })
 })
 
+describe('views-scanner — dynamic prerender (Phase 2)', () => {
+  let root: string
+  let prevCwd: string
+
+  beforeEach(() => { prevCwd = process.cwd() })
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  function leafFiles(outDir: string): { prerender: boolean; hook: boolean } {
+    return {
+      prerender: fs.existsSync(path.join(outDir, '+prerender.ts')),
+      hook:      fs.existsSync(path.join(outDir, '+onBeforePrerenderStart.ts')),
+    }
+  }
+
+  it('emits both +prerender.ts and +onBeforePrerenderStart.ts for an array literal', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const route = '/blog/@slug'\nexport const prerender = ['/blog/a', '/blog/b']\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: true })
+    const hookSrc = fs.readFileSync(path.join(out, '+onBeforePrerenderStart.ts'), 'utf8')
+    assert.match(hookSrc, /import\s+\{\s*prerender as source\s*\}\s+from\s+'App\/Views\/Home\.tsx'/)
+    assert.match(hookSrc, /OnBeforePrerenderStartAsync/)
+  })
+
+  it('emits both files for an async function form', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = async () => ['/a', '/b']\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: true })
+  })
+
+  it('emits both files for a typed function annotation', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender: () => Promise<string[]> = async () => ['/a']\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: true })
+  })
+
+  it('static `= true` still emits only +prerender.ts (no hook)', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = true\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: false })
+  })
+
+  it('removes the hook file when source switches dynamic → static', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = ['/a']\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: true })
+
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = true\nexport default function Home() { return null }\n`,
+    )
+    viewsScannerPlugin()
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: false })
+  })
+
+  it('removes both files when the export is dropped entirely', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = ['/a']\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: true, hook: true })
+
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export default function Home() { return null }\n`,
+    )
+    viewsScannerPlugin()
+    assert.deepStrictEqual(leafFiles(out), { prerender: false, hook: false })
+  })
+
+  it('variable-reference RHS is not picked up as dynamic', () => {
+    // `MY_LIST.slice()` has an `=` separated from `(` by an identifier and
+    // dot — the dynamic regex requires `=\s*(...)` so this stays `'off'`.
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `const MY_LIST = ['/a']\nexport const prerender = MY_LIST.slice()\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const out = path.join(root, 'pages', '__view', 'home')
+    assert.deepStrictEqual(leafFiles(out), { prerender: false, hook: false })
+  })
+})
+
 describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
   const prevCwd = process.cwd()
   let root = ''

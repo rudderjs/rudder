@@ -53,6 +53,12 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/typed-view',
     packages:    ['@rudderjs/view', '@rudderjs/vite'],
   },
+  {
+    title:       'Dynamic prerender',
+    description: 'Parameterized route with build-time URL enumeration. export const prerender = [\'/demos/prerender-dynamic/alpha\', \'/.../beta\'] in the view file writes one static HTML per slug at build time — array form for inline lists, async function form for DB-driven slugs.',
+    href:        '/demos/prerender-dynamic/alpha',
+    packages:    ['@rudderjs/view', '@rudderjs/vite'],
+  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]
