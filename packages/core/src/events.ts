@@ -56,6 +56,24 @@ export class EventDispatcher {
     return result
   }
 
+  /**
+   * Returns a snapshot of registered events with each listener's class name
+   * (or `<anonymous>` for ad-hoc handlers without a named constructor).
+   * Used by the `event:list` command for full introspection output.
+   */
+  inspect(): { event: string; listeners: string[] }[] {
+    const result: { event: string; listeners: string[] }[] = []
+    for (const [event, listeners] of this.map.entries()) {
+      const names = listeners.map(l => {
+        const ctor = (l as { constructor?: { name?: string } }).constructor
+        const name = ctor?.name
+        return name && name !== 'Object' ? name : '<anonymous>'
+      })
+      result.push({ event, listeners: names })
+    }
+    return result
+  }
+
   /** @internal — clears all listeners. Used for testing and hot-reload. */
   reset(): void {
     this.map.clear()

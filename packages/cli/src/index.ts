@@ -209,6 +209,18 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerRouteListCommand'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/core → event:list
+    async () => {
+      const mod = await tryImport('@rudderjs/core', 'commands/event-list')
+      const register = mod['registerEventListCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
+    // @rudderjs/core → config:show
+    async () => {
+      const mod = await tryImport('@rudderjs/core', 'commands/config-show')
+      const register = mod['registerConfigShowCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
     // @rudderjs/terminal → make:terminal
     async () => {
       const mod = await tryImport('@rudderjs/terminal', 'commands/make-terminal')

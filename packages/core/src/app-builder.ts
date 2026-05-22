@@ -401,6 +401,31 @@ export class RudderJS {
     await this._providerBoot
   }
 
+  /**
+   * Snapshot of the configured middleware stack. Combines the user's
+   * `withMiddleware()` block with provider-registered group middleware
+   * (`appendToGroup()` calls during `boot()`). Used by the `route:list
+   * --verbose` command to render the resolved per-route stack in the
+   * same order it runs at request time: `[global → group → route]`.
+   *
+   * Requires providers to have booted (so `appendToGroup()` calls
+   * have populated the global group store).
+   */
+  middlewareSnapshot(): {
+    global: MiddlewareHandler[]
+    groups: Record<RouteGroupName, MiddlewareHandler[]>
+  } {
+    const mw = new MiddlewareConfigurator()
+    this._mwFn?.(mw)
+    return {
+      global: mw.getHandlers(),
+      groups: {
+        web: mw.getGroupHandlers('web'),
+        api: mw.getGroupHandlers('api'),
+      },
+    }
+  }
+
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
     if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot

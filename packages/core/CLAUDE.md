@@ -21,6 +21,15 @@ The framework kernel — Application lifecycle, DI container, service providers,
 - **Scoped bindings**: per-request via `AsyncLocalStorage` (lazy-loaded, server-only)
 - **No circular deps**: `@rudderjs/router` is loaded at runtime via `resolveOptionalPeer()` — never add it to `dependencies`
 
+## Introspection commands
+
+Two subpath-exported commands the CLI registers via `tryImport` after `bootApp()` runs:
+
+- `commands/event-list` — `event:list`. Walks `dispatcher.inspect()` (additive to the count-only `dispatcher.list()`); registers `registerEventListCommand(rudder)`. Wildcard `*` and `<anonymous>` listener handling.
+- `commands/config-show` — `config:show [section[.key]]`. Reads `getConfigRepository().all()`, splits camelCase/snake_case/dotted keys into tokens, redacts when the final token is one of `key/secret/password/token/dsn/webhook/signing/salt/pepper/credentials`. `--raw` disables redaction with a stderr warning; `--json` round-trips through redaction.
+
+`RudderJS.middlewareSnapshot()` is consumed by `@rudderjs/router`'s `route:list --verbose` — returns `{ global, groups: { web, api } }` resolved against the current user-side `withMiddleware()` block + provider-registered `appendToGroup()` middleware. Idempotent re-construction of `MiddlewareConfigurator`; safe to call repeatedly.
+
 ## Commands
 
 ```bash

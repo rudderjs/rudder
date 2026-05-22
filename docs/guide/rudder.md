@@ -139,7 +139,9 @@ The framework ships several built-in commands that show up automatically. The se
 | `queue:work` | queue | Worker process |
 | `storage:link` | storage | Symlink `public/storage → storage/app/public` |
 | `schedule:work`, `schedule:run`, `schedule:list` | schedule | Task scheduler |
-| `route:list` | router | List all registered routes with name + middleware |
+| `route:list` | router | List all registered routes with name + middleware. `--verbose` (or `-v`) expands the resolved `[global → group → route]` middleware stack in the same order that runs at request time. `--json` for machine-readable; combine with `--verbose` to include the resolved layers inline. |
+| `event:list` | core | List registered events alongside each listener's class name. `--filter <substring>` narrows by event name; `--json` machine-readable. Wildcard (`*`) listeners surface as their own row. |
+| `config:show` | core | Inspect resolved configuration. No-arg prints the section summary; `config:show cache` prints the section tree; `config:show cache.default` resolves a leaf. Sensitive values (keys ending in `key`/`secret`/`password`/`token`/`dsn`/`webhook`/`signing` after camelCase + snake_case split) print as `***`. `--raw` opts out with a stderr warning; `--json` round-trips through redaction. |
 | `command:list` | rudder | List all registered commands. `--all` includes built-in + package commands; `--json` emits a machine-readable envelope used by `@rudderjs/boost`'s MCP tools |
 | `doctor` | cli + all framework packages | Green/yellow/red pre-flight of every layer — env, structure, deps, ORM, runtime. `--deep` adds runtime checks (DB connect, port, SMTP); `--fix` auto-applies safe regenerate-style fixes. See [Rudder Doctor](./doctor.md). |
 | `tinker` | cli | Interactive REPL with the app booted — `User`, `Route`, `app()`, every model in `app/Models/` pre-imported. Top-level await; persistent history. See [Tinker](./tinker.md). |
