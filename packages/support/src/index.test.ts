@@ -24,6 +24,7 @@ import {
   t,
   validateSerializable,
   resolveOptionalPeer,
+  resolveIoredisClass,
 } from './index.js'
 import { z } from 'zod'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
@@ -1508,6 +1509,46 @@ describe('resolveOptionalPeer', () => {
       () => resolveOptionalPeer('@scope/not-installed'),
       /Cannot find module '@scope\/not-installed'/,
     )
+  })
+})
+
+describe('resolveIoredisClass', () => {
+  class FakeRedis {
+    static markerFor = 'fake-redis'
+    constructor(public url?: string) {}
+  }
+
+  it('returns mod.Redis when it is a function (typed named-export shape)', () => {
+    const mod = { Redis: FakeRedis }
+    assert.strictEqual(resolveIoredisClass(mod), FakeRedis)
+  })
+
+  it('returns mod.default when default IS the Redis class', () => {
+    const mod = { default: FakeRedis }
+    assert.strictEqual(resolveIoredisClass(mod), FakeRedis)
+  })
+
+  it('returns mod.default.Redis when default is a namespace wrapping the class', () => {
+    const mod = { default: { Redis: FakeRedis } }
+    assert.strictEqual(resolveIoredisClass(mod), FakeRedis)
+  })
+
+  it('prefers mod.Redis over mod.default when both are present', () => {
+    class OtherRedis { static markerFor = 'other' }
+    const mod = { Redis: FakeRedis, default: OtherRedis }
+    assert.strictEqual(resolveIoredisClass(mod), FakeRedis)
+  })
+
+  it('throws when no recognized shape is present', () => {
+    assert.throws(() => resolveIoredisClass({}), /Unable to resolve `Redis` class/)
+    assert.throws(() => resolveIoredisClass({ default: 42 }), /Unable to resolve `Redis` class/)
+    assert.throws(() => resolveIoredisClass({ default: {} }), /Unable to resolve `Redis` class/)
+  })
+
+  it('returned class is constructable with a url string', () => {
+    const Cls = resolveIoredisClass<FakeRedis>({ Redis: FakeRedis })
+    const inst = new Cls('redis://localhost:6379')
+    assert.strictEqual(inst.url, 'redis://localhost:6379')
   })
 })
 

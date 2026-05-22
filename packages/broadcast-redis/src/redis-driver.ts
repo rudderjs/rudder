@@ -1,21 +1,9 @@
 import * as _ioredis from 'ioredis'
 import type { Redis as RedisType } from 'ioredis'
+import { resolveIoredisClass } from '@rudderjs/support'
 import type { BroadcastDriver, BroadcastMeta } from '@rudderjs/broadcast'
 
-// Resolve the `Redis` class across the CJS/ESM interop variants ioredis
-// has shipped — same pattern @rudderjs/cache uses for its Redis adapter.
-const Redis: new (url?: string) => RedisType = (() => {
-  const mod = _ioredis as unknown as {
-    Redis?:   new (url?: string) => RedisType
-    default?: (new (url?: string) => RedisType) | { Redis?: new (url?: string) => RedisType }
-  }
-  if (typeof mod.Redis === 'function') return mod.Redis
-  if (typeof mod.default === 'function') return mod.default
-  if (mod.default && typeof (mod.default as { Redis?: unknown }).Redis === 'function') {
-    return (mod.default as { Redis: new (url?: string) => RedisType }).Redis
-  }
-  throw new Error('[RudderJS Broadcast/Redis] Unable to resolve `Redis` class from `ioredis` — unexpected export shape')
-})()
+const Redis = resolveIoredisClass<RedisType>(_ioredis)
 
 export interface RedisDriverOptions {
   /**

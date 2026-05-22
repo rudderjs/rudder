@@ -56,6 +56,19 @@ When you pass an `ioredis` instance directly, the driver duplicates it for the s
 - `broadcast-redis:url` — confirms `REDIS_URL` (or `BROADCAST_REDIS_URL`) is set
 - `broadcast-redis:connectivity` (under `--deep`) — connects + `PING`
 
+## Manual smoke
+
+```bash
+# Requires a local Redis (or set REDIS_URL=...)
+docker run --rm -d -p 6379:6379 redis
+cd packages/broadcast-redis
+pnpm smoke
+```
+
+`smoke/multi-instance.mjs` spawns two child Node processes — each running its own WebSocket server backed by the same Redis pub/sub — then connects a WS client to one and broadcasts from the other. Asserts the cross-instance delivery worked.
+
+Exits `0` on success, `1` on assertion failure, `2` if Redis isn't reachable (treated as skip, not fail — useful in CI matrices that don't always provide Redis).
+
 ## Trade-offs
 
 - Adds a Redis network hop on every broadcast — sub-millisecond on a co-located Redis, but a real cost when Redis is far. For a single-instance deployment, stick with the default `LocalDriver`.
