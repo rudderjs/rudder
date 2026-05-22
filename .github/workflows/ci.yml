@@ -151,7 +151,7 @@ jobs:
         run: pnpm --filter @rudderjs/docs build
 
   scaffolder-e2e:
-    # Mirrors the user-facing recipes in `create-rudder-app/src/cli-flags.ts`:
+    # Mirrors the user-facing recipes in `create-rudder/src/cli-flags.ts`:
     # every cell here is a profile a real user can pick at `pnpm create
     # rudder-app`. The matrix is react-heavy (all 5 recipes × react) +
     # narrow on vue/solid (only web-app, since minimal/api-service are
@@ -183,7 +183,7 @@ jobs:
           # framework axis (no-frontend → vanilla welcome shell shared across).
           - { framework: vue,   profile: web-app,     via: direct, pm: pnpm }
           - { framework: solid, profile: web-app,     via: direct, pm: pnpm }
-          # CLI entrypoint smoke — spawns `create-rudder-app` in JSON mode to
+          # CLI entrypoint smoke — spawns `create-rudder` in JSON mode to
           # exercise parseFlags → validateJsonMode → resolveJsonAnswers →
           # scaffold end-to-end. One cell covers the path that real users
           # hit; the 7 above keep per-recipe template correctness coverage.
@@ -215,7 +215,7 @@ jobs:
         # devDep version bumps. The shell parse keeps the workflow source
         # of truth in package.json instead of a duplicate string here.
         run: |
-          version=$(node -p "require('./create-rudder-app/package.json').devDependencies.playwright.replace(/^[^0-9]*/, '')")
+          version=$(node -p "require('./create-rudder/package.json').devDependencies.playwright.replace(/^[^0-9]*/, '')")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
@@ -229,14 +229,14 @@ jobs:
         # Skip the ~150MB browser download on cache hit. --with-deps still runs
         # so system libs land even when binaries were cached.
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter create-rudder-app exec playwright install --with-deps chromium
+        run: pnpm --filter create-rudder exec playwright install --with-deps chromium
 
       - name: Install Playwright system deps (cache hit)
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter create-rudder-app exec playwright install-deps chromium
+        run: pnpm --filter create-rudder exec playwright install-deps chromium
 
       - name: Build packages + scaffolder
-        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder'
 
       - name: Scaffold + boot + render-check
-        run: pnpm --filter create-rudder-app smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}
+        run: pnpm --filter create-rudder smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}

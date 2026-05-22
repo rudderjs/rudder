@@ -52,7 +52,7 @@ describe('findGeneratedClientDir', () => {
   })
 
   it('handles output on a nested schema dir (multi-file split)', () => {
-    // create-rudder-app emits prisma/schema/<name>.prisma. The output path
+    // create-rudder emits prisma/schema/<name>.prisma. The output path
     // resolves relative to that nested dir, so "../generated/prisma" lands
     // at tmpDir/prisma/generated/prisma.
     writeFile('prisma/schema/base.prisma', `generator client {

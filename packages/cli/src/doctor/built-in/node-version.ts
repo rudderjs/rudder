@@ -7,7 +7,7 @@ import { readJsonSafe } from './_fs.js'
  *
  * We don't pull in `semver` because the CLI ships with the framework and
  * pulling a 3rd-party parser for one comparison is wasteful. The range syntax
- * we accept matches what create-rudder-app generates.
+ * we accept matches what create-rudder generates.
  */
 function parseVersion(v: string): [number, number, number] | null {
   const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v)

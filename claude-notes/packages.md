@@ -85,7 +85,8 @@ rudderjs/
 │   ├── horizon/        # Deep queue monitor — job lifecycle (queueObservers), per-queue metrics, worker status, retry/delete
 │   ├── terminal/       # terminal('id', props) — Ink/React 19 components rendered in rudder commands (app/Terminal/**)
 │   └── cli/            # make:*, module:*, module:publish, providers:discover, rudder user commands
-├── create-rudder-app/   # Interactive scaffolder CLI — see docs/claude/create-app.md
+├── create-rudder/       # Interactive scaffolder CLI — see claude-notes/create-app.md
+├── create-rudder-app/   # Legacy alias stub for create-rudder
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference
 ```

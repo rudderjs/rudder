@@ -2,7 +2,7 @@
 // file in this directory (`app/Views/Demos/<Name>.tsx`) and a matching
 // controller route in `routes/web.ts` / `routes/api.ts`.
 //
-// Previously lived under `create-rudder-app/src/templates/demos/registry.ts`
+// Previously lived under `create-rudder/src/templates/demos/registry.ts`
 // when the scaffolder shipped demo templates. Demos now live in playground
 // only — this file is the source of truth.
 

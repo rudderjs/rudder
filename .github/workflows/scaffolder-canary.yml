@@ -1,13 +1,15 @@
 name: Scaffolder Canary
 
-# Weekly smoke against the *published* `create-rudder-app` + `@rudderjs/*`
+# Weekly smoke against the *published* legacy `create-rudder-app` alias +
+# `@rudderjs/*`
 # packages on npm. Closes the cross-version-drift gap that the per-PR
 # matrix can't see — the per-PR smoke uses pnpm.overrides to point at the
 # local workspace, so it never resolves `latest` from the npm registry.
 #
 # This job does:
 #   1. `pnpm create rudder-app smoke-canary --recipe=web-app --install=true`
-#      → fetches the published `create-rudder-app` from npm, scaffolds
+#      → fetches the published `create-rudder-app` (which delegates to
+#        `create-rudder`) from npm, scaffolds
 #        a fresh project, and installs every `@rudderjs/*` dep from `latest`.
 #   2. `pnpm build` → builds the prod bundle against real npm tarballs.
 #   3. Boots the server, curls `/` + `/api/health` + `/login`.

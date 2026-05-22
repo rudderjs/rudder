@@ -20,7 +20,7 @@ function mtime(rel: string): number | null {
 
 function findSchemaFiles(): string[] {
   // Two scaffolder shapes: `prisma/schema.prisma` (single-file) or
-  // `prisma/schema/*.prisma` (multi-file split — what create-rudder-app emits).
+  // `prisma/schema/*.prisma` (multi-file split — what create-rudder emits).
   const out: string[] = []
   if (exists('prisma/schema.prisma')) out.push('prisma/schema.prisma')
   try {

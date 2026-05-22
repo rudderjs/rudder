@@ -189,7 +189,7 @@ The auth views were refactored to use semantic class names (`auth-wrap`, `form-c
 
 If your app vendored the previous React auth views, you have two paths:
 
-- **Re-vendor + update CSS** — copy the new view files (command above) and ensure your `app/index.css` defines the semantic class selectors. The reference CSS lives in `create-rudder-app/src/templates.ts` (`semanticRulesApply()` for Tailwind apps, `indexCssPlain()` for non-Tailwind apps).
+- **Re-vendor + update CSS** — copy the new view files (command above) and ensure your `app/index.css` defines the semantic class selectors. The reference CSS lives in `create-rudder/src/templates.ts` (`semanticRulesApply()` for Tailwind apps, `indexCssPlain()` for non-Tailwind apps).
 - **Keep your existing vendored copies** — your old auth views still work, just don't pull in the new ones.
 
 Bumping `@rudderjs/auth` alone won't touch your vendored copies; the views only get re-applied when you explicitly re-vendor.

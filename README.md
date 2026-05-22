@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
-  <a href="https://www.npmjs.com/package/create-rudder-app"><img src="https://img.shields.io/npm/v/create-rudder-app?label=create-rudder-app&color=f5a623" alt="create-rudder-app" /></a>
+  <a href="https://www.npmjs.com/package/create-rudder"><img src="https://img.shields.io/npm/v/create-rudder?label=create-rudder&color=f5a623" alt="create-rudder" /></a>
   <a href="https://github.com/rudderjs/rudder/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/rudderjs/rudder/ci.yml?branch=main&label=CI" alt="CI" /></a>
   <a href="https://github.com/rudderjs/rudder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />

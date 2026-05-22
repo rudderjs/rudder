@@ -1,4 +1,4 @@
-# create-rudder-app
+# create-rudder
 
 > This file is read on-demand by Claude Code when working on the scaffolder.
 > For the always-loaded essentials, see `/CLAUDE.md`.
@@ -59,7 +59,7 @@ When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:d
 2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed)
 3. `pnpm rudder vendor:publish --tag=auth-views-<framework>` — only when auth was selected AND `fs.cp` couldn't vendor the views
 4. `pnpm rudder passport:keys` — only when passport selected
-5. `git init` + `git add . && git commit -m "Initial commit (create-rudder-app)"` — controlled by `--git=true|false`, default true
+5. `git init` + `git add . && git commit -m "Initial commit (create-rudder)"` — controlled by `--git=true|false`, default true
 
 These rely on @rudderjs/cli having the matching commands in its **skip-boot list** (`db:generate`, `db:push`, `migrate*` were added in PR #519's bundled cli fix; `add`/`remove` were added in #520/#521). Without skip-boot, `rudder db:generate` would try to boot the app before `@prisma/client` exists and crash — that's why the framework fix is load-bearing for the scaffolder's first 60-second story.
 
@@ -71,7 +71,7 @@ A scaffolded app that doesn't `pnpm dev` cleanly has a known failure surface —
 
 **Dropped from the default scaffolder** (PR #519). The 15-demo multiselect is gone; no `app/Views/Demos/` folder is generated. Demos still exist in the framework `playground/` (canonical reference app). The original PR copy mentioned `rudderjs.com/examples` but that URL has never shipped — the scaffolder's final panel now links to the GitHub playground tree directly.
 
-`src/templates/demos/registry.ts` still exists as a subpath export (`create-rudder-app/demos-registry`) so the playground continues to consume the same DemoSpec metadata for its own gallery. The scaffolder's template pipeline still accepts a `demos: string[]` field on `TemplateContext`, but the interactive flow always passes `[]`. The `--demos` flag is preserved as a silent no-op for backwards compatibility.
+`src/templates/demos/registry.ts` still exists as a subpath export (`create-rudder/demos-registry`) so the playground continues to consume the same DemoSpec metadata for its own gallery. The scaffolder's template pipeline still accepts a `demos: string[]` field on `TemplateContext`, but the interactive flow always passes `[]`. The `--demos` flag is preserved as a silent no-op for backwards compatibility.
 
 ---
 
@@ -173,7 +173,7 @@ templates/
 ├── pages/                 # index, error, ai-chat (per framework)
 ├── views/                 # welcome (per framework)
 └── demos/                 # registry + per-demo template modules — kept for the
-                            #   `create-rudder-app/demos-registry` subpath export consumed
+                            #   `create-rudder/demos-registry` subpath export consumed
                             #   by the framework playground. Not scaffolded by default
                             #   (templates pipeline still accepts demos: string[] but the
                             #   interactive + recipe flows always pass []).
@@ -219,7 +219,7 @@ Foundation → infrastructure → feature → monitoring stages run in order; `d
 ## Local Testing
 
 ```bash
-cd create-rudder-app
+cd create-rudder
 pnpm build
 node dist/index.js                          # launches the full interactive CLI
 

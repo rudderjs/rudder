@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-// Non-TTY end-to-end smoke test for create-rudder-app.
+// Non-TTY end-to-end smoke test for create-rudder.
 //
 // Drives getTemplates() against a real package manager + filesystem, links every
 // @rudderjs/* dep to the local workspace build, then runs the commands a real
@@ -11,13 +11,13 @@
 //   (c) paths into node_modules/@rudderjs/* that use src/ instead of dist/
 //
 // Usage:
-//   pnpm --filter create-rudder-app smoke                       # default: web-app + pnpm
-//   pnpm --filter create-rudder-app smoke --keep                # keep tmp dir on success
-//   pnpm --filter create-rudder-app smoke --profile=minimal
-//   pnpm --filter create-rudder-app smoke --framework=vue
-//   pnpm --filter create-rudder-app smoke --via=cli             # spawn the real CLI binary
-//   pnpm --filter create-rudder-app smoke --pm=npm              # swap package manager
-//   pnpm --filter create-rudder-app smoke --pm=yarn             # yarn classic (v1)
+//   pnpm --filter create-rudder smoke                       # default: web-app + pnpm
+//   pnpm --filter create-rudder smoke --keep                # keep tmp dir on success
+//   pnpm --filter create-rudder smoke --profile=minimal
+//   pnpm --filter create-rudder smoke --framework=vue
+//   pnpm --filter create-rudder smoke --via=cli             # spawn the real CLI binary
+//   pnpm --filter create-rudder smoke --pm=npm              # swap package manager
+//   pnpm --filter create-rudder smoke --pm=yarn             # yarn classic (v1)
 //
 // Pre-req: `pnpm build` has been run from repo root so packages/*/dist exists.
 
@@ -51,7 +51,7 @@ if (FRAMEWORK_RAW !== undefined && !FRAMEWORKS_VALID.includes(FRAMEWORK_RAW as F
 }
 const FRAMEWORK = (FRAMEWORK_RAW ?? 'react') as Framework
 
-// `--via=cli` invokes the real `create-rudder-app` binary in JSON mode and
+// `--via=cli` invokes the real `create-rudder` binary in JSON mode and
 // hands the scaffolded directory back to the existing install + boot + render
 // pipeline. Catches regressions in parseFlags / validateJsonMode /
 // resolveJsonAnswers / scaffold that the direct getTemplates() path can't see.
@@ -449,7 +449,7 @@ async function bootServer(target: string, port: number): Promise<BootedServer> {
 }
 
 async function vendorAuthViews(target: string, primary: 'react' | 'vue' | 'solid'): Promise<boolean> {
-  // Mirrors the auth-view copy step in create-rudder-app/src/index.ts. The
+  // Mirrors the auth-view copy step in create-rudder/src/index.ts. The
   // smoke calls getTemplates() directly (not scaffold()), so without this the
   // scaffolded /login route would resolve to a missing view at boot. Only
   // packages/auth/views/react/ exists today — vue/solid scaffolds skip auth UI
@@ -485,7 +485,7 @@ async function main(): Promise<void> {
     primary:    FRAMEWORK,
   }
 
-  console.log(`\n[create-rudder-app smoke] profile=${PROFILE} framework=${FRAMEWORK} via=${VIA} pm=${PM_FLAG}`)
+  console.log(`\n[create-rudder smoke] profile=${PROFILE} framework=${FRAMEWORK} via=${VIA} pm=${PM_FLAG}`)
 
   const work = await mkdtemp(path.join(tmpdir(), 'rudder-smoke-'))
   const target = path.join(work, ctx.name)
@@ -498,7 +498,7 @@ async function main(): Promise<void> {
   try {
     // ── Scaffold ──
     if (VIA === 'cli') {
-      // Drive the actual `create-rudder-app` CLI in JSON mode — exercises
+      // Drive the actual `create-rudder` CLI in JSON mode — exercises
       // parseFlags → validateJsonMode → resolveJsonAnswers → scaffold, the
       // path real users hit. Smoke profile maps to `--recipe=<profile>`.
       // `--via=cli` only supports profiles that are valid recipe names.
@@ -506,7 +506,7 @@ async function main(): Promise<void> {
       if (!validRecipes.includes(PROFILE)) {
         throw new Error(`--via=cli requires a profile that matches a recipe (one of: ${validRecipes.join(', ')}); got "${PROFILE}"`)
       }
-      const cliEntry = path.join(REPO_ROOT, 'create-rudder-app', 'dist', 'index.js')
+      const cliEntry = path.join(REPO_ROOT, 'create-rudder', 'dist', 'index.js')
       const args = [
         cliEntry, ctx.name,
         '--json',
@@ -516,7 +516,7 @@ async function main(): Promise<void> {
         '--install=false',
         '--git=false',
       ]
-      const done0 = step(`create-rudder-app --recipe=${PROFILE}`)
+      const done0 = step(`create-rudder --recipe=${PROFILE}`)
       const cliResult = await run('node', args, work, { timeoutMs: 60_000 })
       done0(cliResult)
       // The CLI prints one JSON line to stdout on success; surface it for
@@ -559,7 +559,7 @@ async function main(): Promise<void> {
       await writeFile(path.join(target, 'pnpm-workspace.yaml'), 'packages: ["."]\n')
     }
 
-    // Mirror the auth-view vendor step from create-rudder-app's interactive
+    // Mirror the auth-view vendor step from create-rudder's interactive
     // scaffold flow — without it, /login resolves to a missing view at boot.
     // Only react has vendored views today; for vue/solid the manifest skips
     // auth routes, so a no-op here is fine.
@@ -594,7 +594,7 @@ async function main(): Promise<void> {
     done4(await run(provDisc.cmd, provDisc.args, target, { timeoutMs: 60_000 }))
 
     // rudder db:generate + db:push exercise the chicken-and-egg-safe path used
-    // by the create-rudder-app auto-cascade: both must succeed via the rudder
+    // by the create-rudder auto-cascade: both must succeed via the rudder
     // CLI (skip-boot) even before @prisma/client exists. Catches regressions
     // where db: commands accidentally fall back into bootApp().
     if (ctx.orm === 'prisma') {
@@ -664,12 +664,12 @@ async function main(): Promise<void> {
     }
 
     success = true
-    console.log(`\n[create-rudder-app smoke] OK\n`)
+    console.log(`\n[create-rudder smoke] OK\n`)
   } finally {
     if (success && !KEEP) {
       await rm(work, { recursive: true, force: true })
     } else if (!success) {
-      console.error(`\n[create-rudder-app smoke] FAILED — tmp dir kept at ${work}\n`)
+      console.error(`\n[create-rudder smoke] FAILED — tmp dir kept at ${work}\n`)
     } else {
       console.log(`  --keep set; tmp dir at ${work}\n`)
     }

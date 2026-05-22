@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 **Extended docs** (read on-demand when relevant):
 - `claude-notes/packages.md` — Full monorepo layout + package status table
-- `claude-notes/create-app.md` — create-rudder-app scaffolder details
+- `claude-notes/create-app.md` — create-rudder scaffolder details
 - `claude-notes/ai-sdk-comparison.md` — RudderJS vs Laravel AI vs Vercel AI SDK vs TanStack — feature matrix and design positioning
 - `Architecture.md` — High-level package map + dependency flow (read for orientation; not exhaustive)
 - `ROADMAP.md` — Plans 1–9 status + remaining work (Nightwatch is the only ⬜ entry left)
