@@ -308,8 +308,28 @@ export class RouteBuilder<
     private readonly _router: Router,
   ) {}
 
+  /**
+   * Throw if a mutator is invoked on an already-mounted route. Once the
+   * server adapter has captured `this.definition`, downstream mutations
+   * are silent no-ops (path / host / missing — adapter copied them) or
+   * partial updates (middleware — propagates only for routes without
+   * route-binding middleware). The escape hatch for runtime registration
+   * is {@link Router.lateRegister} — routes registered inside it are
+   * mounted at end-of-callback and then sealed in the same flow as
+   * module-load routes.
+   */
+  private _guardMutation(method: string): void {
+    if (this._router._isMounted(this.definition)) {
+      throw new Error(
+        `[RudderJS Router] .${method}() called on already-mounted route ${this.definition.method} ${this.definition.path} — ` +
+        `define this before router.mount(), or wrap runtime registration in Route.lateRegister(() => Route.<verb>(...).${method}(...)).`
+      )
+    }
+  }
+
   /** Assign a name to this route for use with `route()` and `Url.signedRoute()`. */
   name(n: string): this {
+    this._guardMutation('name')
     // Pass the definition itself so later `where*()` calls (which mutate
     // `definition.path`) are reflected when the named route is looked up.
     this._router._registerName(n, this.definition)
@@ -328,6 +348,7 @@ export class RouteBuilder<
    * Throws if the route path has no `:param` segment.
    */
   where(param: string, regex: string | RegExp): this {
+    this._guardMutation('where')
     const pattern = regex instanceof RegExp ? regex.source : regex
     const path    = this.definition.path
     let out       = ''
@@ -406,6 +427,7 @@ export class RouteBuilder<
    * router.get('/admin', dash).domain(':tenant.example.com')  // captures req.params.tenant
    */
   domain(template: string): this {
+    this._guardMutation('domain')
     this.definition.host = template
     return this
   }
@@ -422,6 +444,7 @@ export class RouteBuilder<
    *   .missing((_req, err) => Response.json({ error: err.message }, { status: 404 }))
    */
   missing(fn: NonNullable<RouteDefinition['missing']>): this {
+    this._guardMutation('missing')
     this.definition.missing = fn
     return this
   }
@@ -447,6 +470,7 @@ export class RouteBuilder<
    * Route.get('/users', (req) => req.query.page).query(z.object({ page: z.coerce.number() }))
    */
   query<S extends ZodType>(schema: S): RouteBuilder<P, z.infer<S>, B> {
+    this._guardMutation('query')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildQueryValidator(schema))
     return this as unknown as RouteBuilder<P, z.infer<S>, B>
@@ -473,6 +497,7 @@ export class RouteBuilder<
    * Route.post('/posts', (req) => req.body).body(z.object({ title: z.string() }))
    */
   body<S extends ZodType>(schema: S): RouteBuilder<P, Q, z.infer<S>> {
+    this._guardMutation('body')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildBodyValidator(schema))
     return this as unknown as RouteBuilder<P, Q, z.infer<S>>
@@ -522,6 +547,50 @@ export class Router {
    */
   private _groupStack: RouteGroupOptions[] = []
 
+  // ── Mount-time freeze ──────────────────────────────────────
+  //
+  // `mount()` is a one-way switch: after the framework calls it during
+  // `_createHandler()`, all RouteBuilder mutators (`.query`/`.body`/`.name`/
+  // `.where`/`.domain`/`.missing`) and route-registration entry points
+  // (`.get`/`.post`/`.add`/`.registerController`/`.resource`/`.bind`/`.use`)
+  // throw — the server adapter has already captured every registered route
+  // and downstream mutations are silent no-ops or partial updates (e.g.
+  // `def.middleware.unshift()` propagates only for routes without route
+  // bindings, since the binding-MW path passes a fresh array to the
+  // adapter; cross-adapter divergence is exactly the silent-failure class
+  // this freeze closes).
+  //
+  // Runtime route registration (plugin architectures, on-demand admin
+  // routes) is supported via `lateRegister(fn)` — it brackets the callback
+  // with `_inLateRegister++` so the freeze suspends inside the callback,
+  // then mounts newly-pushed routes onto the captured adapter and seals
+  // them before returning.
+  private _mounted = false
+  private _adapter: ServerAdapter | null = null
+  private _mountedDefs: WeakSet<RouteDefinition> = new WeakSet()
+  private _inLateRegister = 0
+
+  /** @internal — RouteBuilder uses this to gate mutator methods. */
+  _isMounted(def: RouteDefinition): boolean {
+    return this._mountedDefs.has(def)
+  }
+
+  /**
+   * Throw when a registration entry point fires after `mount()` outside a
+   * `lateRegister()` callback. The error names the entry point and points
+   * at the correct escape hatch. Keep the message structure stable —
+   * scaffolder + doctor diagnostics greps for the leading marker.
+   */
+  private _ensureRegisterAllowed(method: string): void {
+    if (this._mounted && this._inLateRegister === 0) {
+      throw new Error(
+        `[RudderJS Router] ${method}() called after router.mount() outside of Route.lateRegister(). ` +
+        `Register routes during module load (routes/web.ts / routes/api.ts) or wrap runtime registration: ` +
+        `Route.lateRegister(() => Route.${method.toLowerCase()}(...))`
+      )
+    }
+  }
+
   /** @internal — called by RouteBuilder */
   _registerName(name: string, def: RouteDefinition): void {
     this.namedRoutes.set(name, def)
@@ -560,6 +629,12 @@ export class Router {
     this.namedRoutes.clear()
     this.bindings.clear()
     this._groupStack = []
+    // Mount-state too — tests reset between cases and would otherwise
+    // carry the frozen state forward into a fresh fixture.
+    this._mounted = false
+    this._adapter = null
+    this._mountedDefs = new WeakSet()
+    this._inLateRegister = 0
     return this
   }
 
@@ -621,6 +696,7 @@ export class Router {
 
   /** Register a global middleware (runs on every route). */
   use(middleware: MiddlewareHandler): this {
+    this._ensureRegisterAllowed('use')
     this.globalMiddleware.push(middleware)
     return this
   }
@@ -652,6 +728,7 @@ export class Router {
    * router.bind('viewer', User, { optional: true })
    */
   bind(name: string, resolver: RouteResolver, options: RouteBindingOptions = {}): this {
+    this._ensureRegisterAllowed('bind')
     this.bindings.set(name, { resolver, optional: options.optional ?? false })
     return this
   }
@@ -682,6 +759,7 @@ export class Router {
     handler: RouteHandler,
     middleware: MiddlewareHandler[] = [],
   ): this {
+    this._ensureRegisterAllowed('add')
     const composed = this._applyGroupStack(path, middleware)
     const def: RouteDefinition = {
       method,
@@ -794,6 +872,7 @@ export class Router {
   }
 
   private _rb(method: HttpMethod, path: string, handler: RouteHandler, middleware: MiddlewareHandler[] = []): RouteBuilder {
+    this._ensureRegisterAllowed(method.toLowerCase())
     const composed = this._applyGroupStack(path, middleware)
     const def: RouteDefinition = {
       method,
@@ -810,6 +889,7 @@ export class Router {
 
   /** Register all routes from a decorator-based controller class. */
   registerController(ControllerClass: new () => object): this {
+    this._ensureRegisterAllowed('registerController')
     const instance = new ControllerClass() as Record<string, unknown>
     const prefix   = Reflect.getMetadata(CONTROLLER_PREFIX, ControllerClass) as string ?? ''
     const ctrlMw: MiddlewareHandler[] =
@@ -842,19 +922,75 @@ export class Router {
     return this
   }
 
-  /** Mount all routes onto a server adapter. */
+  /**
+   * Mount all routes onto a server adapter.
+   *
+   * After this call the router is **frozen**: every RouteBuilder mutator
+   * (`.query`/`.body`/`.name`/`.where`/`.domain`/`.missing`) and
+   * registration entry point (`.get`/`.post`/`.add`/`.registerController`/
+   * `.resource`/`.bind`/`.use`) throws unless wrapped in
+   * {@link Router.lateRegister}. The framework calls this exactly once
+   * during `_createHandler()`. Tests can call `.reset()` to thaw and
+   * rebuild a fresh fixture.
+   */
   mount(server: ServerAdapter): void {
     for (const mw of this.globalMiddleware) server.applyMiddleware(mw)
     for (const route of this.routes) {
-      const bindingMw = this._buildBindingMiddleware(route)
-      if (bindingMw) {
-        server.registerRoute({
-          ...route,
-          middleware: [bindingMw, ...route.middleware],
-        })
-      } else {
-        server.registerRoute(route)
-      }
+      this._mountRoute(server, route)
+      this._mountedDefs.add(route)
+    }
+    this._adapter = server
+    this._mounted = true
+  }
+
+  /**
+   * Register routes after `mount()`. The callback runs immediately; any
+   * routes registered inside it are mounted onto the adapter that was
+   * passed to the most recent `mount()` call and then sealed against
+   * further mutation, matching the discipline of module-load registration.
+   *
+   * Intended for plugin architectures and dynamic provider registration
+   * where routes appear after the app has booted. Throws if called before
+   * `mount()` — there is no adapter to register against.
+   *
+   * @example
+   * // Inside a runtime hook (e.g. an admin-feature flag firing):
+   * Route.lateRegister(() => {
+   *   Route.get('/admin/foo', adminController.foo).query(adminQuerySchema)
+   * })
+   */
+  lateRegister(fn: () => void): void {
+    if (!this._mounted || !this._adapter) {
+      throw new Error(
+        `[RudderJS Router] lateRegister() called before mount() — the router has no adapter to register routes against. ` +
+        `Call lateRegister() after the app has booted (e.g. from a request-time hook or a dynamic provider's boot()).`
+      )
+    }
+    const before = this.routes.length
+    this._inLateRegister++
+    try {
+      fn()
+    } finally {
+      this._inLateRegister--
+    }
+    for (let i = before; i < this.routes.length; i++) {
+      const route = this.routes[i]
+      if (!route) continue
+      this._mountRoute(this._adapter, route)
+      this._mountedDefs.add(route)
+    }
+  }
+
+  /** @internal — single source of truth for registering one route on an adapter. */
+  private _mountRoute(server: ServerAdapter, route: RouteDefinition): void {
+    const bindingMw = this._buildBindingMiddleware(route)
+    if (bindingMw) {
+      server.registerRoute({
+        ...route,
+        middleware: [bindingMw, ...route.middleware],
+      })
+    } else {
+      server.registerRoute(route)
     }
   }
 
@@ -927,6 +1063,10 @@ export class Router {
     table: readonly ResourceVerbSpec[],
     opts: ResourceOptions,
   ): ResourceRegistration {
+    // Guard at the resource entry point — fires before any of the per-verb
+    // `_rb` calls inside so the error message names `resource(...)` rather
+    // than the first verb the loop happened to dispatch.
+    this._ensureRegisterAllowed('resource')
     const instance  = new Ctrl() as Record<string, unknown>
     const verbs     = filterVerbs(table, opts)
     const paramName = opts.parameters?.[name] ?? singularize(name)
