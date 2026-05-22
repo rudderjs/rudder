@@ -1,5 +1,5 @@
 /**
- * Detect when create-rudder-app is running inside an AI coding agent.
+ * Detect when create-rudder is running inside an AI coding agent.
  *
  * In agent contexts the interactive @clack/prompts UI degrades to garbage
  * (TTY redraws, ANSI escapes the agent can't fill in), and the agent often

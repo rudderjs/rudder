@@ -273,9 +273,9 @@ export function addCommand(program: Command): void {
     })
 }
 
-// ── Config templates (vendored from create-rudder-app for runtime use) ─────
+// ── Config templates (vendored from create-rudder for runtime use) ─────────
 //
-// Kept inline here rather than pulled from create-rudder-app via subpath so
+// Kept inline here rather than pulled from create-rudder via subpath so
 // that @rudderjs/cli stays standalone and doesn't depend on the scaffolder.
 // These are intentionally near-verbatim copies — the scaffolder owns the
 // canonical templates for new-project scaffolding, and this command owns the

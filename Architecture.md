@@ -151,7 +151,7 @@ rudderjs/
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
 │   └── cli/                # Rudder-style CLI (make:*, add, remove, module:*, module:publish,
 │                           #   db:generate, db:push, migrate*, providers:discover, user commands)
-├── create-rudder-app/      # Interactive CLI scaffolder (source of truth — invoked via `pnpm create rudder`)
+├── create-rudder/          # Interactive CLI scaffolder (source of truth — invoked via `pnpm create rudder`)
 │                           #   Recipe-driven prompts (Web app / SaaS / API service / Realtime /
 │                           #   Minimal / Custom) replace the legacy 25-option multiselect — Custom
 │                           #   still walks the full picker. Frontend collapsed to framework + styling
@@ -159,7 +159,8 @@ rudderjs/
 │                           #   migrate deploy + vendor:publish + passport:keys + git init so the
 │                           #   final panel is just `cd app && pnpm dev`. Demos dropped from default
 │                           #   scaffold (registry subpath export still ships for the playground).
-│                           #   Published on npm.
+│                           #   Published on npm. Legacy `create-rudder-app/` is a stub package
+│                           #   that delegates here for old install commands.
 ├── .github/workflows/      # CI (build, typecheck, lint, test) + Release (Changesets auto-publish)
 ├── docs/                   # VitePress documentation site
 └── playground/             # Framework demo app (port 3000) — auth, routing, ORM, queue, mail,
@@ -385,8 +386,8 @@ RudderJS Framework
 │    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mcp:*, passport:*, etc.
 │
 ├─── Scaffolding
-│    ├── create-rudder                Stub package — `npm create rudder@latest` invokes this
-│    └── create-rudder-app            Interactive project scaffolder — source of truth
+│    ├── create-rudder                Interactive project scaffolder — source of truth (`npm create rudder@latest`)
+│    └── create-rudder-app            Legacy alias stub — delegates to `create-rudder`
 │
 └─── Build
      └── @rudderjs/vite               Vike integration, SSR externals, WS patch, route watcher

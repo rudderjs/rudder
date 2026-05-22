@@ -450,7 +450,7 @@ async function runGitInit(cwd: string, logFile?: string): Promise<boolean> {
   if (!await runChild('git', ['init', '-q'],                                      cwd, logFile)) return false
   if (!await runChild('git', ['add', '.'],                                        cwd, logFile)) return false
   // -q silences the commit summary; --no-gpg-sign avoids pgp prompts on fresh machines.
-  if (!await runChild('git', ['commit', '-q', '-m', 'Initial commit (create-rudder-app)', '--no-gpg-sign'], cwd, logFile)) return false
+  if (!await runChild('git', ['commit', '-q', '-m', 'Initial commit (create-rudder)', '--no-gpg-sign'], cwd, logFile)) return false
   return true
 }
 
@@ -533,7 +533,7 @@ async function main(): Promise<void> {
       process.exit(1)
     }
 
-    const logFile = path.join(os.tmpdir(), `create-rudder-app-${Date.now()}.log`)
+    const logFile = path.join(os.tmpdir(), `create-rudder-${Date.now()}.log`)
     await fs.writeFile(logFile, '')
 
     try {
@@ -578,10 +578,10 @@ async function main(): Promise<void> {
   console.log()
   printLogo()
   console.log()
-  // Soft deprecation nudge — only when the user invoked the old bin directly.
-  // The `create-rudder` stub sets RUDDER_INVOKED_AS=create-rudder so we skip
-  // the nudge for users who are already on the new command.
-  if (process.env['RUDDER_INVOKED_AS'] !== 'create-rudder') {
+  // Soft deprecation nudge — only when the user invoked the legacy bin.
+  // The `create-rudder-app` stub sets RUDDER_INVOKED_AS=create-rudder-app
+  // so we can detect users who are still on the old install command.
+  if (process.env['RUDDER_INVOKED_AS'] === 'create-rudder-app') {
     log.info('This scaffolder now ships as `create-rudder` — use `npm create rudder@latest` next time.')
   }
   intro(' create-rudder ')
