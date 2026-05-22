@@ -1,6 +1,6 @@
 # Authorization
 
-Once a user is authenticated, **authorization** is the question of whether they're allowed to perform a specific action on a specific resource. RudderJS ships two complementary tools: **gates** (for one-off abilities) and **policies** (for grouping abilities by resource type). Both live in `@rudderjs/auth`.
+Once a user is authenticated, **authorization** is the question of whether they're allowed to perform a specific action on a specific resource. Rudder ships two complementary tools: **gates** (for one-off abilities) and **policies** (for grouping abilities by resource type). Both live in `@rudderjs/auth`.
 
 ## Gates
 

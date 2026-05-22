@@ -1,6 +1,6 @@
 # Rudder Doctor
 
-`pnpm rudder doctor` pre-flights every layer of a RudderJS app — environment, app structure, dependencies, ORM, runtime — and reports green / yellow / red with a paste-able fix line for each failure.
+`pnpm rudder doctor` pre-flights every layer of a Rudder app — environment, app structure, dependencies, ORM, runtime — and reports green / yellow / red with a paste-able fix line for each failure.
 
 ```bash
 pnpm rudder doctor

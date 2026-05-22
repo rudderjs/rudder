@@ -48,7 +48,7 @@ The provider is auto-discovered.
 ```ts
 import { trans } from '@rudderjs/localization'
 
-await trans('messages.welcome', { app: 'RudderJS' })   // 'Welcome to RudderJS!'
+await trans('messages.welcome', { app: 'Rudder' })   // 'Welcome to Rudder!'
 await trans('messages.greeting', { name: 'Alice' })    // 'Hello, Alice!'
 await trans('messages.items', 3)                        // '3 items'
 ```

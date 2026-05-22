@@ -1,6 +1,6 @@
 # Migrations
 
-RudderJS unifies migration commands across the Prisma and Drizzle adapters. The same `pnpm migrate` works for both — the active ORM is auto-detected from your `package.json`.
+Rudder unifies migration commands across the Prisma and Drizzle adapters. The same `pnpm migrate` works for both — the active ORM is auto-detected from your `package.json`.
 
 ```bash
 pnpm migrate              # apply pending migrations

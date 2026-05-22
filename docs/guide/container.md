@@ -1,6 +1,6 @@
 # Service Container
 
-The service container is the heart of RudderJS. It is a powerful dependency-injection container that resolves classes and their dependencies for you, supports constructor injection via TypeScript decorators, and is the same instance used by every part of the framework.
+The service container is the heart of Rudder. It is a powerful dependency-injection container that resolves classes and their dependencies for you, supports constructor injection via TypeScript decorators, and is the same instance used by every part of the framework.
 
 ```ts
 import 'reflect-metadata'

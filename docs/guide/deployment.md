@@ -1,6 +1,6 @@
 # Deployment
 
-RudderJS exposes a standard WinterCG Fetch handler — the same `bootstrap/app.ts` runs on Node, Bun, Deno, and Cloudflare Workers without code changes. This page covers the common production targets.
+Rudder exposes a standard WinterCG Fetch handler — the same `bootstrap/app.ts` runs on Node, Bun, Deno, and Cloudflare Workers without code changes. This page covers the common production targets.
 
 ## Build
 
@@ -161,7 +161,7 @@ Set `TRUST_PROXY=true` in `.env` so `req.ip` reads `x-forwarded-for` correctly. 
 
 ## Laravel Forge
 
-Forge is a popular choice in the Laravel ecosystem and works well for RudderJS — it provisions the VPS, manages PM2 + nginx, handles SSL via Let's Encrypt, and exposes a one-click deploy from GitHub. Because RudderJS is a Node SSR app, the setup leans on Forge's PM2-based site types rather than the PHP defaults.
+Forge is a popular choice in the Laravel ecosystem and works well for Rudder — it provisions the VPS, manages PM2 + nginx, handles SSL via Let's Encrypt, and exposes a one-click deploy from GitHub. Because Rudder is a Node SSR app, the setup leans on Forge's PM2-based site types rather than the PHP defaults.
 
 **Site type:** pick **Next.js** when creating the site. It's the closest preset — both run a long-running Node process behind nginx — but you'll override the deploy script and start command. None of Next's actual runtime is involved.
 

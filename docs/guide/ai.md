@@ -460,7 +460,7 @@ Pass `eventPrefix` to namespace events when the channel carries other unrelated 
 // emits 'agent.chunk', 'agent.done', 'agent.error'
 ```
 
-**Process model.** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical RudderJS dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
+**Process model.** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical Rudder dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
 
 ## Prompt caching
 

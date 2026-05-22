@@ -1,6 +1,6 @@
 # Tinker
 
-`pnpm rudder tinker` boots your app and drops you into a Node REPL with the DI container, route helpers, and every model in `app/Models/` pre-imported. It's RudderJS's equivalent of `php artisan tinker` — the interactive shell you reach for when you need to probe the database, dispatch a job, or test a service without writing a one-off script.
+`pnpm rudder tinker` boots your app and drops you into a Node REPL with the DI container, route helpers, and every model in `app/Models/` pre-imported. It's Rudder's equivalent of `php artisan tinker` — the interactive shell you reach for when you need to probe the database, dispatch a job, or test a service without writing a one-off script.
 
 ```bash
 $ pnpm rudder tinker

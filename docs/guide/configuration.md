@@ -1,6 +1,6 @@
 # Configuration
 
-RudderJS configuration spans three layers. Each has a clear responsibility, and putting a value in the wrong layer is the most common source of confusion for developers new to the framework.
+Rudder configuration spans three layers. Each has a clear responsibility, and putting a value in the wrong layer is the most common source of confusion for developers new to the framework.
 
 | Layer | File(s) | Purpose |
 |---|---|---|

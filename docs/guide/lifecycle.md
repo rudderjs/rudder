@@ -2,7 +2,7 @@
 
 Read this if you have ever asked *"why is this user showing up in the wrong request?"* — or if you are coming from a per-request DI container in another language.
 
-There is one fundamental fact about how RudderJS is wired, and nearly every "weird bug" in a RudderJS app traces back to it.
+There is one fundamental fact about how Rudder is wired, and nearly every "weird bug" in a Rudder app traces back to it.
 
 > **The DI container is process-scoped, not request-scoped.**
 
@@ -24,7 +24,7 @@ The single core rule follows directly:
 
 ## Why it matters
 
-Some frameworks rebuild their DI container per request — a `singleton` binding gives you a fresh instance every request, and any state on that instance is safely per-user. RudderJS does **not** work that way.
+Some frameworks rebuild their DI container per request — a `singleton` binding gives you a fresh instance every request, and any state on that instance is safely per-user. Rudder does **not** work that way.
 
 **One `Application` instance handles every request for the entire lifetime of the Node process.** An `app.singleton(Foo, ...)` binding returns the same instance to request #1, request #42, and request #1,000,000. Any field on that instance is shared across all of them. Anything keyed on an implicit "current user" leaks across users.
 
@@ -32,7 +32,7 @@ There is no daemon recycler that will save you. This is the runtime model.
 
 ## The pattern
 
-This is the bug class most commonly shipped by developers new to RudderJS.
+This is the bug class most commonly shipped by developers new to Rudder.
 
 ```ts
 // ❌ Wrong — state leaks across requests
@@ -66,7 +66,7 @@ export function currentAuth(): AuthManager {
 
 A single `AuthMiddleware` establishes a fresh `AuthManager` per request and calls `runWithAuth(manager, next)`. Every downstream `currentAuth().user()` reads the request-scoped manager. Two concurrent requests cannot see each other's state, and code outside a request scope throws loudly instead of returning a silent ghost.
 
-This is the pattern RudderJS ships for `Auth`, `Context`, `Localization`, and `Session`. Reach for it whenever you write a stateful service.
+This is the pattern Rudder ships for `Auth`, `Context`, `Localization`, and `Session`. Reach for it whenever you write a stateful service.
 
 ## Picking the right scope
 
@@ -81,7 +81,7 @@ If in doubt, ask: *"if two requests run at the same moment, does each need its o
 
 ## The `runWithX` / `currentX` convention
 
-Every request-scoped facade in RudderJS follows the same shape:
+Every request-scoped facade in Rudder follows the same shape:
 
 ```ts
 import { runWithAuth, currentAuth } from '@rudderjs/auth'

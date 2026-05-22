@@ -1,6 +1,6 @@
 # Application
 
-`bootstrap/app.ts` is the single wiring point for a RudderJS app. It builds an `Application` instance using a fluent configurator, registers route loaders, middleware, and exception handlers, and returns a `RudderJS` runtime ready to handle HTTP requests.
+`bootstrap/app.ts` is the single wiring point for a Rudder app. It builds an `Application` instance using a fluent configurator, registers route loaders, middleware, and exception handlers, and returns a `RudderJS` runtime ready to handle HTTP requests.
 
 ```ts
 // bootstrap/app.ts
