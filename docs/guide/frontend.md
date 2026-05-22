@@ -1,6 +1,6 @@
 # Frontend
 
-RudderJS uses [Vike](https://vike.dev) for SSR and page routing. You have two ways to render a page: a **controller view** that the route handler returns, or a **Vike page** that lives in `pages/` with file-based routing. They coexist freely in the same app.
+Rudder uses [Vike](https://vike.dev) for SSR and page routing. You have two ways to render a page: a **controller view** that the route handler returns, or a **Vike page** that lives in `pages/` with file-based routing. They coexist freely in the same app.
 
 ## Controller views
 
@@ -173,7 +173,7 @@ Vike pages route by filesystem — the URL is the directory name under `pages/`.
 ```tsx
 // pages/index/+Page.tsx
 export default function HomePage() {
-  return <h1>Welcome to RudderJS</h1>
+  return <h1>Welcome to Rudder</h1>
 }
 ```
 
@@ -245,7 +245,7 @@ A site can have `pages/index/+Page.tsx` (Vike marketing home), `pages/blog/**` (
 
 ## Pure API mode
 
-Pages are optional. Omit the `pages/` directory and remove Vike from `vite.config.ts` — the RudderJS server and routing work fine without any frontend.
+Pages are optional. Omit the `pages/` directory and remove Vike from `vite.config.ts` — the Rudder server and routing work fine without any frontend.
 
 ## Packages shipping views
 

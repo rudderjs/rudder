@@ -24,7 +24,7 @@ export default {
   default: Env.get('MAIL_MAILER', 'log'),
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME', 'RudderJS App'),
+    name:    Env.get('MAIL_FROM_NAME', 'Rudder App'),
   },
   mailers: {
     log: { driver: 'log' },

@@ -1,6 +1,6 @@
 # Service Providers
 
-Service providers are where your application is bootstrapped. Every significant piece of RudderJS — database connections, queue adapters, cache stores, mailers — is registered through a provider. When you add an integration, you typically add one provider class to `bootstrap/providers.ts`.
+Service providers are where your application is bootstrapped. Every significant piece of Rudder — database connections, queue adapters, cache stores, mailers — is registered through a provider. When you add an integration, you typically add one provider class to `bootstrap/providers.ts`.
 
 ## Lifecycle
 
@@ -37,7 +37,7 @@ export class AppServiceProvider extends ServiceProvider {
 
 ## Auto-discovery
 
-Framework providers ship a `rudderjs` field in their `package.json` that tells RudderJS how and when to boot them. The `pnpm rudder providers:discover` command scans `node_modules` for these fields and writes a sorted manifest to `bootstrap/cache/providers.json`. The `defaultProviders()` helper from `@rudderjs/core` reads that manifest at boot.
+Framework providers ship a `rudderjs` field in their `package.json` that tells Rudder how and when to boot them. The `pnpm rudder providers:discover` command scans `node_modules` for these fields and writes a sorted manifest to `bootstrap/cache/providers.json`. The `defaultProviders()` helper from `@rudderjs/core` reads that manifest at boot.
 
 ```ts
 // bootstrap/providers.ts
@@ -100,7 +100,7 @@ export default { driver: 'prisma' }
 
 ### Dev-mode boot log
 
-When the app boots in development and `defaultProviders()` was used, RudderJS prints the loaded providers grouped by stage right before `[RudderJS] ready`:
+When the app boots in development and `defaultProviders()` was used, Rudder prints the loaded providers grouped by stage right before `[RudderJS] ready`:
 
 ```
 [RudderJS] 19 providers booted

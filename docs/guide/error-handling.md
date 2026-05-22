@@ -1,6 +1,6 @@
 # Error Handling
 
-When something goes wrong, RudderJS catches the error, decides whether to render it (404 page, JSON error) or report it (log, error tracker), and returns a response. You configure the policy in `bootstrap/app.ts`; you trigger it from your code by throwing an exception or calling `abort()`.
+When something goes wrong, Rudder catches the error, decides whether to render it (404 page, JSON error) or report it (log, error tracker), and returns a response. You configure the policy in `bootstrap/app.ts`; you trigger it from your code by throwing an exception or calling `abort()`.
 
 ## Throwing an HTTP error
 

@@ -1,6 +1,6 @@
 # Database
 
-Almost every modern web application talks to a database. RudderJS makes that interaction painless through `@rudderjs/orm` — a unified `Model` base class that works with either Prisma or Drizzle as the adapter. The same model code runs against either; the adapter handles all SQL and connection pooling.
+Almost every modern web application talks to a database. Rudder makes that interaction painless through `@rudderjs/orm` — a unified `Model` base class that works with either Prisma or Drizzle as the adapter. The same model code runs against either; the adapter handles all SQL and connection pooling.
 
 ```
 Model (from @rudderjs/orm)

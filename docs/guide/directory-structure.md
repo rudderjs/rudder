@@ -1,6 +1,6 @@
 # Directory Structure
 
-A scaffolded RudderJS app puts each concern in a predictable place — bootstrap, config, app code, routes, schema — with a small Vite/Vike layer for the frontend.
+A scaffolded Rudder app puts each concern in a predictable place — bootstrap, config, app code, routes, schema — with a small Vite/Vike layer for the frontend.
 
 ```
 my-app/
@@ -132,7 +132,7 @@ Run `pnpm rudder db:generate` after any schema change (ORM-agnostic — on Prism
 
 `bootstrap/app.ts` is both the bootstrap file and the HTTP entry point. `import 'reflect-metadata'` must be the first line — it enables the entire DI container.
 
-`+server.ts` at the project root wires Vike to the RudderJS instance:
+`+server.ts` at the project root wires Vike to the Rudder instance:
 
 ```ts
 // +server.ts
@@ -142,7 +142,7 @@ import app from './bootstrap/app.js'
 export default { fetch: app.fetch } satisfies Server
 ```
 
-No separate `src/index.ts` is needed — Vike consumes the RudderJS instance directly.
+No separate `src/index.ts` is needed — Vike consumes the Rudder instance directly.
 
 ## Modules (optional)
 

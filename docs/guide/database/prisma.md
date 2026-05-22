@@ -10,7 +10,7 @@ pnpm add -D prisma
 ```
 
 ::: tip Prisma 7+ — pick a generator
-Prisma 7 ships two client generators. RudderJS supports both, but they're not interchangeable in browser-sandboxed environments:
+Prisma 7 ships two client generators. Rudder supports both, but they're not interchangeable in browser-sandboxed environments:
 
 | Generator | Schema declaration | When to use |
 |---|---|---|
@@ -40,7 +40,7 @@ MySQL uses `@prisma/adapter-mariadb` under the hood (wire-compatible with both M
 
 ## Multi-file schema
 
-RudderJS uses Prisma's multi-file schema feature: instead of one `prisma/schema.prisma`, schemas live in `prisma/schema/*.prisma`. Each concern gets its own file, and packages can publish their own schema shards.
+Rudder uses Prisma's multi-file schema feature: instead of one `prisma/schema.prisma`, schemas live in `prisma/schema/*.prisma`. Each concern gets its own file, and packages can publish their own schema shards.
 
 ```
 prisma/
@@ -152,7 +152,7 @@ This is the path the Pilotiq playgrounds use to consume their own generated clie
 
 ## Browser-sandboxed runtimes (WebContainer)
 
-To boot a RudderJS app inside StackBlitz / Bolt.new / any WebContainer-backed environment, switch to Prisma 7's new `prisma-client` generator. The legacy `prisma-client-js` generator is incompatible with WebContainer because its `prisma generate` step downloads the schema-engine binary from `https://binaries.prisma.sh`, which doesn't ship CORS headers — the install hangs with `socket hang up`.
+To boot a Rudder app inside StackBlitz / Bolt.new / any WebContainer-backed environment, switch to Prisma 7's new `prisma-client` generator. The legacy `prisma-client-js` generator is incompatible with WebContainer because its `prisma generate` step downloads the schema-engine binary from `https://binaries.prisma.sh`, which doesn't ship CORS headers — the install hangs with `socket hang up`.
 
 The new generator emits a self-contained ESM client with no engine binary downloads at install time:
 

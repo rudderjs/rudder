@@ -116,7 +116,7 @@ Run `pnpm dev` (or `pnpm build`) once — the scanner regenerates `pages/__view/
 
 ## Comparison
 
-This is RudderJS's equivalent of Inertia's prop typing or Nuxt's typed `useFetch` — but without a separate generator step or a `.d.ts` file you have to remember to refresh. The scanner is already running to discover views; the registry falls out of the same scan.
+This is Rudder's equivalent of Inertia's prop typing or Nuxt's typed `useFetch` — but without a separate generator step or a `.d.ts` file you have to remember to refresh. The scanner is already running to discover views; the registry falls out of the same scan.
 
 ## Limitations
 

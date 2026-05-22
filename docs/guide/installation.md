@@ -168,7 +168,7 @@ export default [
 
 ### 3. Wire Vike
 
-`+server.ts` at the project root connects Vike to the RudderJS application:
+`+server.ts` at the project root connects Vike to the Rudder application:
 
 ```ts
 // +server.ts

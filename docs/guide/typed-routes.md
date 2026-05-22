@@ -208,11 +208,11 @@ For `route(name, params)`, the `name` arg is `N extends string`. When `N` lands 
 
 ## Comparison
 
-This is RudderJS's equivalent of:
+This is Rudder's equivalent of:
 
 - **Hono's typed `c.req.param()`** — same idea, packaged as `req.params.<name>` to match Express/Laravel ergonomics.
 - **tRPC input validators** — same Zod-inferred-handler pattern, scoped to HTTP routes instead of RPC procedures.
-- **Next.js typed routes** — Next types the *call site* (`<Link href>`). RudderJS types the *handler*. Different ends of the same problem.
+- **Next.js typed routes** — Next types the *call site* (`<Link href>`). Rudder types the *handler*. Different ends of the same problem.
 
 ## Limitations
 

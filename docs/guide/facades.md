@@ -110,7 +110,7 @@ Use the container directly when:
 - You are writing a library and don't want to require consumers to install the facade's package.
 - You are writing tests and prefer to inject mocks via constructors over swapping container bindings.
 
-The two styles compose freely — many RudderJS apps use both, choosing per-call-site.
+The two styles compose freely — many Rudder apps use both, choosing per-call-site.
 
 ## Testing with facades
 

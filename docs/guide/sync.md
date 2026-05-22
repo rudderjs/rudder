@@ -36,7 +36,7 @@ The most common building blocks are:
 - **`Y.XmlFragment`** — rich-text tree for editor integration
 - **Awareness** — ephemeral presence state (cursor positions, who's online), not persisted
 
-These are the same Yjs primitives you'd use without RudderJS — the framework handles transport, persistence, and auth.
+These are the same Yjs primitives you'd use without Rudder — the framework handles transport, persistence, and auth.
 
 ## Persistence
 

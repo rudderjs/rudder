@@ -1,6 +1,6 @@
 # Validation
 
-RudderJS validates request input with [Zod](https://zod.dev). You can validate inline with `validate()`, attach a schema as middleware with `validateWith()`, or extend `FormRequest` for class-based validation that includes authorization.
+Rudder validates request input with [Zod](https://zod.dev). You can validate inline with `validate()`, attach a schema as middleware with `validateWith()`, or extend `FormRequest` for class-based validation that includes authorization.
 
 `@rudderjs/core` re-exports `z` so you don't need a separate `zod` install.
 
