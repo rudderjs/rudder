@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import {
   scanRouteFiles,
   routesRegistrySource,
+  stripJsComments,
   syncRoutesFromDisk,
   routesScannerPlugin,
   type DiscoveredNamedRoute,
@@ -144,6 +145,83 @@ describe('routes-scanner — scanRouteFiles', () => {
     root = scaffold()
     rmSync(path.join(root, 'routes'), { recursive: true })
     assert.deepEqual(scanRouteFiles(path.join(root, 'routes')), [])
+  })
+
+  it('ignores commented-out chains (// single-line)', () => {
+    // Pre-fix bug: the `\b(?:Route|router)…` regex matched after the space in
+    // `// Route.get(…).name(…)`, populating RouteRegistry with names that
+    // had no runtime registration — `route('admin')` type-checked but threw.
+    root = scaffold()
+    write(root, 'routes/web.ts', `
+      import { Route } from '@rudderjs/router'
+      // Route.get('/admin', async () => ({})).name('admin.legacy')
+      Route.get('/posts', async () => ({})).name('posts.index')
+    `)
+    const names = scanRouteFiles(path.join(root, 'routes')).map(r => r.name).sort()
+    assert.deepEqual(names, ['posts.index'])
+  })
+
+  it('ignores commented-out chains (/* block */)', () => {
+    root = scaffold()
+    write(root, 'routes/web.ts', `
+      import { Route } from '@rudderjs/router'
+      /*
+       * Route.get('/admin', async () => ({})).name('admin.legacy')
+       */
+      Route.get('/posts', async () => ({})).name('posts.index')
+    `)
+    const names = scanRouteFiles(path.join(root, 'routes')).map(r => r.name).sort()
+    assert.deepEqual(names, ['posts.index'])
+  })
+
+  it('preserves URLs containing `//` inside string literals', () => {
+    // The comment-stripper must not corrupt `https://example.com/…`-style
+    // URLs — those forward slashes are inside a quoted string, not a comment.
+    root = scaffold()
+    write(root, 'routes/web.ts', `
+      import { Route } from '@rudderjs/router'
+      Route.get('https://example.com/api', async () => ({})).name('proxy.example')
+    `)
+    const out = scanRouteFiles(path.join(root, 'routes'))
+    assert.equal(out.length, 1)
+    assert.equal(out[0]?.name, 'proxy.example')
+    assert.equal(out[0]?.path, 'https://example.com/api')
+  })
+})
+
+describe('routes-scanner — stripJsComments', () => {
+  it('strips // single-line comments (replaces with whitespace)', () => {
+    const out = stripJsComments('a // tail\nb')
+    assert.match(out, /^a\s+\nb$/, `got: ${JSON.stringify(out)}`)
+    assert.ok(!out.includes('tail'), 'tail text must be gone')
+    assert.equal(out.length, 'a // tail\nb'.length, 'length must be preserved')
+  })
+
+  it('strips /* … */ block comments (replaces with whitespace)', () => {
+    const out = stripJsComments('a /* tail */ b')
+    assert.ok(!out.includes('tail'), 'tail text must be gone')
+    assert.match(out, /^a\s+b$/, `got: ${JSON.stringify(out)}`)
+    assert.equal(out.length, 'a /* tail */ b'.length, 'length must be preserved')
+  })
+
+  it('preserves quoted strings that contain comment markers', () => {
+    assert.equal(stripJsComments("const x = '// not a comment'"),     "const x = '// not a comment'")
+    assert.equal(stripJsComments('const y = "/* not a comment */"'), 'const y = "/* not a comment */"')
+    assert.equal(stripJsComments('const z = `// not a comment`'),     'const z = `// not a comment`')
+  })
+
+  it('honors backslash escapes inside strings', () => {
+    // The escaped quote should not terminate the string early; the trailing
+    // `// tail` must still be stripped.
+    const out = stripJsComments("const x = 'a\\'b' // tail")
+    assert.ok(out.startsWith("const x = 'a\\'b'"), `string not preserved: ${JSON.stringify(out)}`)
+    assert.ok(!out.includes('tail'))
+  })
+
+  it('preserves newlines inside block comments so line numbers stay aligned', () => {
+    const input  = 'a\n/* line1\nline2 */\nb'
+    const output = stripJsComments(input)
+    assert.equal(output.split('\n').length, input.split('\n').length)
   })
 })
 

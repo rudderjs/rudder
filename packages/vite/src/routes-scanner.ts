@@ -88,13 +88,80 @@ function walkRouteFiles(dir: string): string[] {
   return out
 }
 
+/**
+ * Strip JS/TS comments before scanning so commented-out chains like
+ * `// Route.get('/admin', h).name('admin')` aren't picked up as live routes.
+ *
+ * Tracks string-literal state (single/double quotes + template literals) so
+ * the stripper doesn't accidentally truncate URLs that contain `//` inside
+ * strings (e.g. `Route.get('https://example.com/api', …)`). Returns the
+ * input with comment regions replaced by whitespace of the same length,
+ * which preserves line numbers + offsets if the result is ever mapped back
+ * to source — and lets the existing regex run unchanged.
+ *
+ * Not a full JS lexer (doesn't understand regex literals or `${}` template
+ * interpolation as code, which is fine for the scanner — the regex only
+ * matches literal-quoted paths anyway, so anything inside a template
+ * interpolation can't match the chain).
+ */
+export function stripJsComments(src: string): string {
+  let out = ''
+  let i   = 0
+  const n = src.length
+  while (i < n) {
+    const c = src[i]
+    // String literal — copy through unchanged, honoring backslash escapes.
+    if (c === '\'' || c === '"' || c === '`') {
+      const quote = c
+      out += c
+      i++
+      while (i < n) {
+        const k = src.charAt(i)
+        if (k === '\\' && i + 1 < n) {
+          out += k + src.charAt(i + 1)
+          i += 2
+          continue
+        }
+        out += k
+        i++
+        if (k === quote) break
+      }
+      continue
+    }
+    // Line comment — replace with spaces until newline, keep the newline.
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < n && src[i] !== '\n') { out += ' '; i++ }
+      continue
+    }
+    // Block comment — replace with whitespace of equal length, preserving newlines.
+    if (c === '/' && src[i + 1] === '*') {
+      out += '  '
+      i   += 2
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        out += src[i] === '\n' ? '\n' : ' '
+        i++
+      }
+      if (i < n) { out += '  '; i += 2 }  // closing `*/`
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
 export function scanRouteFiles(routesDir: string): DiscoveredNamedRoute[] {
   const seen   = new Map<string, DiscoveredNamedRoute>()
   const files  = walkRouteFiles(routesDir).sort()  // sort for stable output
   const cwd    = process.cwd()
   for (const abs of files) {
-    const source   = readFileSafe(abs)
-    if (source === null) continue
+    const rawSource = readFileSafe(abs)
+    if (rawSource === null) continue
+    // Strip comments so `// Route.get('/x', h).name('x')` doesn't pollute the
+    // RouteRegistry with a name that has no runtime registration backing it
+    // — that augmentation would let `route('x')` type-check but throw at
+    // runtime. URLs containing `//` inside strings stay intact (see stripJsComments).
+    const source = stripJsComments(rawSource)
     const relSource = path.relative(cwd, abs).replace(/\\/g, '/')
     let match: RegExpExecArray | null
     ROUTE_NAME_RE.lastIndex = 0

@@ -362,6 +362,53 @@ describe('views-scanner — typed +Page stubs', () => {
     const stub = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.vue'), 'utf8')
     assert.match(stub, /Record<string, unknown>/)
   })
+
+  it('ignores `// export const route = …` inside a single-line comment', () => {
+    // Pre-fix bug: `(?:^|[\s;])` matched the space after `//`, so a
+    // commented-out reference override silently swapped the view's URL to
+    // the stale path and the generated +route.ts emitted the wrong value.
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `// export const route = '/old-path'\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const routeFile = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+route.ts'), 'utf8')
+    // Falls through to the id-derived URL `/home` instead of `/old-path`.
+    assert.match(routeFile, /export default '\/home'/)
+    assert.doesNotMatch(routeFile, /\/old-path/)
+  })
+
+  it('honors a real `export const route` even after a commented reference', () => {
+    // Regression guard: stripping the comment should NOT prevent the actual
+    // export below it from being picked up.
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `// export const route = '/old-path'\nexport const route = '/'\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const routeFile = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+route.ts'), 'utf8')
+    assert.match(routeFile, /export default '\/'/)
+  })
+
+  it('ignores `// export interface Props` inside a single-line comment', () => {
+    // Pre-fix bug: PROPS_EXPORT_RE picked up the commented declaration and
+    // emitted a `registry.d.ts` entry that tried to import a non-existent
+    // type — tsc broke at the next compile.
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `// export interface Props { x: number }\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    // No registry entry was emitted for `home` because there's no actual Props export.
+    assert.doesNotMatch(registry, /'home':\s*import/)
+  })
 })
 
 describe('views-scanner — prerender opt-in', () => {

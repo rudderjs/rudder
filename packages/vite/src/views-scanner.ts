@@ -153,7 +153,13 @@ function walk(dir: string, extensions: string[], base = dir): string[] {
  * introduce a dep. The pattern is strict enough that false positives require
  * deliberate obfuscation.
  */
-const ROUTE_EXPORT_RE = /(?:^|[\s;])export\s+const\s+route\s*(?::\s*string)?\s*=\s*['"`]([^'"`]+)['"`]/m
+// Anchored at start-of-line (via the `m` flag's `^`) so a commented-out
+// override (`// export const route = '/old-path'`) doesn't get picked up as
+// the active route — the `[\s;]` alternative used to match the space after
+// `//`, silently swapping the view's URL to the stale value. Vue dual-script
+// blocks place their `export` at the start of a line within the `<script>`
+// block, so this still picks them up. Same fix shape as PRERENDER_DECL_RE.
+const ROUTE_EXPORT_RE = /^export\s+const\s+route\s*(?::\s*string)?\s*=\s*['"`]([^'"`]+)['"`]/m
 
 /**
  * Read the `export const route = '...'` override from a view file, if any.
@@ -186,9 +192,15 @@ function readRouteOverride(absPath: string): string | null {
  *
  * Multiline-tolerant (Vue SFCs have the export inside a `<script>` block;
  * the surrounding `<script>` tags don't interfere because the regex anchors
- * at whitespace/semicolon/start-of-line).
+ * at start-of-line via the `m` flag's `^` — Vue's `export` sits at column
+ * zero within the `<script>` block).
+ *
+ * Anchored at `^` so a commented-out reference declaration
+ * (`// export interface Props { x: number }`) doesn't fool the scanner into
+ * emitting a `registry.d.ts` entry that imports a non-existent type. Same
+ * fix shape as PRERENDER_DECL_RE.
  */
-const PROPS_EXPORT_RE = /(?:^|[\s;])export\s+(?:interface|type)\s+Props\b/m
+const PROPS_EXPORT_RE = /^export\s+(?:interface|type)\s+Props\b/m
 
 function readHasPropsExport(absPath: string): boolean {
   try {
