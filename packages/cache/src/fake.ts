@@ -6,7 +6,7 @@ import { BaseLock, newOwnerToken, type Lock } from './lock.js'
 // ─── Types ────────────────────────────────────────────────
 
 export interface CacheOperation {
-  type:   'get' | 'set' | 'forget' | 'has' | 'flush' | 'increment' | 'lock-acquire' | 'lock-release' | 'lock-force-release'
+  type:   'get' | 'set' | 'forget' | 'has' | 'flush' | 'increment' | 'add' | 'lock-acquire' | 'lock-release' | 'lock-force-release'
   key?:   string | undefined
   value?: unknown
   ttl?:   number | undefined
@@ -73,6 +73,18 @@ export class FakeCacheAdapter implements CacheAdapter {
     const expiresAt = ttlSeconds ? now + ttlSeconds * 1_000 : null
     this._store.set(key, { value: by, expiresAt })
     return by
+  }
+
+  async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    this._operations.push({ type: 'add', key, value, ttl: ttlSeconds })
+    const existing = this._store.get(key)
+    const now = Date.now()
+    if (existing && (existing.expiresAt === null || now <= existing.expiresAt)) {
+      return false
+    }
+    const expiresAt = ttlSeconds ? now + ttlSeconds * 1_000 : null
+    this._store.set(key, { value, expiresAt })
+    return true
   }
 
   async forget(key: string): Promise<void> {

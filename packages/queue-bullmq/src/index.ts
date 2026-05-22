@@ -1,5 +1,6 @@
 import { Queue, Worker, type Job as BullJob } from 'bullmq'
 import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@rudderjs/queue'
+import { encodePayload, decodePayload } from '@rudderjs/queue'
 import { queueObservers } from '@rudderjs/queue/observers'
 
 // ─── Config ────────────────────────────────────────────────
@@ -114,8 +115,10 @@ class BullMQAdapter implements QueueAdapter {
       startedAt:    new Date(),
     })
 
-    // Separate __context from job data
-    const { __context, ...jobData } = bullJob.data
+    // Separate __context from job data, then untag Date/BigInt/Buffer/Map/Set
+    // back into the original JS types the handler expects.
+    const { __context, ...rawJobData } = bullJob.data
+    const jobData = decodePayload(rawJobData) as Record<string, unknown>
     const instance = Object.assign(new (JobClass as new () => Job)(), jobData)
 
     // Hydrate request context if @rudderjs/context is available
@@ -151,7 +154,10 @@ class BullMQAdapter implements QueueAdapter {
 
     let data: Record<string, unknown>
     try {
-      data = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+      // Tag Date/BigInt/Buffer/Map/Set before the transport's JSON round-trip
+      // so the worker receives the original types via `decodePayload` instead
+      // of silent string/empty-object coercion.
+      data = JSON.parse(JSON.stringify(encodePayload(job))) as Record<string, unknown>
     } catch (err) {
       throw new Error(
         `[BullMQ] Cannot serialize job "${job.constructor.name}": ${err instanceof Error ? err.message : String(err)}`,

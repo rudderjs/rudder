@@ -22,6 +22,14 @@ export interface CacheAdapter {
    * pattern allowed concurrent requests to silently undercount.
    */
   increment(key: string, by?: number, ttlSeconds?: number): Promise<number>
+  /**
+   * Atomically store `value` at `key` only if the key does not already exist.
+   * Returns `true` when the value was stored (caller "won the race"), `false`
+   * when another writer was first. TTL is applied on first write. Redis uses
+   * `SET NX EX`; in-memory uses a synchronous check-and-set. Use for unique
+   * claims (queue unique-jobs, single-leader election, idempotency keys).
+   */
+  add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean>
   /** Build a lock backed by this driver. Does NOT acquire — call .get() or .block(). */
   lock(name: string, seconds: number): Lock
   /** Rebuild a lock with a specific owner token (cross-process release). */
@@ -105,6 +113,20 @@ export class Cache {
    */
   static increment(key: string, by?: number, ttl?: number): Promise<number> {
     return this.store().increment(key, by, ttl)
+  }
+
+  /**
+   * Atomically claim `key` with `value`. Returns `true` if THIS caller wrote
+   * (no prior value), `false` if a concurrent caller got there first. Race-free
+   * under concurrent dispatchers — Redis: `SET NX EX`; in-memory: sync CAS.
+   *
+   * @example
+   *   if (await Cache.add('unique:sync-inventory-1', '1', 60)) {
+   *     await queue.dispatch(new SyncInventory(1))
+   *   } // else: another dispatcher already claimed it
+   */
+  static add(key: string, value: unknown, ttl?: number): Promise<boolean> {
+    return this.store().add(key, value, ttl)
   }
 
   /**
@@ -235,6 +257,14 @@ export class MemoryAdapter implements CacheAdapter {
     return by
   }
 
+  async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    const existing = this.store.get(key)
+    if (existing && !this.expired(existing)) return false
+    const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
+    this.store.set(key, { value, expiresAt })
+    return true
+  }
+
   async forget(key: string): Promise<void>  { this.store.delete(key) }
 
   async has(key: string): Promise<boolean> {
@@ -341,6 +371,18 @@ class RedisAdapter implements CacheAdapter {
       : [String(by)]
     const result = await client.eval(script, 1, this.k(key), ...args)
     return Number(result)
+  }
+
+  async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    const client = await this.getClient()
+    const serialised = JSON.stringify(value)
+    // `SET NX` returns 'OK' on first-write and null when the key already
+    // exists. Pair with `EX <ttl>` for an atomic claim with expiry.
+    const args = ttlSeconds && ttlSeconds > 0
+      ? ['NX', 'EX', ttlSeconds]
+      : ['NX']
+    const result = await client.set(this.k(key), serialised, ...args)
+    return result !== null
   }
 
   async forget(key: string): Promise<void> {

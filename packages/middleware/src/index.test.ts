@@ -75,6 +75,13 @@ function makeMemoryCache() {
       store.set(key, { value: by, expiresAt: now + ttlSeconds * 1000 })
       return by
     },
+    async add(key: string, value: unknown, ttlSeconds = 60): Promise<boolean> {
+      const rec = store.get(key)
+      const now = Date.now()
+      if (rec && now <= rec.expiresAt) return false
+      store.set(key, { value, expiresAt: now + ttlSeconds * 1000 })
+      return true
+    },
     async forget(key: string): Promise<void> { store.delete(key) },
     async has(key: string): Promise<boolean> {
       const rec = store.get(key)

@@ -16,16 +16,29 @@ describe('acquireUniqueLock — cache backed', () => {
   beforeEach(() => { fake = FakeCacheAdapter.fake(); _clearLocks() })
   afterEach(()  => fake.restore())
 
-  it('acquires the lock through @rudderjs/cache when an adapter is registered', async () => {
+  it('acquires the lock atomically through @rudderjs/cache when an adapter is registered', async () => {
     const job = new UniqueJob('sync-inventory-1', 60)
     assert.strictEqual(await acquireUniqueLock(job), true)
-    fake.assertSet('rudderjs:unique:sync-inventory-1', v => v === '1')
+    const op = fake.operations().find(o => o.type === 'add' && o.key === 'rudderjs:unique:sync-inventory-1')
+    assert.ok(op, 'expected cache.add() to be called for the unique key')
+    assert.equal(op.value, '1')
+    assert.equal(op.ttl, 60)
   })
 
   it('returns false when the cache key is already held', async () => {
     await fake.set('rudderjs:unique:sync-inventory-1', '1', 60)
     const job = new UniqueJob('sync-inventory-1', 60)
     assert.strictEqual(await acquireUniqueLock(job), false)
+  })
+
+  it('two concurrent dispatchers see exactly one acquired lock', async () => {
+    // The previous `get → set` pattern let both callers read null and both
+    // write — both thinking they acquired. `cache.add()` (SETNX) guarantees
+    // at most one winner.
+    const job1 = new UniqueJob('sync-inventory-concurrent', 60)
+    const job2 = new UniqueJob('sync-inventory-concurrent', 60)
+    const [a, b] = await Promise.all([acquireUniqueLock(job1), acquireUniqueLock(job2)])
+    assert.equal([a, b].filter(Boolean).length, 1, 'exactly one dispatcher must win the race')
   })
 
   it('releaseUniqueLock forgets the cache key', async () => {
