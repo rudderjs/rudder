@@ -284,7 +284,13 @@ describe('whereVectorSimilarTo — chained .where() (Phase 2.5)', () => {
     assert.deepEqual(getCapturedParams()[0], ['%kafka%'])
   })
 
-  it('chains .orWhere() in a parenthesized OR block joined by AND with the AND chain', async () => {
+  it('chains .orWhere() as top-level OR alternatives to the AND chain (Laravel parity, 2026-05-22 breaking)', async () => {
+    // Before Phase 3 this emitted `tenantId=$1 AND (priority=$2 OR
+    // starred=$3)` — the .orWhere() alternatives were constrained by the
+    // prior AND. Laravel-parity is `(tenantId=$1 OR priority=$2 OR
+    // starred=$3)` — each .orWhere() escapes the AND chain. With only
+    // one .where() in the AND side, it joins the OR list directly (no
+    // inner parens needed).
     const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()
     const qb = adapter.query('documents')
@@ -296,8 +302,25 @@ describe('whereVectorSimilarTo — chained .where() (Phase 2.5)', () => {
       .get()
 
     const sql = getCaptured()[0]!
-    assert.match(sql, /"tenantId" = \$1 AND \("priority" = \$2 OR "starred" = \$3\)/)
+    assert.match(sql, /\("tenantId" = \$1 OR "priority" = \$2 OR "starred" = \$3\)/)
     assert.deepEqual(getCapturedParams()[0], [7, 'high', true])
+  })
+
+  it('chains .orWhere() with multiple .where() — the AND chain is parenthesised as one OR alternative', async () => {
+    const { fakeClient, getCaptured, getCapturedParams } = makeVectorClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    const qb = adapter.query('documents')
+    await qb
+      .whereVectorSimilarTo!('embedding', [1])
+      .where('tenantId', 7)
+      .where('status', 'active')
+      .orWhere('priority', 'high')
+      .get()
+
+    const sql = getCaptured()[0]!
+    // (tenantId=$1 AND status=$2) OR priority=$3
+    assert.match(sql, /\(\("tenantId" = \$1 AND "status" = \$2\) OR "priority" = \$3\)/)
+    assert.deepEqual(getCapturedParams()[0], [7, 'active', 'high'])
   })
 
   it('user values are bound positionally — never string-interpolated into SQL', async () => {
