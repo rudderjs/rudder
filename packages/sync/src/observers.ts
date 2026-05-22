@@ -14,6 +14,8 @@
  * could be high-rate, so consumers should expect to throttle.
  */
 
+import { syncGlobal } from './globals.js'
+
 /** Discriminated union of every event the sync layer can emit. */
 export type SyncEvent =
   | {
@@ -97,9 +99,4 @@ export class SyncObserverRegistry {
 
 // Process-wide singleton, like commandObservers in @rudderjs/console
 // and broadcastObservers in @rudderjs/broadcast.
-const _g = globalThis as Record<string, unknown>
-if (!_g['__rudderjs_sync_observers__']) {
-  _g['__rudderjs_sync_observers__'] = new SyncObserverRegistry()
-}
-
-export const syncObservers = _g['__rudderjs_sync_observers__'] as SyncObserverRegistry
+export const syncObservers = syncGlobal('observers', () => new SyncObserverRegistry())

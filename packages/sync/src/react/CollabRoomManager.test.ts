@@ -349,14 +349,14 @@ describe('CollabRoomManager', () => {
     assert.equal(state.providers.length, 0)
   })
 
-  it('start() is one-shot — second call is a no-op', async () => {
+  it('start() is one-shot — second call throws and never double-constructs', async () => {
     const mgr = new CollabRoomManager({
       roomKey:  'doc:11',
       wsUrl:    'ws://test',
       factories: makeFactories(state),
     })
     await mgr.start()
-    await mgr.start()  // should not double-construct
+    await assert.rejects(mgr.start(), /called twice/)
     assert.equal(state.docs.length, 1)
     assert.equal(state.providers.length, 1)
   })

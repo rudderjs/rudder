@@ -2,6 +2,7 @@ import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
 import { syncObservers }                               from './observers.js'
+import { syncGlobal, setSyncGlobal, readSyncGlobal }   from './globals.js'
 
 // ─── Per-WebSocket client id ────────────────────────────────
 //
@@ -320,12 +321,17 @@ interface Room {
   awarenessMap: Map<import('ws').WebSocket, Uint8Array>
   /** Stored AI awareness message — sent to newly connecting clients. */
   aiAwarenessMsg?: Uint8Array
+  /** Wall-clock timestamp when `aiAwarenessMsg` was set; replay skips if stale. */
+  aiAwarenessAt?:  number
 }
 
-const g       = globalThis as Record<string, unknown>
-const KEY     = '__rudderjs_live__'
-const PERSIST_KEY = '__rudderjs_live_persistence__'
-const FIRST_CONNECT_KEY = '__rudderjs_sync_first_connect__'
+/**
+ * TTL in ms for stored AI awareness replay. If an AI agent crashes without
+ * calling `clearAiAwareness`, the stored cursor would be replayed to every
+ * new joiner forever; the TTL bounds the staleness window so the ghost
+ * cursor disappears on its own.
+ */
+const AI_AWARENESS_REPLAY_TTL_MS = 60_000
 
 /**
  * docNames whose `onFirstConnect` hook has already fired in this process.
@@ -335,12 +341,7 @@ const FIRST_CONNECT_KEY = '__rudderjs_sync_first_connect__'
  * map is fresh), which is correct: persistence may have been cleared too.
  */
 function firstConnectFired(): Set<string> {
-  let s = g[FIRST_CONNECT_KEY] as Set<string> | undefined
-  if (!s) {
-    s = new Set<string>()
-    g[FIRST_CONNECT_KEY] = s
-  }
-  return s
+  return syncGlobal('firstConnect', () => new Set<string>())
 }
 
 /** Transaction origin used by server-side mutations (Sync.updateMap, etc.) */
@@ -350,7 +351,7 @@ const SERVER_ORIGIN = 'rudderjs:server'
  *  created in this process. Centralizes the structural cast so individual
  *  callers don't repeat it. */
 function getRoomsMap(): Map<string, Room> | undefined {
-  return g[KEY] as Map<string, Room> | undefined
+  return readSyncGlobal<Map<string, Room>>('rooms')
 }
 
 /** Shape returned by `Y.XmlText.toDelta()` — yjs types the return as
@@ -366,11 +367,7 @@ function readDocArg(args: unknown): string {
 
 /** Get-or-create variant — guarantees a Map is present on globalThis. */
 function ensureRoomsMap(): Map<string, Room> {
-  const existing = getRoomsMap()
-  if (existing) return existing
-  const created = new Map<string, Room>()
-  g[KEY] = created
-  return created
+  return syncGlobal('rooms', () => new Map<string, Room>())
 }
 
 function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
@@ -555,14 +552,26 @@ async function handleConnection(
   ws.send(encodeSyncMsg(syncStep1, Y.encodeStateVector(room.doc)))
 
   // ── Step 2: send existing awareness states to the new client ─
+  // Force-killed sockets (proxy timeout, tab kill) never fire `close`, so
+  // their `awarenessMap` entry would linger and replay ghost cursors to
+  // every late joiner. Prune dead entries inline.
   for (const [client, buf] of room.awarenessMap) {
-    if (client !== ws && client.readyState === 1 /* OPEN */) {
-      ws.send(buf)
+    if (client.readyState !== 1 /* OPEN */) {
+      room.awarenessMap.delete(client)
+      continue
     }
+    if (client !== ws) ws.send(buf)
   }
-  // Send stored AI awareness (if an AI agent is currently editing)
-  if (room.aiAwarenessMsg) {
-    ws.send(room.aiAwarenessMsg)
+  // Send stored AI awareness (if an AI agent is currently editing) —
+  // unless it's older than the replay TTL, in which case the AI likely
+  // crashed without calling `clearAiAwareness` and the cursor is stale.
+  if (room.aiAwarenessMsg && room.aiAwarenessAt !== undefined) {
+    if (Date.now() - room.aiAwarenessAt <= AI_AWARENESS_REPLAY_TTL_MS) {
+      ws.send(room.aiAwarenessMsg)
+    } else {
+      delete room.aiAwarenessMsg
+      delete room.aiAwarenessAt
+    }
   }
 
   // ── Message handler ───────────────────────────────────────
@@ -722,7 +731,7 @@ export class SyncProvider extends ServiceProvider {
     const path        = this._path
     const persistence = this._persistence
     const cfg         = config<SyncConfig>('sync', {})
-    g[PERSIST_KEY] = persistence
+    setSyncGlobal('persistence', persistence)
 
       const wss = new WebSocketServer({ noServer: true })
 
@@ -730,13 +739,15 @@ export class SyncProvider extends ServiceProvider {
         void handleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect)
       })
 
-      // Chain into the broadcast-specific handler (not the combined handler)
-      // to avoid circular references during HMR re-boots.
-      const prev = (g['__rudderjs_ws_broadcast_upgrade__'] ?? g['__rudderjs_ws_upgrade__']) as
+      // Cross-package WebSocket upgrade chain — these key names are part of
+      // the contract with `@rudderjs/broadcast` and server-hono. Owned outside
+      // sync, so they don't live in `globals.ts` / `SYNC_KEYS`.
+      const wsGlobals = globalThis as Record<string, unknown>
+      const prev = (wsGlobals['__rudderjs_ws_broadcast_upgrade__'] ?? wsGlobals['__rudderjs_ws_upgrade__']) as
         | ((req: unknown, socket: unknown, head: unknown) => void)
         | undefined
 
-      g[SYNC_UPGRADE_KEY] = (req: IncomingMessage, socket: unknown, head: unknown) => {
+      wsGlobals[SYNC_UPGRADE_KEY] = (req: IncomingMessage, socket: unknown, head: unknown) => {
         const pathname = (req.url ?? '/').split('?')[0] ?? '/'
         if (pathname.startsWith(path)) {
           wss.handleUpgrade(req, socket as import('net').Socket, head as Buffer, (ws) => {
@@ -748,7 +759,7 @@ export class SyncProvider extends ServiceProvider {
       }
 
       // Register as the active upgrade handler
-      g['__rudderjs_ws_upgrade__'] = g[SYNC_UPGRADE_KEY]
+      wsGlobals['__rudderjs_ws_upgrade__'] = wsGlobals[SYNC_UPGRADE_KEY]
 
       rudder.command('sync:docs', async () => {
         const rooms = getRoomsMap()
@@ -892,7 +903,7 @@ export class SyncProvider extends ServiceProvider {
 export const Sync = {
   /** Get the configured persistence adapter. */
   persistence(): SyncPersistence {
-    const p = g[PERSIST_KEY] as SyncPersistence | undefined
+    const p = readSyncGlobal<SyncPersistence>('persistence')
     if (!p) throw new Error('[Sync] Not initialised — register sync() in providers.')
     return p
   },
@@ -1106,5 +1117,22 @@ export const Sync = {
   document(docName: string): Y.Doc {
     const persistence = this.persistence()
     return getOrCreateRoom(docName, persistence).doc
+  },
+
+  /**
+   * Drop the stored AI awareness replay buffer for a doc — future joiners
+   * won't see a ghost AI cursor. Use as a recovery path by `docName` when
+   * an AI agent crashes without calling its own `clearAiAwareness(doc)`.
+   *
+   * The replay buffer also auto-expires after 60s, so this is only needed
+   * for *immediate* cleanup. To also clear the cursor on currently
+   * connected clients, use the lexical-side `clearAiAwareness(doc)` —
+   * that helper broadcasts a null awareness frame as well.
+   */
+  clearAiAwareness(docName: string): void {
+    const room = getRoomsMap()?.get(docName)
+    if (!room) return
+    delete room.aiAwarenessMsg
+    delete room.aiAwarenessAt
   },
 }

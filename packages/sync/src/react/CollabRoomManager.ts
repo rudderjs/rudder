@@ -74,11 +74,20 @@ export class CollabRoomManager {
 
   /**
    * Lazy-imports peers, constructs handles, wires sync resolution.
-   * Safe to call exactly once. Cancellation via `stop()` aborts mid-await
-   * without leaving partial handles uncleaned.
+   *
+   * One-shot — a `CollabRoomManager` instance binds to a single
+   * `(roomKey, wsUrl, offline)` triple and a single connection attempt.
+   * Calling `start()` twice on the same instance throws: if the first
+   * call was cancelled mid-`loadYjs` (e.g. via React strict-mode
+   * double-invoke), the `synced` promise is already rejected and there's
+   * no observable success path for the second call to resolve. Throwing
+   * makes the misuse loud instead of leaving consumers waiting on a dead
+   * promise. Construct a fresh manager to retry.
    */
   async start(): Promise<void> {
-    if (this.started) return
+    if (this.started) {
+      throw new Error('CollabRoomManager.start() called twice — construct a fresh manager to retry')
+    }
     this.started = true
     if (this.cancelled) return
 

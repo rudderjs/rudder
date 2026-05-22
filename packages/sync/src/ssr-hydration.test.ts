@@ -10,6 +10,7 @@ import {
   type SyncConfig,
   type SyncPersistence,
 } from './index.js'
+import { SYNC_KEYS } from './globals.js'
 
 // ─── Test helpers ────────────────────────────────────────────
 
@@ -35,11 +36,11 @@ function slowPersistence(backing: SyncPersistence, delayMs: number): SyncPersist
 
 /**
  * Bind Sync's persistence to a specific adapter — the facade reads from
- * `globalThis[PERSIST_KEY]` (set by `SyncProvider.register`), so tests that
- * exercise the facade have to populate that slot directly.
+ * `globalThis[SYNC_KEYS.persistence]` (set by `SyncProvider.register`), so
+ * tests that exercise the facade have to populate that slot directly.
  */
 function bindPersistence(p: SyncPersistence): void {
-  ;(globalThis as Record<string, unknown>)['__rudderjs_live_persistence__'] = p
+  ;(globalThis as Record<string, unknown>)[SYNC_KEYS.persistence] = p
 }
 
 /**
