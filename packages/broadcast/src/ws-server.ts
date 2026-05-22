@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket as WsSocket } from 'ws'
 import type { IncomingMessage }                    from 'node:http'
 import type { Duplex }                             from 'node:stream'
 import { broadcastObservers } from './observers.js'
+import { LocalDriver, type BroadcastDriver } from './driver.js'
 
 // ─── Public types ───────────────────────────────────────────
 
@@ -53,6 +54,12 @@ export interface WsServerOptions {
    * terminated. Pass `false` to disable. Default: `{ interval: 30000, timeout: 60000 }`.
    */
   heartbeat?: { interval: number; timeout: number } | false
+  /**
+   * Cross-instance pub/sub driver. Default: {@link LocalDriver} (in-process
+   * fan-out only). Plug in `@rudderjs/broadcast-redis` (or any
+   * {@link BroadcastDriver} impl) to fan messages across instances.
+   */
+  driver?: BroadcastDriver
 }
 
 // ─── Internal message types ─────────────────────────────────
@@ -96,6 +103,10 @@ interface WsState {
   heartbeat:           { interval: number; timeout: number } | false
   /** Set to true once we've warned that allowedOrigins is empty. */
   warnedOpenOrigin:    boolean
+  /** Cross-instance pub/sub driver. */
+  driver:              BroadcastDriver
+  /** Driver subscription teardown — invoked on resetBroadcast(). */
+  driverUnsubscribe:   () => void
 }
 
 // ─── Init ───────────────────────────────────────────────────
@@ -107,6 +118,7 @@ export function initWsServer(options: WsServerOptions = {}): void {
   const heartbeat = options.heartbeat === false
     ? false as const
     : { ...DEFAULT_HEARTBEAT, ...(options.heartbeat ?? {}) }
+  const driver = options.driver ?? new LocalDriver()
   const state: WsState = {
     wss,
     subscriptions: new Map(),
@@ -125,7 +137,23 @@ export function initWsServer(options: WsServerOptions = {}): void {
       : {}),
     heartbeat,
     warnedOpenOrigin: false,
+    driver,
+    // Filled in below — placeholder so the property is non-optional.
+    driverUnsubscribe: () => {},
   }
+  // Subscribe to the driver: every published message (local OR remote)
+  // fans out to this instance's local subscribers. The LocalDriver loop
+  // is same-tick synchronous so existing tests that assert immediate
+  // delivery after `broadcast()` keep working with the default driver.
+  //
+  // `meta.excludeConnectionId` is the `client-event` echo guard — when a
+  // socket sends a `client-event`, its own connection id is passed as the
+  // exclude hint so it doesn't receive its own message back via the local
+  // subscriber. Multi-instance drivers drop this hint on foreign-origin
+  // deliveries (a connection id is only meaningful on its own instance).
+  state.driverUnsubscribe = driver.subscribe((channel, event, data, meta) => {
+    broadcastTo(state, channel, { type: 'event', channel, event, data }, meta?.excludeConnectionId)
+  })
   g[KEY] = state
 
   wss.on('connection', (ws: WsSocket, req: IncomingMessage) => {
@@ -400,7 +428,10 @@ async function onMessage(
         return
       }
       const recipientCount = (state.channels.get(channel)?.size ?? 0) - 1 // exclude sender
-      broadcastTo(state, channel, { type: 'event', channel, event, data }, id)
+      // Route through the driver — the local subscriber will fan out to
+      // peers on this instance (excluding the sender via meta), and remote
+      // instances pick it up via their own driver subscribers.
+      await state.driver.publish(channel, event, data, { excludeConnectionId: id })
       broadcastObservers.emit({
         kind: 'broadcast', channel, event, recipientCount: Math.max(recipientCount, 0),
         payloadSize: jsonByteSize(data),
@@ -462,6 +493,8 @@ export function resetBroadcast(): void {
     for (const ws of state.sockets.values()) {
       try { ws.terminate() } catch { /* ignore */ }
     }
+    try { state.driverUnsubscribe() } catch { /* ignore */ }
+    try { void state.driver.close?.() } catch { /* ignore */ }
     try { state.wss.close() } catch { /* ignore */ }
   }
   delete g[KEY]
@@ -471,12 +504,22 @@ export function resetBroadcast(): void {
 
 // ─── Public API ─────────────────────────────────────────────
 
-/** Broadcast an event to all subscribers of a channel from anywhere on the server. */
-export function broadcast(channel: string, event: string, data: unknown): void {
+/**
+ * Broadcast an event to all subscribers of a channel from anywhere on
+ * the server. Routes through the configured {@link BroadcastDriver}, so
+ * single-instance deployments see same-tick local fan-out (LocalDriver
+ * default) and multi-instance deployments fan the message across the
+ * cluster via Redis pub/sub (or any custom driver).
+ *
+ * Resolves once the driver has accepted the message — fast for Local,
+ * a single Redis round-trip for Redis. Never throws; driver errors are
+ * surfaced via observers + console.
+ */
+export async function broadcast(channel: string, event: string, data: unknown): Promise<void> {
   const state = g[KEY] as WsState | undefined
   if (!state) return
   const recipientCount = state.channels.get(channel)?.size ?? 0
-  broadcastTo(state, channel, { type: 'event', channel, event, data })
+  await state.driver.publish(channel, event, data)
   broadcastObservers.emit({
     kind: 'broadcast', channel, event, recipientCount,
     payloadSize: jsonByteSize(data),

@@ -27,6 +27,7 @@ const PACKAGES_WITH_CHECKS: string[] = [
   '@rudderjs/orm-prisma', '@rudderjs/orm-drizzle',
   '@rudderjs/cashier-paddle',
   '@rudderjs/queue-bullmq', '@rudderjs/queue-inngest',
+  '@rudderjs/broadcast-redis',
   '@rudderjs/mail',
   '@rudderjs/ai', '@rudderjs/mcp',
   '@rudderjs/telescope', '@rudderjs/pulse', '@rudderjs/horizon',

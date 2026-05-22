@@ -8,6 +8,7 @@ import {
   type AuthCallback,
   type ConnectionAuthCallback,
 } from './ws-server.js'
+import type { BroadcastDriver } from './driver.js'
 
 // ─── Config ─────────────────────────────────────────────────
 
@@ -33,6 +34,21 @@ export interface BroadcastConfig {
    * terminated. Pass `false` to disable. Default: `{ interval: 30000, timeout: 60000 }`.
    */
   heartbeat?: { interval: number; timeout: number } | false
+  /**
+   * Cross-instance pub/sub driver factory. Returns a {@link BroadcastDriver}
+   * (sync or async). When unset, the broadcast layer uses the in-process
+   * `LocalDriver` — fine for single-instance deployments. Set this to a
+   * `RedisDriver` (or similar) factory for multi-instance fan-out.
+   *
+   * @example
+   * import { RedisDriver } from '@rudderjs/broadcast-redis'
+   * import Redis from 'ioredis'
+   *
+   * export default {
+   *   driver: () => new RedisDriver({ redis: process.env.REDIS_URL! }),
+   * }
+   */
+  driver?: () => BroadcastDriver | Promise<BroadcastDriver>
 }
 
 // ─── globalThis key for the upgrade handler ─────────────────
@@ -94,10 +110,13 @@ export class BroadcastingProvider extends ServiceProvider {
     const cfg  = config<BroadcastConfig>('broadcast', {})
     const path = cfg.path ?? '/ws'
 
+    const driver = cfg.driver ? await cfg.driver() : undefined
+
     initWsServer({
       ...(cfg.allowedOrigins      ? { allowedOrigins:      cfg.allowedOrigins      } : {}),
       ...(cfg.maxConnectionsPerIp ? { maxConnectionsPerIp: cfg.maxConnectionsPerIp } : {}),
       ...(cfg.heartbeat !== undefined ? { heartbeat: cfg.heartbeat } : {}),
+      ...(driver !== undefined        ? { driver }                  : {}),
     })
 
       // Register upgrade handler on globalThis so @rudderjs/vite and

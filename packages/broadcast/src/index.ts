@@ -7,3 +7,5 @@ export { BroadcastingProvider, Broadcast }                       from './provide
 export type { BroadcastConfig }                                  from './provider.js'
 export { broadcastObservers, BroadcastObserverRegistry }         from './observers.js'
 export type { BroadcastEvent, BroadcastObserver }                from './observers.js'
+export { LocalDriver }                                           from './driver.js'
+export type { BroadcastDriver, BroadcastMeta }                   from './driver.js'
