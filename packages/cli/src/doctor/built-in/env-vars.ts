@@ -22,12 +22,47 @@ function parseEnvText(text: string): Map<string, string> {
   return out
 }
 
+/**
+ * Env-var keys that signal "operator has supplied config via process.env
+ * directly". Any of these being set means we're in a non-`.env`-file
+ * deployment shape (CI, Docker, Forge / Fly / Render / Vercel / Railway,
+ * Kubernetes ConfigMap / Secret) and the absent-file is not a problem.
+ *
+ * Each key has its own targeted check (`env:app-key`, `env:app-env`,
+ * `orm-prisma:database-url`) that surfaces the per-key concern — this list
+ * only gates the file-shape check, so widening doesn't blunt those signals.
+ *
+ * NODE_ENV is NOT included on purpose — Vite sets it to `'development'` in
+ * dev, so it's not a reliable "operator-supplied" marker.
+ */
+const PROCESS_ENV_DEPLOYMENT_SIGNALS = ['APP_KEY', 'APP_ENV', 'DATABASE_URL'] as const
+
+function isConfigSuppliedViaProcessEnv(): { supplied: true; key: string } | { supplied: false } {
+  for (const key of PROCESS_ENV_DEPLOYMENT_SIGNALS) {
+    if (process.env[key]) return { supplied: true, key }
+  }
+  return { supplied: false }
+}
+
 registerDoctorCheck({
   id:       'env:dotenv-loadable',
   category: 'env',
   title:    '.env file',
   run(): DoctorResult {
     if (!fileExists('.env')) {
+      // Config can come from process.env directly — Docker, CI, Forge / Fly /
+      // Render / Vercel / Railway, Kubernetes ConfigMap / Secret. If ANY of
+      // the framework-cared-about keys are in env, the operator has chosen
+      // the process.env shape deliberately and the .env file is just not
+      // their config source. The sibling checks (env:app-key, env:app-env,
+      // orm-prisma:database-url) still validate the per-key concerns.
+      const signal = isConfigSuppliedViaProcessEnv()
+      if (signal.supplied) {
+        return {
+          status:  'ok',
+          message: `absent — config supplied via process.env (${signal.key} set)`,
+        }
+      }
       const exampleHint = fileExists('.env.example')
         ? 'Run `cp .env.example .env` and fill in the secrets'
         : 'Create a .env file with your config (APP_KEY, AUTH_SECRET, etc.)'

@@ -36,6 +36,7 @@ beforeEach(() => {
   // don't accidentally inherit the parent process's value.
   delete process.env['APP_KEY']
   delete process.env['APP_ENV']
+  delete process.env['DATABASE_URL']
 })
 
 function writeFile(rel: string, content: string): void {
@@ -233,5 +234,62 @@ describe('built-in checks — monorepo friendliness', () => {
     const result = await runChecks()
     const o = outcomeFor(result.outcomes, 'env:app-key')
     assert.strictEqual(o.status, 'error')
+  })
+
+  it('env:dotenv-loadable passes when APP_KEY supplied via process.env', async () => {
+    // Docker / CI / Forge / Fly / Kubernetes shape — operator sets config in
+    // the host env, no .env file on disk. The other env checks still
+    // validate the per-key concerns (APP_KEY length, APP_ENV value, etc.).
+    writeFile('package.json', '{}')
+    process.env['APP_KEY'] = Buffer.alloc(32, 0xab).toString('base64')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'ok', `expected ok, got ${o.status}: ${o.message}`)
+    assert.ok(o.message.includes('process.env'), `expected process.env hint, got: ${o.message}`)
+    assert.ok(o.message.includes('APP_KEY'), `expected APP_KEY in message, got: ${o.message}`)
+  })
+
+  it('env:dotenv-loadable passes when only DATABASE_URL is supplied via process.env', async () => {
+    // API-only / no-session app in CI — APP_KEY isn't needed (env:app-key
+    // warns) but DATABASE_URL signals the operator chose the process.env
+    // shape deliberately.
+    writeFile('package.json', '{}')
+    process.env['DATABASE_URL'] = 'postgresql://localhost/test'
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'ok')
+    assert.ok(o.message.includes('DATABASE_URL'))
+  })
+
+  it('env:dotenv-loadable passes when only APP_ENV is supplied via process.env', async () => {
+    writeFile('package.json', '{}')
+    process.env['APP_ENV'] = 'production'
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'ok')
+    assert.ok(o.message.includes('APP_ENV'))
+  })
+
+  it('env:dotenv-loadable still errors on a bare fresh clone (no .env, no env signals)', async () => {
+    // Regression guard: removing the file check entirely would mask the
+    // "you forgot to copy .env.example" beginner case. With no .env and
+    // none of the framework-cared-about keys in process.env, the check
+    // must still fire.
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.message.includes('missing'))
+  })
+
+  it('env:dotenv-loadable still validates the .env file when present', async () => {
+    // File-shape branch is unchanged regardless of process.env state.
+    writeFile('package.json', '{}')
+    writeFile('.env', 'APP_KEY=abc\nFOO=bar\n')
+    process.env['APP_KEY'] = 'in-env-too'  // should be ignored on this branch
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:dotenv-loadable')
+    assert.strictEqual(o.status, 'ok')
+    assert.ok(o.message.includes('parses'))
   })
 })
