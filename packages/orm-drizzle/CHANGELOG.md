@@ -1,5 +1,90 @@
 # @rudderjs/orm-drizzle
 
+## 1.6.1
+
+### Patch Changes
+
+- 14b1ab9: Fix `increment` / `decrement` / `deleteAll` / `updateAll` on Drizzle + MySQL.
+
+  MySQL drivers don't support `RETURNING`, so the existing implementations
+  either threw (`increment` / `decrement` — "returned no rows") or silently
+  reported a 0-row count (`deleteAll` / `updateAll`). The 0-count broke the
+  `prune --mass` chunk loop, which exits as soon as the affected count drops
+  below the chunk size — on MySQL it always exited after the first pass with
+  rows still in the table.
+
+  `DrizzleConfig` gains a new optional `dialect: 'pg' | 'mysql' | 'sqlite'`
+  field. It's inferred from `driver` when present (`'postgresql'` → `'pg'`,
+  `'sqlite'` / `'libsql'` → `'sqlite'`, `'mysql'` → `'mysql'`), and defaults
+  to `'pg'` when a pre-built `client` is supplied without an explicit dialect
+  (matches the previous code path, so existing Postgres / SQLite users see no
+  behavior change).
+
+  On MySQL:
+
+  - `increment` / `decrement` run the `UPDATE` then re-select the target row
+    (two round-trips instead of one — the trade-off for losing `RETURNING`).
+  - `deleteAll` / `updateAll` read `affectedRows` from the driver result
+    metadata. Both `mysql2`'s `affectedRows` and planetscale-serverless's
+    `rowsAffected` shapes are accepted.
+
+  `'mysql'` is now a valid `driver` value in `DrizzleConfig` and
+  `DatabaseConnectionConfig`. When used, the adapter boots a `mysql2/promise`
+  pool and routes it through `drizzle-orm/mysql2`. `mysql2` is declared as an
+  optional peer.
+
+  Closes Phase 4 of `docs/plans/2026-05-21-framework-orm-correctness.md`.
+
+- c5e2408: fix(orm): `find(id)` composes accumulated wheres / scopes / soft-deletes
+
+  Previously, `Model.find(id)` bypassed the query chain entirely on both adapters. `User.where('tenantId', t).find(5)` would return rows across tenants — a cross-tenant data leak by default. Drizzle honored the soft-delete scope but ignored everything else; Prisma ignored all of it.
+
+  The fix:
+
+  - **Prisma**: `find()` now uses `findFirst` (was `findUnique`) so the PK match can be AND-composed with the accumulated where chain, soft-delete filter, global scopes, and relation predicates. Empty chain stays as `{ id }` — no needless `AND` wrapper.
+  - **Drizzle**: `find()` now uses the same `buildConditions()` aggregator that `get()` does, so it composes wheres + orWheres + soft-delete + `whereGroup` / `whereRelationExists` subqueries with the PK match. Drops the manual soft-delete-only branch.
+
+  Regression tests added on both adapters:
+
+  - Drizzle (real in-memory sqlite via integration suite): `where('age', '>=', 31).find(aliceId)` returns null when Alice is 30; `where('age', '>=', 30).find(aliceId)` resolves her.
+  - Prisma (capturing client): asserts `findFirst` (not `findUnique`) is called; verifies the composed `{ AND: [{ id }, { tenantId }] }` shape; confirms unchained `find(id)` stays as plain `{ id }`.
+
+  Note: this fix uses the existing `id` literal as the primary key column. The companion plan phase (`docs/plans/2026-05-21-framework-orm-correctness.md` Phase 2) covers threading `Model.primaryKey` through the adapter contract for non-`id` PK models.
+
+- 6652117: Thread `Model.primaryKey` through the `OrmAdapter` contract so models with
+  `static primaryKey = 'uuid'` (or any non-`id` PK) work on both adapters.
+
+  `OrmAdapter.query(table, opts?)` now accepts an optional `OrmAdapterQueryOpts`
+  with a `primaryKey` field. `Model._q()` + `Model.query()` thread the model's
+  configured `primaryKey` through it. The Prisma adapter, which previously
+  hardcoded `where: { id }` on every mutation method, now emits
+  `where: { [primaryKey]: id }` — fixing `find` / `update` / `delete` / `restore`
+  / `forceDelete` / `increment` / `decrement`. The Drizzle adapter, which
+  previously read a single adapter-global `primaryKey` from `drizzle()` config,
+  now lets the per-query opts override it — so monorepos with mixed PKs
+  (`users.id` + `subscriptions.uuid`) work without forcing every model onto the
+  same PK.
+
+  The contract widen is fully backwards-compatible: `opts` is optional, both
+  adapters fall back to the historical `'id'` (Prisma) / adapter-global
+  (Drizzle) when no opts are threaded. Third-party adapters that haven't
+  been updated keep working for `id`-PK models.
+
+  Closes Phase 2 of `docs/plans/2026-05-21-framework-orm-correctness.md`.
+  Required prerequisite for the Phase 1 `find()` fix shipped in #582 to work
+  correctly with non-`id` PK models.
+
+- Updated dependencies [d24a914]
+- Updated dependencies [a99ed3d]
+- Updated dependencies [1553c9a]
+- Updated dependencies [41f68b1]
+- Updated dependencies [6652117]
+- Updated dependencies [3e60f95]
+  - @rudderjs/ai@1.8.1
+  - @rudderjs/core@1.2.0
+  - @rudderjs/orm@1.12.0
+  - @rudderjs/contracts@1.8.0
+
 ## 1.6.0
 
 ### Minor Changes

@@ -1,5 +1,66 @@
 # @rudderjs/auth
 
+## 6.2.0
+
+### Minor Changes
+
+- 84e5c13: **@rudderjs/auth** — `BaseAuthController` now ships default rate-limits on
+  `signIn` (10/min by IP), `signUp` (5/min by IP), and `requestPasswordReset`
+  (3/min by email, IP fallback). Override per-method via `static rateLimits`
+  on the subclass, or set to `{}` to disable entirely. `@rudderjs/middleware`
+  is now a required peer (it's a core package shipped with every scaffolded
+  app, so installations that already use `BaseAuthController` are unaffected).
+
+  **@rudderjs/middleware** — `RateLimit` instances now namespace their cache
+  key per-handler so siblings keyed by the same identifier don't share a
+  bucket. Before: `m.web(RateLimit.perMinute(60))` and a route-scoped
+  `RateLimit.perMinute(5)` keyed by IP both wrote to `rudderjs:rl:<ip>`, so 5
+  unrelated web-group GETs would drain the route-scoped limiter's quota. Now
+  each handler instance owns its own bucket; a shared handler reference
+  (`m.web(myLimiter)` applied to multiple routes) still shares a bucket as
+  expected. Load-bearing for the Phase 6 default rate-limits above —
+  surfaced by the scaffolder render E2E.
+
+  Plan: `docs/plans/2026-05-21-framework-security-fixes.md` Phase 6.
+
+### Patch Changes
+
+- 739cf40: fix(auth): `AuthMiddleware` try/finally + `EnsureEmailIsVerified` typed checks
+
+  Two fail-closed hardening fixes from the 2026-05-21 code review (`docs/plans/2026-05-21-framework-security-fixes.md`, Phases 4 + 5).
+
+  **Phase 4 — `AuthMiddleware` try/finally**
+
+  The post-`next()` sync block that mirrors session changes back onto `req.user` previously ran only on the happy path. A handler that signed the user in (or out) and then threw would skip the sync, so the downstream error renderer saw stale `req.user` — typically empty even though the session had `auth_user_id` set. Now wrapped in `try/finally`: the original handler error propagates unchanged, but the sync runs first so the error path sees the post-sign-in (or post-sign-out) state. Sync failures during the finally never mask the original throw — they're rethrown only when the handler itself succeeded.
+
+  **Phase 5 — `EnsureEmailIsVerified` hardening**
+
+  Two changes:
+
+  - **Re-resolve via the live guard.** Previously the middleware read `req.user.emailVerifiedAt` from the `userToPlain()` snapshot. The snapshot drops methods (so a `MustVerifyEmail` mixin's `hasVerifiedEmail()` is gone) and serializes whatever the column happened to be at request time. Now we call `Auth.user()` first to get the live Model instance; fall back to the snapshot only when no auth context is set or the guard returns null.
+  - **Type-narrow the verified-state check.** The previous `!== null && !== undefined` accepted any truthy value: the string `"false"`, the number `0`, the boolean `false`, etc. — all silently passed the gate. If a future Model lets `emailVerifiedAt` slip into a mass-assignable column (the default `fillable: []` policy enforces nothing unless opted in), attacker-supplied values become a privilege boundary. Now `isVerifiedTimestamp(v)` accepts only a real `Date` or a string `Date.parse` can consume.
+  - Preferred path: when the User Model implements `MustVerifyEmail`, the mixin's `hasVerifiedEmail()` is authoritative — it rules out the truthy-anything bug entirely.
+
+  **Tests** — `src/middleware-and-verification-fixes.test.ts`, 14 specs:
+
+  - AuthMiddleware: sign-in-then-throw → `req.user` populated; sign-out-then-throw → `req.user` cleared; sync failure during finally doesn't mask the original handler error.
+  - EnsureEmailIsVerified: accepts real `Date` + ISO string; rejects `"false"`, `0`, `false`, `""`, `null`, `"unverified"`; honors `MustVerifyEmail` returning `true`/`false`; 401 when no user resolvable.
+
+  Also: `package.json` `test` script now matches `dist-test/*.test.js` instead of hard-coding `index.test.js`, so future per-feature test files are picked up automatically.
+
+  Verified: 92 auth tests pass (78 prior + 14 new); `passport`, `sanctum`, `telescope`, `cashier-paddle` typecheck clean.
+
+- Updated dependencies [84e5c13]
+- Updated dependencies [1553c9a]
+- Updated dependencies [40916c1]
+- Updated dependencies [6652117]
+- Updated dependencies [3aeba89]
+- Updated dependencies [3e60f95]
+  - @rudderjs/middleware@1.1.2
+  - @rudderjs/core@1.2.0
+  - @rudderjs/contracts@1.8.0
+  - @rudderjs/router@1.6.0
+
 ## 6.1.0
 
 ### Minor Changes
