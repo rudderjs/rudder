@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
+import { MalformedBodyError } from '@rudderjs/contracts'
 import { hono } from './index.js'
 import { renderErrorPage, buildErrorMarkdown, resolveErrorLine } from './error-page.js'
 
@@ -273,15 +274,92 @@ describe('HonoAdapter — body parsing', () => {
     assert.strictEqual(getCaptured(), null)
   })
 
-  it('falls back to {} on malformed JSON', async () => {
-    const { app, getCaptured } = setupCapture()
+  it('throws MalformedBodyError on malformed JSON (httpStatus=400 so the core pipeline renders 400)', async () => {
+    const adapter = hono().create()
+    let handlerRan = false
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/echo',
+      handler: async (_req, res) => { handlerRan = true; return res.json({ ok: true }) },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as {
+      fetch:   (req: Request) => Promise<Response>
+      onError: (fn: (err: unknown) => Response) => void
+    }
+    let errCaught: unknown = undefined
+    app.onError((err) => {
+      errCaught = err
+      // Mimic the central pipeline's response shape so the assertion
+      // covers both "the throw reached onError" and "the renderer would
+      // produce a 400 — the response we serve here is just for the test".
+      return new Response('intercepted', { status: 500 })
+    })
     const res = await app.fetch(new Request('http://localhost/echo', {
       method:  'POST',
       headers: { 'content-type': 'application/json' },
       body:    '{not json',
     }))
+    assert.strictEqual(res.status, 500, 'Hono default for uncaught — would be 400 via the framework pipeline')
+    assert.strictEqual(handlerRan, false, 'route handler must not run when body parse throws')
+    assert.ok(errCaught instanceof MalformedBodyError,
+      `expected MalformedBodyError, got ${(errCaught as Error)?.constructor?.name}`)
+    assert.strictEqual((errCaught as MalformedBodyError).httpStatus, 400)
+    assert.strictEqual((errCaught as MalformedBodyError).contentType, 'application/json')
+    assert.match((errCaught as Error).message, /Malformed request body.*application\/json/i)
+    // The original parse error survives as `cause` for diagnostics.
+    assert.ok((errCaught as Error & { cause?: unknown }).cause instanceof SyntaxError,
+      'cause should be the underlying JSON SyntaxError')
+  })
+
+  it('leaves req.body at the default when JSON body is empty (no parse, no throw)', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    '',
+    }))
     assert.strictEqual(res.status, 200)
-    assert.deepStrictEqual(getCaptured(), {})
+    // Empty body: no parse attempted, no throw — req.body stays at the
+    // normalizer default (null). Validators see "no body" and emit the
+    // normal missing-field errors instead of cryptic JSON parse messages.
+    assert.strictEqual(getCaptured(), null)
+  })
+
+  it('throws MalformedBodyError on malformed JSON with charset suffix on content-type', async () => {
+    const adapter = hono().create()
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/echo',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as {
+      fetch:   (req: Request) => Promise<Response>
+      onError: (fn: (err: unknown) => Response) => void
+    }
+    let errCaught: unknown = undefined
+    app.onError((err) => { errCaught = err; return new Response('x', { status: 500 }) })
+    await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body:    '{"name": "tru',  // truncated
+    }))
+    assert.ok(errCaught instanceof MalformedBodyError,
+      'content-type matching is substring-based — charset suffix must not bypass parsing')
+  })
+
+  it('leaves req.body at the default when form-urlencoded body is empty', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body:    '',
+    }))
+    assert.strictEqual(res.status, 200)
+    // Mirrors the JSON-empty path — no parse attempted, no req.body
+    // assignment, so the normalizer default (null) survives.
+    assert.strictEqual(getCaptured(), null)
   })
 
   it('preserves raw body stream after pre-parse — handlers that need raw access (e.g. MCP streamable-HTTP transport) can still read c.req.raw.body', async () => {

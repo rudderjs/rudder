@@ -37,7 +37,7 @@ import type {
   AppRequest,
   AppResponse,
 } from '@rudderjs/contracts'
-import { attachInputAccessors } from '@rudderjs/contracts'
+import { attachInputAccessors, MalformedBodyError } from '@rudderjs/contracts'
 
 // ─── ViewResponse duck-type check ──────────────────────────
 // Detects @rudderjs/view ViewResponse instances without importing the package.
@@ -490,12 +490,32 @@ class HonoAdapter implements ServerAdapter {
       if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
         const ct = c.req.header('content-type') ?? ''
         if (ct.includes('application/json')) {
-          try { req.body = await c.req.raw.clone().json() } catch { req.body = {} }
+          // Read the cloned body as text first so we can distinguish empty
+          // bodies (leave req.body at the default — validators emit their
+          // normal "field required" errors) from malformed JSON (throw 400
+          // via the central exception pipeline — see MalformedBodyError's
+          // httpStatus duck-type in `@rudderjs/core/src/app-builder.ts`).
+          // The old `req.body = {}` fallback made malformed requests look
+          // like missing-field validation errors to handlers.
+          const text = await c.req.raw.clone().text()
+          if (text.length > 0) {
+            try { req.body = JSON.parse(text) }
+            catch (e) {
+              throw new MalformedBodyError('application/json', e instanceof Error ? e : undefined)
+            }
+          }
         } else if (ct.includes('application/x-www-form-urlencoded')) {
+          // `URLSearchParams` is tolerant — it never throws on malformed
+          // input, just parses what it can. Only a body-stream read error
+          // surfaces here.
           try {
             const text = await c.req.raw.clone().text()
-            req.body = Object.fromEntries(new URLSearchParams(text))
-          } catch { req.body = {} }
+            if (text.length > 0) {
+              req.body = Object.fromEntries(new URLSearchParams(text))
+            }
+          } catch (e) {
+            throw new MalformedBodyError('application/x-www-form-urlencoded', e instanceof Error ? e : undefined)
+          }
         }
       }
       markBoundary(perfId, B.BODY_PARSE_DONE)
