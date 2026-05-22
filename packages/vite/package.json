@@ -46,6 +46,11 @@
       "import": "./dist/commands/view-sync.js",
       "default": "./dist/commands/view-sync.js",
       "types": "./dist/commands/view-sync.d.ts"
+    },
+    "./commands/routes-sync": {
+      "import": "./dist/commands/routes-sync.js",
+      "default": "./dist/commands/routes-sync.js",
+      "types": "./dist/commands/routes-sync.d.ts"
     }
   },
   "scripts": {
