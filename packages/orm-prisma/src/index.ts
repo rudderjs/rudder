@@ -356,16 +356,27 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       )
     }
 
+    // ── Laravel / Drizzle precedence parity (2026-05-22 breaking) ─────
+    //
+    // Same shape contract as `buildWhere()` above. The vector-search SQL
+    // path historically emitted `(andChain) AND (or1 OR or2)` which
+    // constrained every OR alternative by the prior AND chain. Laravel
+    // parity is `(andChain) OR or1 OR or2`. See the `buildWhere()` block
+    // for the full rationale.
     const andClauses: string[] = this._wheres.map(c => this.clauseToSql(c, params))
     if (this._softDeletes && !this._withTrashed) {
       andClauses.push(this._onlyTrashed
         ? `${id('deletedAt')} IS NOT NULL`
         : `${id('deletedAt')} IS NULL`)
     }
-    if (andClauses.length > 0) whereParts.push(andClauses.join(' AND '))
+    const orClauses: string[] = this._orWheres.map(c => this.clauseToSql(c, params))
 
-    if (this._orWheres.length > 0) {
-      const orClauses = this._orWheres.map(c => this.clauseToSql(c, params))
+    if (andClauses.length > 0 && orClauses.length > 0) {
+      const andSide = andClauses.length === 1 ? andClauses[0]! : `(${andClauses.join(' AND ')})`
+      whereParts.push(`(${[andSide, ...orClauses].join(' OR ')})`)
+    } else if (andClauses.length > 0) {
+      whereParts.push(andClauses.join(' AND '))
+    } else if (orClauses.length > 0) {
       whereParts.push(`(${orClauses.join(' OR ')})`)
     }
 
@@ -581,24 +592,73 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
     const hasAndGroups = this._andGroups.length > 0
     const hasOrGroups  = this._orGroups.length > 0
+    const hasAndItems  = andFilters.length > 0 || hasAndGroups
+    const hasOrItems   = orFilters.length > 0 || hasOrGroups
 
-    if (
-      andFilters.length === 0 && orFilters.length === 0 &&
-      !hasAndGroups && !hasOrGroups
-    ) return {}
+    if (!hasAndItems && !hasOrItems) return {}
 
-    const where: Record<string, unknown> = {}
-    if (hasAndGroups) {
-      // Use AND-array form so groups don't clobber sibling keys via Object.assign.
-      where['AND'] = [...andFilters, ...this._andGroups]
-    } else if (andFilters.length > 0) {
-      Object.assign(where, ...andFilters)
+    // ── Laravel / Drizzle precedence parity (2026-05-22 breaking) ─────────
+    //
+    // Before this change, Prisma's shape was
+    //   `{ ...andSpread, OR: [...orFilters] }`
+    // which Prisma interpreted as
+    //   `andSpread AND (or1 OR or2 ...)`.
+    // That constrained every `.orWhere()` alternative by the prior AND
+    // chain — so `where('a').where('b').orWhere('c')` matched only rows
+    // where `(a AND b AND c)`, not `(a AND b) OR c` as Eloquent does.
+    //
+    // The Laravel-parity shape is
+    //   `OR: [(AND chain), or1, or2, ...]`
+    // so each `.orWhere()` / `.orWhereGroup()` is a top-level alternative
+    // and the prior AND chain becomes one of those alternatives. This
+    // matches `@rudderjs/orm-drizzle`'s Laravel-parity behaviour (see
+    // `packages/orm-drizzle/src/index.ts:buildConditions`) and the
+    // sequence of operators in Eloquent's query grammar.
+    //
+    // Edge cases:
+    // - Only AND content → keep the legacy flat shape (Object.assign spread
+    //   when no andGroups; `{ AND: [...] }` array form when groups are
+    //   present to avoid sibling-key clobbering). Tests for AND-only
+    //   queries are unaffected.
+    // - Only OR content → emit `{ OR: [...] }`.
+    // - Both → emit `{ OR: [andSide, ...orItems] }`. The AND side
+    //   collapses to a single flat object if it has exactly one element
+    //   and no andGroups (the common case for `.where().orWhere()`);
+    //   otherwise it's `{ AND: [...] }`.
+    const buildAndSide = (): Record<string, unknown> => {
+      if (hasAndGroups) {
+        return { AND: [...andFilters, ...this._andGroups] }
+      }
+      if (andFilters.length === 1) return { ...andFilters[0] }
+      if (andFilters.length > 1) {
+        // Use AND-array form so duplicate columns survive — Object.assign
+        // would clobber e.g. two `.where('priority', ...)` calls. Honour
+        // the same column-collision safety as the andGroups branch.
+        return { AND: [...andFilters] }
+      }
+      // andFilters.length === 0 && !hasAndGroups — caller is guarded.
+      /* istanbul ignore next */
+      return {}
     }
-    if (hasOrGroups || orFilters.length > 0) {
-      where['OR'] = [...orFilters, ...this._orGroups]
+
+    if (!hasOrItems) {
+      // Pure AND chain — for AND-only-no-groups with multiple items the
+      // legacy shape was Object.assign-spread. Keep that to avoid churning
+      // tests of unrelated callers; the new AND-array form is only used
+      // when we need to compose with OR alternatives.
+      if (hasAndGroups) {
+        return { AND: [...andFilters, ...this._andGroups] }
+      }
+      if (andFilters.length > 0) return Object.assign({}, ...andFilters)
+      return {}
     }
 
-    return where
+    if (!hasAndItems) {
+      return { OR: [...orFilters, ...this._orGroups] }
+    }
+
+    // Both AND and OR content — Laravel-parity OR-of-alternatives.
+    return { OR: [buildAndSide(), ...orFilters, ...this._orGroups] }
   }
 
   /** @internal — direct count/exists requests go through Prisma's native
