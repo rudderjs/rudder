@@ -1,6 +1,7 @@
 import path from 'node:path'
 import type { Plugin } from 'vite'
 import { viewsScannerPlugin } from './views-scanner.js'
+import { routesScannerPlugin } from './routes-scanner.js'
 
 // ─── SSR / build externals ─────────────────────────────────
 
@@ -81,6 +82,7 @@ const SSR_NO_EXTERNALS = [
 export function rudderjs(): Plugin[] {
   return [
     viewsScannerPlugin(),
+    routesScannerPlugin(),
     {
       // Inject x-real-ip header from the Node socket so downstream Hono
       // middleware can read the client IP. Vike's universal-middleware

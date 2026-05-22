@@ -70,7 +70,7 @@ Route.get('/test-get-route', (_req, res) => {
 })
 
 // GET /demos — index page listing all available demos.
-Route.get('/demos', async () => view('demos.index'))
+Route.get('/demos', async () => view('demos.index')).name('demos.index')
 
 // GET /demos/contact — CSRF + Zod validation demo.
 // POST handler for /api/contact lives in routes/api.ts.
