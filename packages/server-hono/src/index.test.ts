@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { MalformedBodyError } from '@rudderjs/contracts'
-import { hono } from './index.js'
+import { hono, compileControllerViewRegex } from './index.js'
 import { renderErrorPage, buildErrorMarkdown, resolveErrorLine } from './error-page.js'
 
 // ─── hono() factory ─────────────────────────────────────────
@@ -759,5 +759,241 @@ describe('HonoAdapter — multi-value Set-Cookie', () => {
       `expected >= 2 separate Set-Cookie headers, got ${setCookies.length}: ${JSON.stringify(setCookies)}`)
     assert.ok(setCookies.some(c => c.startsWith('csrf=abc')), 'expected csrf cookie')
     assert.ok(setCookies.some(c => c.startsWith('session=xyz')), 'expected session cookie')
+  })
+})
+
+// ─── compileControllerViewRegex() — Hono-style path → regex ────
+//
+// The path-to-regex compiler powers the parameterised-route fast path
+// for the .pageContext.json rewrite. Static paths take the Set fast
+// path; this compiler is only consulted when a route's path contains
+// `:`. Wildcard-only routes (`*` with no `:`) are intentionally left
+// out of both indexes — they're catch-all fallbacks, not view returns.
+
+describe('compileControllerViewRegex()', () => {
+  it('static path: matches itself exactly', () => {
+    const re = compileControllerViewRegex('/users')
+    assert.ok(re.test('/users'))
+    assert.ok(!re.test('/users/42'),  'must not match a longer prefix')
+    assert.ok(!re.test('/use'),       'must not match a shorter prefix')
+    assert.ok(!re.test('/users/'),    'must not match trailing slash')
+  })
+
+  it(':param: matches one segment, rejects multi-segment & empty', () => {
+    const re = compileControllerViewRegex('/users/:id')
+    assert.ok(re.test('/users/42'))
+    assert.ok(re.test('/users/john-doe'))
+    assert.ok(!re.test('/users'),         'parent path must not match a required :param route')
+    assert.ok(!re.test('/users/'),        'empty segment must not match')
+    assert.ok(!re.test('/users/42/edit'), 'multi-segment must not match')
+  })
+
+  it('multiple params + nested params: each is one segment', () => {
+    const re = compileControllerViewRegex('/posts/:slug/comments/:cid')
+    assert.ok(re.test('/posts/hello-world/comments/42'))
+    assert.ok(!re.test('/posts/hello-world/comments'))
+    assert.ok(!re.test('/posts/hello/world/comments/42'),
+      'param must not span multiple segments')
+  })
+
+  it('optional :param? after slash: matches both with and without the segment', () => {
+    const re = compileControllerViewRegex('/users/:id?')
+    assert.ok(re.test('/users/42'))
+    assert.ok(re.test('/users'),         'optional :param? must allow the bare parent path')
+    assert.ok(!re.test('/users/42/x'),   'extra segment must not match')
+    assert.ok(!re.test('/users/'),       'trailing slash without value must not match (Hono parity)')
+  })
+
+  it('custom regex :param{regex}: passes through verbatim — UUID', () => {
+    const re = compileControllerViewRegex('/users/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}')
+    assert.ok(re.test('/users/550e8400-e29b-41d4-a716-446655440000'),
+      'a valid UUID must match')
+    assert.ok(!re.test('/users/not-a-uuid'), 'non-UUID must not match')
+  })
+
+  it('custom regex :param{regex}: passes through verbatim — number constraint', () => {
+    const re = compileControllerViewRegex('/users/:id{[0-9]+}')
+    assert.ok(re.test('/users/42'))
+    assert.ok(!re.test('/users/abc'),  'letters must not match a {[0-9]+} constraint')
+  })
+
+  it('escapes regex metacharacters in literal path segments', () => {
+    // A path like `/posts/v1.0` historically had `.` interpreted as
+    // "any char" — would have matched `/posts/v1Xa`. The escaper must
+    // make `.` literal.
+    const re = compileControllerViewRegex('/posts/v1.0')
+    assert.ok(re.test('/posts/v1.0'))
+    assert.ok(!re.test('/posts/v1X0'), '`.` must be literal, not regex any-char')
+  })
+
+  it('root path matches only root', () => {
+    const re = compileControllerViewRegex('/')
+    assert.ok(re.test('/'))
+    assert.ok(!re.test('/users'))
+  })
+})
+
+// ─── controllerViewPatterns — parameterised SPA-nav rewrite ───────
+//
+// End-to-end: a route registered with `:param` must show up in
+// controllerViewPatterns, the new _matchesControllerView() must accept
+// the rewritten path, and the .pageContext.json fetch rewrite must
+// dispatch to the controller rather than fall back to Vike's full-reload
+// path. This is the Phase 1 fix from
+// docs/plans/2026-05-21-framework-pipeline-hardening.md.
+
+describe('HonoAdapter — controllerViewPatterns (parameterised SPA-nav)', () => {
+  it('static GET route lands in controllerViewPaths (Set fast path)', () => {
+    const adapter = hono().create() as ReturnType<ReturnType<typeof hono>['create']> & {
+      controllerViewPaths:    Set<string>
+      controllerViewPatterns: Array<{ regex: RegExp; path: string }>
+    }
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    assert.ok(adapter.controllerViewPaths.has('/users'))
+    assert.strictEqual(adapter.controllerViewPatterns.length, 0,
+      'static path must not bloat the pattern array')
+  })
+
+  it('parameterised GET route lands in controllerViewPatterns (regex slow path)', () => {
+    const adapter = hono().create() as ReturnType<ReturnType<typeof hono>['create']> & {
+      controllerViewPaths:    Set<string>
+      controllerViewPatterns: Array<{ regex: RegExp; path: string }>
+    }
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users/:id',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    assert.ok(!adapter.controllerViewPaths.has('/users/:id'),
+      'parameterised paths must not pollute the static Set — would cause false negatives on real URLs')
+    assert.strictEqual(adapter.controllerViewPatterns.length, 1)
+    assert.strictEqual(adapter.controllerViewPatterns[0]?.path, '/users/:id')
+    assert.ok(adapter.controllerViewPatterns[0]?.regex.test('/users/42'))
+  })
+
+  it('wildcard-only route (`*` with no `:`) is excluded from both indexes', () => {
+    const adapter = hono().create() as ReturnType<ReturnType<typeof hono>['create']> & {
+      controllerViewPaths:    Set<string>
+      controllerViewPatterns: Array<{ regex: RegExp; path: string }>
+    }
+    adapter.registerRoute({
+      method:  'ALL',
+      path:    '/api/*',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    assert.ok(!adapter.controllerViewPaths.has('/api/*'),
+      'wildcard fallback should not be a view candidate — was a no-op in the Set lookup pre-2026-05-22, keeping that contract')
+    assert.strictEqual(adapter.controllerViewPatterns.length, 0)
+  })
+
+  it('non-GET/non-ALL routes are not tracked as view candidates', () => {
+    const adapter = hono().create() as ReturnType<ReturnType<typeof hono>['create']> & {
+      controllerViewPaths:    Set<string>
+      controllerViewPatterns: Array<{ regex: RegExp; path: string }>
+    }
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/users/:id',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    assert.strictEqual(adapter.controllerViewPatterns.length, 0,
+      'POST :param routes never receive .pageContext.json rewrites — Vike client nav is GET-only')
+  })
+
+  it('_matchesControllerView returns the matching pattern for parameterised URLs', () => {
+    const adapter = hono().create() as ReturnType<ReturnType<typeof hono>['create']> & {
+      _matchesControllerView: (path: string) => string | undefined
+    }
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users/:id',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+
+    assert.strictEqual(adapter._matchesControllerView('/users'),    '/users')
+    assert.strictEqual(adapter._matchesControllerView('/users/42'), '/users/:id')
+    assert.strictEqual(adapter._matchesControllerView('/random'),   undefined)
+  })
+
+  it('end-to-end: SPA-nav rewrite reaches the controller for /users/:id (Phase 1 regression)', async () => {
+    // The whole point of Phase 1: SPA navigation between `/users/:id`-style
+    // routes used to silently degrade to full reloads because the
+    // .pageContext.json rewrite was gated on a Set lookup that only
+    // tracked static paths. After this fix, the parameterised pattern
+    // catches the rewrite and the controller runs end-to-end.
+    const provider = hono()
+    const handler  = await provider.createFetchHandler((adapter) => {
+      adapter.registerRoute({
+        method:  'GET',
+        path:    '/users/:id',
+        handler: async (req, res) => res.json({ userId: req.params['id'] }),
+        middleware: [],
+      })
+    })
+
+    const res = await handler(new Request('http://localhost/users/42/index.pageContext.json'))
+
+    // Pre-fix: this would either 404 (Vike middleware doesn't know about
+    // a controller-owned route) or return HTML, NOT JSON with userId 42.
+    // Post-fix: the controller runs, returns JSON.
+    assert.strictEqual(res.status, 200, `expected 200, got ${res.status}`)
+    const body = await res.json() as { userId: string }
+    assert.strictEqual(body.userId, '42')
+  })
+
+  it('end-to-end: requests for static view routes still rewrite (Set fast path regression)', async () => {
+    const provider = hono()
+    const handler  = await provider.createFetchHandler((adapter) => {
+      adapter.registerRoute({
+        method:  'GET',
+        path:    '/about',
+        handler: async (_req, res) => res.json({ page: 'about' }),
+        middleware: [],
+      })
+    })
+
+    const res = await handler(new Request('http://localhost/about/index.pageContext.json'))
+    assert.strictEqual(res.status, 200)
+    const body = await res.json() as { page: string }
+    assert.strictEqual(body.page, 'about')
+  })
+
+  it('end-to-end: .pageContext.json for an unregistered path is not rewritten (Vike handles)', async () => {
+    const provider = hono()
+    let controllerRan = false
+    const handler  = await provider.createFetchHandler((adapter) => {
+      adapter.registerRoute({
+        method:  'GET',
+        path:    '/users/:id',
+        handler: async (_req, res) => { controllerRan = true; return res.json({ ok: true }) },
+        middleware: [],
+      })
+    })
+
+    // /nope/42 doesn't match any registered controller view — the rewrite
+    // must NOT fire, so the request falls through to Vike's middleware.
+    // What Vike returns in the test sandbox doesn't matter (no `app/Views`
+    // exists, so it errors) — the contract being pinned here is that the
+    // controller was NOT invoked. Pre-fix this was already the behaviour
+    // for static URLs; this test guards against a future regression that
+    // over-matches in the pattern array.
+    await handler(new Request('http://localhost/nope/42/index.pageContext.json'))
+    assert.strictEqual(controllerRan, false,
+      'controller handler must not run for an unregistered .pageContext.json path')
   })
 })

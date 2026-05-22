@@ -382,6 +382,108 @@ function matchHost(template: string, host: string): { params: Record<string, str
   return { params }
 }
 
+// ─── controller-view path matcher ─────────────────────────
+//
+// Compile a Hono-style route pattern (`/users/:id`, `/posts/:slug{[a-z]+}`,
+// `/admin/:tenant/:section?`) into a regex that tests whether a stripped
+// `.pageContext.json` URL path corresponds to that route. Used purely as
+// a yes/no gate for the Vike SPA-nav rewrite — we don't need to extract
+// params here (Hono does that during real routing), just decide whether
+// the controller would have matched.
+//
+// Optional `:param?` after a slash treats the slash as part of the
+// optional group, so `/users/:id?` matches both `/users` and `/users/42`.
+// Custom regex shards (`:slug{[a-z]+}`) pass through verbatim — this is
+// the same syntax `RouteBuilder.where()` produces, and Hono evaluates
+// the same way internally, so behaviour stays consistent across the
+// `routes/web.ts` → adapter → SPA-nav rewrite path.
+//
+// Exported as `@internal` for the unit tests below; not part of the
+// public API surface.
+export function compileControllerViewRegex(path: string): RegExp {
+  let result = '^'
+  let i = 0
+  while (i < path.length) {
+    const ch = path[i]!
+    // `/:param[?]{regex?}` — when a slash directly precedes a param, fold
+    // it into the optional group so `/users/:id?` matches `/users` too.
+    if (ch === '/' && path[i + 1] === ':') {
+      let j = i + 2
+      while (j < path.length && /[A-Za-z0-9_]/.test(path[j]!)) j++
+      const optional = path[j] === '?'
+      const afterOpt = optional ? j + 1 : j
+      let segPattern = '[^/]+'
+      let nextI      = afterOpt
+      if (path[afterOpt] === '{') {
+        const consumed = consumeBraceBlockLocal(path, afterOpt)
+        segPattern = path.slice(afterOpt + 1, consumed - 1)
+        nextI      = consumed
+      }
+      result += optional ? `(?:/${segPattern})?` : `/${segPattern}`
+      i = nextI
+      continue
+    }
+    if (ch === ':') {
+      // Param at the start of the path (rare). Don't swallow a slash.
+      let j = i + 1
+      while (j < path.length && /[A-Za-z0-9_]/.test(path[j]!)) j++
+      const optional = path[j] === '?'
+      const afterOpt = optional ? j + 1 : j
+      let segPattern = '[^/]+'
+      let nextI      = afterOpt
+      if (path[afterOpt] === '{') {
+        const consumed = consumeBraceBlockLocal(path, afterOpt)
+        segPattern = path.slice(afterOpt + 1, consumed - 1)
+        nextI      = consumed
+      }
+      result += optional ? `(?:${segPattern})?` : segPattern
+      i = nextI
+      continue
+    }
+    if (ch === '*') { result += '.*';        i++; continue }
+    if (/[.+?^${}()|[\]\\]/.test(ch)) { result += '\\' + ch; i++; continue }
+    result += ch
+    i++
+  }
+  return new RegExp(result + '$')
+}
+
+/**
+ * Consume a `{...}` block starting at index `start` (which must point at
+ * the opening `{`). Handles balanced nesting (`[0-9]{8}-...{12}` style),
+ * `\{` / `\}` escapes, and `}` literals inside `[^}]` character classes.
+ * Returns the index just past the closing `}`.
+ *
+ * Local to this file — `RouteBuilder.where()` in `@rudderjs/router` ships
+ * its own copy under the same contract, so the two paths produce the
+ * same regex segments. Kept private to avoid a circular import on the
+ * router package.
+ */
+function consumeBraceBlockLocal(path: string, start: number): number {
+  let depth   = 0
+  let i       = start
+  let inClass = false
+  while (i < path.length) {
+    const ch = path[i]!
+    if (ch === '\\') { i += 2; continue }
+    if (inClass) {
+      if (ch === ']') inClass = false
+      i++
+      continue
+    }
+    if (ch === '[') { inClass = true; i++; continue }
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return i + 1
+    }
+    i++
+  }
+  // Unbalanced — fall back to "rest of string" so the regex at least
+  // compiles. The route would never have worked at the Hono level either.
+  return path.length
+}
+
 // ─── Hono Adapter ─────────────────────────────────────────
 
 class HonoAdapter implements ServerAdapter {
@@ -390,15 +492,42 @@ class HonoAdapter implements ServerAdapter {
   private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
   private _groupMiddleware: Record<'web' | 'api', MiddlewareHandler[]> = { web: [], api: [] }
   /**
-   * Set of GET route paths registered via the router. Used by the outer fetch
-   * handler to decide whether a `.pageContext.json` request should be rewritten
-   * to a controller URL or left for Vike's middleware to handle directly.
-   * Without this, Vike's pageContext.json requests for its own pages would be
-   * misrouted into Hono and return HTML instead of JSON.
-   * Note: only exact-match paths are tracked — parameterized routes (`/users/:id`)
-   * are not supported as controller views in v1.
+   * Set of static GET route paths registered via the router — paths without
+   * `:param` segments. Hot path: the outer fetch handler does an O(1) Set
+   * lookup on every `.pageContext.json` request to decide whether to rewrite
+   * to a controller URL or let Vike handle it directly. Without this gate,
+   * Vike's pageContext.json requests for its own pages would be misrouted
+   * into Hono and return HTML instead of JSON.
    */
   readonly controllerViewPaths = new Set<string>()
+
+  /**
+   * Parameterised controller-view routes — paths containing `:param`. The
+   * outer fetch handler falls back to a linear regex match over this array
+   * when the static Set misses. Without this, SPA navigation between
+   * `/users/:id`-style routes silently degrades to a full reload because
+   * the `.pageContext.json` rewrite never fires.
+   *
+   * Compiled once at registerRoute() time. Tiny per app (one entry per
+   * dynamic GET/ALL route), and the Set fast-path absorbs the static-route
+   * majority — so the scan only runs for the small dynamic set.
+   */
+  readonly controllerViewPatterns: Array<{ regex: RegExp; path: string }> = []
+
+  /**
+   * @internal — match a stripped URL pathname against the registered
+   * controller-view routes. Tries the static Set first (O(1)), then walks
+   * the parameterised pattern list (O(n) over the dynamic-route count).
+   * Returns the original pattern that matched (for diagnostics), or
+   * `undefined` if no controller view claims this path.
+   */
+  _matchesControllerView(path: string): string | undefined {
+    if (this.controllerViewPaths.has(path)) return path
+    for (const entry of this.controllerViewPatterns) {
+      if (entry.regex.test(path)) return entry.path
+    }
+    return undefined
+  }
 
   constructor(app?: Hono, trustProxy = false) {
     this.app = app ?? new Hono()
@@ -420,12 +549,25 @@ class HonoAdapter implements ServerAdapter {
     const method = (route.method === 'ALL' ? 'all' : route.method.toLowerCase()) as
       'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'all'
 
-    // Track GET routes that don't contain dynamic segments — these are the
-    // candidates for `view()` returns and SPA-navigable. The outer fetch
-    // handler uses this set to know when a `.pageContext.json` request should
-    // be rewritten into a controller call.
-    if ((route.method === 'GET' || route.method === 'ALL') && !route.path.includes(':')) {
-      this.controllerViewPaths.add(route.path)
+    // Track GET / ALL routes as candidates for `view()` returns. The outer
+    // fetch handler uses this index to know when a `.pageContext.json`
+    // request should be rewritten into a controller call. Static paths go
+    // into the Set (O(1) lookup on the hot path); parameterised paths
+    // (`:id`, `:slug{[a-z]+}`, etc.) get compiled to a regex once and
+    // appended to controllerViewPatterns for the slow-path scan.
+    // Wildcard-only routes (`*` with no `:`) are intentionally excluded:
+    // they're typically catch-all fallbacks, not `view()` returns, and the
+    // pre-2026-05-22 implementation never matched them against dynamic
+    // URLs either — preserving that opt-out shape.
+    if (route.method === 'GET' || route.method === 'ALL') {
+      if (route.path.includes(':')) {
+        this.controllerViewPatterns.push({
+          regex: compileControllerViewRegex(route.path),
+          path:  route.path,
+        })
+      } else if (!route.path.includes('*')) {
+        this.controllerViewPaths.add(route.path)
+      }
     }
 
     this.app[method](route.path, async (c: Context) => {
@@ -729,7 +871,11 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const PAGE_CTX_SUFFIX = '/index.pageContext.json'
         if (reqUrl.pathname.endsWith(PAGE_CTX_SUFFIX)) {
           const stripped = reqUrl.pathname.slice(0, -PAGE_CTX_SUFFIX.length) || '/'
-          if (adapter.controllerViewPaths.has(stripped)) {
+          // _matchesControllerView() walks the static Set first (O(1)) and
+          // falls back to scanning compiled patterns for parameterised
+          // routes (`/users/:id` etc.) — without this fallback, SPA nav
+          // between dynamic-segment views silently degrades to full reloads.
+          if (adapter._matchesControllerView(stripped)) {
             const rewrittenUrl = new URL(request.url)
             rewrittenUrl.pathname = stripped
             const headers = new Headers(request.headers)
