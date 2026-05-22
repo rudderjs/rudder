@@ -168,3 +168,70 @@ describe('built-in checks — broken state', () => {
     assert.ok(o.message.includes('@rudderjs/ghost'))
   })
 })
+
+describe('built-in checks — monorepo friendliness', () => {
+  it('env:package-manager finds lockfile at workspace root', async () => {
+    // Workspace root has the lockfile + pnpm-workspace.yaml; package lives in a subdir.
+    fs.mkdirSync(path.join(tmpDir, 'packages/app'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'),      '')
+    fs.writeFileSync(path.join(tmpDir, 'packages/app/package.json'), '{}')
+    process.chdir(path.join(tmpDir, 'packages/app'))
+
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:package-manager')
+    assert.strictEqual(o.status, 'ok', `expected ok, got ${o.status}: ${o.message}`)
+    assert.ok(o.message.includes('workspace root'), `expected workspace-root hint, got: ${o.message}`)
+  })
+
+  it('deps:providers-manifest ok on manual composition (no defaultProviders call)', async () => {
+    writeFile('package.json', '{}')
+    // Manual composition — no `defaultProviders()` call, no manifest needed.
+    writeFile('bootstrap/providers.ts',
+      "import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'\nexport default [AppServiceProvider]\n")
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'deps:providers-manifest')
+    assert.strictEqual(o.status, 'ok')
+    assert.ok(o.message.includes('manual composition'))
+  })
+
+  it('deps:providers-manifest still warns when defaultProviders is used and manifest missing', async () => {
+    writeFile('package.json', '{}')
+    // Standard scaffolded shape — needs manifest.
+    writeFile('bootstrap/providers.ts',
+      'export default [...(await defaultProviders())]\n')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'deps:providers-manifest')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.fix?.includes('providers:discover'))
+  })
+
+  it('env:app-key warns (not errors) when no session/auth providers in use', async () => {
+    writeFile('package.json', '{}')
+    // Manual composition with no session/auth references — APP_KEY isn't consumed.
+    writeFile('bootstrap/providers.ts',
+      "import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'\nexport default [AppServiceProvider]\n")
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:app-key')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.message.includes('no session/auth'))
+  })
+
+  it('env:app-key still errors when defaultProviders is used', async () => {
+    writeFile('package.json', '{}')
+    writeFile('bootstrap/providers.ts',
+      'export default [...(await defaultProviders())]\n')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:app-key')
+    assert.strictEqual(o.status, 'error')
+  })
+
+  it('env:app-key still errors when SessionProvider is manually composed', async () => {
+    writeFile('package.json', '{}')
+    writeFile('bootstrap/providers.ts',
+      "import { SessionProvider } from '@rudderjs/session'\nexport default [SessionProvider]\n")
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'env:app-key')
+    assert.strictEqual(o.status, 'error')
+  })
+})

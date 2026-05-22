@@ -42,6 +42,23 @@ registerDoctorCheck({
   },
 })
 
+/**
+ * APP_KEY is consumed by session signing, encryption, and signed URLs.
+ * Determine whether the user's app actually wires any of those providers,
+ * so APP_KEY=missing surfaces as a hard error for apps that need it and a
+ * soft warn for apps that don't (e.g. demo / API-only playgrounds).
+ *
+ * Fails closed: if we can't read providers.ts, assume session IS in use.
+ */
+function appUsesAppKey(): boolean {
+  const text = readFileSafe('bootstrap/providers.ts')
+  if (text === null) return true  // unknown → strict
+  // Auto-discovery path: defaultProviders() loads SessionProvider when @rudderjs/session is installed.
+  if (/\bdefaultProviders\s*\(/.test(text)) return true
+  // Manual composition: look for explicit session / auth / passport references.
+  return /(@rudderjs\/(session|auth|passport)|(?:Session|Auth|Passport)Provider)\b/.test(text)
+}
+
 registerDoctorCheck({
   id:       'env:app-key',
   category: 'env',
@@ -49,6 +66,13 @@ registerDoctorCheck({
   run(): DoctorResult {
     const v = process.env['APP_KEY']
     if (!v) {
+      if (!appUsesAppKey()) {
+        return {
+          status:  'warn',
+          message: 'unset — no session/auth providers detected, not required for this app',
+          fix:     'No action needed. Add APP_KEY to .env later if you wire @rudderjs/session, @rudderjs/auth, or signed URLs.',
+        }
+      }
       return {
         status:  'error',
         message: 'unset',

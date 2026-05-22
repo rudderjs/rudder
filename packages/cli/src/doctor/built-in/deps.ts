@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { registerDoctorCheck, type DoctorResult } from '@rudderjs/console'
-import { fileExists, mtimeMs, readJsonSafe } from './_fs.js'
+import { fileExists, mtimeMs, readFileSafe, readJsonSafe } from './_fs.js'
 
 interface AppPkg {
   dependencies?:    Record<string, string>
@@ -18,6 +18,14 @@ registerDoctorCheck({
   category: 'deps',
   title:    'providers manifest',
   run(): DoctorResult {
+    // Manual-composition path: bootstrap/providers.ts that does NOT call
+    // defaultProviders() doesn't need the auto-discovery manifest at all.
+    // Detect by absence of the call (not by array-literal shape, which also
+    // matches the standard scaffolded template `[...(await defaultProviders())]`).
+    const providersTs = readFileSafe('bootstrap/providers.ts')
+    if (providersTs !== null && !/\bdefaultProviders\s*\(/.test(providersTs)) {
+      return { status: 'ok', message: 'manual composition (no auto-discovery)' }
+    }
     const manifest = 'bootstrap/cache/providers.json'
     if (!fileExists(manifest)) {
       return {
