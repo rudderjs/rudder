@@ -143,4 +143,23 @@ describe('RedisDriver', () => {
     await new Promise((r) => setTimeout(r, 5))
     assert.equal(seen.length, 0)
   })
+
+  it('handler that self-unsubscribes mid-dispatch does not skip the next handler', async () => {
+    // Pre-fix bug: unsubscribe used `splice(idx, 1)` which mutated the
+    // array under the active `for…of` iterator in `dispatch()`. When
+    // handler #2 (at index 1) unsubscribed itself, handler #3 (at index 2)
+    // was skipped because the splice shifted it down to index 1 — where
+    // the iterator had already advanced past.
+    const drv = new RedisDriver({ redis: 'redis://stub' })
+    const seen: string[] = []
+    let   unsub2: () => void = () => {}
+    drv.subscribe((_c, e) => seen.push(`h1:${e}`))
+    unsub2 = drv.subscribe((_c, e) => { seen.push(`h2:${e}`); unsub2() })
+    drv.subscribe((_c, e) => seen.push(`h3:${e}`))
+    await new Promise((r) => setTimeout(r, 5))
+    await drv.publish('chan', 'evt', {})
+    await new Promise((r) => setTimeout(r, 5))
+    assert.deepEqual(seen, ['h1:evt', 'h2:evt', 'h3:evt'])
+    await drv.close()
+  })
 })

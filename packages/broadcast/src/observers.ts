@@ -46,11 +46,13 @@ export type BroadcastEvent =
       /**
        * Emitted when an HTTP upgrade is rejected before the WebSocket
        * handshake completes — origin allowlist mismatch, per-IP cap hit,
-       * or per-connection auth callback returning false.
+       * per-connection auth callback returning false, or the underlying
+       * socket being torn down externally (proxy timeout, tab close)
+       * during the auth promise's await.
        */
       kind:   'upgrade.rejected'
       url:    string
-      reason: 'origin' | 'ip-cap' | 'connection-auth'
+      reason: 'origin' | 'ip-cap' | 'connection-auth' | 'socket-closed-during-auth'
       origin?: string
       ip?:    string
     }

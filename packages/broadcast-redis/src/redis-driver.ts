@@ -51,7 +51,7 @@ export class RedisDriver implements BroadcastDriver {
   private readonly prefix:       string
   private readonly fanoutKey:    string
   private readonly originId:     string
-  private readonly handlers:     Array<(c: string, e: string, d: unknown, m?: BroadcastMeta) => void> = []
+  private handlers:              Array<(c: string, e: string, d: unknown, m?: BroadcastMeta) => void> = []
   private subscribed                                                                                   = false
 
   constructor(opts: RedisDriverOptions) {
@@ -111,9 +111,13 @@ export class RedisDriver implements BroadcastDriver {
         console.error('[RudderJS Broadcast/Redis] subscribe failed', err)
       })
     }
+    // Filter-replace (not splice) so a handler that self-unsubscribes mid-
+    // dispatch doesn't shift indices under the active `for…of` iterator in
+    // `dispatch()` — that would silently skip the next handler. The new-array
+    // assignment keeps the active iterator pointed at the snapshot it
+    // captured. Matches the LocalDriver subscribe contract.
     return () => {
-      const idx = this.handlers.indexOf(handler)
-      if (idx !== -1) this.handlers.splice(idx, 1)
+      this.handlers = this.handlers.filter(h => h !== handler)
     }
   }
 

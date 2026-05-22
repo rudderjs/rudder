@@ -319,6 +319,14 @@ interface Room {
   ready:   Promise<void>
   /** Latest awareness message per client — sent to newly connected clients. */
   awarenessMap: Map<import('ws').WebSocket, Uint8Array>
+  /**
+   * Per-socket Y.js awareness clientIDs + their highest observed clock.
+   * Populated on each incoming awareness frame; consumed on socket close to
+   * synthesize an awareness-removal message so other peers drop the user
+   * from their `Awareness.getStates()` immediately instead of waiting on the
+   * 30s y-protocols outdated-timeout (or never, if the page never reloads).
+   */
+  awarenessClients: Map<import('ws').WebSocket, Map<number, number>>
   /** Stored AI awareness message — sent to newly connecting clients. */
   aiAwarenessMsg?: Uint8Array
   /** Wall-clock timestamp when `aiAwarenessMsg` was set; replay skips if stale. */
@@ -409,7 +417,13 @@ function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
     })
     throw e
   })
-  const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
+  const room: Room = {
+    doc,
+    clients:         new Set(),
+    ready,
+    awarenessMap:    new Map(),
+    awarenessClients: new Map(),
+  }
   rooms.set(docName, room)
 
   // Observe server-side mutations and broadcast to all connected WebSocket clients.
@@ -483,6 +497,64 @@ function encodeSyncMsg(subType: number, data: Uint8Array): Uint8Array {
   out[1] = subType
   out.set(lenBytes, 2)
   out.set(data, 2 + lenBytes.length)
+  return out
+}
+
+/**
+ * Parse the clientID → clock entries an awareness frame announces. Mirrors
+ * the y-protocols wire format documented at `lexical/awareness.ts` —
+ * [messageAwareness][innerLen][numberOfClients][...{clientID, clock, jsonLen, json}].
+ *
+ * Returns an empty array on any decode failure. The caller silently degrades
+ * to "no removal broadcast on disconnect for this socket", which is just the
+ * pre-fix behavior — never throws into the message hot path.
+ */
+function decodeAwarenessClientEntries(buf: Uint8Array): Array<{ clientID: number; clock: number }> {
+  try {
+    if (buf[0] !== messageAwareness) return []
+    let pos = 1
+    const [innerLen, p0] = readVarUint(buf, pos)
+    pos = p0
+    const innerEnd = pos + innerLen
+    const [count, p1] = readVarUint(buf, pos)
+    pos = p1
+    const out: Array<{ clientID: number; clock: number }> = []
+    for (let i = 0; i < count && pos < innerEnd; i++) {
+      const [clientID, q1] = readVarUint(buf, pos);  pos = q1
+      const [clock,    q2] = readVarUint(buf, pos);  pos = q2
+      const [jsonLen,  q3] = readVarUint(buf, pos);  pos = q3 + jsonLen
+      out.push({ clientID, clock })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Encode an awareness "removal" frame — entries with state = literal `null`.
+ * Y.js's `applyAwarenessUpdate` interprets a null state as "this client left"
+ * and drops the clientID from `awareness.getStates()`. Clock is incremented
+ * past the last observed value so the receiver doesn't filter it as stale.
+ */
+function encodeAwarenessRemoval(entries: Array<{ clientID: number; clock: number }>): Uint8Array | null {
+  if (entries.length === 0) return null
+  const NULL_JSON = new TextEncoder().encode('null')
+  const innerParts: Uint8Array[] = [writeVarUint(entries.length)]
+  for (const { clientID, clock } of entries) {
+    innerParts.push(writeVarUint(clientID))
+    innerParts.push(writeVarUint(clock + 1))
+    innerParts.push(writeVarUint(NULL_JSON.length))
+    innerParts.push(NULL_JSON)
+  }
+  let innerLen = 0
+  for (const p of innerParts) innerLen += p.length
+  const innerLenBytes = writeVarUint(innerLen)
+  const out = new Uint8Array(1 + innerLenBytes.length + innerLen)
+  out[0] = messageAwareness
+  out.set(innerLenBytes, 1)
+  let pos = 1 + innerLenBytes.length
+  for (const p of innerParts) { out.set(p, pos); pos += p.length }
   return out
 }
 
@@ -575,7 +647,14 @@ async function handleConnection(
   }
 
   // ── Message handler ───────────────────────────────────────
+  // The outer try/catch keeps a malformed frame (truncated varuint, bogus
+  // Y.applyUpdate input, etc.) from becoming an unhandled promise rejection
+  // — the async handler attached to `ws.on('message', ...)` returns its
+  // rejection into Node's `unhandledRejection` event with no socket-level
+  // recovery. Surface the failure through the observer so telescope sees
+  // it, and keep the room operating against the in-memory doc.
   ws.on('message', async (raw: Buffer) => {
+   try {
     const buf = new Uint8Array(raw)
     let   pos = 0
 
@@ -645,6 +724,20 @@ async function handleConnection(
     } else if (type === messageAwareness) {
       // Store latest awareness message for this client
       room.awarenessMap.set(ws, new Uint8Array(buf))
+      // Record clientIDs + clocks this socket announces — consumed on close
+      // to synthesize an awareness-removal so other peers drop the user
+      // from `awareness.getStates()` instantly. Without this, ghost users
+      // linger until the y-protocols 30s outdated-timeout (or forever if
+      // the client never refreshes their awareness clock again).
+      const entries = decodeAwarenessClientEntries(buf)
+      if (entries.length > 0) {
+        let perSocket = room.awarenessClients.get(ws)
+        if (!perSocket) { perSocket = new Map(); room.awarenessClients.set(ws, perSocket) }
+        for (const { clientID, clock } of entries) {
+          const prev = perSocket.get(clientID) ?? -1
+          if (clock > prev) perSocket.set(clientID, clock)
+        }
+      }
       // Broadcast awareness (presence/cursors) to all other clients
       for (const client of room.clients) {
         if (client !== ws && client.readyState === 1) {
@@ -661,11 +754,40 @@ async function handleConnection(
         byteSize: buf.byteLength,
       })
     }
+   } catch (err) {
+    syncObservers.emit({
+      kind:    'sync.error',
+      op:      'message',
+      docName,
+      clientId,
+      error:   err instanceof Error ? err.message : String(err),
+    })
+   }
   })
 
   ws.on('close', () => {
     room.clients.delete(ws)
     room.awarenessMap.delete(ws)
+
+    // Tell remaining peers this socket's clientIDs are gone. Y.js's
+    // `applyAwarenessUpdate` interprets the null state as a removal and
+    // drops the entries from `Awareness.getStates()` — the user vanishes
+    // from peer presence lists immediately instead of lingering until the
+    // y-protocols outdated-timeout (or forever, in the demo's case).
+    const perSocket = room.awarenessClients.get(ws)
+    if (perSocket && perSocket.size > 0) {
+      const entries  = [...perSocket.entries()].map(([clientID, clock]) => ({ clientID, clock }))
+      const removal  = encodeAwarenessRemoval(entries)
+      if (removal) {
+        for (const client of room.clients) {
+          if (client.readyState === 1 /* OPEN */) {
+            try { client.send(removal) } catch { /* socket may already be closing */ }
+          }
+        }
+      }
+    }
+    room.awarenessClients.delete(ws)
+
     syncObservers.emit({
       kind:        'doc.closed',
       docName,
