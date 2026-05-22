@@ -1,5 +1,11 @@
 # @rudderjs/cli
 
+## 4.6.2
+
+### Patch Changes
+
+- f1660bf: Doctor now picks up checks contributed by `@rudderjs/broadcast-redis` (`REDIS_URL` + deep connectivity probe). The package is silently skipped when not installed in the user app.
+
 ## 4.6.1
 
 ### Patch Changes

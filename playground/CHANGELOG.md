@@ -1,5 +1,15 @@
 # rudderjs-playground
 
+## 0.0.89
+
+### Patch Changes
+
+- Updated dependencies [f1660bf]
+- Updated dependencies [f1660bf]
+  - @rudderjs/ai@1.8.2
+  - @rudderjs/broadcast@1.2.0
+  - @rudderjs/notification@1.0.4
+
 ## 0.0.88
 
 ### Patch Changes
