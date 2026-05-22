@@ -1,5 +1,11 @@
 # @rudderjs/view
 
+## 1.2.2
+
+### Patch Changes
+
+- 42fab4c: Documents the new `export const prerender = true` opt-in in the README — static build-time prerender for views with no per-request data. The flag lives in the view file; the scanner in `@rudderjs/vite` picks it up. No runtime change in `@rudderjs/view` itself.
+
 ## 1.2.1
 
 ### Patch Changes
