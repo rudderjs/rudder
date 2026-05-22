@@ -1,6 +1,6 @@
 import { Queue, Worker, type Job as BullJob } from 'bullmq'
 import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@rudderjs/queue'
-import { encodePayload, decodePayload } from '@rudderjs/queue'
+import { encodePayload, decodePayload, executeJob } from '@rudderjs/queue'
 import { queueObservers } from '@rudderjs/queue/observers'
 
 // ─── Config ────────────────────────────────────────────────
@@ -115,35 +115,20 @@ class BullMQAdapter implements QueueAdapter {
       startedAt:    new Date(),
     })
 
-    // Separate __context from job data, then untag Date/BigInt/Buffer/Map/Set
-    // back into the original JS types the handler expects.
+    // Reconstruct the job instance — Date/BigInt/Buffer/Map/Set are untagged
+    // by `decodePayload`, then `Object.assign` restores own properties onto
+    // a fresh class instance. Hand off to `executeJob` so middleware,
+    // ShouldBeUnique lock release, the `failed()` hook, and request-context
+    // hydration all fire on this driver.
     const { __context, ...rawJobData } = bullJob.data
-    const jobData = decodePayload(rawJobData) as Record<string, unknown>
-    const instance = Object.assign(new (JobClass as new () => Job)(), jobData)
-
-    // Hydrate request context if @rudderjs/context is available
-    if (__context && typeof __context === 'object') {
-      let contextLoaded = false
-      try {
-        const specifier = '@rudderjs/context'
-        const mod = await import(/* @vite-ignore */ specifier) as {
-          runWithContext<T>(fn: () => T): T
-          Context: { hydrate(payload: { data: Record<string, unknown>; stacks: Record<string, unknown[]> }): void }
-        }
-        contextLoaded = true
-        await mod.runWithContext(async () => {
-          mod.Context.hydrate(__context as { data: Record<string, unknown>; stacks: Record<string, unknown[]> })
-          await instance.handle()
-        })
-        return
-      } catch (err) {
-        // Re-throw if the import succeeded — error came from handle(), not the import
-        if (contextLoaded) throw err
-        // @rudderjs/context not installed — fall through to run without context
-      }
-    }
-
-    await instance.handle()
+    const decoded = decodePayload(rawJobData) as Record<string, unknown>
+    const instance = Object.assign(new (JobClass as new () => Job)(), decoded)
+    await executeJob(
+      instance,
+      __context && typeof __context === 'object'
+        ? { __context: __context as Record<string, unknown> }
+        : {},
+    )
   }
 
   async dispatch(job: Job, options: DispatchOptions = {}): Promise<void> {

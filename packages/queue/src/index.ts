@@ -3,6 +3,8 @@ import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { resolveOptionalPeer } from '@rudderjs/core'
 import { queueObservers } from './observers.js'
 import { encodePayload } from './serialize.js'
+import { executeJob } from './execute.js'
+import { acquireUniqueLock, isUniqueJob } from './unique.js'
 import { FakeQueueAdapter } from './fake.js'
 
 // ─── Job Contract ──────────────────────────────────────────
@@ -65,6 +67,16 @@ export class DispatchBuilder<T extends Job> {
   async send(): Promise<void> {
     const adapter = QueueRegistry.get()
     if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
+
+    // ShouldBeUnique: acquire the dispatch lock atomically. If another
+    // dispatcher already won the race, silently skip enqueueing — Laravel
+    // semantics. `executeJob` releases the lock when the worker side
+    // finishes (or right before processing starts for
+    // `ShouldBeUniqueUntilProcessing`).
+    if (isUniqueJob(this.job)) {
+      const acquired = await acquireUniqueLock(this.job)
+      if (!acquired) return
+    }
 
     // Propagate request context to the job if @rudderjs/context is installed
     let contextPayload: Record<string, unknown> | undefined
@@ -229,7 +241,12 @@ export class SyncAdapter implements QueueAdapter {
     queueObservers.emit({ ...base, kind: 'job.active', startedAt })
 
     try {
-      await job.handle()
+      // Route through the shared `executeJob` helper so middleware /
+      // unique-lock release / failed() hook all fire on this driver. Pass
+      // the original instance — Sync runs in-process so there's no wire
+      // round-trip, and the instance keeps closure-style `handle` methods
+      // intact (used by `dispatch(fn)`, `Chain`, batch wrappers).
+      await executeJob(job, options ? { __context: options.__context } : {})
       const completedAt = new Date()
       queueObservers.emit({
         ...base,
@@ -246,14 +263,6 @@ export class SyncAdapter implements QueueAdapter {
         duration: completedAt.getTime() - startedAt.getTime(),
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       })
-      // The job's own `failed()` hook is best-effort — if it throws, log
-      // and continue so the original failure is the one that propagates.
-      // Otherwise the user-defined hook's error would mask the real cause.
-      try {
-        await job.failed?.(error)
-      } catch (hookError) {
-        console.error(`[RudderJS Queue] job.failed() hook threw for "${name}":`, hookError)
-      }
       throw error
     }
   }
@@ -404,4 +413,5 @@ export { isUniqueJob, isUniqueUntilProcessing, acquireUniqueLock, releaseUniqueL
 export type { JobMiddleware }                          from './job-middleware.js'
 export { runJobMiddleware, RateLimited, WithoutOverlapping, ThrottlesExceptions, Skip }  from './job-middleware.js'
 export { encodePayload, decodePayload }                from './serialize.js'
+export { executeJob, type ExecuteJobContext }          from './execute.js'
 export { FakeQueueAdapter }                           from './fake.js'
