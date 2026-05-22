@@ -23,7 +23,9 @@ type Tagged =
   | { [TAG]: 'set';    value: unknown[] }
 
 function isTagged(v: unknown): v is Tagged {
-  return typeof v === 'object' && v !== null && TAG in (v as Record<string, unknown>)
+  if (v == null) return false
+  if (typeof v !== 'object') return false
+  return TAG in (v as Record<string, unknown>)
 }
 
 /**
