@@ -50,7 +50,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **AI-native** — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage), agents with tools, streaming, MCP, queue-backed runs, approval gates.
 - **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
 - **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
-- **Pay-as-you-go** — 47 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **Pay-as-you-go** — 48 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones.
 - **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
@@ -473,7 +473,7 @@ Visit `http://localhost:3000`. Done.
 
 ---
 
-## Packages (47)
+## Packages (48)
 
 > Three foundation packages get you running. The rest are opt-in.
 
@@ -489,7 +489,7 @@ Visit `http://localhost:3000`. Done.
 
 **Workloads** — [`queue`](./packages/queue) · [`queue-bullmq`](./packages/queue-bullmq) · [`queue-inngest`](./packages/queue-inngest) · [`schedule`](./packages/schedule) · [`concurrency`](./packages/concurrency) · [`process`](./packages/process)
 
-**Communication** — [`mail`](./packages/mail) · [`notification`](./packages/notification) · [`broadcast`](./packages/broadcast) · [`sync`](./packages/sync)
+**Communication** — [`mail`](./packages/mail) · [`notification`](./packages/notification) · [`broadcast`](./packages/broadcast) · [`broadcast-redis`](./packages/broadcast-redis) · [`sync`](./packages/sync)
 
 **AI & tooling** — [`ai`](./packages/ai) · [`mcp`](./packages/mcp) · [`boost`](./packages/boost)
 
@@ -561,7 +561,7 @@ Rudder is the middle ground — batteries-included, modular, UI-agnostic, fullst
 | DI container | None | Class-based IoC | IoC | Service Providers + ALS request scope |
 | AI-native | ✗ | ✗ | ✗ | ✓ 15 providers, agents, streaming, MCP |
 | Real-time collab | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
-| Modularity | All-in | All-in | Preset-based | Pay-as-you-go — 47 opt-in packages |
+| Modularity | All-in | All-in | Preset-based | Pay-as-you-go — 48 opt-in packages |
 
 ---
 
