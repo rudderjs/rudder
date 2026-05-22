@@ -1,5 +1,13 @@
 # @rudderjs/cache
 
+## 1.3.1
+
+### Patch Changes
+
+- feb0d02: `RedisAdapter` now uses `resolveIoredisClass` from `@rudderjs/support` instead of an inline CJS/ESM interop fallback. Behaviour identical; removes the duplicated fallback chain that also lives in `@rudderjs/broadcast-redis`.
+- Updated dependencies [feb0d02]
+  - @rudderjs/support@1.3.0
+
 ## 1.3.0
 
 ### Minor Changes
