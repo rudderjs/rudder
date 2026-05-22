@@ -38,4 +38,20 @@ export interface UseCollabRoomOptions {
    * before the WebSocket finishes its first sync. Defaults to `false`.
    */
   offline?: boolean
+
+  /**
+   * Gate the WebSocket connection without rendering branches around the hook.
+   *
+   * Defaults to `true` — omit and the hook behaves identically to before.
+   * Set to `false` to skip the manager construction entirely (no WS handshake,
+   * no IndexedDB open). Flipping `false` → `true` mounts the manager; flipping
+   * `true` → `false` tears down the active room (`room` becomes `null` via
+   * `CollabRoomManager.stop()`'s `onRoomChange(null)` callback).
+   *
+   * Standard pattern for "render fields locally until prerequisites are met"
+   * (e.g. `enabled: !!wsPath`) — same shape as `useSWR(..., { enabled })` and
+   * `useQuery(..., { enabled })`. Use this instead of `if (!wsPath) return …`
+   * before the hook (illegal under Rules of Hooks).
+   */
+  enabled?: boolean
 }

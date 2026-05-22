@@ -28,7 +28,7 @@ export function useCollabRoom(
   roomKey: string,
   options: UseCollabRoomOptions = {},
 ): CollabRoom | null {
-  const { wsUrl = DEFAULT_WS_URL, offline = false } = options
+  const { wsUrl = DEFAULT_WS_URL, offline = false, enabled = true } = options
   const [room, setRoom] = useState<CollabRoom | null>(null)
 
   useEffect(() => {
@@ -36,12 +36,22 @@ export function useCollabRoom(
     // the DOM lib being in the framework's tsconfig (it isn't).
     if (typeof (globalThis as { window?: unknown }).window === 'undefined') return
 
+    // Gated — caller flipped `enabled` to false. No manager construction,
+    // no WS handshake. When `enabled` flips back to true the effect re-fires
+    // (deps include `enabled`) and the room mounts as if from a fresh hook.
+    if (!enabled) {
+      // Flipping `true → false` mid-lifecycle: the previous effect's cleanup
+      // already called `manager.stop()` (which fires `onRoomChange(null)`),
+      // so `room` is already null here — no extra setRoom needed.
+      return
+    }
+
     const manager = new CollabRoomManager({ roomKey, wsUrl, offline })
     manager.onRoomChange(setRoom)
     void manager.start()
 
     return () => { manager.stop() }
-  }, [roomKey, wsUrl, offline])
+  }, [roomKey, wsUrl, offline, enabled])
 
   return room
 }

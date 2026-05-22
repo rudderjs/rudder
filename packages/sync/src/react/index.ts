@@ -12,9 +12,9 @@
  * hooks.
  */
 
-export { useCollabRoom }       from './useCollabRoom.js'
-export { useCollabSeed }       from './useCollabSeed.js'
-export { CollabRoomManager }   from './CollabRoomManager.js'
+export { useCollabRoom }                        from './useCollabRoom.js'
+export { useCollabSeed, useCollabSeedText }     from './useCollabSeed.js'
+export { CollabRoomManager }                    from './CollabRoomManager.js'
 
 export type {
   CollabRoom,
