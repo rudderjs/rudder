@@ -21,7 +21,20 @@ const messageAwareness = 1
  *  client IDs (random 30-bit integers). */
 const AI_CLIENT_ID = 999_999_999
 
-let aiAwarenessClock = 0
+/**
+ * y-protocols requires monotonically increasing clocks per `clientID`. A
+ * module-level counter would reset to 0 on Vite SSR re-eval / HMR / process
+ * restart, and lib0/y-protocols filters older clocks — silently dropping
+ * AI awareness updates on every reboot. Lives on `globalThis` so the
+ * counter survives module re-evaluation.
+ */
+const AI_CLOCK_KEY = '__rudderjs_sync_ai_clock__'
+function nextAiClock(): number {
+  const g = globalThis as Record<string, unknown>
+  const next = ((g[AI_CLOCK_KEY] as number | undefined) ?? 0) + 1
+  g[AI_CLOCK_KEY] = next
+  return next
+}
 
 /**
  * Encode an awareness update message for the AI cursor.
@@ -42,7 +55,7 @@ export function encodeAiAwareness(state: Record<string, unknown> | null): Uint8A
   const innerParts: Uint8Array[] = [
     writeVarUint(1),                  // numberOfClients = 1
     writeVarUint(AI_CLIENT_ID),       // clientID
-    writeVarUint(++aiAwarenessClock), // clock (incrementing)
+    writeVarUint(nextAiClock()),      // clock (incrementing, survives HMR/restart)
     writeVarUint(jsonBytes.length),   // stateJSON length (varString encoding)
     jsonBytes,                        // stateJSON utf8 bytes
   ]

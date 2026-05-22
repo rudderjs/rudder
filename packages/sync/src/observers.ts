@@ -61,6 +61,12 @@ export type SyncEvent =
       docName:   string
       clientId?: string
       error:     string
+      /**
+       * The operation that failed. Helps consumers (telescope) tag the
+       * failure surface. Optional for backward compatibility with
+       * existing emit sites that don't yet pass this field.
+       */
+      op?:       'getYDoc' | 'storeUpdate' | 'onChange' | 'seed' | 'firstConnect'
     }
 
 export type SyncObserver = (event: SyncEvent) => void
