@@ -602,6 +602,20 @@ export function getUpgradeHandler(
           return false
         })
         .then((allowed) => {
+          // Socket may have been destroyed externally during the auth await
+          // (proxy timeout, browser tab close, network drop). Calling
+          // `handleUpgrade` on a destroyed socket throws — and `rejectUpgrade`
+          // would write to a closed half. Bail out silently; the upstream
+          // close has already cleaned up.
+          if (socket.destroyed) {
+            broadcastObservers.emit({
+              kind:   'upgrade.rejected',
+              url:    req.url ?? '/',
+              reason: 'socket-closed-during-auth',
+              ...(ip ? { ip } : {}),
+            })
+            return
+          }
           if (!allowed) {
             rejectUpgrade(socket, 401, 'Unauthorized')
             broadcastObservers.emit({

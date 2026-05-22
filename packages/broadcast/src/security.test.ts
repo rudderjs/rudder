@@ -168,6 +168,62 @@ describe('Phase 5b — Connection auth + per-IP cap', () => {
     })
   )
 
+  it('does not throw when the socket is destroyed during the auth await', async () => {
+    // Pre-fix bug: the auth path called `state.wss.handleUpgrade(socket, …)`
+    // unconditionally after the auth promise resolved. If the client
+    // terminated the connection mid-await (proxy timeout / tab close),
+    // `handleUpgrade` ran against an already-destroyed socket and threw
+    // through Node's HTTP upgrade boundary. Fix: short-circuit on
+    // `socket.destroyed` before handleUpgrade, emit a distinct observer
+    // event so telescope sees the abandoned-upgrade.
+    //
+    // Drives the upgrade handler directly with a stub Duplex so the test is
+    // deterministic — racing the real ws client against the auth stall is flaky.
+    const { Duplex } = await import('node:stream')
+    resetBroadcast()
+    initWsServer({ allowedOrigins: ['https://app.com'] })
+    let resolveAuth: (allowed: boolean) => void = () => {}
+    registerConnectionAuth(() => new Promise<boolean>((r) => { resolveAuth = r }))
+
+    const handler = getUpgradeHandler('/ws')
+    const { events, unsubscribe } = captureObserver()
+
+    try {
+      // Build a minimal upgrade IncomingMessage stub.
+      const req = {
+        url:     '/ws',
+        method:  'GET',
+        headers: {
+          'connection':            'Upgrade',
+          'upgrade':               'websocket',
+          'sec-websocket-key':     'dGhlIHNhbXBsZSBub25jZQ==',
+          'sec-websocket-version': '13',
+          'origin':                'https://app.com',
+        },
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as http.IncomingMessage
+
+      const socket = new Duplex({ read() { /* */ }, write(_c, _e, cb) { cb() } })
+      const head   = Buffer.alloc(0)
+      handler(req, socket, head)
+
+      // Tear down the socket BEFORE the auth resolves — mirrors a proxy timeout
+      // or browser tab close during the auth window.
+      socket.destroy()
+      resolveAuth(true)
+
+      // Yield so the .then() runs and hits the socket.destroyed guard.
+      await new Promise(r => setImmediate(r))
+      await new Promise(r => setImmediate(r))
+
+      const rejected = events.find(e => e.kind === 'upgrade.rejected' && (e as { reason: string }).reason === 'socket-closed-during-auth')
+      assert.ok(rejected, `expected upgrade.rejected with reason=socket-closed-during-auth; got reasons: ${events.filter(e => e.kind === 'upgrade.rejected').map(e => (e as { reason: string }).reason).join(', ') || '(none)'}`)
+    } finally {
+      unsubscribe()
+      resetBroadcast()
+    }
+  })
+
   it('rejects upgrade with 429 when per-IP cap exceeded', () =>
     withServer({ maxConnectionsPerIp: 2 }, async (port) => {
       const a = await openSocket(port)

@@ -10,6 +10,7 @@ import {
   type SyncPersistence,
   type SyncConfig,
 } from './index.js'
+import { syncObservers } from './observers.js'
 import { SYNC_KEYS } from './globals.js'
 
 // ─── MemoryPersistence ───────────────────────────────────────
@@ -689,5 +690,150 @@ describe('awareness lifecycle', () => {
 
     assert.strictEqual(room!.aiAwarenessMsg, undefined, 'aiAwarenessMsg must be cleared')
     assert.strictEqual(room!.aiAwarenessAt,  undefined, 'aiAwarenessAt must be cleared')
+  })
+})
+
+/**
+ * Decode an awareness frame back to its clientID + clock + JSON-state entries.
+ * Mirrors the server-side decoder so the test can assert what other peers
+ * received on the wire (clientID matches, state was null, clock incremented).
+ */
+function decodeAwarenessFrame(buf: Uint8Array): Array<{ clientID: number; clock: number; state: string }> {
+  if (buf[0] !== 1 /* messageAwareness */) return []
+  // Skip messageAwareness + innerLen varuint.
+  let pos = 1
+  while ((buf[pos]! & 0x80) !== 0) pos++; pos++  // skip innerLen
+  const readVar = (): number => {
+    let result = 0, shift = 0
+    while (true) {
+      const b = buf[pos++] ?? 0
+      result |= (b & 0x7f) << shift
+      shift  += 7
+      if ((b & 0x80) === 0) break
+    }
+    return result
+  }
+  const count = readVar()
+  const out: Array<{ clientID: number; clock: number; state: string }> = []
+  for (let i = 0; i < count; i++) {
+    const clientID = readVar()
+    const clock    = readVar()
+    const jsonLen  = readVar()
+    const state    = new TextDecoder().decode(buf.slice(pos, pos + jsonLen))
+    pos += jsonLen
+    out.push({ clientID, clock, state })
+  }
+  return out
+}
+
+describe('awareness removal on disconnect', () => {
+  it('broadcasts a null-state awareness frame to remaining peers on close', async () => {
+    // Pre-fix: when a peer disconnected (refresh, tab close), the server only
+    // cleaned its own maps — other peers never learned the user had left,
+    // so `Awareness.getStates()` kept the ghost user until the y-protocols
+    // 30s outdated-timeout (or forever, in the playground demo's case).
+    const persistence = new MemoryPersistence()
+    const docName     = `ghost-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    const peerA = new MockWsSocket()
+    const peerB = new MockWsSocket()
+    await _handleConnection(peerA as never, { url } as never, persistence)
+    await _handleConnection(peerB as never, { url } as never, persistence)
+
+    // Peer A announces awareness with clientID=42, clock=7, state='{"user":"alice"}'.
+    const aliceClientID = 42
+    const aliceClock    = 7
+    const aliceJson     = '{"user":"alice"}'
+    const aliceBytes    = new TextEncoder().encode(aliceJson)
+    const innerParts: number[] = [
+      1,                                              // numberOfClients
+      aliceClientID,                                  // clientID (fits in 1 byte)
+      aliceClock,                                     // clock     (fits in 1 byte)
+      aliceJson.length,                               // jsonLen   (fits in 1 byte)
+      ...Array.from(aliceBytes),                      // json utf8
+    ]
+    peerA.receive(encodeAwarenessFrame(new Uint8Array(innerParts)))
+    await new Promise(r => setImmediate(r))
+
+    // Snapshot peer B's pre-disconnect frame count so we can isolate what
+    // the close handler sent.
+    const peerBPreClose = peerB.sent.length
+
+    // Simulate peer A disconnecting — the close handler must broadcast a
+    // removal frame to peer B carrying clientID=42 + state='null' + bumped clock.
+    peerA.emit('close')
+
+    const newFrames = peerB.sent.slice(peerBPreClose)
+    const awarenessFrames = newFrames.filter(f => f[0] === 1 /* messageAwareness */)
+    assert.strictEqual(awarenessFrames.length, 1, `peer B should receive exactly one awareness removal frame, got ${awarenessFrames.length}`)
+    const decoded = decodeAwarenessFrame(awarenessFrames[0]!)
+    assert.strictEqual(decoded.length, 1)
+    assert.strictEqual(decoded[0]?.clientID, aliceClientID, 'removal must target the right clientID')
+    assert.strictEqual(decoded[0]?.state,    'null',        'state must be the literal null marker')
+    assert.ok((decoded[0]?.clock ?? 0) > aliceClock, 'clock must be > last observed so peers do not filter as stale')
+  })
+
+  it('removal frame skips closed sockets', async () => {
+    const persistence = new MemoryPersistence()
+    const docName     = `ghost-skip-closed-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    const peerA = new MockWsSocket()
+    const peerB = new MockWsSocket()
+    await _handleConnection(peerA as never, { url } as never, persistence)
+    await _handleConnection(peerB as never, { url } as never, persistence)
+
+    // Peer A announces awareness.
+    peerA.receive(encodeAwarenessFrame(new Uint8Array([1, 42, 7, 4, 110, 117, 108, 108])))
+    await new Promise(r => setImmediate(r))
+
+    // Peer B's socket is already closed when peer A disconnects — must not
+    // attempt to send the removal frame to a dead socket.
+    peerB.readyState = 3 // ws.CLOSED
+    const peerBPreClose = peerB.sent.length
+
+    assert.doesNotThrow(() => peerA.emit('close'))
+    assert.strictEqual(peerB.sent.length, peerBPreClose, 'must not send removal to a CLOSED peer')
+  })
+})
+
+describe('async message handler error containment', () => {
+  it('a malformed frame does not produce an unhandled rejection', async () => {
+    // Pre-fix: `ws.on('message', async (raw) => …)` with no outer try/catch
+    // meant a throw from readVarUint / Y.applyUpdate became an unhandled
+    // promise rejection. The fix surfaces the failure through the observer
+    // and keeps the room operating.
+    const persistence = new MemoryPersistence()
+    const docName     = `malformed-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    const observed: Array<{ kind: string; op?: string; error?: string }> = []
+    const unsub = syncObservers.subscribe(ev => {
+      if (ev.kind === 'sync.error') {
+        observed.push({
+          kind: ev.kind,
+          ...(ev.op    ? { op:    ev.op    } : {}),
+          ...(ev.error ? { error: ev.error } : {}),
+        })
+      }
+    })
+
+    const peer = new MockWsSocket()
+    await _handleConnection(peer as never, { url } as never, persistence)
+
+    // Send a syncUpdate frame whose Y.js update payload is garbage — applyUpdate throws.
+    // Frame: [messageSync=0, syncUpdate=2, dataLen=4, 0xff 0xff 0xff 0xff]
+    const malformed = new Uint8Array([0, 2, 4, 0xff, 0xff, 0xff, 0xff])
+    peer.receive(malformed)
+
+    // Yield to microtasks so the async handler runs to completion + catch.
+    await new Promise(r => setImmediate(r))
+    await new Promise(r => setImmediate(r))
+
+    assert.ok(observed.length >= 1, `should emit at least one sync.error event, got ${observed.length}`)
+    assert.strictEqual(observed[0]?.kind, 'sync.error')
+    assert.strictEqual(observed[0]?.op,   'message')
+    unsub()
   })
 })
