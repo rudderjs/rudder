@@ -132,10 +132,15 @@ for (const [name, build] of drivers) {
     })
 
     it('TTL expiry frees the lock for the next caller', async () => {
-      const a = adapter.lock('thing', 0.05) // 50ms
+      // TTL + sleep need to comfortably exceed Date.now() / setTimeout
+      // resolution. Windows Node 20 quantizes both to ~15-32ms; a 50ms TTL
+      // with a 30ms buffer flaked because the wall clock could advance past
+      // expiresAt before the competing get() ran. 300ms TTL with a 100ms
+      // buffer leaves headroom on every platform we test.
+      const a = adapter.lock('thing', 0.3) // 300ms
       assert.strictEqual(await a.get(), true)
       assert.strictEqual(await adapter.lock('thing', 60).get(), false)
-      await sleep(80)
+      await sleep(400)
       assert.strictEqual(await adapter.lock('thing', 60).get(), true)
     })
 
