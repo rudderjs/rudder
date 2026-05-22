@@ -25,6 +25,36 @@ export type AuthCallback = (
   channel: string,
 ) => Promise<boolean | Record<string, unknown>>
 
+/**
+ * Per-connection auth callback. Invoked once at WebSocket upgrade time,
+ * before the socket is upgraded. Returning `false` rejects the upgrade
+ * with HTTP 401. Returning `true` proceeds to the WebSocket handshake.
+ */
+export type ConnectionAuthCallback = (req: BroadcastAuthRequest) => Promise<boolean>
+
+/** Options for {@link initWsServer}. */
+export interface WsServerOptions {
+  /**
+   * Origin allowlist for WebSocket upgrade requests. When set, the
+   * `Origin` header on each upgrade is compared against this list and
+   * mismatches receive HTTP 403. When unset, all origins are accepted
+   * (with a one-time startup warning) — set this in production to close
+   * the CSRF-style cross-origin attack window on cookie-auth'd channels.
+   */
+  allowedOrigins?: string[]
+  /**
+   * Per-IP connection cap. Rejects upgrades from an IP that already has
+   * this many open connections with HTTP 429. `undefined` / `0` disables.
+   */
+  maxConnectionsPerIp?: number
+  /**
+   * Server-side heartbeat. The server sends a WebSocket PING every
+   * `interval` ms; if no PONG arrives within `timeout` ms the socket is
+   * terminated. Pass `false` to disable. Default: `{ interval: 30000, timeout: 60000 }`.
+   */
+  heartbeat?: { interval: number; timeout: number } | false
+}
+
 // ─── Internal message types ─────────────────────────────────
 
 type ClientMsg =
@@ -35,9 +65,12 @@ type ClientMsg =
 
 // ─── Global state ───────────────────────────────────────────
 
-const g       = globalThis as Record<string, unknown>
-const KEY     = '__rudderjs_ws__'
-const AUTH_KEY = '__rudderjs_ws_auth__'
+const g            = globalThis as Record<string, unknown>
+const KEY          = '__rudderjs_ws__'
+const AUTH_KEY     = '__rudderjs_ws_auth__'
+const CONN_AUTH_KEY = '__rudderjs_ws_conn_auth__'
+
+const DEFAULT_HEARTBEAT = { interval: 30_000, timeout: 60_000 } as const
 
 /** Internal runtime state held on globalThis so it survives HMR reloads. */
 interface WsState {
@@ -52,15 +85,28 @@ interface WsState {
   sockets:       Map<string, WsSocket>
   /** socketId → original upgrade IncomingMessage */
   upgradeReqs:   Map<string, IncomingMessage>
+  /** socketId → IP for per-IP cap accounting */
+  socketIps:     Map<string, string>
+  /** IP → live connection count */
+  ipCounts:      Map<string, number>
   counter:       number
+  // Options (see WsServerOptions) — captured at init time
+  allowedOrigins?:     Set<string>
+  maxConnectionsPerIp?: number
+  heartbeat:           { interval: number; timeout: number } | false
+  /** Set to true once we've warned that allowedOrigins is empty. */
+  warnedOpenOrigin:    boolean
 }
 
 // ─── Init ───────────────────────────────────────────────────
 
-export function initWsServer(): void {
+export function initWsServer(options: WsServerOptions = {}): void {
   if (g[KEY]) return   // already running (HMR / hot-reload)
 
   const wss = new WebSocketServer({ noServer: true })
+  const heartbeat = options.heartbeat === false
+    ? false as const
+    : { ...DEFAULT_HEARTBEAT, ...(options.heartbeat ?? {}) }
   const state: WsState = {
     wss,
     subscriptions: new Map(),
@@ -68,7 +114,17 @@ export function initWsServer(): void {
     presence:      new Map(),
     sockets:       new Map(),
     upgradeReqs:   new Map(),
+    socketIps:     new Map(),
+    ipCounts:      new Map(),
     counter:       0,
+    ...(options.allowedOrigins && options.allowedOrigins.length > 0
+      ? { allowedOrigins: new Set(options.allowedOrigins) }
+      : {}),
+    ...(options.maxConnectionsPerIp && options.maxConnectionsPerIp > 0
+      ? { maxConnectionsPerIp: options.maxConnectionsPerIp }
+      : {}),
+    heartbeat,
+    warnedOpenOrigin: false,
   }
   g[KEY] = state
 
@@ -82,6 +138,18 @@ export function initWsServer(): void {
 export function registerAuth(pattern: string, callback: AuthCallback): void {
   if (!g[AUTH_KEY]) g[AUTH_KEY] = new Map<string, AuthCallback>()
   ;(g[AUTH_KEY] as Map<string, AuthCallback>).set(pattern, callback)
+}
+
+/**
+ * Register a per-connection auth callback. Invoked once at WebSocket
+ * upgrade time, before the socket is upgraded — return `false` to reject
+ * the upgrade with HTTP 401. Useful for requiring a valid session cookie,
+ * bearer token, or other gate before any subscribe is even possible.
+ *
+ * Only one callback may be registered at a time; calling again replaces.
+ */
+export function registerConnectionAuth(callback: ConnectionAuthCallback): void {
+  g[CONN_AUTH_KEY] = callback
 }
 
 /**
@@ -137,16 +205,29 @@ function broadcastTo(state: WsState, channel: string, data: unknown, excludeId?:
 
 // ─── Connection lifecycle ───────────────────────────────────
 
+/**
+ * Per-socket message-handling queue. Each socket's frames are processed
+ * sequentially via a chained promise — this closes the auth race window
+ * where a `client-event` could interleave with the same socket's pending
+ * `subscribe` auth callback. Lives on the socket reference (WeakMap) so
+ * it's GC'd automatically on close.
+ */
+const socketQueues = new WeakMap<WsSocket, Promise<void>>()
+
 async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage): Promise<void> {
   const id = nextId(state)
+  const ip = extractIp(req)
   state.sockets.set(id, ws)
   state.subscriptions.set(id, new Set())
   state.upgradeReqs.set(id, req)
+  if (ip) {
+    state.socketIps.set(id, ip)
+    state.ipCounts.set(ip, (state.ipCounts.get(ip) ?? 0) + 1)
+  }
 
   send(ws, { type: 'connected', socketId: id })
 
   // Notify observers (telescope, etc.)
-  const ip = extractIp(req)
   const ua = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined
   broadcastObservers.emit({
     kind:         'connection.opened',
@@ -156,20 +237,58 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
     ...(ua ? { userAgent: ua } : {}),
   })
 
+  // Heartbeat — protocol-level PING/PONG. If the client misses the deadline
+  // the socket is terminated. Distinct from the JSON `{ type: 'ping' }`
+  // message which is application-level.
+  let heartbeatTimer: NodeJS.Timeout | undefined
+  let pongDeadline:   NodeJS.Timeout | undefined
+  if (state.heartbeat !== false) {
+    const { interval, timeout } = state.heartbeat
+    const armDeadline = (): void => {
+      if (pongDeadline) clearTimeout(pongDeadline)
+      pongDeadline = setTimeout(() => {
+        try { ws.terminate() } catch { /* socket may already be closing */ }
+      }, timeout)
+    }
+    ws.on('pong', () => {
+      if (pongDeadline) { clearTimeout(pongDeadline); pongDeadline = undefined }
+    })
+    heartbeatTimer = setInterval(() => {
+      if (ws.readyState !== WsSocket.OPEN) return
+      try { ws.ping() } catch { /* ignore */ }
+      armDeadline()
+    }, interval)
+    // Don't keep the event loop alive just for heartbeats (tests, single-shot processes).
+    heartbeatTimer.unref?.()
+    pongDeadline?.unref?.()
+  }
+
   ws.on('message', (raw) => {
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) as ClientMsg }
     catch { send(ws, { type: 'error', message: 'Invalid JSON' }); return }
-    // Fire-and-forget: don't serialize message handling on the auth await.
-    // Awaiting onMessage() would block this socket's `message` event from
-    // processing the next frame until auth resolves — turning subscribe +
-    // immediate publish into a multi-RTT chain. Errors thrown inside
-    // onMessage are caught there (auth failure path) and surfaced via the
-    // observer; nothing escapes to a Node `unhandledRejection`.
-    void onMessage(state, id, ws, req, msg)
+    // Serialize per-socket: each frame waits for the previous frame's
+    // handler to settle. Closes the auth race window where a `client-event`
+    // could interleave with this socket's pending `subscribe` auth check.
+    // Errors are surfaced via the observer; nothing escapes to Node.
+    const prev = socketQueues.get(ws) ?? Promise.resolve()
+    const next = prev
+      .then(() => onMessage(state, id, ws, req, msg))
+      .catch((err: unknown) => {
+        broadcastObservers.emit({
+          kind:         'message.error',
+          connectionId: id,
+          error:        err,
+        })
+      })
+    socketQueues.set(ws, next)
   })
 
-  ws.on('close', () => { disconnect(state, id) })
+  ws.on('close', () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
+    if (pongDeadline)   clearTimeout(pongDeadline)
+    disconnect(state, id)
+  })
 }
 
 function extractIp(req: IncomingMessage): string | undefined {
@@ -215,7 +334,9 @@ async function onMessage(
           ...(token !== undefined ? { token } : {}),
         }
         const authStart = Date.now()
+        let authError: unknown
         const result = await authFn(authReq, channel).catch((err: unknown) => {
+          authError = err
           console.error('[RudderJS Broadcast] Auth callback error:', err)
           return false as const
         })
@@ -224,7 +345,9 @@ async function onMessage(
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
           broadcastObservers.emit({
             kind: 'subscribe', connectionId: id, channel, channelType,
-            allowed: false, authMs, reason: 'Auth callback returned false',
+            allowed: false, authMs,
+            reason: authError ? 'Auth callback threw' : 'Auth callback returned false',
+            ...(authError !== undefined ? { error: authError } : {}),
           })
           return
         }
@@ -319,6 +442,13 @@ function disconnect(state: WsState, id: string): void {
   state.subscriptions.delete(id)
   state.sockets.delete(id)
   state.upgradeReqs.delete(id)
+  const ip = state.socketIps.get(id)
+  if (ip) {
+    state.socketIps.delete(id)
+    const next = (state.ipCounts.get(ip) ?? 1) - 1
+    if (next <= 0) state.ipCounts.delete(ip)
+    else state.ipCounts.set(ip, next)
+  }
   broadcastObservers.emit({ kind: 'connection.closed', connectionId: id })
 }
 
@@ -336,6 +466,7 @@ export function resetBroadcast(): void {
   }
   delete g[KEY]
   delete g[AUTH_KEY]
+  delete g[CONN_AUTH_KEY]
 }
 
 // ─── Public API ─────────────────────────────────────────────
@@ -376,8 +507,84 @@ export function getUpgradeHandler(
     const state = g[KEY] as WsState | undefined
     if (!state) { socket.destroy(); return }
 
+    // 5a — Origin allowlist
+    if (state.allowedOrigins) {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
+      if (!origin || !state.allowedOrigins.has(origin)) {
+        rejectUpgrade(socket, 403, 'Forbidden')
+        broadcastObservers.emit({
+          kind:   'upgrade.rejected',
+          url:    req.url ?? '/',
+          reason: 'origin',
+          ...(origin ? { origin } : {}),
+        })
+        return
+      }
+    } else if (!state.warnedOpenOrigin) {
+      state.warnedOpenOrigin = true
+      console.warn(
+        '[RudderJS Broadcast] No allowedOrigins configured — accepting cross-origin WebSocket ' +
+        'connections. Set `broadcast.allowedOrigins` in production to close the CSRF window.'
+      )
+    }
+
+    // 5b — Per-IP cap (cheap check, before async connection-auth)
+    const ip = extractIp(req)
+    if (state.maxConnectionsPerIp && ip) {
+      const current = state.ipCounts.get(ip) ?? 0
+      if (current >= state.maxConnectionsPerIp) {
+        rejectUpgrade(socket, 429, 'Too Many Requests')
+        broadcastObservers.emit({
+          kind:   'upgrade.rejected',
+          url:    req.url ?? '/',
+          reason: 'ip-cap',
+          ip,
+        })
+        return
+      }
+    }
+
+    // 5b — Per-connection auth hook
+    const connAuth = g[CONN_AUTH_KEY] as ConnectionAuthCallback | undefined
+    if (connAuth) {
+      const authReq: BroadcastAuthRequest = {
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        url:     req.url ?? '/',
+      }
+      // The upgrade handler can't be async at the http.Server boundary, so
+      // run the auth and complete-or-reject inside the promise.
+      void connAuth(authReq)
+        .catch((err: unknown) => {
+          console.error('[RudderJS Broadcast] Connection auth callback threw:', err)
+          return false
+        })
+        .then((allowed) => {
+          if (!allowed) {
+            rejectUpgrade(socket, 401, 'Unauthorized')
+            broadcastObservers.emit({
+              kind:   'upgrade.rejected',
+              url:    req.url ?? '/',
+              reason: 'connection-auth',
+              ...(ip ? { ip } : {}),
+            })
+            return
+          }
+          state.wss.handleUpgrade(req, socket as Parameters<typeof state.wss.handleUpgrade>[1], head, (ws) => {
+            state.wss.emit('connection', ws, req)
+          })
+        })
+      return
+    }
+
     state.wss.handleUpgrade(req, socket as Parameters<typeof state.wss.handleUpgrade>[1], head, (ws) => {
       state.wss.emit('connection', ws, req)
     })
   }
+}
+
+function rejectUpgrade(socket: Duplex, code: number, status: string): void {
+  try {
+    socket.write(`HTTP/1.1 ${code} ${status}\r\nConnection: close\r\n\r\n`)
+  } catch { /* socket may already be closing */ }
+  try { socket.destroy() } catch { /* ignore */ }
 }

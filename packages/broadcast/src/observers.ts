@@ -39,6 +39,30 @@ export type BroadcastEvent =
       authMs?:      number
       /** Reason if `allowed === false` */
       reason?:      string
+      /** Error thrown by the auth callback (when reason === 'Auth callback threw') */
+      error?:       unknown
+    }
+  | {
+      /**
+       * Emitted when an HTTP upgrade is rejected before the WebSocket
+       * handshake completes — origin allowlist mismatch, per-IP cap hit,
+       * or per-connection auth callback returning false.
+       */
+      kind:   'upgrade.rejected'
+      url:    string
+      reason: 'origin' | 'ip-cap' | 'connection-auth'
+      origin?: string
+      ip?:    string
+    }
+  | {
+      /**
+       * Emitted when the per-socket message-handling queue catches an
+       * unhandled error from a frame handler. Safety net — not part of
+       * the normal auth/subscribe lifecycle which has its own events.
+       */
+      kind:         'message.error'
+      connectionId: string
+      error:        unknown
     }
   | {
       kind:         'unsubscribe'
