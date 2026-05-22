@@ -34,7 +34,7 @@ features:
     details: DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle) — one bootstrap file wires everything.
   - icon: 🪶
     title: Pay-as-you-go modularity
-    details: 47 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
+    details: 48 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
   - icon: 🔒
     title: TypeScript-first, strict by default
     details: "`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime."

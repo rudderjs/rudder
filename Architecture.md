@@ -109,6 +109,8 @@ rudderjs/
 │   │                       #   ShouldQueue (queued notifications), BroadcastChannel (WebSocket),
 │   │                       #   AnonymousNotifiable, Notification.route() (on-demand)
 │   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
+│   │                       #   Pluggable BroadcastDriver — LocalDriver default; broadcast-redis for multi-instance
+│   ├── broadcast-redis/    # Redis pub/sub driver for @rudderjs/broadcast (multi-instance fan-out)
 │   ├── sync/               # Real-time collaborative document sync via Yjs CRDT — /ws-sync endpoint
 │   │                       #   Editor adapters under subpaths (@rudderjs/sync/lexical, /tiptap)
 │   ├── ai/                 # AI engine — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek,
