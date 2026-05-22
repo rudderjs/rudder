@@ -48,9 +48,9 @@ registerDoctorCheck({
     const missing = needsKey.filter(p => !process.env[PROVIDER_ENV[p]!])
     if (missing.length === needsKey.length) {
       return {
-        status:  'error',
+        status:  'warn',
         message: `none of ${needsKey.length} cloud provider(s) have an API key set`,
-        fix:     `Set at least one of: ${needsKey.map(p => PROVIDER_ENV[p]).join(', ')}`,
+        fix:     `Set at least one of: ${needsKey.map(p => PROVIDER_ENV[p]).join(', ')} (or remove the providers from config/ai.ts if unused)`,
         detail:  `Declared providers: ${needsKey.join(', ')}`,
       }
     }
