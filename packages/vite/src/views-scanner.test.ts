@@ -364,6 +364,89 @@ describe('views-scanner — typed +Page stubs', () => {
   })
 })
 
+describe('views-scanner — prerender opt-in', () => {
+  const prevCwd = process.cwd()
+  let root = ''
+
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('emits +prerender.ts when the view declares export const prerender = true', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = true\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const prerenderFile = path.join(root, 'pages', '__view', 'home', '+prerender.ts')
+    assert.ok(fs.existsSync(prerenderFile), '+prerender.ts should be emitted')
+    assert.match(fs.readFileSync(prerenderFile, 'utf8'), /export default true/)
+  })
+
+  it('tolerates the `: boolean` annotation on the export', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender: boolean = true\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+prerender.ts')))
+  })
+
+  it('does not emit +prerender.ts when the export is absent', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    viewsScannerPlugin()
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '__view', 'home', '+prerender.ts')))
+  })
+
+  it('does not emit +prerender.ts for `export const prerender = false`', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = false\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '__view', 'home', '+prerender.ts')))
+  })
+
+  it('removes a stale +prerender.ts when the source flips off the export', () => {
+    root = scaffold('react')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const prerender = true\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const prerenderFile = path.join(root, 'pages', '__view', 'home', '+prerender.ts')
+    assert.ok(fs.existsSync(prerenderFile))
+
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export default function Home() { return null }\n`,
+    )
+    viewsScannerPlugin()
+    assert.ok(!fs.existsSync(prerenderFile), 'stale +prerender.ts should be removed')
+  })
+
+  it('works through a Vue dual <script> block', () => {
+    root = scaffold('vue')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.vue'),
+      `<script lang="ts">\nexport const prerender = true\n</script>\n<script setup lang="ts">\nconst x = 1\n</script>\n<template><div /></template>\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+prerender.ts')))
+  })
+})
+
 describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
   const prevCwd = process.cwd()
   let root = ''

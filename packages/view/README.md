@@ -145,6 +145,33 @@ The Vite scanner reads the export at build time and wires the Vike page to the e
 
 ---
 
+## Static prerender
+
+For views with no per-request data — marketing pages, docs index, terms / privacy — opt into Vike's build-time static prerender by exporting `prerender = true`:
+
+```ts
+// app/Views/Marketing/Landing.tsx
+import '@/index.css'
+
+export const prerender = true
+export const route     = '/'
+
+export default function Landing() {
+  return <div>...</div>
+}
+```
+
+The scanner picks the flag up the same way as `route`, emits a `+prerender.ts` next to the generated `+Page.*`, and `pnpm build` writes the pre-rendered HTML to `dist/client/<url>/index.html`. The production server serves the static file before falling back to SSR — zero per-request cost.
+
+**Constraints:**
+
+- Static URLs only (no `:param` segments). Dynamic prerender (one URL per slug, etc.) needs `onBeforePrerenderStart` — out of scope for v1.
+- Dev mode is unaffected — `pnpm dev` still SSRs every request. Prerender is build-time only.
+- The view should not depend on per-request `viewProps` since the controller doesn't run at build time. Use defaults inside the component if needed.
+- Auth-guarded views are incompatible — opt them out (the flag is per-view, so this is the default).
+
+---
+
 ## Per-page response headers
 
 `view()` takes an optional third argument for response headers. The headers attach to the rendered SSR response via `@rudderjs/vite`'s `+headersResponse` Vike hook — no manual `Response` wrapping in the controller, no middleware boilerplate:

@@ -2,6 +2,12 @@ import { useState, useRef } from 'react'
 import '@/index.css'
 import { SiteHeader } from 'App/Components/SiteHeader.js'
 
+// Opt into Vike's build-time static prerender — this view has no per-request
+// props (controller calls `view('demos.avatar')` with no args), so the markup
+// is identical for every visitor and can ship as static HTML.
+// `pnpm build` emits the prerendered file under `dist/client/demos/avatar/`.
+export const prerender = true
+
 interface ProcessedImage {
   url:    string
   format: string
