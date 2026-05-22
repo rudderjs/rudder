@@ -22,10 +22,10 @@ type Tagged =
   | { [TAG]: 'map';    value: Array<[unknown, unknown]> }
   | { [TAG]: 'set';    value: unknown[] }
 
-function isTagged(v: unknown): v is Tagged {
-  if (v == null) return false
-  if (typeof v !== 'object') return false
-  return TAG in (v as Record<string, unknown>)
+// Called only by `decodePayload`, which has already filtered null/undefined,
+// arrays, and non-object primitives — so the parameter is a non-null object.
+function isTagged(v: object): v is Tagged {
+  return TAG in v
 }
 
 /**
