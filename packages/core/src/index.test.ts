@@ -618,6 +618,58 @@ describe('AppBuilder', () => {
   })
 })
 
+// ─── RudderJS.middlewareSnapshot() ───────────────────────────
+
+describe('RudderJS.middlewareSnapshot()', () => {
+  beforeEach(() => {
+    reset()
+    resetGroupMiddleware()
+    delete (globalThis as Record<string, unknown>)['__rudderjs_instance__']
+  })
+
+  it('captures global + web/api stacks from the withMiddleware block', () => {
+    const requestId: MiddlewareHandler = async () => {}
+    const csrf: MiddlewareHandler = async () => {}
+    const rateLimit: MiddlewareHandler = async () => {}
+
+    const instance = Application.configure({ server: {} as never })
+      .withMiddleware((m) => {
+        m.use(requestId)
+        m.web(csrf, rateLimit)
+      })
+      .create()
+
+    const snap = instance.middlewareSnapshot()
+    assert.deepStrictEqual(snap.global, [requestId])
+    assert.deepStrictEqual(snap.groups.web, [csrf, rateLimit])
+    assert.deepStrictEqual(snap.groups.api, [])
+  })
+
+  it('merges provider-registered group middleware via appendToGroup', () => {
+    const sessionMw: MiddlewareHandler = async () => {}
+    const userCsrf: MiddlewareHandler = async () => {}
+
+    appendToGroup('web', sessionMw)
+
+    const instance = Application.configure({ server: {} as never })
+      .withMiddleware((m) => { m.web(userCsrf) })
+      .create()
+
+    const snap = instance.middlewareSnapshot()
+    // Provider-registered middleware comes BEFORE user middleware (matches
+    // request-time composition: getGroupHandlers prepends groupMiddlewareStore).
+    assert.deepStrictEqual(snap.groups.web, [sessionMw, userCsrf])
+  })
+
+  it('returns empty arrays when no middleware is configured', () => {
+    const instance = Application.configure({ server: {} as never }).create()
+    const snap = instance.middlewareSnapshot()
+    assert.deepStrictEqual(snap.global, [])
+    assert.deepStrictEqual(snap.groups.web, [])
+    assert.deepStrictEqual(snap.groups.api, [])
+  })
+})
+
 // ─── ExceptionConfigurator ────────────────────────────────
 
 describe('ExceptionConfigurator', () => {

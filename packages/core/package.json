@@ -29,6 +29,14 @@
       "import": "./dist/commands/providers-discover.js",
       "types": "./dist/commands/providers-discover.d.ts"
     },
+    "./commands/event-list": {
+      "import": "./dist/commands/event-list.js",
+      "types": "./dist/commands/event-list.d.ts"
+    },
+    "./commands/config-show": {
+      "import": "./dist/commands/config-show.js",
+      "types": "./dist/commands/config-show.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
