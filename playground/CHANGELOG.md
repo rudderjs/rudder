@@ -1,5 +1,12 @@
 # rudderjs-playground
 
+## 0.0.93
+
+### Patch Changes
+
+- Updated dependencies [29d0d79]
+  - @rudderjs/vite@2.4.1
+
 ## 0.0.92
 
 ### Patch Changes
