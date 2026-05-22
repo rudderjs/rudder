@@ -126,6 +126,31 @@ describe('MemoryAdapter', () => {
     assert.strictEqual(await adapter.get<number>('hits'), 25)
     assert.strictEqual(new Set(results).size, 25, 'each call should observe a unique value')
   })
+
+  it('add() stores the value when the key is missing and returns true', async () => {
+    assert.strictEqual(await adapter.add('claim', '1', 60), true)
+    assert.strictEqual(await adapter.get('claim'), '1')
+  })
+
+  it('add() returns false and does not overwrite when the key exists', async () => {
+    await adapter.set('claim', 'first')
+    assert.strictEqual(await adapter.add('claim', 'second'), false)
+    assert.strictEqual(await adapter.get('claim'), 'first')
+  })
+
+  it('add() under concurrent callers grants exactly one winner', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => adapter.add('claim', '1', 60)),
+    )
+    assert.strictEqual(results.filter(Boolean).length, 1, 'exactly one caller wins')
+  })
+
+  it('add() after expiry treats the key as missing', async () => {
+    await adapter.add('claim', '1', 0.05)
+    await sleep(80)
+    assert.strictEqual(await adapter.add('claim', '2', 60), true)
+    assert.strictEqual(await adapter.get('claim'), '2')
+  })
 })
 
 // ─── CacheRegistry ─────────────────────────────────────────

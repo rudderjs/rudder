@@ -56,24 +56,23 @@ const _locks = new Map<string, number>()
  * Returns `true` if the lock was acquired (job can be dispatched).
  * Returns `false` if the lock is already held (job should be skipped).
  *
- * Uses `@rudderjs/cache` if available, otherwise falls back to in-memory.
- * The in-memory map is process-local — use a shared cache driver for
- * cross-process uniqueness.
+ * Uses `@rudderjs/cache`'s atomic `add()` (SETNX) when available so two
+ * concurrent dispatchers can't both win the race. Falls back to a
+ * process-local in-memory map otherwise — use a shared cache driver
+ * (Redis) for cross-process uniqueness.
  */
 export async function acquireUniqueLock(job: Job & ShouldBeUnique): Promise<boolean> {
   const key = `rudderjs:unique:${job.uniqueId()}`
   const ttl = job.uniqueFor?.() ?? 0
 
-  // Try cache adapter first
   const cache = await _getCache()
   if (cache) {
-    const existing = await cache.get(key)
-    if (existing !== null && existing !== undefined) return false
-    await cache.set(key, '1', ttl > 0 ? ttl : 86400)
-    return true
+    return await cache.add(key, '1', ttl > 0 ? ttl : 86400)
   }
 
-  // Fallback: in-memory
+  // Fallback: in-memory check-and-set. Single-tick synchronous between the
+  // expiry check and the write — safe under Node's single-threaded event
+  // loop because no `await` sits between them.
   const now = Date.now()
   const expiry = _locks.get(key)
   if (expiry !== undefined && expiry > now) return false
@@ -105,8 +104,7 @@ export function _clearLocks(): void {
 // ─── Cache integration ──────────────────────────────────────
 
 interface CacheLike {
-  get(key: string): Promise<unknown>
-  set(key: string, value: unknown, ttl?: number): Promise<void>
+  add(key: string, value: unknown, ttl?: number): Promise<boolean>
   forget(key: string): Promise<void>
 }
 

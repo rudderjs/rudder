@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { resolveOptionalPeer } from '@rudderjs/core'
 import { queueObservers } from './observers.js'
+import { encodePayload } from './serialize.js'
+import { FakeQueueAdapter } from './fake.js'
 
 // ─── Job Contract ──────────────────────────────────────────
 
@@ -198,12 +200,18 @@ export class QueueRegistry {
 
 // ─── Sync Adapter ──────────────────────────────────────────
 
+/**
+ * Encode a job into a JSON-safe payload that round-trips Date/BigInt/Buffer/
+ * Map/Set through the queue transport. Throws on a non-serialisable value
+ * (BigInt key conflicts, circular refs) — the prior `try/catch { return {} }`
+ * silently dropped the entire payload and made the bug invisible to observers.
+ */
 function safePayload(job: Job): Record<string, unknown> {
-  try {
-    return JSON.parse(JSON.stringify(job)) as Record<string, unknown>
-  } catch {
-    return {}
-  }
+  // `JSON.parse(JSON.stringify(...))` round-trip after `encodePayload` keeps
+  // the payload shape identical to what the worker will receive over the
+  // wire (after the transport's own JSON round-trip), so the sync adapter's
+  // observers see the same data type the BullMQ/Inngest workers would.
+  return JSON.parse(JSON.stringify(encodePayload(job))) as Record<string, unknown>
 }
 
 export class SyncAdapter implements QueueAdapter {
@@ -381,9 +389,7 @@ export class QueueProvider extends ServiceProvider {
 
 export class Queue {
   /** Replace the queue adapter with a fake for testing. */
-  static fake(): import('./fake.js').FakeQueueAdapter {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { FakeQueueAdapter } = require('./fake.js') as typeof import('./fake.js')
+  static fake(): FakeQueueAdapter {
     return FakeQueueAdapter.fake()
   }
 }
@@ -397,4 +403,5 @@ export type { ShouldBeUnique, ShouldBeUniqueUntilProcessing }  from './unique.js
 export { isUniqueJob, isUniqueUntilProcessing, acquireUniqueLock, releaseUniqueLock }  from './unique.js'
 export type { JobMiddleware }                          from './job-middleware.js'
 export { runJobMiddleware, RateLimited, WithoutOverlapping, ThrottlesExceptions, Skip }  from './job-middleware.js'
+export { encodePayload, decodePayload }                from './serialize.js'
 export { FakeQueueAdapter }                           from './fake.js'

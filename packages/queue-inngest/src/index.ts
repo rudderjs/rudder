@@ -6,6 +6,7 @@ import type {
   QueueAdapterProvider,
   DispatchOptions,
 } from '@rudderjs/queue'
+import { encodePayload, decodePayload } from '@rudderjs/queue'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -58,10 +59,13 @@ class InngestAdapter implements QueueAdapter {
           const payload = (event.data as Record<string, unknown>)['payload'] ?? {}
           // Reconstruct the job instance from the serialized payload.
           // TypeScript `private` fields are plain JS properties at runtime,
-          // so Object.assign correctly restores them.
+          // so Object.assign correctly restores them. `decodePayload` untags
+          // Date/BigInt/Buffer/Map/Set back into the JS types the handler
+          // expects (otherwise a `Date` would arrive as an ISO string).
+          const decoded = decodePayload(payload) as Record<string, unknown>
           const job = Object.assign(
             new (JobClass as new () => Job)(),
-            payload,
+            decoded,
           )
           await job.handle()
         },
@@ -82,7 +86,7 @@ class InngestAdapter implements QueueAdapter {
 
     let payload: Record<string, unknown>
     try {
-      payload = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+      payload = JSON.parse(JSON.stringify(encodePayload(job))) as Record<string, unknown>
     } catch (err) {
       throw new Error(
         `[Inngest] Cannot serialize job "${name}": ${err instanceof Error ? err.message : String(err)}`,
