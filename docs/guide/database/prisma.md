@@ -204,6 +204,27 @@ Pair the new generator with a JS driver adapter (`@prisma/adapter-libsql` + `@li
 
 For the canonical reference, see the `playground-web/` variant in the framework repo — a sibling of `playground/` that runs end-to-end inside StackBlitz.
 
+## Upgrading to `@rudderjs/orm-prisma@2.0`
+
+The 2.0 release changes the precedence semantics of mixed `.where()` + `.orWhere()` chains. The 1.x adapter constrained every `.orWhere()` alternative by the prior AND chain — opposite of Eloquent and out of step with `@rudderjs/orm-drizzle`. The 2.0 adapter emits the Laravel-parity shape, so the same chain now means what it syntactically looks like:
+
+```ts
+Post.where('a').where('b').orWhere('c').get()
+// 1.x on Prisma:  WHERE a AND b AND c          ← constrained, often 0 rows
+// 2.0 on Prisma:  WHERE (a AND b) OR c          ← Laravel parity
+```
+
+This affects both regular queries and vector-search queries built with `whereVectorSimilarTo()`. AND-only chains and OR-only chains are unaffected — only mixed AND+OR queries change.
+
+If you rely on the 1.x behaviour for a specific query, restructure it with `whereGroup`:
+
+```ts
+// 2.0 equivalent of the 1.x constrained semantics:
+Post.where('a').where('b').whereGroup(g => g.orWhere('c')).get()
+```
+
+There is no compatibility flag — the long-deprecation strategy is the major-version bump itself. Apps still on `@rudderjs/orm-prisma@1.x` keep the legacy behaviour until they upgrade. See [Precedence in mixed `where` + `orWhere` chains](/guide/database/models#precedence-in-mixed-where-orwhere-chains) for the full semantics + edge cases (soft-delete interaction, nested `whereGroup`).
+
 ## Pitfalls
 
 - **`Prisma has no delegate for table "x"`.** You set `static table` to the SQL table name (e.g. `'oauth_clients'`) instead of the accessor (`'oAuthClient'`). Use the accessor.

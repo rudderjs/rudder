@@ -96,6 +96,40 @@ const user = await User.updateOrCreate(
 | `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
 
+### Precedence in mixed `where` + `orWhere` chains
+
+The chain reads left-associative, like Eloquent: `where('a').where('b').orWhere('c')` is `(a AND b) OR c`, not `a AND b AND c`. Each `.orWhere()` introduces a top-level alternative that escapes the prior AND chain:
+
+```ts
+Post
+  .where('status', 'active')
+  .where('priority', 'high')
+  .orWhere('priority', 'low')
+  .get()
+// SQL: WHERE (status = 'active' AND priority = 'high') OR priority = 'low'
+// Matches every active-and-high row plus every low-priority row regardless of status.
+```
+
+This is identical on both `@rudderjs/orm-prisma` (≥ 2.0.0) and `@rudderjs/orm-drizzle` — queries port between adapters without changing meaning.
+
+When you actually want the OR alternative constrained by some shared filter, group it explicitly:
+
+```ts
+// "active rows where priority is high OR starred is true"
+Post
+  .where('status', 'active')
+  .whereGroup(g => g.where('priority', 'high').orWhere('starred', true))
+  .get()
+// SQL: WHERE status = 'active' AND (priority = 'high' OR starred = true)
+```
+
+> **Upgrading from `@rudderjs/orm-prisma@1.x`?** This precedence is the breaking change in 2.0. The 1.x Prisma adapter constrained every `.orWhere()` by the prior AND chain (so the first example above returned no rows — `priority = 'high' AND priority = 'low'` is empty). Review queries that mix `.where()` and `.orWhere()` for the new shape; in most cases the new behaviour matches what the code looks like it should mean. The Drizzle adapter was always Laravel-parity, so cross-adapter portable apps already had the new shape.
+
+A few edge cases worth knowing:
+
+- **Soft deletes** join the AND alternative — when you mix `.orWhere()` with a soft-deleted model, the soft-delete filter only applies to the AND side of the OR. Keep `.orWhere()` chains AND-only or wrap them in a `whereGroup` if you need the soft-delete to apply across every alternative.
+- **`whereGroup` / `orWhereGroup`** compose recursively — the precedence rule applies at every nesting level.
+
 ## Hydrated instances
 
 Every read path returns Model instances — `find`, `first`, `all`, `paginate`, `where(...).first()`, `where(...).get()`, `create`, `update`, `restore`, `firstOrCreate`, `updateOrCreate`. The result is `instanceof Model` with the prototype chain bound, so instance methods you define on the class work directly:

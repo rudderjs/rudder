@@ -299,6 +299,36 @@ pnpm rudder route:list      # all registered routes, with name + middleware
 
 The router also exposes a programmatic API: `router.list()` returns every `RouteDefinition`; `router.listNamed()` returns the name → path map.
 
+## Runtime route registration (`Route.lateRegister`)
+
+Routes are normally declared in `routes/web.ts` / `routes/api.ts` (or via decorator controllers) at module load. The framework then mounts them onto the server adapter once during boot — and after that point the router is **frozen**: every mutator (`.query`, `.body`, `.name`, `.where`, `.domain`, `.missing`) and every registration entry point (`.get`, `.post`, `.add`, `.use`, `.bind`, `.registerController`, `.resource`, `.fallback`) throws if it's called outside a `Route.lateRegister(...)` callback:
+
+```
+[RudderJS Router] .query() called on already-mounted route GET /users —
+define this before router.mount(), or wrap runtime registration in
+Route.lateRegister(() => Route.<verb>(...).query(...)).
+```
+
+If you really need to add a route after boot — typically a feature-flag callback, a dynamic provider, or a plugin architecture — wrap the registration in `Route.lateRegister(fn)`:
+
+```ts
+import { Route } from '@rudderjs/router'
+
+// Inside a runtime hook (e.g. a feature flag flipped on):
+Route.lateRegister(() => {
+  Route.get('/admin/foo', adminController.foo).query(adminQuerySchema)
+})
+```
+
+`lateRegister`:
+
+- Throws if called before the app has booted — there's no adapter to register against.
+- Suspends the freeze for the duration of `fn()` (counter-based, so nested calls work).
+- Mounts every route appended during the callback onto the adapter via the same composition path module-load routes use — route-binding middleware still attaches correctly.
+- Seals the new routes against further mutation once `fn` returns; leaked builders throw on subsequent `.query()` / `.name()` / etc., same as module-load routes.
+
+You only need `lateRegister` for genuine runtime registration. Provider `boot()` methods, route loaders (`routes/web.ts`), and HMR-driven re-bootstrap all happen before `mount()` and don't need it.
+
 ## Pitfalls
 
 - **Catch-all order.** `router.all('/api/*', ...)` must be the last route declared, or it'll swallow more specific ones.

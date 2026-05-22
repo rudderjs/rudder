@@ -77,7 +77,8 @@ The pipeline runs in this order:
 2. **User renderers** registered via `e.render(Type, fn)` take priority.
 3. **`ValidationError`** renders as 422 JSON with `{ message, errors }`.
 4. **`HttpException`** renders with its status code (JSON for API requests, HTML for browser navigations).
-5. **Anything else** is reported and rendered as 500 (HTML stack trace if `APP_DEBUG=true`, generic page otherwise).
+5. **Duck-typed `httpStatus`** — any `Error` with a numeric `httpStatus` property in the 4xx/5xx range renders with that status. This is how adapter-owned errors flow through without a hard dependency on `@rudderjs/core`: `MalformedBodyError` (from `@rudderjs/contracts`, raised by `@rudderjs/server-hono` on malformed JSON / form-urlencoded request bodies → 400), `ModelNotFoundError` (`@rudderjs/orm` → 404), `RouteModelNotFoundError` (`@rudderjs/router` → 404). Custom errors can opt in by declaring `readonly httpStatus = <number>` on the class.
+6. **Anything else** is reported and rendered as 500 (HTML stack trace if `APP_DEBUG=true`, generic page otherwise).
 
 ## Dev error page
 
