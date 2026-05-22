@@ -18,13 +18,23 @@ export interface JobMiddleware {
   handle(job: Job, next: () => Promise<void>): Promise<void>
 }
 
-/** Run a job through its middleware pipeline, then execute `handle()`. */
-export async function runJobMiddleware(job: Job, middlewares: JobMiddleware[]): Promise<void> {
+/**
+ * Run a job through its middleware pipeline, then execute the inner handler
+ * (default: `job.handle()`). The handler form lets callers wrap `handle()`
+ * with extra error semantics — `executeJob` uses it to catch from inside the
+ * pipeline so `failed()` fires even when middleware throws.
+ */
+export async function runJobMiddleware(
+  job:         Job,
+  middlewares: JobMiddleware[],
+  handler?:    () => Promise<void>,
+): Promise<void> {
+  const inner = handler ?? (() => job.handle())
   let index = 0
 
   const run = async (): Promise<void> => {
     if (index >= middlewares.length) {
-      await job.handle()
+      await inner()
       return
     }
     const mw = middlewares[index++]!
