@@ -467,6 +467,22 @@ describe('ExceptionConfigurator', () => {
     assert.strictEqual(body.message, 'No User found for id 7')
   })
 
+  it('buildHandler() renders MalformedBodyError as 400 (contracts → httpStatus path)', async () => {
+    // Pins the contract for `@rudderjs/server-hono`'s body-parse throw: a
+    // MalformedBodyError must come out the other side of the central
+    // pipeline as a 400 with the parse-error message intact. If this test
+    // breaks, the silent-`{}` regression returns and validators emit
+    // cryptic missing-field errors for malformed JSON bodies.
+    const { MalformedBodyError } = await import('@rudderjs/contracts')
+    const exc = new ExceptionConfigurator()
+    const handler = exc.buildHandler()
+    const res = await handler(new MalformedBodyError('application/json'), makeReq())
+    assert.strictEqual(res.status, 400)
+    const body = await res.json() as { status: number; message: string }
+    assert.strictEqual(body.status, 400)
+    assert.match(body.message, /Malformed request body.*application\/json/i)
+  })
+
   it('buildHandler() ignores non-numeric or out-of-range httpStatus', async () => {
     const exc = new ExceptionConfigurator()
     const handler = exc.buildHandler()

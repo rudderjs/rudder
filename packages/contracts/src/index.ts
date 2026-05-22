@@ -403,6 +403,28 @@ export class InputTypeError extends Error {
 }
 
 /**
+ * Thrown by server adapters when the request advertises a parseable body
+ * (`Content-Type: application/json` or `application/x-www-form-urlencoded`)
+ * but the body fails to parse. Lives in contracts so adapters can throw it
+ * without taking a `@rudderjs/core` dependency. The framework's exception
+ * pipeline in `@rudderjs/core` renders this as HTTP 400 via the
+ * duck-typed `httpStatus` path.
+ *
+ * Replaces the legacy silent `req.body = {}` fallback which made malformed
+ * requests look like missing-field validation errors to handlers.
+ */
+export class MalformedBodyError extends Error {
+  readonly httpStatus = 400
+  readonly contentType: string
+  constructor(contentType: string, cause?: Error) {
+    super(`Malformed request body (Content-Type: ${contentType})`)
+    this.name = 'MalformedBodyError'
+    this.contentType = contentType
+    if (cause) this.cause = cause
+  }
+}
+
+/**
  * Thrown by validation pipelines (FormRequest, router `.query(schema)`, etc.)
  * when input fails schema validation. Lives in contracts so packages outside
  * `@rudderjs/core` can throw it without taking a core dependency. The
