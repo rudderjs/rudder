@@ -380,6 +380,17 @@ function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
 
   const doc       = new Y.Doc()
   const loadStart = Date.now()
+  // Persistence load can fail (DB transient, Redis hiccup, etc.). Two design
+  // points worth knowing:
+  // (1) The room is evicted from the rooms map on failure so the *next*
+  //     call recreates a fresh room and retries — without this, a single
+  //     blip caches a broken in-memory doc forever and updates routed
+  //     through storeUpdate silently fail downstream.
+  // (2) The `ready` promise REJECTS on failure (it used to .catch +
+  //     resolve, which masked errors). Callers that await ready and don't
+  //     wrap in try/catch will surface the failure loudly — that's the
+  //     point. handleConnection wraps + closes the socket cleanly; the
+  //     public Sync.* helpers let the rejection propagate to user code.
   const ready = persistence.getYDoc(docName).then(persisted => {
     const sv     = Y.encodeStateVector(doc)
     const update = Y.encodeStateAsUpdate(persisted, sv)
@@ -390,12 +401,16 @@ function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
       durationMs: Date.now() - loadStart,
       byteSize:   update.length,
     })
-  }).catch((e: unknown) => {
+  }, (e: unknown) => {
+    // Evict the broken room so subsequent calls retry from scratch.
+    if (rooms.get(docName) === room) rooms.delete(docName)
     syncObservers.emit({
       kind:    'sync.error',
+      op:      'getYDoc',
       docName,
       error:   e instanceof Error ? e.message : String(e),
     })
+    throw e
   })
   const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
   rooms.set(docName, room)
@@ -411,7 +426,18 @@ function getOrCreateRoom(docName: string, persistence: SyncPersistence): Room {
           client.send(fwd)
         }
       }
-      void persistence.storeUpdate(docName, update)
+      // Fire-and-forget by design (server-side mutation already applied
+      // in-memory and broadcast to clients), but failures need to surface
+      // somewhere — otherwise a Redis outage silently desyncs disk from
+      // memory across every server-originated write.
+      persistence.storeUpdate(docName, update).catch((err: unknown) => {
+        syncObservers.emit({
+          kind:    'sync.error',
+          op:      'storeUpdate',
+          docName,
+          error:   err instanceof Error ? err.message : String(err),
+        })
+      })
     }
   })
   return room
@@ -492,7 +518,16 @@ async function handleConnection(
   // sending the initial state vector. Otherwise the hook would see an empty
   // doc (since persistence is async) and the client would receive an
   // up-front state vector that doesn't include hook-written seed data.
-  await room.ready
+  //
+  // `room.ready` now rejects on persistence load failure (see getOrCreateRoom).
+  // Close the socket cleanly so the client retries rather than silently
+  // operating against an empty in-memory doc.
+  try {
+    await room.ready
+  } catch {
+    try { ws.close(1011, 'persistence load failed') } catch { /* already closing */ }
+    return
+  }
 
   // Fire the first-connect hook exactly once per docName per process. The
   // Set is shared across the function via globalThis (survives HMR). On
@@ -561,8 +596,33 @@ async function handleConnection(
           }
         }
 
-        await persistence.storeUpdate(docName, data)
-        onChange?.(docName, data)
+        try {
+          await persistence.storeUpdate(docName, data)
+          syncObservers.emit({
+            kind:     'persistence.save',
+            docName,
+            byteSize: data.byteLength,
+          })
+        } catch (err) {
+          syncObservers.emit({
+            kind:    'sync.error',
+            op:      'storeUpdate',
+            docName,
+            clientId,
+            error:   err instanceof Error ? err.message : String(err),
+          })
+        }
+        try {
+          await onChange?.(docName, data)
+        } catch (err) {
+          syncObservers.emit({
+            kind:    'sync.error',
+            op:      'onChange',
+            docName,
+            clientId,
+            error:   err instanceof Error ? err.message : String(err),
+          })
+        }
 
         syncObservers.emit({
           kind:           'update.applied',
@@ -570,11 +630,6 @@ async function handleConnection(
           clientId,
           byteSize:       data.byteLength,
           recipientCount,
-        })
-        syncObservers.emit({
-          kind:     'persistence.save',
-          docName,
-          byteSize: data.byteLength,
         })
       }
 
@@ -844,22 +899,33 @@ export const Sync = {
 
   /**
    * Seed a ydoc with initial data (e.g. from a DB record).
-   * Safe to call multiple times — only seeds when the ydoc is empty.
+   *
+   * **Atomicity:** the empty-doc check happens *inside* `transact`, against
+   * the actual `fields` map size. Two key consequences:
+   * - The old `encodeStateVector(...).length > 1` gate falsely reported
+   *   "already seeded" for any doc that had ever been opened by a client
+   *   (state vector grows on first connect, before any data is written).
+   * - Two concurrent `seed()` callers serialise on Yjs's per-doc transact
+   *   queue — the second transact sees `fields.size > 0` and skips.
+   *
+   * Returns `true` if this call wrote the seed data, `false` if the doc
+   * already had `fields` and the seed was skipped.
    */
-  async seed(docName: string, data: Record<string, unknown>): Promise<void> {
+  async seed(docName: string, data: Record<string, unknown>): Promise<boolean> {
     const persistence = this.persistence()
     const room = getOrCreateRoom(docName, persistence)
-    await room.ready  // wait for persisted state to load
-
-    const sv = Y.encodeStateVector(room.doc)
-    if (sv.length > 1) return  // already has content
+    await room.ready  // wait for persisted state to load — may reject
 
     const fields = room.doc.getMap('fields')
+    let didSeed = false
     room.doc.transact(() => {
+      if (fields.size > 0) return  // already seeded
       for (const [key, val] of Object.entries(data)) {
         fields.set(key, val ?? null)
       }
+      didSeed = true
     })
+    return didSeed
   },
 
   /**
