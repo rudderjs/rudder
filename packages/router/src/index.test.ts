@@ -3,6 +3,7 @@ import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, ServerAdapter, MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
 import { attachInputAccessors } from '@rudderjs/contracts'
+import { z } from 'zod'
 import {
   Router, router, Route,
   Controller, Middleware,
@@ -1198,5 +1199,264 @@ describe('runWithGroup tagging', () => {
     })
     // Slot is restored to its pre-runWithGroup value (undefined here).
     assert.strictEqual(g['__rudderjs_router_current_group__'], undefined)
+  })
+})
+
+// ─── Mount-time freeze + Route.lateRegister ────────────────────
+//
+// After router.mount(), every RouteBuilder mutator and Router
+// registration entry point throws unless wrapped in lateRegister. This
+// closes the silent-failure class where post-mount `.query()` /
+// `.body()` chains, registration calls, etc. either silently no-op or
+// partially propagate (in-place `def.middleware.unshift()` reaches the
+// adapter only when the route has no route-binding middleware — that
+// cross-adapter divergence is exactly what's sealed here).
+
+describe('Router — mount-time freeze + lateRegister', () => {
+  let r:      Router
+  let server: FakeServer
+
+  beforeEach(() => {
+    r      = new Router()
+    server = new FakeServer()
+  })
+
+  describe('RouteBuilder mutators throw post-mount', () => {
+    it('.query() throws on already-mounted route', () => {
+      const builder = r.get('/users', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.query(z.object({ page: z.coerce.number() })),
+        /\.query\(\) called on already-mounted route GET \/users/,
+      )
+    })
+
+    it('.body() throws on already-mounted route', () => {
+      const builder = r.post('/posts', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.body(z.object({ title: z.string() })),
+        /\.body\(\) called on already-mounted route POST \/posts/,
+      )
+    })
+
+    it('.name() throws on already-mounted route', () => {
+      const builder = r.get('/users/:id', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.name('users.show'),
+        /\.name\(\) called on already-mounted route GET \/users\/:id/,
+      )
+    })
+
+    it('.where() throws on already-mounted route (covers whereNumber/Alpha/Uuid/Ulid/In transitively)', () => {
+      const builder = r.get('/users/:id', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.whereNumber('id'),
+        /\.where\(\) called on already-mounted route GET \/users\/:id/,
+      )
+    })
+
+    it('.domain() throws on already-mounted route', () => {
+      const builder = r.get('/me', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.domain('api.example.com'),
+        /\.domain\(\) called on already-mounted route GET \/me/,
+      )
+    })
+
+    it('.missing() throws on already-mounted route', () => {
+      const builder = r.get('/users/:id', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.missing((_req: AppRequest) => undefined),
+        /\.missing\(\) called on already-mounted route GET \/users\/:id/,
+      )
+    })
+
+    it('error message points at Route.lateRegister(...) as the escape hatch', () => {
+      const builder = r.get('/users', handler)
+      r.mount(server)
+      assert.throws(
+        () => builder.query(z.object({})),
+        /Route\.lateRegister\(\(\) => Route\.<verb>\(\.\.\.\)\.query\(\.\.\.\)\)/,
+      )
+    })
+  })
+
+  describe('Router registration entry points throw post-mount', () => {
+    it('.get() / .post() / .put() / .patch() / .delete() / .all() throw after mount', () => {
+      r.get('/seed', handler)  // anchor so mount has something to walk
+      r.mount(server)
+      for (const verb of ['get', 'post', 'put', 'patch', 'delete', 'all'] as const) {
+        assert.throws(
+          () => r[verb]('/late', handler),
+          new RegExp(`${verb}\\(\\) called after router\\.mount\\(\\) outside of Route\\.lateRegister\\(\\)`, 'i'),
+          `.${verb}() should throw post-mount`,
+        )
+      }
+    })
+
+    it('.add() throws after mount', () => {
+      r.mount(server)
+      assert.throws(
+        () => r.add('OPTIONS', '/opts', handler),
+        /add\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+
+    it('.use() throws after mount', () => {
+      r.mount(server)
+      assert.throws(
+        () => r.use(noop),
+        /use\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+
+    it('.bind() throws after mount', () => {
+      r.mount(server)
+      class FakeResolver { static name = 'User'; static findForRoute(_v: string): null { return null } }
+      assert.throws(
+        () => r.bind('user', FakeResolver as never),
+        /bind\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+
+    it('.registerController() throws after mount', () => {
+      class Ctrl { @Get('/late') hello(): string { return 'ok' } }
+      r.mount(server)
+      assert.throws(
+        () => r.registerController(Ctrl),
+        /registerController\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+
+    it('.resource() throws after mount', () => {
+      class PostsCtrl { index(): string { return 'list' } }
+      r.mount(server)
+      assert.throws(
+        () => r.resource('posts', PostsCtrl),
+        /resource\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+
+    it('.fallback() throws after mount (funnels through .all → _rb guard)', () => {
+      r.mount(server)
+      assert.throws(
+        () => r.fallback(handler),
+        /all\(\) called after router\.mount\(\) outside of Route\.lateRegister\(\)/,
+      )
+    })
+  })
+
+  describe('Router.reset() thaws the mount state', () => {
+    it('after reset(), .get() works again without lateRegister', () => {
+      r.get('/a', handler)
+      r.mount(server)
+      r.reset()
+      assert.doesNotThrow(() => r.get('/b', handler))
+      assert.strictEqual(r.list().length, 1)
+      assert.strictEqual(r.list()[0]?.path, '/b')
+    })
+
+    it('after reset(), the builder from the new registration is mutable', () => {
+      r.mount(server)
+      r.reset()
+      const builder = r.get('/c', handler)
+      assert.doesNotThrow(() => builder.name('c.show').query(z.object({})))
+    })
+  })
+
+  describe('Route.lateRegister(fn)', () => {
+    it('throws when called before mount() — no adapter to register against', () => {
+      assert.throws(
+        () => r.lateRegister(() => { r.get('/x', handler) }),
+        /lateRegister\(\) called before mount\(\)/,
+      )
+    })
+
+    it('mounts a new route on the captured adapter', () => {
+      r.get('/seed', handler)
+      r.mount(server)
+      const beforeLen = server.routes.length
+
+      r.lateRegister(() => {
+        r.get('/admin/foo', handler)
+      })
+
+      assert.strictEqual(server.routes.length, beforeLen + 1)
+      assert.strictEqual(server.routes[server.routes.length - 1]?.path, '/admin/foo')
+    })
+
+    it('builders inside lateRegister can chain .query() / .body() / .name() — the freeze suspends until fn returns', () => {
+      r.mount(server)
+      assert.doesNotThrow(() => {
+        r.lateRegister(() => {
+          r.get('/late', handler)
+            .name('late.show')
+            .query(z.object({ page: z.coerce.number() }))
+        })
+      })
+      assert.strictEqual(r.getNamedRoute('late.show'), '/late')
+    })
+
+    it('routes registered inside lateRegister are sealed after fn returns', () => {
+      r.mount(server)
+      let leakedBuilder: ReturnType<typeof r.get> | undefined
+      r.lateRegister(() => {
+        leakedBuilder = r.get('/late', handler)
+      })
+      assert.throws(
+        () => leakedBuilder!.query(z.object({})),
+        /\.query\(\) called on already-mounted route GET \/late/,
+      )
+    })
+
+    it('routes-binding-aware path: routes registered late still get the binding middleware applied', () => {
+      class FakeUser { static name = 'User'; static findForRoute(v: string): { id: string } { return { id: v } } }
+      r.bind('user', FakeUser as never)
+      r.mount(server)
+      const before = server.routes.length
+
+      r.lateRegister(() => {
+        r.get('/users/:user', (req: AppRequest) => req.bound?.['user'] ?? null)
+      })
+
+      const newRoute = server.routes[before]
+      assert.ok(newRoute, 'late route should have been registered on the adapter')
+      // The binding middleware is prepended by `_mountRoute()` — assert
+      // there's at least one middleware (the binding one).
+      assert.ok((newRoute?.middleware.length ?? 0) >= 1,
+        'route with :user param should have at least the binding middleware')
+    })
+
+    it('inner registrations re-allow more registrations inside the same callback (counter, not flag)', () => {
+      r.mount(server)
+      // Nested lateRegister inside lateRegister is unusual but should work
+      // — the counter ensures even the inner call doesn't trip the guard.
+      assert.doesNotThrow(() => {
+        r.lateRegister(() => {
+          r.get('/a', handler)
+          r.lateRegister(() => {
+            r.get('/b', handler)
+          })
+        })
+      })
+    })
+
+    it('throws on the inner registration if fn itself throws — guard counter is restored via try/finally', () => {
+      r.mount(server)
+      assert.throws(() => {
+        r.lateRegister(() => {
+          r.get('/x', handler)
+          throw new Error('boom')
+        })
+      }, /boom/)
+      // After the throw, a subsequent post-mount call without lateRegister
+      // must still throw — proving the counter decremented in `finally`.
+      assert.throws(() => r.get('/y', handler), /called after router\.mount\(\) outside of Route\.lateRegister/)
+    })
   })
 })
