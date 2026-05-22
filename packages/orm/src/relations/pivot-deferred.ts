@@ -58,14 +58,41 @@ function replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, un
   return cur
 }
 
+/** What `buildResolved` resolves to — both the replay-ready QueryBuilder
+ *  and the pivot rows fetched for *this* terminal call. Returning them
+ *  together means concurrent terminals don't share state (the prior
+ *  closure-captured `lastPivotRows` was a race; see Phase 5 in
+ *  `docs/plans/2026-05-21-framework-orm-correctness.md`). */
+type ResolvedQuery = {
+  q:         QueryBuilder<Model>
+  pivotRows: ReadonlyArray<Record<string, unknown>>
+}
+
 interface DeferredProxyHooks {
   /** Called when `withPivot(...cols)` is invoked. Throws when no cols are
    *  provided (mirrors the contract). The implementation captures the column
    *  list into the deferred-QB closure for post-terminal stamping. */
   onWithPivot?(columns: string[]): void
-  /** Called after a terminal returns a result. Lets the deferred-QB stamp
-   *  `pivot` onto each row using the in-memory pivot rows from the lookup. */
-  postProcess?<R>(result: R, terminal: string): R
+  /** Called after a terminal returns a result. Receives the pivot rows
+   *  resolved for *this* call (not closure-captured) so concurrent
+   *  terminals on the same builder don't read each other's pivot data. */
+  postProcess?<R>(result: R, terminal: string, pivotRows: ReadonlyArray<Record<string, unknown>>): R
+}
+
+/** Methods we know exist on the QueryBuilder / ModelQuery surface but the
+ *  deferred pivot proxy doesn't record. Throwing on these surfaces the
+ *  silent no-op users hit when they chained `.whereHas(...)` /
+ *  `.withCount(...)` / `.whereGroup(...)` etc. onto a pivot relation. */
+function looksLikeUnsupportedChainMethod(name: string): boolean {
+  if (CHAIN_METHODS.has(name) || TERMINAL_METHODS.has(name) || UNSUPPORTED_TERMINALS.has(name)) return false
+  if (name === 'withPivot') return false
+  // `where*` (whereHas, whereDoesntHave, whereGroup, whereBelongsTo, …),
+  // `with*` (withCount, withSum, withWhereHas, withAggregate, …),
+  // `load*` (loadCount, loadSum, …), and `or<X>` variants (orWhereGroup, …).
+  // We bound this to method-shaped names so symbol props and runtime-internal
+  // accesses (`then`, `toString`, `Symbol.iterator`) keep silently returning
+  // undefined.
+  return /^(where|with|load|or[A-Z])/.test(name)
 }
 
 /**
@@ -76,16 +103,26 @@ interface DeferredProxyHooks {
  * Mutations (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw —
  * write the pivot via `belongsToMany().attach/detach/sync` and write the
  * related rows via the related model directly.
+ *
+ * Unsupported chain methods (`whereHas`, `withCount`, `whereGroup`, etc.)
+ * also throw — previously they silently no-oped because the proxy returned
+ * `undefined` for unknown props, which made the entire call chain fall off
+ * the deferred lookup.
  */
 function makeDeferredProxy(
-  buildResolved: () => Promise<QueryBuilder<Model>>,
+  buildResolved: () => Promise<ResolvedQuery>,
   recorded:      Array<[string, unknown[]]>,
   relationKind:  'belongsToMany' | 'morphToMany' | 'morphedByMany',
   hooks:         DeferredProxyHooks = {},
 ): QueryBuilder<Model> {
   const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
     get(_t, prop): unknown {
-      const name = String(prop)
+      // Non-string props (Symbol.iterator, Symbol.toPrimitive, etc.) are
+      // accessed by the JS runtime; returning undefined keeps the proxy a
+      // plain object as far as `await`, spreads, and comparisons are
+      // concerned. We never throw on these.
+      if (typeof prop !== 'string') return undefined
+      const name = prop
       if (name === 'withPivot') {
         return (...cols: string[]) => {
           if (cols.length === 0) {
@@ -103,10 +140,10 @@ function makeDeferredProxy(
       }
       if (TERMINAL_METHODS.has(name)) {
         return async (...args: unknown[]) => {
-          const q = await buildResolved()
+          const { q, pivotRows } = await buildResolved()
           const fn = (q as unknown as QbAsDict)[name]
           const raw = fn ? await fn.apply(q, args) : undefined
-          return hooks.postProcess ? hooks.postProcess(raw, name) : raw
+          return hooks.postProcess ? hooks.postProcess(raw, name, pivotRows) : raw
         }
       }
       if (UNSUPPORTED_TERMINALS.has(name)) {
@@ -114,6 +151,17 @@ function makeDeferredProxy(
           throw new Error(
             `[RudderJS ORM] "${name}" is not supported on a ${relationKind} lazy-fetch query. ` +
             `Use Model.${relationKind}(parent, name) for pivot mutations or call methods on the related Model directly.`,
+          )
+        }
+      }
+      if (looksLikeUnsupportedChainMethod(name)) {
+        return () => {
+          throw new Error(
+            `[RudderJS ORM] "${name}()" is not supported on a ${relationKind} lazy-fetch query — ` +
+            `the deferred proxy can only record the chain methods it knows about (` +
+            `${[...CHAIN_METHODS].join(', ')}). ` +
+            `To filter the related rows, terminate first (e.g. \`await parent.related(...).get()\`) ` +
+            `then query the related model with the desired predicates, or use \`Model.${relationKind}(parent, name)\` for direct access to the QueryBuilder primitive.`,
           )
         }
       }
@@ -192,27 +240,25 @@ export function belongsToManyDeferredQb(
 ): QueryBuilder<Model> {
   const recorded:     Array<[string, unknown[]]> = []
   const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
+  const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
     const pivotRows = await adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .get()
-    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     // Empty IN list — short-circuit with a guaranteed-empty query so
     // adapters don't have to handle the edge case.
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return replayChain(q, recorded)
+    return { q: replayChain(q, recorded), pivotRows }
   }
 
   return makeDeferredProxy(buildResolved, recorded, 'belongsToMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    postProcess(result, terminal, pivotRows) {
+      return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
   })
 }
@@ -225,26 +271,24 @@ export function morphToManyDeferredQb(
 ): QueryBuilder<Model> {
   const recorded:     Array<[string, unknown[]]> = []
   const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
+  const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
     const pivotRows = await adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
       .get()
-    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return replayChain(q, recorded)
+    return { q: replayChain(q, recorded), pivotRows }
   }
 
   return makeDeferredProxy(buildResolved, recorded, 'morphToMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    postProcess(result, terminal, pivotRows) {
+      return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
   })
 }
@@ -257,26 +301,24 @@ export function morphedByManyDeferredQb(
 ): QueryBuilder<Model> {
   const recorded:     Array<[string, unknown[]]> = []
   const pivotColumns: string[] = []
-  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
-  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
+  const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
     const pivotRows = await adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
       .get()
-    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
-    return replayChain(q, recorded)
+    return { q: replayChain(q, recorded), pivotRows }
   }
 
   return makeDeferredProxy(buildResolved, recorded, 'morphedByMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
-    postProcess(result, terminal) {
-      return stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    postProcess(result, terminal, pivotRows) {
+      return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
   })
 }
