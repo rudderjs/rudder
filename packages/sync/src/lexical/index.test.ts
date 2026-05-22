@@ -4,6 +4,7 @@ import * as Y                       from 'yjs'
 import { MemoryPersistence, Sync }  from '../index.js'
 import { insertBlock, removeBlock } from './index.js'
 import type { InnerDeltaItem }      from './types.js'
+import { SYNC_KEYS }                from '../globals.js'
 
 // ─── insertBlock / removeBlock ───────────────────────────────
 //
@@ -15,8 +16,8 @@ import type { InnerDeltaItem }      from './types.js'
 // so the helpers see something realistic.
 
 const G           = globalThis as Record<string, unknown>
-const PERSIST_KEY = '__rudderjs_live_persistence__'
-const ROOMS_KEY   = '__rudderjs_live__'
+const PERSIST_KEY = SYNC_KEYS.persistence
+const ROOMS_KEY   = SYNC_KEYS.rooms
 
 /** Read the rooms map directly out of the globalThis slot the sync runtime
  *  populates. Centralizes the structural cast so individual tests don't

@@ -5,10 +5,12 @@ import * as Y from 'yjs'
 import {
   MemoryPersistence,
   SyncProvider,
+  Sync,
   _handleConnection,
   type SyncPersistence,
   type SyncConfig,
 } from './index.js'
+import { SYNC_KEYS } from './globals.js'
 
 // ─── MemoryPersistence ───────────────────────────────────────
 
@@ -566,5 +568,126 @@ describe('Multi-peer WS broadcast', () => {
       peerInBBaseline,
       'peer in a different room should NOT receive frames from another room',
     )
+  })
+})
+
+// ─── Awareness lifecycle (Phase 8) ───────────────────────────
+//
+// 8a: a force-killed socket (proxy timeout / tab kill) never fires the
+// `close` event, so its `awarenessMap` entry would otherwise replay
+// ghost cursors to every late joiner. The handler prunes dead entries
+// on the awareness replay loop.
+//
+// 8d: stored AI awareness is replayed to every new joiner. If the AI
+// agent crashes without calling `clearAiAwareness`, the stale cursor
+// would replay forever. The handler skips replay (and drops the
+// buffer) once `aiAwarenessAt` is older than the 60s TTL.
+
+/** Build the y-protocols wire frame for an awareness message. */
+function encodeAwarenessFrame(payload: Uint8Array): Uint8Array {
+  // [messageAwareness=1, payloadLen(varint), ...payload]
+  const len = writeVarUint(payload.length)
+  const buf = new Uint8Array(1 + len.length + payload.length)
+  buf[0] = 1 // messageAwareness
+  buf.set(len, 1)
+  buf.set(payload, 1 + len.length)
+  return buf
+}
+
+function getSyncRooms(): Map<string, {
+  awarenessMap: Map<unknown, Uint8Array>
+  aiAwarenessMsg?: Uint8Array
+  aiAwarenessAt?:  number
+}> | undefined {
+  return (globalThis as Record<string, unknown>)[SYNC_KEYS.rooms] as
+    | Map<string, {
+        awarenessMap: Map<unknown, Uint8Array>
+        aiAwarenessMsg?: Uint8Array
+        aiAwarenessAt?:  number
+      }>
+    | undefined
+}
+
+describe('awareness lifecycle', () => {
+  it('prunes dead sockets from awarenessMap on replay', async () => {
+    const persistence = new MemoryPersistence()
+    const docName     = `awareness-prune-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    const peerA = new MockWsSocket()
+    const peerB = new MockWsSocket()
+
+    await _handleConnection(peerA as never, { url } as never, persistence)
+    await _handleConnection(peerB as never, { url } as never, persistence)
+
+    // Peer A sends an awareness frame — stored in the room's awarenessMap.
+    const awarenessPayload = new Uint8Array([1, 42, 7, 0, 0, 0, 0, 0])
+    peerA.receive(encodeAwarenessFrame(awarenessPayload))
+    await new Promise(r => setImmediate(r))
+
+    // Force-kill peer A — readyState flips to CLOSED without a `close` event.
+    peerA.readyState = 3
+
+    const peerC = new MockWsSocket()
+    await _handleConnection(peerC as never, { url } as never, persistence)
+
+    // Peer C should NOT have received an awareness frame from peer A — the
+    // dead-socket entry must have been pruned before the replay loop forwarded it.
+    const awarenessFramesAtC = peerC.sent.filter(f => f[0] === 1 /* messageAwareness */)
+    assert.strictEqual(awarenessFramesAtC.length, 0, 'late joiner must not receive awareness from a dead peer')
+
+    // And the room's awarenessMap should no longer contain peer A.
+    const room = getSyncRooms()?.get(docName)
+    assert.ok(room, 'room should exist')
+    let hasPeerA = false
+    for (const client of room!.awarenessMap.keys()) {
+      if (client === peerA) hasPeerA = true
+    }
+    assert.strictEqual(hasPeerA, false, 'dead peer A must be pruned from awarenessMap')
+  })
+
+  it('skips stale AI awareness replay older than the TTL', async () => {
+    const persistence = new MemoryPersistence()
+    const docName     = `ai-stale-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    // Bootstrap the room by opening one peer (so a room entry exists).
+    const peerA = new MockWsSocket()
+    await _handleConnection(peerA as never, { url } as never, persistence)
+
+    // Inject a stored AI awareness payload that's 120s old — beyond the 60s TTL.
+    const room = getSyncRooms()?.get(docName)
+    assert.ok(room, 'room should exist after first peer connects')
+    room!.aiAwarenessMsg = new Uint8Array([1, 5, 1, 99, 1, 0])
+    room!.aiAwarenessAt  = Date.now() - 120_000
+
+    const peerB = new MockWsSocket()
+    await _handleConnection(peerB as never, { url } as never, persistence)
+
+    // Peer B should NOT have received the stale AI awareness frame. And the
+    // handler should have dropped the buffer so future joiners don't see it either.
+    const awarenessFramesAtB = peerB.sent.filter(f => f[0] === 1 /* messageAwareness */)
+    assert.strictEqual(awarenessFramesAtB.length, 0, 'stale AI awareness must not be replayed')
+    assert.strictEqual(room!.aiAwarenessMsg, undefined, 'stale AI awareness buffer must be dropped')
+    assert.strictEqual(room!.aiAwarenessAt,  undefined, 'stale AI awareness timestamp must be dropped')
+  })
+
+  it('Sync.clearAiAwareness(docName) drops the stored replay buffer', async () => {
+    const persistence = new MemoryPersistence()
+    const docName     = `ai-clear-${Date.now()}`
+    const url         = `/ws-sync/${docName}`
+
+    // Boot the room + inject a fresh AI awareness payload.
+    const peerA = new MockWsSocket()
+    await _handleConnection(peerA as never, { url } as never, persistence)
+    const room = getSyncRooms()?.get(docName)
+    assert.ok(room, 'room should exist')
+    room!.aiAwarenessMsg = new Uint8Array([1, 5, 1, 99, 1, 0])
+    room!.aiAwarenessAt  = Date.now()
+
+    Sync.clearAiAwareness(docName)
+
+    assert.strictEqual(room!.aiAwarenessMsg, undefined, 'aiAwarenessMsg must be cleared')
+    assert.strictEqual(room!.aiAwarenessAt,  undefined, 'aiAwarenessAt must be cleared')
   })
 })

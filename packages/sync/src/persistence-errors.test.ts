@@ -9,14 +9,15 @@ import {
   type SyncEvent,
 } from './index.js'
 import { encodeAiAwareness } from './lexical/awareness.js'
+import { SYNC_KEYS }         from './globals.js'
 
 // ─── Test setup ─────────────────────────────────────────────
 
 const g = globalThis as Record<string, unknown>
-const PERSIST_KEY        = '__rudderjs_live_persistence__'
-const ROOMS_KEY          = '__rudderjs_live__'
-const FIRST_CONNECT_KEY  = '__rudderjs_sync_first_connect__'
-const AI_CLOCK_KEY       = '__rudderjs_sync_ai_clock__'
+const PERSIST_KEY        = SYNC_KEYS.persistence
+const ROOMS_KEY          = SYNC_KEYS.rooms
+const FIRST_CONNECT_KEY  = SYNC_KEYS.firstConnect
+const AI_CLOCK_KEY       = SYNC_KEYS.aiAwarenessClock
 
 function clearSyncGlobals(): void {
   delete g[PERSIST_KEY]

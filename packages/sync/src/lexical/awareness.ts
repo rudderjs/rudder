@@ -13,6 +13,7 @@
 
 import * as Y from 'yjs'
 import { writeVarUint } from './internal.js'
+import { SYNC_KEYS } from '../globals.js'
 
 // Yjs awareness message type byte (matches y-protocols)
 const messageAwareness = 1
@@ -28,11 +29,11 @@ const AI_CLIENT_ID = 999_999_999
  * AI awareness updates on every reboot. Lives on `globalThis` so the
  * counter survives module re-evaluation.
  */
-const AI_CLOCK_KEY = '__rudderjs_sync_ai_clock__'
 function nextAiClock(): number {
   const g = globalThis as Record<string, unknown>
-  const next = ((g[AI_CLOCK_KEY] as number | undefined) ?? 0) + 1
-  g[AI_CLOCK_KEY] = next
+  const slot = SYNC_KEYS.aiAwarenessClock
+  const next = ((g[slot] as number | undefined) ?? 0) + 1
+  g[slot] = next
   return next
 }
 
@@ -75,22 +76,22 @@ export function encodeAiAwareness(state: Record<string, unknown> | null): Uint8A
 
 // ─── Room lookup ─────────────────────────────────────────────
 //
-// The Sync WebSocket layer stores rooms on `globalThis['__rudderjs_live__']`
-// keyed by docName. Each room has a `doc`, a `clients` set, and an optional
-// `aiAwarenessMsg` snapshot used to send AI presence to newly-connecting
-// clients. We reverse-lookup by Y.Doc identity here so the lexical adapter
-// stays free of any room-manager wiring on the public API.
-
-const ROOMS_KEY = '__rudderjs_live__'
+// The Sync WebSocket layer stores rooms on the `rooms` slot in
+// `SYNC_KEYS` (see `../globals.ts`) keyed by docName. Each room has a
+// `doc`, a `clients` set, and an optional `aiAwarenessMsg` snapshot used
+// to send AI presence to newly-connecting clients. We reverse-lookup by
+// Y.Doc identity here so the lexical adapter stays free of any
+// room-manager wiring on the public API.
 
 interface RoomLike {
   doc:             Y.Doc
   clients:         Set<{ readyState: number; send(data: Uint8Array): void }>
   aiAwarenessMsg?: Uint8Array
+  aiAwarenessAt?:  number
 }
 
 function findRoomByDoc(doc: Y.Doc): RoomLike | null {
-  const rooms = (globalThis as Record<string, unknown>)[ROOMS_KEY] as
+  const rooms = (globalThis as Record<string, unknown>)[SYNC_KEYS.rooms] as
     | Map<string, RoomLike>
     | undefined
   if (!rooms) return null
@@ -141,6 +142,7 @@ export function setAiAwareness(
     if (client.readyState === 1 /* OPEN */) client.send(msg)
   }
   room.aiAwarenessMsg = msg
+  room.aiAwarenessAt  = Date.now()
 }
 
 /**
@@ -155,4 +157,5 @@ export function clearAiAwareness(doc: Y.Doc): void {
     if (client.readyState === 1 /* OPEN */) client.send(msg)
   }
   delete room.aiAwarenessMsg
+  delete room.aiAwarenessAt
 }
