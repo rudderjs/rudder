@@ -1,5 +1,6 @@
+import path from 'node:path'
 import { registerDoctorCheck, type DoctorResult } from '@rudderjs/console'
-import { fileExists } from './_fs.js'
+import { fileExistsAtWorkspaceRoot, findWorkspaceRoot } from './_fs.js'
 
 interface DetectedPM {
   /** PM inferred from the lockfile that exists in cwd. */
@@ -18,7 +19,7 @@ function detect(): DetectedPM {
     ['bun.lockb',          'bun'],
     ['bun.lock',           'bun'],
   ]
-  const lockfiles = lockMap.filter(([f]) => fileExists(f)).map(([f]) => f)
+  const lockfiles = lockMap.filter(([f]) => fileExistsAtWorkspaceRoot(f)).map(([f]) => f)
   const fromLockfile = lockfiles.length === 1
     ? lockMap.find(([f]) => f === lockfiles[0])![1]
     : null
@@ -63,6 +64,10 @@ registerDoctorCheck({
         fix:     `Run with ${pm} (\`${pm} install\`, \`${pm} <script>\`) to match the lockfile`,
       }
     }
-    return { status: 'ok', message: `${pm} — lockfile present` }
+    const root = findWorkspaceRoot()
+    const where = root === process.cwd()
+      ? ''
+      : ` (workspace root: ${path.relative(process.cwd(), root) || '.'})`
+    return { status: 'ok', message: `${pm} — lockfile present${where}` }
   },
 })
