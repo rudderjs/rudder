@@ -1,4 +1,5 @@
 import { ServiceProvider, config } from '@rudderjs/core'
+import { resolveIoredisClass } from '@rudderjs/support'
 
 import { FakeCacheAdapter } from './fake.js'
 import { MemoryLock, RedisLock, newOwnerToken, type Lock, type RedisLockClient } from './lock.js'
@@ -315,8 +316,7 @@ class RedisAdapter implements CacheAdapter {
     eval(script: string, numKeys: number, ...args: unknown[]): Promise<unknown>
   }> {
     if (!this.client) {
-      const ioredisModule = await import('ioredis') as unknown as { Redis?: typeof import('ioredis').Redis; default?: { Redis?: typeof import('ioredis').Redis } }
-      const Redis = ioredisModule.Redis ?? ioredisModule.default?.Redis ?? (ioredisModule.default as unknown as typeof import('ioredis').Redis)
+      const Redis = resolveIoredisClass<import('ioredis').Redis>(await import('ioredis'))
       this.client = this.config.url
         ? new Redis(this.config.url)
         : new Redis({

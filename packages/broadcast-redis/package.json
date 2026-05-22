@@ -35,20 +35,24 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test --experimental-test-module-mocks dist-test/redis-driver.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test --experimental-test-module-mocks dist-test/redis-driver.test.js",
+    "smoke": "node smoke/multi-instance.mjs"
   },
   "peerDependencies": {
     "@rudderjs/broadcast": "workspace:^",
     "ioredis": "^5.0.0"
   },
   "dependencies": {
-    "@rudderjs/console": "workspace:^"
+    "@rudderjs/console": "workspace:^",
+    "@rudderjs/support": "workspace:^"
   },
   "devDependencies": {
     "@rudderjs/broadcast": "workspace:^",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.0.0",
     "ioredis": "^5.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "ws": "^8.0.0"
   },
   "author": "Suleiman Shahbari"
 }

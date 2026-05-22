@@ -194,6 +194,9 @@ importers:
       '@rudderjs/console':
         specifier: workspace:^
         version: link:../console
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@rudderjs/broadcast':
         specifier: workspace:^
@@ -201,18 +204,27 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
+      '@types/ws':
+        specifier: ^8.0.0
+        version: 8.18.1
       ioredis:
         specifier: ^5.0.0
         version: 5.9.3
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+      ws:
+        specifier: ^8.0.0
+        version: 8.20.0
 
   packages/cache:
     dependencies:
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -10965,7 +10977,7 @@ snapshots:
   '@libsql/isomorphic-ws@0.1.5':
     dependencies:
       '@types/ws': 8.18.1
-      ws: 8.19.0
+      ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate

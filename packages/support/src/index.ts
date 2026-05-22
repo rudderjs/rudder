@@ -416,3 +416,46 @@ export function defineEnv<T extends z.ZodRawShape>(
   }
   return parsed.data
 }
+
+// ─── resolveIoredisClass ───────────────────────────────────
+
+/**
+ * Resolves the `Redis` constructor across the CJS/ESM interop variants
+ * `ioredis` ships. Pass the result of `import('ioredis')` (dynamic) or
+ * `import * as _ioredis from 'ioredis'` (static) and get back the class.
+ *
+ * Why: under NodeNext + `esModuleInterop: false`, `import { Redis } from
+ * 'ioredis'` resolves the named export at the type level but throws at
+ * runtime because ioredis's CJS shape doesn't expose `Redis` as a named
+ * export. The fallback chain handles every shape we've seen:
+ *
+ *   1. `mod.Redis`             — the typed named re-export (works in some envs)
+ *   2. `mod.default`           — when default IS the Redis class
+ *   3. `mod.default.Redis`     — when default is a namespace wrapping the class
+ *
+ * Throws when none match — surfaces an ioredis upgrade-shape change loudly
+ * rather than silently constructing an undefined.
+ *
+ * Shared by `@rudderjs/cache` (RedisAdapter) and `@rudderjs/broadcast-redis`
+ * (RedisDriver). Apps don't normally call this.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveIoredisClass<R = unknown>(mod: unknown): new (...args: any[]) => R {
+  const m = mod as {
+    Redis?:   unknown
+    default?: unknown
+  }
+  if (typeof m.Redis === 'function') {
+    return m.Redis as new (...args: unknown[]) => R
+  }
+  if (typeof m.default === 'function') {
+    return m.default as new (...args: unknown[]) => R
+  }
+  if (m.default && typeof (m.default as { Redis?: unknown }).Redis === 'function') {
+    return (m.default as { Redis: new (...args: unknown[]) => R }).Redis
+  }
+  throw new Error(
+    '[RudderJS] Unable to resolve `Redis` class from `ioredis` — unexpected export shape. ' +
+    'This usually means an ioredis upgrade changed its module shape; please file an issue.',
+  )
+}
