@@ -102,6 +102,14 @@ RSC introduces an **additional request type**: the client router fetches an RSC 
 
 So point 3 collapses to: in `@rudderjs/server-hono`, `apply()` vike's resolved universal middlewares onto our *existing* Hono app via `@universal-middleware/hono`, alongside the current `vike(app)` / custom fetch handler / `view()` / error-page / prewarm machinery — additive, not a rewrite. **Open sub-question for Phase 3:** whether `@vikejs/hono`'s `vike(app)` already applies config-declared middlewares (making even the explicit `apply()` unnecessary) or whether we add the `@universal-middleware/hono` mount ourselves. Either way it is small.
 
+**Phase 3 result (2026-05-24) — no server-hono code change needed. The explicit `apply()` is unnecessary.** Source-level reading of the installed vike (0.4.257) settled the open sub-question:
+
+- `@vikejs/hono`'s `vike(app)` is literally `apply(app, [...middlewares, vikeMiddleware])` — and `vikejs/servers`' current Hono adapter is byte-for-byte the same three lines. Both mount only the single `vike/universal-middleware` SSR handler (a catch-all at path `/**` that calls `renderPageServer`); neither auto-collects config-declared middlewares.
+- But it doesn't need to: `renderPageServer.js` itself does `const middlewares = (globalContext.config.middleware ?? []).flat()` and, when non-empty, routes the request through them via `@universal-middleware/core`'s `UniversalRouter` before rendering. So the config `middleware` entry that `vike-react-rsc` declares (`middleware: "import:vike-react-rsc/__internal/integration/rscMiddleware"`) is dispatched *inside* the catch-all handler our `vike(app)` already mounts. A `/_rsc` request matches `/**` → `renderPageServer` → the RSC middleware.
+- The only server-hono-specific transform is the `.pageContext.json` SPA-nav rewrite. `/_rsc` (GET for navigation, POST for server actions) has no `/index.pageContext.json` suffix, so the rewrite is skipped and the request passes through to `app.fetch` untouched.
+
+Net: once an app's vike config `extends: [vikeReactRsc]`, our existing adapter serves `/_rsc` with zero changes. Phase 3 ships only a regression test pinning that the rewrite wrapper never diverts `/_rsc` (GET + POST), plus this documentation. Full end-to-end verification (actual RSC stream + action round-trip) is Phase 4, which needs `vike-react-rsc` installed in the playground.
+
 ### 4. The `view()` ↔ server-component design decision
 
 The current model is controller-driven: the controller fetches data and passes `props` to a presentational view. RSC inverts this — the page *is* an async server component that fetches its own data, and mutations go through server actions.
@@ -119,13 +127,13 @@ This is the part with the most product-design surface and the least precedent in
 | Phase | Scope | Gate |
 |---|---|---|
 | 0 | ✅ **DONE 2026-05-23** — probed how RSC request handling is wired. Decided **Option A**: RSC is a mountable `/_rsc` universal middleware applied via `@universal-middleware/hono`; no re-platform. | Passed — Option A confirmed cheap. |
-| 1 | Version bumps (react 19.2 / vite 7.2) on a branch; confirm the whole monorepo builds + existing playground unaffected. | `pnpm build` + `pnpm typecheck` clean; playground renders. |
-| 2 | `@rudderjs/vite` scanner: `react-rsc` renderer detection + RSC `usePageContext`/codegen + mutual-exclusion guard. | `views-scanner.test.ts` extended + green. |
-| 3 | `@rudderjs/server-hono`: implement the chosen option (A or B). | server-hono test surface green; `view()` + JSON API + error page unchanged. |
+| 1 | ✅ **DONE 2026-05-24 (#635)** — version bumps react 19.0→19.2 (19.2.4) / vite 7.1→7.2 (7.3.1) across playgrounds + dev pins. Surfaced + fixed a latent dynamic-prerender codegen bug first (#634). | Passed — `pnpm build` 52/52, `pnpm typecheck` 94/94, playground renders. |
+| 2 | ✅ **DONE 2026-05-24 (#637)** — `@rudderjs/vite` scanner: `react-rsc` detection + server-component stub using `getPageContext()` from `vike-react-rsc/pageContext` + mutual-exclusion guard. | Passed — `views-scanner.test.ts` +2, 89/89. |
+| 3 | ✅ **DONE 2026-05-24** — established the explicit `apply()` is unnecessary (vike's `renderPageServer` runs `config.middleware` itself; `/_rsc` passes through our rewrite wrapper). No server code change; ships a `/_rsc` pass-through regression test. | Passed — server-hono 94/94; `view()` + JSON API + error page unchanged (no code touched). |
 | 4 | Playground: one RSC view + one server action, behind an opt-in flag/dir; manual verify SSR + soft-nav + action round-trip. | Live: server-rendered HTML, 64-byte soft-nav, action rerenders. |
 | 5 | Docs + the `view()`↔server-component RFC; decide GA vs experimental label. | — |
 
-Phases 0–1 are cheap and reversible; the real investment starts at phase 3.
+Phases 0–3 turned out cheap and reversible (Phase 3 needed no server code at all — see its result above); the real investment is now Phase 4, which requires `vike-react-rsc` installed in the playground and an end-to-end manual verify.
 
 ## Risks and open questions
 

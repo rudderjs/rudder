@@ -997,3 +997,43 @@ describe('HonoAdapter — controllerViewPatterns (parameterised SPA-nav)', () =>
       'controller handler must not run for an unregistered .pageContext.json path')
   })
 })
+
+// vike-react-rsc serves its server-component stream and server actions from a
+// fixed internal path (/_rsc, GET + POST), registered as a vike *config*
+// middleware (`middleware: "import:vike-react-rsc/__internal/integration/rscMiddleware"`).
+// vike's own renderPageServer reads `globalContext.config.middleware` and
+// dispatches to it, so the existing `vike(app)` catch-all already serves /_rsc
+// once an app extends vikeReactRsc — no extra mount is needed (see the RSC
+// integration design doc, Phase 3). The only server-hono code that could break
+// RSC is the .pageContext.json SPA-nav rewrite wrapper. These pin that it never
+// diverts /_rsc: the path has no `/index.pageContext.json` suffix, so the
+// controller-view rewrite is skipped and the request flows through to
+// app.fetch (→ Vike → the RSC middleware), for both GET navigations and POST
+// server actions.
+describe('createFetchHandler() — RSC /_rsc pass-through (Phase 3)', () => {
+  for (const method of ['GET', 'POST'] as const) {
+    it(`${method} /_rsc is never diverted to a controller view`, async () => {
+      const provider = hono()
+      let controllerRan = false
+      const handler = await provider.createFetchHandler((adapter) => {
+        adapter.registerRoute({
+          method:  'GET',
+          path:    '/about',
+          handler: async (_req, res) => { controllerRan = true; return res.json({ ok: true }) },
+          middleware: [],
+        })
+      })
+
+      // The response depends on Vike (no app/Views in this sandbox, and
+      // vike-react-rsc isn't installed) and is irrelevant — the rewrite
+      // decision happens before app.fetch, so the contract holds regardless of
+      // whatever Vike returns or throws downstream.
+      try {
+        await handler(new Request('http://localhost/_rsc', { method }))
+      } catch { /* Vike may error in the bare sandbox; rewrite already decided */ }
+
+      assert.strictEqual(controllerRan, false,
+        `${method} /_rsc must fall through to Vike, not a controller view`)
+    })
+  }
+})
