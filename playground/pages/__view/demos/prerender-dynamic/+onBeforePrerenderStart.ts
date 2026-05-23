@@ -3,5 +3,12 @@
 import type { OnBeforePrerenderStartAsync } from 'vike/types'
 import { prerender as source } from 'App/Views/Demos/PrerenderDynamic.tsx'
 
+// `prerender` may be declared as a URL array, or a sync/async function that
+// returns one. Normalize the imported symbol to that union so the runtime
+// guard below type-checks regardless of which form the view used — a bare
+// array would otherwise narrow the function branch to `never` (uncallable).
+type Urls = Awaited<ReturnType<OnBeforePrerenderStartAsync>>
+const value = source as Urls | (() => Urls | Promise<Urls>)
+
 export const onBeforePrerenderStart: OnBeforePrerenderStartAsync<unknown> =
-  async () => (typeof source === 'function' ? await source() : source)
+  async () => (typeof value === 'function' ? await value() : value)

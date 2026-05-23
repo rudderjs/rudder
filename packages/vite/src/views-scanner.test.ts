@@ -525,6 +525,12 @@ describe('views-scanner — dynamic prerender (Phase 2)', () => {
     const hookSrc = fs.readFileSync(path.join(out, '+onBeforePrerenderStart.ts'), 'utf8')
     assert.match(hookSrc, /import\s+\{\s*prerender as source\s*\}\s+from\s+'App\/Views\/Home\.tsx'/)
     assert.match(hookSrc, /OnBeforePrerenderStartAsync/)
+    // Regression: a bare-array `prerender` narrows `typeof x === 'function'` to
+    // `never`, so calling `source()` directly makes the generated file fail
+    // `tsc` ("not callable"). The hook must normalize the imported symbol to a
+    // callable-or-array union first, never call `source` directly.
+    assert.match(hookSrc, /const value = source as .* \(\(\) =>/)
+    assert.doesNotMatch(hookSrc, /typeof source === 'function'/)
   })
 
   it('emits both files for an async function form', () => {
