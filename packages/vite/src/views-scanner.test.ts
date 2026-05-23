@@ -15,15 +15,16 @@ import { viewsScannerPlugin, syncViewsFromDisk } from './views-scanner.js'
  *     app/Views/Home.tsx  (or Home.vue / Home.ts depending on framework)
  *     pages/                                           (scanner writes __view/ here)
  */
-function scaffold(framework: 'react' | 'vue' | 'solid' | 'vanilla'): string {
+function scaffold(framework: 'react' | 'react-rsc' | 'vue' | 'solid' | 'vanilla'): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'views-scanner-'))
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
 
   const pkgByFramework: Record<typeof framework, string | null> = {
-    react:   'vike-react',
-    vue:     'vike-vue',
-    solid:   'vike-solid',
-    vanilla: null,
+    react:       'vike-react',
+    'react-rsc': 'vike-react-rsc',
+    vue:         'vike-vue',
+    solid:       'vike-solid',
+    vanilla:     null,
   }
   const pkg = pkgByFramework[framework]
   if (pkg) {
@@ -39,10 +40,11 @@ function scaffold(framework: 'react' | 'vue' | 'solid' | 'vanilla'): string {
   const viewsDir = path.join(root, 'app', 'Views')
   fs.mkdirSync(viewsDir, { recursive: true })
   const viewExt = {
-    react:   '.tsx',
-    vue:     '.vue',
-    solid:   '.tsx',
-    vanilla: '.ts',
+    react:       '.tsx',
+    'react-rsc': '.tsx',
+    vue:         '.vue',
+    solid:       '.tsx',
+    vanilla:     '.ts',
   }[framework]
   fs.writeFileSync(path.join(viewsDir, `Home${viewExt}`), '// placeholder\n')
 
@@ -67,6 +69,24 @@ describe('views-scanner — framework detection', () => {
     assert.ok(fs.existsSync(generated), '+Page.tsx should exist')
     const contents = fs.readFileSync(generated, 'utf8')
     assert.match(contents, /vike-react\/usePageContext/)
+    assert.match(contents, /ViewComponent/)
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+route.ts')))
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+data.ts')))
+  })
+
+  it('generates an RSC server-component stub when vike-react-rsc is installed', () => {
+    root = scaffold('react-rsc')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const generated = path.join(root, 'pages', '__view', 'home', '+Page.tsx')
+    assert.ok(fs.existsSync(generated), '+Page.tsx should exist')
+    const contents = fs.readFileSync(generated, 'utf8')
+    // The +Page is a server component, so it reads pageContext via
+    // getPageContext() from vike-react-rsc/pageContext — NOT the
+    // usePageContext() hook, which throws under the react-server condition.
+    assert.match(contents, /import \{ getPageContext \} from 'vike-react-rsc\/pageContext'/)
+    assert.match(contents, /getPageContext\(\)/)
+    assert.doesNotMatch(contents, /usePageContext/)
     assert.match(contents, /ViewComponent/)
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+route.ts')))
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+data.ts')))
@@ -116,6 +136,20 @@ describe('views-scanner — framework detection', () => {
       JSON.stringify({ name: 'vike-vue', version: '0.0.0', main: 'index.js' }),
     )
     fs.writeFileSync(path.join(vueDir, 'index.js'), '')
+    process.chdir(root)
+    assert.throws(() => viewsScannerPlugin(), /Multiple Vike renderers/)
+  })
+
+  it('throws when both vike-react and vike-react-rsc are installed', () => {
+    root = scaffold('react') // installs vike-react
+    // vike-react and vike-react-rsc are both React renderers — mutually exclusive.
+    const rscDir = path.join(root, 'node_modules', 'vike-react-rsc')
+    fs.mkdirSync(rscDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(rscDir, 'package.json'),
+      JSON.stringify({ name: 'vike-react-rsc', version: '0.0.0', main: 'index.js' }),
+    )
+    fs.writeFileSync(path.join(rscDir, 'index.js'), '')
     process.chdir(root)
     assert.throws(() => viewsScannerPlugin(), /Multiple Vike renderers/)
   })
