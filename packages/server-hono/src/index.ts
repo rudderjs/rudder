@@ -846,8 +846,32 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         })
       }
 
-      // Attach Vike SSR middleware
-      vike(app)
+      // Attach Vike SSR middleware.
+      //
+      // Pass Vike's config-declared middlewares (https://vike.dev/middleware) so
+      // they mount as their OWN routes ahead of the catch-all, rather than only
+      // being dispatched from inside the catch-all's renderPageServer. This is
+      // load-bearing for React Server Components: vike-react-rsc declares a
+      // `/_rsc` middleware that itself calls renderPageServer — reachable only via
+      // the catch-all, that becomes a *re-entrant* renderPageServer (catch-all
+      // renderPageServer → dispatch `/_rsc` → renderPageServer again), which trips
+      // Vike's dev request logger and 500s server actions. A direct route renders
+      // `/_rsc` exactly once.
+      //
+      // No-op for renderers without config middlewares (e.g. vike-react):
+      // `vike(app, [])` is byte-identical to `vike(app)`. Best-effort — if the
+      // global context isn't ready at setup time, fall back to the catch-all,
+      // which still dispatches config middlewares internally (fine for page
+      // renders; only RSC actions need the direct route).
+      let configMiddlewares: unknown[] = []
+      try {
+        const { getGlobalContext } = await import('vike/server')
+        const gc = (await getGlobalContext()) as { config?: { middleware?: unknown[] } }
+        configMiddlewares = (gc?.config?.middleware ?? []).flat()
+      } catch {
+        // Vike global context not initialised yet — keep the catch-all only.
+      }
+      vike(app, configMiddlewares as Parameters<typeof vike>[1])
 
       // Logging at the outermost fetch level catches ALL requests — including Vike's
       // client-side navigation data fetches, which bypass the Hono middleware chain.

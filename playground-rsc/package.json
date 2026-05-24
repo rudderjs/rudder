@@ -1,0 +1,43 @@
+{
+  "name": "rudderjs-playground-rsc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vike dev",
+    "dev:clean": "pids=$(lsof -ti :24678 -ti :3001 2>/dev/null); if [ -n \"$pids\" ]; then kill -9 $pids; fi; vike dev",
+    "build": "vike build",
+    "start": "node ./dist/server/index.mjs",
+    "preview": "pids=$(lsof -ti :3001 2>/dev/null); if [ -n \"$pids\" ]; then kill -9 $pids; fi; node ./dist/server/index.mjs",
+    "typecheck": "tsc --noEmit",
+    "rudder": "tsx node_modules/@rudderjs/cli/src/index.ts"
+  },
+  "dependencies": {
+    "@rudderjs/contracts": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/server-hono": "workspace:*",
+    "@rudderjs/support": "workspace:*",
+    "@rudderjs/view": "workspace:*",
+    "@vikejs/hono": "^0.2.0",
+    "@vitejs/plugin-rsc": "0.5.1",
+    "dotenv": "^16.4.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-streaming": "^0.4.12",
+    "reflect-metadata": "^0.2.2",
+    "vike": "0.4.257",
+    "vike-react-rsc": "workspace:*"
+  },
+  "devDependencies": {
+    "@rudderjs/cli": "workspace:*",
+    "@rudderjs/vite": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0",
+    "vite": "^7.3.0"
+  }
+}

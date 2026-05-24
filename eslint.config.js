@@ -13,6 +13,10 @@ export default tseslint.config(
       '**/.vitepress/dist/**',
       '**/node_modules/**',
       'playground/**',
+      // Vendored third-party source (MIT fork of vike-react-rsc, see its
+      // VENDORED.md). Not held to RudderJS lint rules — reformatting it would
+      // diverge from upstream and complicate re-vendoring.
+      'packages/vike-react-rsc/**',
     ],
   },
 
