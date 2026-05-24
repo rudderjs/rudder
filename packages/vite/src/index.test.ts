@@ -1,9 +1,9 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 
-import { rudderjs, invalidateBackendSubtree, resolveWatchDir } from './index.js'
+import { rudderjs, invalidateBackendSubtree, performReboot, resolveWatchDir } from './index.js'
 
 /** Walk up from the test cwd (dist-test/) to the pnpm workspace root. */
 function repoRootDir(): string {
@@ -267,6 +267,173 @@ describe('invalidateBackendSubtree', () => {
     invalidateBackendSubtree(server, cfg.file, cwd)
     assert.ok(invalidated.includes(cfg),   'changed config file invalidated')
     assert.ok(invalidated.includes(route), 'route loader module invalidated via the routes/ sweep')
+  })
+})
+
+// ─── performReboot + watcher debounce (half-booted-window fix) ───
+
+describe('performReboot', () => {
+  const cwd = process.cwd()
+  type Node = { file: string; importers: Set<Node> }
+
+  function makeServer(files: Record<string, Node>) {
+    const sends: unknown[] = []
+    let invalidatedAll = false
+    const byFile = new Map<string, Set<Node>>()
+    for (const n of Object.values(files)) {
+      const set = byFile.get(n.file) ?? new Set<Node>()
+      set.add(n)
+      byFile.set(n.file, set)
+    }
+    const invalidated: Node[] = []
+    const server = {
+      hot: { send: (m: unknown) => { sends.push(m) } },
+      environments: { ssr: { moduleGraph: {
+        getModulesByFile: (f: string) => byFile.get(f),
+        invalidateModule: (m: Node) => { invalidated.push(m) },
+        invalidateAll: () => { invalidatedAll = true },
+        fileToModulesMap: byFile,
+      } } },
+    }
+    return { server: server as never, sends, invalidated, wasInvalidatedAll: () => invalidatedAll }
+  }
+
+  it('clears the bootstrap singletons and sends exactly one full-reload for a multi-file burst', () => {
+    const g = globalThis as Record<string, unknown>
+    g['__rudderjs_instance__'] = {}
+    g['__rudderjs_app__'] = {}
+
+    const a: Node = { file: path.resolve(cwd, 'app', 'Models', 'Article.ts'), importers: new Set() }
+    const b: Node = { file: path.resolve(cwd, 'app', 'Pilotiq', 'AdminPanel.ts'), importers: new Set() }
+    const { server, sends, invalidated } = makeServer({ a, b })
+
+    const log = console.log
+    console.log = () => {}
+    try {
+      performReboot(server, [a.file, b.file], cwd)
+    } finally {
+      console.log = log
+    }
+
+    assert.equal(g['__rudderjs_instance__'], undefined, 'instance singleton cleared')
+    assert.equal(g['__rudderjs_app__'], undefined, 'app singleton cleared')
+    assert.ok(invalidated.includes(a) && invalidated.includes(b), 'both changed files invalidated')
+    assert.equal(sends.length, 1, 'exactly one full-reload regardless of file count')
+    assert.deepEqual(sends[0], { type: 'full-reload' })
+  })
+
+  it('falls back to invalidateAll when any changed file is not in the SSR graph', () => {
+    const tracked: Node = { file: path.resolve(cwd, 'app', 'a.ts'), importers: new Set() }
+    const { server, wasInvalidatedAll } = makeServer({ tracked })
+    const log = console.log
+    console.log = () => {}
+    try {
+      performReboot(server, [tracked.file, path.resolve(cwd, 'app', 'never-imported.ts')], cwd)
+    } finally {
+      console.log = log
+    }
+    assert.ok(wasInvalidatedAll(), 'an untracked file forces a whole-graph invalidation')
+  })
+
+  it('is a no-op for an empty file list', () => {
+    const { server, sends } = makeServer({})
+    performReboot(server, [], cwd)
+    assert.equal(sends.length, 0)
+  })
+})
+
+describe('rudderjs:routes watcher debounce', () => {
+  const cwd = process.cwd()
+
+  function setup() {
+    const sends: unknown[] = []
+    let onChange: ((f: string) => void) | undefined
+    const server = {
+      watcher: {
+        add: () => {},
+        on: (ev: string, cb: (f: string) => void) => { if (ev === 'change') onChange = cb },
+      },
+      hot: { send: (m: unknown) => { sends.push(m) } },
+      environments: { ssr: { moduleGraph: {
+        getModulesByFile: () => undefined,
+        invalidateModule: () => {},
+        invalidateAll: () => {},
+        fileToModulesMap: new Map(),
+      } } },
+    }
+    const routes = rudderjs().find(p => p.name === 'rudderjs:routes')!
+    ;(routes.configureServer as (s: unknown) => void)(server as never)
+    return { onChange: onChange!, sends }
+  }
+
+  function withMutedLog(fn: () => void) {
+    const log = console.log
+    console.log = () => {}
+    try { fn() } finally { console.log = log }
+  }
+
+  it('coalesces a burst of change events (atomic-write / format-on-save) into one reload', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      withMutedLog(() => {
+        const { onChange, sends } = setup()
+        const file = path.resolve(cwd, 'app', 'Pilotiq', 'AdminPanel.ts')
+        // Three events ms apart, no debounce window elapsing between them.
+        onChange(file); onChange(file); onChange(file)
+        assert.equal(sends.length, 0, 'no reload before the debounce settles')
+        mock.timers.tick(100)
+        assert.equal(sends.length, 1, 'one coalesced full-reload, not three')
+        assert.deepEqual(sends[0], { type: 'full-reload' })
+      })
+    } finally {
+      mock.timers.reset()
+    }
+  })
+
+  it('fires again for a change after the previous burst has settled', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      withMutedLog(() => {
+        const { onChange, sends } = setup()
+        const file = path.resolve(cwd, 'routes', 'web.ts')
+        onChange(file)
+        mock.timers.tick(100)
+        assert.equal(sends.length, 1)
+        onChange(file)
+        mock.timers.tick(100)
+        assert.equal(sends.length, 2, 'a later edit triggers its own reload')
+      })
+    } finally {
+      mock.timers.reset()
+    }
+  })
+
+  it('ignores app/Views/** edits — Vike component HMR owns them', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      withMutedLog(() => {
+        const { onChange, sends } = setup()
+        onChange(path.resolve(cwd, 'app', 'Views', 'Home.tsx'))
+        mock.timers.tick(100)
+        assert.equal(sends.length, 0)
+      })
+    } finally {
+      mock.timers.reset()
+    }
+  })
+
+  it('ignores files outside the watched dirs', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      withMutedLog(() => {
+        const { onChange, sends } = setup()
+        onChange(path.resolve(cwd, 'node_modules', 'x', 'index.js'))
+        mock.timers.tick(100)
+        assert.equal(sends.length, 0)
+      })
+    } finally {
+      mock.timers.reset()
+    }
   })
 })
 
