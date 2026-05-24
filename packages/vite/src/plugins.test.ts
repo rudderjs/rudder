@@ -37,7 +37,12 @@ interface FakeServer {
   middlewares: MiddlewareStack
   watcher:     FakeWatcher
   httpServer:  { on(event: string, listener: (...args: unknown[]) => void): void } | null
-  environments: { ssr: { moduleGraph: { invalidateAll: () => void; invalidated: number } } }
+  environments: { ssr: { moduleGraph: {
+    invalidateAll: () => void
+    invalidated: number
+    getModulesByFile: (file: string) => undefined
+    invalidateModule: (mod: unknown) => void
+  } } }
   hot:         { sent: Array<{ type: string }>, send: (msg: { type: string }) => void }
 }
 
@@ -48,7 +53,15 @@ function makeServer(httpServer: FakeServer['httpServer'] = null): FakeServer {
     watcher:     new FakeWatcher(),
     httpServer,
     environments: {
-      ssr: { moduleGraph: { invalidateAll: () => { ssrInvalidations.invalidated++ }, invalidated: ssrInvalidations.invalidated } },
+      // getModulesByFile returns undefined → the watcher falls back to
+      // invalidateAll() (these tests cover the watcher wiring + fallback; the
+      // scoped-invalidation walk is unit-tested in index.test.ts).
+      ssr: { moduleGraph: {
+        invalidateAll: () => { ssrInvalidations.invalidated++ },
+        invalidated: ssrInvalidations.invalidated,
+        getModulesByFile: () => undefined,
+        invalidateModule: () => {},
+      } },
     },
     hot: {
       sent: [],

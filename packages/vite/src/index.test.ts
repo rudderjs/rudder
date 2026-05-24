@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import path from 'node:path'
 
-import { rudderjs } from './index.js'
+import { rudderjs, invalidateBackendSubtree } from './index.js'
 
 describe('@rudderjs/vite', () => {
   it('exports rudderjs function', () => {
@@ -171,5 +172,71 @@ describe('headersResponse', () => {
     const { headersResponse } = await import('./hooks/headersResponse.js')
     const headers = headersResponse({} as never)
     assert.deepEqual(headers, {})
+  })
+})
+
+// ─── invalidateBackendSubtree (Phase B1 scoped invalidation) ──
+
+describe('invalidateBackendSubtree', () => {
+  const cwd = path.resolve('/app')
+
+  // Minimal fake of Vite's EnvironmentModuleGraph + the importer-linked nodes.
+  type Node = { file: string; importers: Set<Node> }
+  function makeServer(files: Record<string, Node>) {
+    const invalidated: Node[] = []
+    const byFile = new Map<string, Set<Node>>()
+    for (const n of Object.values(files)) {
+      const set = byFile.get(n.file) ?? new Set<Node>()
+      set.add(n)
+      byFile.set(n.file, set)
+    }
+    const server = {
+      environments: { ssr: { moduleGraph: {
+        getModulesByFile: (f: string) => byFile.get(f),
+        invalidateModule: (m: Node) => { invalidated.push(m) },
+      } } },
+    }
+    return { server: server as never, invalidated, abs: (rel: string) => path.resolve(cwd, rel) }
+  }
+
+  it('walks the changed file up its importer chain to the bootstrap entry', () => {
+    const entry: Node = { file: path.resolve(cwd, 'bootstrap/app.ts'), importers: new Set() }
+    const route: Node = { file: path.resolve(cwd, 'routes/api.ts'), importers: new Set([entry]) }
+    const ctrl:  Node = { file: path.resolve(cwd, 'app/Http/Controllers/TestController.ts'), importers: new Set([route]) }
+    const { server, invalidated } = makeServer({ entry, route, ctrl })
+
+    const ok = invalidateBackendSubtree(server, ctrl.file, cwd)
+    assert.equal(ok, true)
+    assert.ok(invalidated.includes(ctrl),  'changed file invalidated')
+    assert.ok(invalidated.includes(route), 'importer (route) invalidated')
+    assert.ok(invalidated.includes(entry), 'bootstrap entry invalidated')
+  })
+
+  it('returns false when the file is not in the SSR graph (caller falls back to invalidateAll)', () => {
+    const { server, invalidated } = makeServer({})
+    const ok = invalidateBackendSubtree(server, path.resolve(cwd, 'app/Models/User.ts'), cwd)
+    assert.equal(ok, false)
+    assert.equal(invalidated.length, 0)
+  })
+
+  it('invalidates the bootstrap entry via the safety net even if the importer chain stops short', () => {
+    // ctrl's chain stops at route (route has no importers — simulates a
+    // non-analyzable dynamic import that left bootstrap/app.ts unlinked).
+    const entry: Node = { file: path.resolve(cwd, 'bootstrap/app.ts'), importers: new Set() }
+    const route: Node = { file: path.resolve(cwd, 'routes/api.ts'), importers: new Set() }
+    const ctrl:  Node = { file: path.resolve(cwd, 'app/Http/Controllers/TestController.ts'), importers: new Set([route]) }
+    const { server, invalidated } = makeServer({ entry, route, ctrl })
+
+    invalidateBackendSubtree(server, ctrl.file, cwd)
+    assert.ok(invalidated.includes(entry), 'safety net invalidates bootstrap/app.ts')
+  })
+
+  it('terminates on a circular importer graph', () => {
+    const a: Node = { file: path.resolve(cwd, 'app/a.ts'), importers: new Set() }
+    const b: Node = { file: path.resolve(cwd, 'app/b.ts'), importers: new Set() }
+    a.importers.add(b); b.importers.add(a) // cycle
+    const { server, invalidated } = makeServer({ a, b })
+    assert.doesNotThrow(() => invalidateBackendSubtree(server, a.file, cwd))
+    assert.ok(invalidated.includes(a) && invalidated.includes(b))
   })
 })
