@@ -110,3 +110,17 @@ for x in $(seq 1 8); do ( curl -s localhost:3003/new-admin/articles | grep -oc '
 # → some return 1 (empty-state) not 101; then no-edit steady-state stays 1 (wedged).
 ```
 Pilotiq stays on 2.7.1 (strictly better than 2.7.0); this residual tracked for a follow-up PR.
+
+---
+
+## Framework session 2026-05-25 — hypothesis #1 disproven, adapter-reuse fix landed
+
+Branch `fix/hmr-reboot-adapter-reuse` (core + orm-prisma; not yet merged).
+
+**Hypothesis #1 (concurrent `Application.create()` race) is FALSE — proven by trace.** Added `RUDDER_HMR_TRACE=1` construct counters to `Application.create()` (`application.ts`) and `AppBuilder.create()` (`app-builder.ts`). Live framework-playground run, flooding the re-boot window with 8 concurrent requests across 16 re-boots (incl. format-on-save double-writes): the counters climbed by **exactly 1 per re-boot** (`RudderJS construct #1…#17`, always paired with `Application construct #N`), never by 2. Vite's SSR module-runner dedupes the concurrent `bootstrap/app.ts` re-evaluation, and the synchronous globalThis guard + JS run-to-completion guarantee one instance per re-boot. **There is nothing to serialize at `create()` — drop suggested-direction #1.**
+
+**Wedge cause confirmed in source = the ORM adapter is never torn down on re-boot.** `DatabaseProvider.boot()` (`orm-prisma/src/index.ts`) calls `PrismaAdapter.make()` on every re-boot → `new PrismaClient(...)` + a fresh driver connection (`new PrismaBetterSqlite3`, a new pg/mariadb pool, …); the superseded client was never `$disconnect()`ed and there was no globalThis-cached client (the standard Prisma-HMR guard). Under Prisma 7's driver-adapter model the app owns this lifecycle and Prisma de-dupes nothing — updating 7.4.2 → 7.8.0 does **not** fix it.
+
+**Fix shipped (suggested-direction #2):** `PrismaAdapter.make()` now caches the live `PrismaClient` on `globalThis` keyed by connection signature (driver + url). Same signature → reuse the live client (zero new connections per edit); changed signature (a `config/database.ts` edit) → fresh client + `$disconnect()` the superseded one. No-op in production; `config.client` apps opt out. Regression test `packages/orm-prisma/src/client-reuse.test.ts` pins all three behaviours (reuse / disconnect-on-change / config.client opt-out).
+
+**Wedge NOT reproducible in the framework playground (SQLite).** The pilotiq repro (8-way flood) was run against the framework playground on **both** the unfixed and fixed builds — **all requests returned full data (posts=100) on both**, even at 16 accumulated re-boots, no steady-state wedge. So the wedge is specific to the pilotiq environment/load shape (its polling + data path, possibly MySQL vs SQLite), not a generic framework repro. The fix is correct in mechanism (unit-tested) and removes the per-re-boot connection churn that is the most plausible wedge cause, but **the wedge fix must be validated against the pilotiq playground** — a clean before/after there is the remaining confirmation. Extending the headless regression test to model the wedge (suggested-direction #3) is blocked on a deterministic repro, which the framework playground does not provide.

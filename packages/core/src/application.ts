@@ -93,6 +93,18 @@ export class Application {
     const g = globalThis as Record<string, unknown>
 
     if (!g['__rudderjs_app__']) {
+      // RUDDER_HMR_TRACE=1 — count fresh Application constructions. The dev HMR
+      // single-flight + request gate assume exactly ONE fresh Application per
+      // re-boot. A flood of concurrent requests landing after the watcher clears
+      // the globals should still construct only one (the globalThis guard + JS's
+      // single-threaded run-to-completion dedupe them). A count >1 within a
+      // re-boot window would mean concurrent `bootstrap/app.ts` re-evaluations
+      // are each racing past the guard — the open question in the reboot plan.
+      if (process.env['RUDDER_HMR_TRACE'] === '1') {
+        const n = ((g['__rudderjs_app_ctor_count__'] as number) ?? 0) + 1
+        g['__rudderjs_app_ctor_count__'] = n
+        console.log(`[hmr] Application construct #${n}`)
+      }
       g['__rudderjs_app__'] = new Application(config)
     }
     Application.instance = g['__rudderjs_app__'] as Application
