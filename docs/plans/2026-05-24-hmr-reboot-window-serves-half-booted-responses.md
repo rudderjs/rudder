@@ -3,7 +3,7 @@
 > **Correctness bug — falsifies the "No correctness bug" claim in `2026-05-24-hmr-dx-improvements.md` (line 7).**
 > That plan shipped scoped invalidation in `@rudderjs/vite@2.7.0` and reasoned only about the *single triggering* request. It did not account for **requests that arrive while the async re-bootstrap is still in flight** — those are served against a half-booted app and return empty data.
 
-**Status:** handoff from a pilotiq dev session, 2026-05-24. Framework pickup.
+**Status:** SHIPPED 2026-05-24 — all three levers implemented (`@rudderjs/core` + `@rudderjs/vite`, patch). See "Shipped" at the bottom.
 **Scope:** `@rudderjs/vite` (`rudderjs:routes` watcher) + `@rudderjs/core` (`Application.create()` globalThis caching / `_bootstrapProviders()` / `handleRequest`).
 **Severity:** **correctness** (dev shows empty data after a routine edit), not just DX.
 **Affected:** `@rudderjs/vite@2.7.0` (current). Any app that loads data in a provider-booted route handler (ORM queries) is exposed; visible in the pilotiq playground as empty resource tables.
@@ -39,6 +39,17 @@ Per the chain documented in `2026-05-24-hmr-dx-improvements.md` §"How the piece
 3. **A request arriving during that await** either (a) reads the freshly-cached-but-not-yet-booted instance (if `globalThis.__rudderjs_app__` is set *before* `boot()` completes), or (b) kicks off its own parallel `create()` + re-boot. Either way the `orm-prisma` provider's `boot()` hasn't finished → `app.make('prisma')` resolves to a not-ready/stale binding → the model query returns empty instead of throwing → empty table.
 4. No **debounce** on the watcher means editor atomic-save / format-on-save fires the whole sequence twice → two concurrent re-boots → larger/duplicated window.
 
+## Framework confirmation (rudder side, 2026-05-24 — verified against source)
+
+Confirmed the two unguarded spots, with one correction to the mechanism above:
+
+- **Double-fire — CONFIRMED.** `packages/vite/src/index.ts` `server.watcher.on('change', …)` has **no debounce**: every event runs clear-globals → `invalidateBackendSubtree` → `full-reload` immediately. Format-on-save / atomic-write (two writes ms apart) = two `change detected` = two concurrent re-boots. This is the reliable-repro trigger.
+- **Un-booted app published to the global — CONFIRMED.** `Application.create()` (`packages/core/src/application.ts:95`) sets `globalThis.__rudderjs_app__ = new Application(config)` at *construction*; `app.bootstrap()` runs later inside `_bootstrapProviders`. So `app()` points at an un-booted Application during the window. `RudderJS.handleRequest()` (`app-builder.ts:444-448`) DOES `await this._boot`, so a *single* re-boot is gated **for code that goes through that instance's handler** — but a *concurrent* re-boot (the double-fire) clears + swaps the globals out from under an in-flight request.
+- **No single-flight** on the re-boot: each `create()` after a globals-clear builds a fresh instance + Application and boots independently.
+- **CORRECTION to mechanism step 3:** the ORM does **not** resolve `app().make('prisma')` at query time. It reads a **globalThis-backed registry** `__rudderjs_orm_registry__` (`packages/orm/src/index.ts:92-116`) via `ModelRegistry.getAdapter()`. orm-prisma's `boot()` (`orm-prisma/src/index.ts:1231-1248`) does `ModelRegistry.set(adapter)`; nothing in the re-boot path calls `ModelRegistry.reset()`, so the **previous** adapter persists until the new boot overwrites it. So the empty render is **not** simply "un-booted app" — `getAdapter()` would otherwise *throw* (it errors on a null adapter, doesn't return empty). The empty almost certainly comes from the **double-fire** interacting with the Prisma client lifecycle (a concurrent re-boot building/connecting a new `PrismaAdapter` while an in-flight request queries) and/or `_store.adapter` being mid-swap. **This last link was not fully pinned statically — reproduce with `RUDDER_HMR_TRACE=1` + concurrent curls (the repro above) to confirm before finalizing lever 3.**
+
+**Takeaway:** lever 1 (debounce) is the safe, high-value first fix — it removes the double-fire that is the reliable trigger, independent of the exact empty path. Levers 2+3 are the deeper correctness fixes; confirm the empty mechanism via the repro first so lever 3 targets the real culprit (ORM-registry swap vs. un-booted-app publish).
+
 ## Proposed fix (three independent levers)
 
 1. **Debounce the watcher** (`@rudderjs/vite`, the `server.watcher.on('change')` handler): coalesce events within ~75–150ms so one save = one reload, regardless of atomic-write / format-on-save double events.
@@ -53,3 +64,17 @@ Per the chain documented in `2026-05-24-hmr-dx-improvements.md` §"How the piece
 ## Cross-repo context
 
 Pilotiq bumped `@rudderjs/vite` 2.0→2.7 (its `project_pilotiq_panel_hmr_data_loss_fix`) which fixed the **common single-edit** case (the coarse `invalidateAll` reboot was even more exposed). This race is the residual: it remains under format-on-save double-fire and immediate post-reload requests. No pilotiq-side fix is possible — the half-booted window is owned by `@rudderjs/core`'s reboot lifecycle.
+
+## Shipped (2026-05-24)
+
+All three levers landed. Branch `fix/hmr-reboot-window-half-booted`.
+
+1. **Debounce — `@rudderjs/vite` (`packages/vite/src/index.ts`).** The `rudderjs:routes` watcher now collects changed files into a `Set` and fires a single re-boot `100ms` after the last event in a burst (`performReboot()`, extracted + exported for unit testing). One save = one re-boot regardless of atomic-write / format-on-save double events. Tests: `performReboot` (multi-file invalidation, single full-reload, `invalidateAll` fallback, empty no-op) + watcher-debounce coalescing (via `node:test` `mock.timers`); the two pre-existing positive `plugins.test.ts` watcher tests now tick the debounce.
+
+2. **Single-flight — `@rudderjs/core` (`app-builder.ts` `RudderJS`).** The constructor now goes through `_singleFlightBootstrap()`, which chains each re-boot after the previous one via `globalThis.__rudderjs_boot__`. Concurrent re-boots run strictly serially, so no boot interleaves its `router.reset()` / `resetGroupMiddleware()` / provider boot / `ModelRegistry.set()` with another. No-op in production (single boot, `prev === undefined`).
+
+3. **Request gate — `@rudderjs/core` (`handleRequest()`).** After awaiting its own `_boot`, `handleRequest()` also awaits `globalThis.__rudderjs_boot__` when that points at a *newer* re-boot (a concurrent reload that started after this instance built its handler). In-window requests block on the latest boot instead of being served against half-booted shared state. No-op in the steady state and in production (`latest === this._providerBoot`).
+
+**Reproduction → regression test.** The flaky curl-flood repro was converted to a deterministic test (`packages/core/src/reboot-single-flight.test.ts`) modelling both invariants with gated provider boots (no Vite/DB needed): (a) a re-boot triggered while another is in flight does not start until the first finishes; (b) `handleRequest()` blocks until the latest in-flight re-boot completes. Both **failed against the unfixed code** and pass after. This is independent of the exact empty-data path (ORM-registry swap vs. PrismaClient lifecycle vs. un-booted-app publish — the lever-3 open question in "Framework confirmation"): serializing + gating removes the concurrent-reboot window entirely, so whichever path produced empty is closed.
+
+**Constraints kept:** no `server.restart()`; scoped invalidation (B1) untouched; `RUDDER_HMR_TRACE` instrumentation preserved (t0 is now taken at re-boot time, after the debounce settles, so the debounce delay isn't attributed to Vite's re-import).

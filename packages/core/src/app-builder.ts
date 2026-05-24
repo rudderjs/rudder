@@ -253,7 +253,46 @@ export class RudderJS {
     private readonly _mwFn?:   (m: MiddlewareConfigurator) => void,
     private readonly _excFn?:  (e: ExceptionConfigurator) => void,
   ) {
-    this._providerBoot = this._bootstrapProviders()
+    this._providerBoot = this._singleFlightBootstrap()
+  }
+
+  /**
+   * Single-flight the provider re-boot across concurrent dev HMR reloads.
+   *
+   * In dev, the @rudderjs/vite watcher clears `__rudderjs_instance__` +
+   * `__rudderjs_app__` on every change, so the next request re-evaluates
+   * `bootstrap/app.ts` and constructs a fresh `RudderJS` whose `boot()`
+   * resets + re-registers process-wide shared state — the router routes, the
+   * provider-group middleware store, and (via `orm-prisma`'s boot) the global
+   * `ModelRegistry` adapter. If a second re-boot is triggered while the first is
+   * still in flight (an editor's atomic-write / format-on-save double-fire, or
+   * any concurrent trigger), running the two boots in parallel let the second's
+   * `router.reset()` / `ModelRegistry.set()` interleave with the first — a
+   * request served in that window observed a half-booted graph and rendered
+   * empty data (e.g. resource tables showing their empty-state despite rows in
+   * the DB).
+   *
+   * The fix: chain each re-boot after the previous one via a promise published
+   * on `globalThis.__rudderjs_boot__`. Concurrent re-boots now run strictly
+   * serially, so no boot ever observes another mid-reset. `handleRequest()`
+   * gates on this same promise so in-window requests block on the latest boot
+   * instead of being served against half-booted state.
+   *
+   * In production there is exactly one boot, so `prev` is undefined and this is
+   * a no-op wrapper around `_bootstrapProviders()`.
+   */
+  private _singleFlightBootstrap(): Promise<void> {
+    const g = globalThis as Record<string, unknown>
+    const prev = g['__rudderjs_boot__'] as Promise<void> | undefined
+    const run = (async () => {
+      // Wait for any in-flight re-boot to fully finish before touching shared
+      // state. A prior boot's failure is its own concern (surfaced via its own
+      // request/handler) — swallow it here so it doesn't cascade into this one.
+      if (prev) { try { await prev } catch { /* prior boot owns its failure */ } }
+      await this._bootstrapProviders()
+    })()
+    g['__rudderjs_boot__'] = run
+    return run
   }
 
   private _suppressVikeNoise(): void {
@@ -444,6 +483,17 @@ export class RudderJS {
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
     if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot
+    // Dev HMR gate: a concurrent re-boot (watcher double-fire, or a reload that
+    // landed after this instance built its handler) may be mid-flight, resetting
+    // process-wide shared state — the router, the group-middleware store, the
+    // global ORM adapter registry. Block on the latest re-boot so we never serve
+    // against a half-booted graph (the "empty data after a routine edit" race).
+    // `__rudderjs_boot__` is this instance's own promise in the steady state and
+    // in production, so this is a no-op there.
+    const latest = (globalThis as Record<string, unknown>)['__rudderjs_boot__'] as Promise<void> | undefined
+    if (latest && latest !== this._providerBoot) {
+      try { await latest } catch { /* the newer boot owns its own failure */ }
+    }
     if (!this._handler) throw new Error('[RudderJS] Request handler not initialized.')
     return this._handler(request, env, ctx)
   }

@@ -122,6 +122,67 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
 }
 
 /**
+ * Re-bootstrap the dev SSR app after a watched file change: clear the two
+ * top-level singletons (so a fresh `RudderJS` + `Application` pair is built on
+ * the next request), invalidate the changed files' SSR subtrees, and tell the
+ * browser to do a full reload.
+ *
+ * Extracted from the watcher handler so the {@link rudderjs} `rudderjs:routes`
+ * plugin can run it once per *coalesced burst* of change events rather than
+ * once per raw event — see the debounce in `configureServer`. Coalescing is the
+ * primary guard against the "half-booted response" race: an atomic-write /
+ * format-on-save fires two `change` events ms apart, and firing this twice spun
+ * up two concurrent re-boots that stomped each other's shared state (router
+ * routes, ORM adapter registry), so a request landing in the window rendered
+ * empty data. One burst = one re-boot.
+ *
+ * @param files - absolute paths of every file changed during the burst.
+ */
+export function performReboot(server: ViteDevServer, files: string[], cwd: string): void {
+  if (files.length === 0) return
+
+  // RUDDER_HMR_TRACE=1 — segment the reload wall-clock. t0 is stashed on
+  // globalThis so @rudderjs/core's _bootstrapProviders() can measure the
+  // watcher→reimport gap (Vite/Vike re-fetch) and reboot→ready. t0 is taken at
+  // re-boot time (after the debounce settles), so the debounce delay is not
+  // attributed to Vite's re-import.
+  const trace = process.env['RUDDER_HMR_TRACE'] === '1'
+  const t0 = trace ? performance.now() : 0
+
+  // Clear the two top-level singletons so a new RudderJS + Application pair is
+  // created when the module re-executes. App files (models, resources,
+  // controllers) are captured in closures during bootstrap so they also need a
+  // full re-bootstrap to pick up changes.
+  const g = globalThis as Record<string, unknown>
+  if (trace) g['__rudderjs_hmr_t0__'] = t0
+  delete g['__rudderjs_instance__']
+  delete g['__rudderjs_app__']
+  const tCleared = trace ? performance.now() : 0
+
+  // Invalidate each changed file's import subtree (up to the bootstrap entry)
+  // so Vike re-executes bootstrap/app.ts and the edited modules on the next
+  // request, while framework packages and unrelated app modules stay warm.
+  // Falls back to invalidating the whole graph when any file isn't tracked in
+  // the SSR graph. Lighter than server.restart() and safe while requests are in
+  // flight.
+  let allScoped = true
+  for (const file of files) {
+    if (!invalidateBackendSubtree(server, file, cwd)) allScoped = false
+  }
+  if (!allScoped) server.environments.ssr.moduleGraph.invalidateAll()
+  const tInvalidated = trace ? performance.now() : 0
+
+  // Tell the browser to do a full page reload so it picks up the changes via a
+  // fresh SSR request.
+  server.hot.send({ type: 'full-reload' })
+  if (trace) {
+    console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms (${allScoped ? 'scoped' : 'all'})`)
+  }
+  const rel = files.map(f => path.relative(cwd, f) || f).join(', ')
+  console.log(`[RudderJS] change detected — reloading (${rel})`)
+}
+
+/**
  * Resolve a `watch` entry — a package name or an absolute directory — to a
  * directory to add to the dev file watcher. Package names resolve to the
  * package's `src/` when present (the dev source you edit), else the package
@@ -310,43 +371,34 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
         const allWatchDirs = [...watchDirs, ...extraDirs]
 
         for (const dir of allWatchDirs) server.watcher.add(dir)
+
+        // Coalesce a burst of change events into a single re-boot. An editor's
+        // atomic-write / format-on-save emits two `change` events for the same
+        // file ms apart; before the debounce each fired its own clear-globals +
+        // invalidate + full-reload, so two re-boots ran concurrently and stomped
+        // each other's shared state (router routes, ORM adapter registry) — a
+        // request landing in the window rendered empty data. With the debounce,
+        // one save = one re-boot. (Re-boots that still overlap — e.g. writes
+        // spaced wider than the window, or an in-flight request straddling the
+        // re-boot — are made safe by @rudderjs/core's single-flight boot + the
+        // handleRequest boot gate; this only removes the common trigger.)
+        const DEBOUNCE_MS = 100
+        const pending = new Set<string>()
+        let timer: ReturnType<typeof setTimeout> | undefined
         server.watcher.on('change', (file) => {
           if (!allWatchDirs.some(d => file.startsWith(d))) return
           if (file.startsWith(viewsRoot)) return
 
-          // RUDDER_HMR_TRACE=1 — segment the reload wall-clock. t0 is stashed on
-          // globalThis so @rudderjs/core's _bootstrapProviders() can measure the
-          // watcher→reimport gap (Vite/Vike re-fetch) and reboot→ready.
-          const trace = process.env['RUDDER_HMR_TRACE'] === '1'
-          const t0 = trace ? performance.now() : 0
-
-          // Clear the two top-level singletons so a new RudderJS + Application
-          // pair is created when the module re-executes. App files (models,
-          // resources, controllers) are captured in closures during bootstrap
-          // so they also need a full re-bootstrap to pick up changes.
-          const g = globalThis as Record<string, unknown>
-          if (trace) g['__rudderjs_hmr_t0__'] = t0
-          delete g['__rudderjs_instance__']
-          delete g['__rudderjs_app__']
-          const tCleared = trace ? performance.now() : 0
-
-          // Invalidate only the changed file's import subtree (up to the
-          // bootstrap entry) so Vike re-executes bootstrap/app.ts and the edited
-          // module on the next request, while framework packages and unrelated
-          // app modules stay warm. Falls back to invalidating the whole graph
-          // when the file isn't tracked in the SSR graph. Lighter than
-          // server.restart() and safe while requests are in flight.
-          const scoped = invalidateBackendSubtree(server, file, cwd)
-          if (!scoped) server.environments.ssr.moduleGraph.invalidateAll()
-          const tInvalidated = trace ? performance.now() : 0
-
-          // Tell the browser to do a full page reload so it picks up the
-          // changes via a fresh SSR request.
-          server.hot.send({ type: 'full-reload' })
-          if (trace) {
-            console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms (${scoped ? 'scoped' : 'all'})`)
-          }
-          console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)})`)
+          pending.add(file)
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => {
+            timer = undefined
+            const files = [...pending]
+            pending.clear()
+            performReboot(server, files, cwd)
+          }, DEBOUNCE_MS)
+          // Don't keep the dev process alive solely for a pending reload.
+          timer.unref?.()
         })
       },
     },

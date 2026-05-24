@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test'
+import { describe, it, beforeEach, afterEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import type { Plugin } from 'vite'
@@ -168,7 +168,14 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', path.join(cwd, 'routes', 'web.ts'))
+    // The re-boot is debounced — the effect lands after the window settles.
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      server.watcher.fire('change', path.join(cwd, 'routes', 'web.ts'))
+      mock.timers.tick(100)
+    } finally {
+      mock.timers.reset()
+    }
 
     const g = globalThis as Record<string, unknown>
     assert.equal(g['__rudderjs_instance__'], undefined)
@@ -221,7 +228,13 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
     let invalidated = 0
     server.environments.ssr.moduleGraph.invalidateAll = () => { invalidated++ }
 
-    server.watcher.fire('change', path.join(cwd, 'app', 'Models', 'User.ts'))
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      server.watcher.fire('change', path.join(cwd, 'app', 'Models', 'User.ts'))
+      mock.timers.tick(100)
+    } finally {
+      mock.timers.reset()
+    }
 
     const g = globalThis as Record<string, unknown>
     assert.equal(g['__rudderjs_instance__'], undefined, 'singleton cleared for model edits')
