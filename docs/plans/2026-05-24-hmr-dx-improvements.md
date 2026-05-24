@@ -1,5 +1,7 @@
 # Dev HMR DX — targeted invalidation, tiered reload, external-package HMR
 
+> **Status: shipped 2026-05-24.** Phase A (instrumentation) → PR #645. Phase B1 (scoped invalidation) → PR #646. Phase C (external-package `watch` + dev `noExternal`) → PR #648 (which also fixed a latent routes-loss regression B1 introduced). `@rudderjs/vite@2.7.0`. **Phase B2 (tiered reload) was deferred by design** — the Phase A measurement showed it would shave only ~56ms off a ~1100ms reload *and* is unsafe-by-default for apps that register routes in a provider `boot()` (e.g. pilotiq). The measured win came entirely from B1 (scoped invalidation): edit-to-ready ~1.1s → ~75ms, `watcher→reimport` ~911ms → ~50ms. The original plan text is kept below for the record.
+
 **Status:** plan, 2026-05-24. Pickup task for a framework session.
 **Scope:** `@rudderjs/vite` (`rudderjs:routes` plugin) + `@rudderjs/core` (`RudderJS._bootstrapProviders()` / re-boot lifecycle). Touches `@rudderjs/server-hono` only for instrumentation.
 **Severity:** DX / perf. No correctness bug — the current path is *correct* but blunt. Every backend edit triggers a full re-bootstrap of all 23 providers + a whole-graph SSR invalidation + a full browser reload.

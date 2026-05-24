@@ -243,6 +243,42 @@ Use **Vike pages** when the URL *is* the identity of the page — marketing, doc
 
 A site can have `pages/index/+Page.tsx` (Vike marketing home), `pages/blog/**` (file-based blog), and `app/Views/Dashboard.tsx` (controller-owned app), and SPA nav between all three works.
 
+## Hot reload in dev
+
+Rudder runs two reload tracks in `pnpm dev`:
+
+- **Frontend** — `app/Views/**`, `pages/**`, and any client component go through Vike + Vite's native HMR. The component swaps in place in ~50ms with no page reload and browser state preserved.
+- **Backend** — a change under `routes/`, `bootstrap/`, or `app/` (except `app/Views/`) re-bootstraps the app (every provider's `boot()` re-runs) and triggers a full browser reload. `@rudderjs/vite` invalidates only the edited file's import subtree — not the whole module graph — so the framework stays warm and the reload is fast.
+
+### Watching a linked package
+
+A package consumed from source that registers routes, views, or config in a service provider's `boot()` (e.g. a workspace/linked package in a monorepo) isn't under `app/`, so edits to it wouldn't trigger a reload. Opt it in:
+
+```ts
+// vite.config.ts
+import rudderjs from '@rudderjs/vite'
+
+export default defineConfig({
+  plugins: [
+    rudderjs({ watch: ['@your-scope/your-package'] }), // package name(s) or absolute dir(s)
+    // ...
+  ],
+})
+```
+
+Editing the watched package's source then re-bootstraps the app like an `app/` edit, no restart. Package-name entries are also pulled into the SSR module graph in dev (`ssr.noExternal`) so Vite re-evaluates them on change. A package with native dependencies that can't be transformed by Vite's SSR pipeline can't be watched this way — pass an absolute source directory instead and keep it externalized.
+
+### Diagnosing reload time
+
+Two env flags print timing to the dev log (zero overhead when unset):
+
+- `RUDDER_HMR_TRACE=1` — segments each reload (`watcher→reimport`, `reboot→ready`, invalidation).
+- `RUDDER_PERF_TRACE=2` — per-provider `boot()` timing (level `2` adds the per-provider lines to the level-`1` boot summary).
+
+```bash
+RUDDER_HMR_TRACE=1 RUDDER_PERF_TRACE=2 pnpm dev
+```
+
 ## Pure API mode
 
 Pages are optional. Omit the `pages/` directory and remove Vike from `vite.config.ts` — the Rudder server and routing work fine without any frontend.
