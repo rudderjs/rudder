@@ -1,5 +1,54 @@
 # @rudderjs/vite
 
+## 2.5.0
+
+### Minor Changes
+
+- 7710545: feat(vite): detect the `vike-react-rsc` renderer (React Server Components)
+
+  The view scanner now recognizes `vike-react-rsc` as a renderer alongside
+  `vike-react` / `vike-vue` / `vike-solid`. When it is the installed renderer, the
+  generated `app/Views/**` page is a React **server component** that reads
+  pageContext via `getPageContext()` from `vike-react-rsc/pageContext` — the
+  `usePageContext()` hook throws under the `react-server` condition. The
+  controller still injects `viewProps`, so `view('id', props)` keeps working.
+
+  `vike-react` and `vike-react-rsc` are mutually exclusive (both are React
+  renderers) — installing both raises the existing multiple-renderers error.
+
+  Opt-in / experimental: install `vike-react-rsc` instead of `vike-react`. The
+  default whole-page-hydration `vike-react` model is unchanged.
+
+- b58db48: feat(vite): RSC-compatible routes + framework hooks in the view scanner
+
+  When `vike-react-rsc` is the renderer, the view scanner now:
+
+  - pins each view's route via an inlined `route` value in its `+config.ts`
+    instead of a separate `+route.ts` module, and
+  - wires the RudderJS framework hooks (`onCreatePageContext`, `onError`,
+    `headersResponse`) via Vike `import:` strings in the generated view-root
+    `+config.ts` rather than physical `pages/+<hook>.ts` re-export stubs.
+
+  Both avoid `vike-react-rsc`'s client-bundle exclusion, which strips server-only
+  `+*.ts` project modules to `export default {}` — that otherwise broke Vike's
+  client router (route read as an object) and crashed hydration (the global
+  `onCreatePageContext` hook lost its export). Leaf-dir detection is now
+  framework-agnostic (any `+Page.*`, not only `+route.ts`).
+
+  No change for the `vike-react` / `vike-vue` / `vike-solid` renderers.
+
+### Patch Changes
+
+- 45745c7: fix(vite): dynamic-prerender codegen no longer fails `tsc` for the array form
+
+  The generated `+onBeforePrerenderStart.ts` called the imported `prerender`
+  symbol directly inside a `typeof source === 'function'` guard. When a view
+  declared `export const prerender = ['/a', '/b']` (a literal URL array), TS
+  narrowed the function branch to `never`, so `source()` raised
+  `TS2349: This expression is not callable`. The hook now normalizes the symbol
+  to a callable-or-array union before the runtime guard, so all three documented
+  forms (array, sync function, async function) type-check.
+
 ## 2.4.1
 
 ### Patch Changes
