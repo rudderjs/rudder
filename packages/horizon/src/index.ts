@@ -101,9 +101,21 @@ export class HorizonProvider extends ServiceProvider {
 
     if (!resolved.enabled) return
 
-      // ── Create storage ────────────────────────────────────
-      let storage: HorizonStorage
+    // ── One-time monitoring runtime (survives dev re-boots) ──
+    // boot() re-runs on every @rudderjs/vite dev re-boot; storage, the prune
+    // timer, and the collectors (MetricsCollector 60s + WorkerCollector 30s
+    // timers) are process-global. Rebuilding them per edit leaks the storage
+    // connection (Redis when storage:'redis' → maxclients exhaustion) + timers
+    // and re-subscribes the collectors to queueObservers (→ duplicate metric
+    // rows). Build once, keyed on globalThis, reuse across re-boots. Routes ARE
+    // re-registered every boot because router.reset() wipes them. No-op in production.
+    const g = globalThis as Record<string, unknown>
+    const RT_KEY = '__rudderjs_horizon_runtime__'
+    let runtime = g[RT_KEY] as { storage: HorizonStorage } | undefined
 
+    if (!runtime) {
+      // ── Create storage ──
+      let storage: HorizonStorage
       if (resolved.storage === 'sqlite') {
         storage = new SqliteStorage(resolved.sqlitePath)
       } else if (resolved.storage === 'redis') {
@@ -113,10 +125,7 @@ export class HorizonProvider extends ServiceProvider {
         storage = new MemoryStorage(resolved.maxJobs)
       }
 
-      HorizonRegistry.set(storage)
-      this.app.instance('horizon', storage)
-
-      // ── Misconfig warning ─────────────────────────────────
+      // ── Misconfig warning ──
       // BullMQ runs jobs in a separate process; with in-memory storage the
       // dashboard can't see the worker-process state transitions and every
       // job appears stuck at 'pending' forever. Surface this loudly so users
@@ -132,7 +141,7 @@ export class HorizonProvider extends ServiceProvider {
         }
       } catch { /* config read failure shouldn't block boot */ }
 
-      // ── Auto-prune ────────────────────────────────────────
+      // ── Auto-prune ──
       const pruneHours = resolved.pruneAfterHours
       if (pruneHours > 0) {
         const interval = Math.min(pruneHours * 60 * 60 * 1000, 3_600_000)
@@ -142,7 +151,7 @@ export class HorizonProvider extends ServiceProvider {
         timer.unref()
       }
 
-      // ── Register collectors ───────────────────────────────
+      // ── Register collectors (subscribe once per process) ──
       const metricsCollector = new MetricsCollector(storage, resolved.metricsIntervalMs)
       const jobCollector     = new JobCollector(storage, metricsCollector)
       const workerCollector  = new WorkerCollector(storage)
@@ -164,7 +173,15 @@ export class HorizonProvider extends ServiceProvider {
       }
       workerCollector.register()
 
-    // ── Register UI + API routes ──────────────────────────
+      runtime = { storage }
+      g[RT_KEY] = runtime
+    }
+
+    const { storage } = runtime
+    HorizonRegistry.set(storage)
+    this.app.instance('horizon', storage)
+
+    // ── Register UI + API routes (re-registered every boot; router.reset() wipes them) ──
     await registerHorizonRoutes(storage, {
       path:       resolved.path,
       ...(resolved.auth ? { auth: resolved.auth } : {}),

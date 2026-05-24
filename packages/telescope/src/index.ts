@@ -179,19 +179,30 @@ export class TelescopeProvider extends ServiceProvider {
 
     if (!resolved.enabled) return
 
-      // ── Create storage ────────────────────────────────────
-      let storage: TelescopeStorage
+    // ── One-time monitoring runtime (survives dev re-boots) ──
+    // boot() re-runs on every @rudderjs/vite dev re-boot. Storage, the prune
+    // timer, and the collectors are process-global infrastructure — rebuilding
+    // them per edit leaks a DB connection + a prune timer, and re-subscribes
+    // every collector to its peer observer registry (each a fresh closure the
+    // registry can't dedup → duplicate entries pile up per edit). Build them
+    // once, keyed on globalThis, and reuse across re-boots. Routes + request
+    // middleware ARE re-registered every boot below, because router.reset()
+    // wipes both. No-op cost in production (single boot).
+    const RT_KEY = '__rudderjs_telescope_runtime__'
+    let runtime = _g[RT_KEY] as
+      | { storage: TelescopeStorage; requestMiddleware: Array<ReturnType<RequestCollector['middleware']>> }
+      | undefined
 
+    if (!runtime) {
+      // ── Create storage ──
+      let storage: TelescopeStorage
       if (resolved.storage === 'sqlite') {
         storage = new SqliteStorage(resolved.sqlitePath)
       } else {
         storage = new MemoryStorage(resolved.maxEntries)
       }
 
-      TelescopeRegistry.set(storage)
-      this.app.instance('telescope', storage)
-
-      // ── Auto-prune on interval ────────────────────────────
+      // ── Auto-prune on interval ──
       const pruneHours = resolved.pruneAfterHours as number
       if (pruneHours > 0) {
         const interval = Math.min(pruneHours * 60 * 60 * 1000, 3_600_000)
@@ -202,9 +213,8 @@ export class TelescopeProvider extends ServiceProvider {
         timer.unref()
       }
 
-      // ── Register collectors ───────────────────────────────
+      // ── Register collectors (subscribe once per process) ──
       const collectors: Collector[] = []
-
       const requestCollector = new RequestCollector(storage, resolved)
       collectors.push(requestCollector)
 
@@ -231,15 +241,26 @@ export class TelescopeProvider extends ServiceProvider {
         await collector.register()
       }
 
-      // ── Register request middleware ───────────────────────
-      if (resolved.recordRequests) {
-        try {
-          const { router } = await import('@rudderjs/router')
-          router.use(requestCollector.middleware())
-        } catch {
-          // @rudderjs/router not available — request recording disabled
-        }
+      runtime = {
+        storage,
+        requestMiddleware: resolved.recordRequests ? [requestCollector.middleware()] : [],
       }
+      _g[RT_KEY] = runtime
+    }
+
+    const { storage } = runtime
+    TelescopeRegistry.set(storage)
+    this.app.instance('telescope', storage)
+
+    // ── Re-register every boot (router.reset() wiped routes + middleware) ──
+    if (runtime.requestMiddleware.length > 0) {
+      try {
+        const { router } = await import('@rudderjs/router')
+        for (const mw of runtime.requestMiddleware) router.use(mw)
+      } catch {
+        // @rudderjs/router not available — request recording disabled
+      }
+    }
 
     // ── Register UI + API routes ──────────────────────────
     const routeOpts: Parameters<typeof registerTelescopeRoutes>[1] = {}
