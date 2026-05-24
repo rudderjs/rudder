@@ -3,7 +3,7 @@
 > **Correctness bug — falsifies the "No correctness bug" claim in `2026-05-24-hmr-dx-improvements.md` (line 7).**
 > That plan shipped scoped invalidation in `@rudderjs/vite@2.7.0` and reasoned only about the *single triggering* request. It did not account for **requests that arrive while the async re-bootstrap is still in flight** — those are served against a half-booted app and return empty data.
 
-**Status:** SHIPPED 2026-05-24 — all three levers implemented (`@rudderjs/core` + `@rudderjs/vite`, patch). See "Shipped" at the bottom.
+**Status:** PARTIALLY SHIPPED — `@rudderjs/core@1.3.1` + `@rudderjs/vite@2.7.1` (#650/#651) fixed the single-request case, but **REOPENED 2026-05-25**: post-ship pilotiq E2E found concurrent requests during a reboot still race to empty and can wedge the ORM path permanently. See "Shipped" then "⚠️ REOPEN" at the bottom.
 **Scope:** `@rudderjs/vite` (`rudderjs:routes` watcher) + `@rudderjs/core` (`Application.create()` globalThis caching / `_bootstrapProviders()` / `handleRequest`).
 **Severity:** **correctness** (dev shows empty data after a routine edit), not just DX.
 **Affected:** `@rudderjs/vite@2.7.0` (current). Any app that loads data in a provider-booted route handler (ORM queries) is exposed; visible in the pilotiq playground as empty resource tables.
@@ -78,3 +78,35 @@ All three levers landed. Branch `fix/hmr-reboot-window-half-booted`.
 **Reproduction → regression test.** The flaky curl-flood repro was converted to a deterministic test (`packages/core/src/reboot-single-flight.test.ts`) modelling both invariants with gated provider boots (no Vite/DB needed): (a) a re-boot triggered while another is in flight does not start until the first finishes; (b) `handleRequest()` blocks until the latest in-flight re-boot completes. Both **failed against the unfixed code** and pass after. This is independent of the exact empty-data path (ORM-registry swap vs. PrismaClient lifecycle vs. un-booted-app publish — the lever-3 open question in "Framework confirmation"): serializing + gating removes the concurrent-reboot window entirely, so whichever path produced empty is closed.
 
 **Constraints kept:** no `server.restart()`; scoped invalidation (B1) untouched; `RUDDER_HMR_TRACE` instrumentation preserved (t0 is now taken at re-boot time, after the debounce settles, so the debounce delay isn't attributed to Vite's re-import).
+
+---
+
+## ⚠️ REOPEN — post-ship validation found a residual (pilotiq cross-repo E2E, 2026-05-25)
+
+Validated `@rudderjs/core@1.3.1` + `@rudderjs/vite@2.7.1` against the live pilotiq playground. **The common case is fixed, but the concurrent path is not** — the "removes the concurrent-reboot window entirely" claim above is too strong.
+
+**Fixed (confirmed):** the realistic **single-request** reload — format-on-save double-write edit → browser full-reload → one SSR request — was **6/6 clean** (steady-state 101 cells AND post-edit 101, 0 errors). 2.7.0 broke even this. Debounce + single-flight + gate clearly help.
+
+**NOT fixed (reproduced):** **concurrent requests landing in the reboot window still race to empty, and can WEDGE the server permanently.**
+- An 8-way concurrent flood through one reboot returned **3/8 empty** on a freshly-warmed, single-process server (no Vite `.build-*.mjs` ENOENT, no other error logged).
+- Worse: that concurrent load left the server **stuck empty at steady-state** — repeated no-edit requests kept returning the empty-state, **no error, no self-recovery** (only a process restart clears it). The app still served (`/_notifications` → 200), so it's specifically the **ORM/table-data path** that wedged, not a crash. This matches the original "table stops showing data and doesn't come back."
+
+**Why this is hit in practice, not just synthetic:** a real browser reload does NOT fire one request — it fires the document request **plus** the app's own polls **concurrently** (e.g. pilotiq's `databaseNotifications({ polling })` hits `/_notifications` alongside `/articles`). So 2–4 concurrent requests through the reboot window is the *normal* reload shape, not an edge case.
+
+**Hypothesis (gap the current levers miss):** the gate (`handleRequest` awaits `globalThis.__rudderjs_boot__`) and single-flight both assume **one fresh instance per reboot**. But after the watcher clears `__rudderjs_instance__`/`__rudderjs_app__`, several concurrent requests can each miss the globalThis cache and race into `Application.create()` *before* any of them publishes its boot promise — so the serialization/gate has nothing to await yet, and multiple instances build + each runs `ModelRegistry.set()`/PrismaClient init. The regression test (`reboot-single-flight.test.ts`) models **gated provider boots** but NOT this **concurrent `Application.create()` race to publish the globals** — which is why it's green while the live server still breaks.
+
+**Suggested direction:**
+1. **Serialize/queue instance *creation*, not just the boot** — concurrent post-clear requests must share ONE freshly-created instance + its boot promise (e.g. publish an in-flight `create()` promise to globalThis and have racers await it), so the gate always has something to block on.
+2. **Investigate the wedge** — a persistent stuck-empty ORM path (no error, survives steady-state) suggests `ModelRegistry`/`PrismaAdapter` left in a bad state after concurrent `ModelRegistry.set()` + PrismaClient (re)connect during reboot. Likely needs an atomic adapter swap and/or disconnect of the superseded client.
+3. **Extend the regression test** to model N concurrent requests racing `create()` after a globals-clear (not just gated boots), reproducing the wedge headlessly.
+
+**Repro (pilotiq playground, deps at 2.7.1):**
+```sh
+# warm a SINGLE fresh server first (kill ALL stray vike procs — orphans holding
+# :3003 silently route requests to a wedged old server and pollute results).
+sed -i '' "s/title: 'X'/title: 'Ya'/" app/Pilotiq/AdminPanel.ts; sleep 0.3   # format-on-save double-write
+sed -i '' "s/title: 'Ya'/title: 'Yb'/" app/Pilotiq/AdminPanel.ts
+for x in $(seq 1 8); do ( curl -s localhost:3003/new-admin/articles | grep -oc '</td>' ) & sleep 0.2; done; wait
+# → some return 1 (empty-state) not 101; then no-edit steady-state stays 1 (wedged).
+```
+Pilotiq stays on 2.7.1 (strictly better than 2.7.0); this residual tracked for a follow-up PR.
