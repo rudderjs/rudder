@@ -88,7 +88,14 @@ describe('views-scanner — framework detection', () => {
     assert.match(contents, /getPageContext\(\)/)
     assert.doesNotMatch(contents, /usePageContext/)
     assert.match(contents, /ViewComponent/)
-    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+route.ts')))
+    // RSC pins the route via an inlined `+config.ts` value, NOT a `+route.ts`
+    // module — vike-react-rsc's client exclusion would strip a `+route.ts`
+    // (replacing `export default '/'` with `export default {}`), breaking the
+    // client router. A string `route` in `+config.ts` is inlined into the page
+    // config instead. See `rscViewConfigSource`.
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '__view', 'home', '+route.ts')), '+route.ts should NOT exist for RSC')
+    const cfg = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+config.ts'), 'utf8')
+    assert.match(cfg, /route:\s*'\/home'/)
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+data.ts')))
   })
 

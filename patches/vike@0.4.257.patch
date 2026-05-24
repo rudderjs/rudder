@@ -1,0 +1,17 @@
+diff --git a/dist/node/vite/plugins/pluginDev/optimizeDeps.js b/dist/node/vite/plugins/pluginDev/optimizeDeps.js
+index 21465d0..5fe34d4 100644
+--- a/dist/node/vite/plugins/pluginDev/optimizeDeps.js
++++ b/dist/node/vite/plugins/pluginDev/optimizeDeps.js
+@@ -133,7 +133,11 @@ async function getPageDeps(config, pageConfigs) {
+     const addEntry = (e, isForClientSide, definedAt) => {
+         assert(e);
+         // optimizeDeps.entries expects filesystem absolute paths
+-        assert(isVirtualFileId(e) || isFilePathAbsoluteFilesystem(e));
++        // RudderJS patch: an extension's `client` config can resolve to a bare
++        // package specifier (e.g. vike-react-rsc/...), which is neither virtual
++        // nor absolute. Upstream asserts and crashes RSC dev; skip it instead —
++        // Vite resolves such imports on demand (see vike's own getPageDeps note).
++        if (!isVirtualFileId(e) && !isFilePathAbsoluteFilesystem(e)) return;
+         if (isExcluded(e, isForClientSide, definedAt))
+             return;
+         if (isForClientSide) {

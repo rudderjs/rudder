@@ -5,6 +5,7 @@ packages:
   - create-rudder
   - playground
   - playground-web
+  - playground-rsc
   - docs
 
 onlyBuiltDependencies: sharp

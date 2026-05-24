@@ -1,0 +1,61 @@
+{
+  "name": "vike-react-rsc",
+  "version": "1.0.0",
+  "description": "Vendored fork of vike-react-rsc (React Server Components for Vike). See VENDORED.md.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown --clean",
+    "dev": "tsdown --watch --sourcemap"
+  },
+  "exports": {
+    "./config": "./dist/config.js",
+    "./server": "./dist/server.js",
+    "./client": "./dist/client.js",
+    "./pageContext": {
+      "react-server": "./dist/hooks/pageContext/pageContext-server.js",
+      "default": "./dist/hooks/pageContext/pageContext-client.js"
+    },
+    "./__internal/integration/onRenderHtml": "./dist/integration/onRenderHtml.js",
+    "./__internal/integration/onRenderClient": "./dist/integration/onRenderClient.js",
+    "./__internal/integration/onBeforeRender": "./dist/integration/onBeforeRender.js",
+    "./__internal/integration/onPageTransitionStart": "./dist/integration/onPageTransitionStart.js",
+    "./__internal/integration/rscMiddleware": "./dist/integration/rscMiddleware.js",
+    "./__internal/integration/client": "./dist/integration/client.js",
+    "./__internal/register/browser": "./dist/register/browser.js",
+    "./__internal/register/server": "./dist/register/server.js",
+    "./__internal/register/ssr": "./dist/register/ssr.js",
+    "./__internal/runtime/server": "./dist/runtime/server.js",
+    "./__internal/runtime/ssr": "./dist/runtime/ssr.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "*",
+    "react-dom": "*",
+    "vike": "*",
+    "vite": "*"
+  },
+  "dependencies": {
+    "@brillout/json-serializer": "^0.5.15",
+    "@brillout/vite-plugin-server-entry": "^0.7.5",
+    "@hiogawa/transforms": "^0.0.0",
+    "@hiogawa/utils": "^1.7.0",
+    "@universal-middleware/core": "^0.4.17",
+    "@vitejs/plugin-rsc": "0.5.1",
+    "react-streaming": "^0.4.12"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsdown": "^0.6.10",
+    "typescript": "^5.4.0",
+    "vike": "^0.4.257",
+    "vite": "^7.2.0",
+    "vitefu": "^1.1.1"
+  }
+}
