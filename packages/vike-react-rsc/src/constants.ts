@@ -1,1 +1,1 @@
-export const PKG_NAME = "vike-react-rsc";
+export const PKG_NAME = "vike-react-rsc-rudder";

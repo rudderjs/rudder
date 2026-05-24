@@ -242,10 +242,11 @@ jobs:
         run: pnpm --filter create-rudder smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}
 
   rsc-e2e:
-    # React Server Components (vike-react-rsc) is an opt-in renderer built on a
-    # vendored fork + vike version-compat shims (see packages/vike-react-rsc/
-    # VENDORED.md). It's fragile to vike / @vitejs/plugin-rsc bumps and to a
-    # re-vendor, so this gate builds `playground-rsc` for PRODUCTION and drives a
+    # React Server Components (vike-react-rsc-rudder) is an opt-in renderer:
+    # a RudderJS-maintained fork of upstream vike-react-rsc + vike version-compat
+    # shims (see packages/vike-react-rsc/README.md). It's fragile to vike /
+    # @vitejs/plugin-rsc bumps and to an upstream re-sync, so this gate builds
+    # `playground-rsc` for PRODUCTION and drives a
     # headless browser through the SSR render + the `"use server"` action
     # round-trip. A red here means a dep bump or a scanner/server-hono change
     # broke RSC — caught in CI instead of in a user's app. (playground-rsc is not

@@ -5,30 +5,30 @@ import vikeRscPlugin from "./plugin";
 
 //@ts-expect-error
 const config: Config = {
-  name: "vike-react-rsc",
+  name: "vike-react-rsc-rudder",
   require: {
     vike: ">=0.4.182",
   },
   // https://vike.dev/onRenderHtml
   onRenderHtml:
-    "import:vike-react-rsc/__internal/integration/onRenderHtml:onRenderHtml",
+    "import:vike-react-rsc-rudder/__internal/integration/onRenderHtml:onRenderHtml",
   // https://vike.dev/onRenderClient
   onRenderClient:
-    "import:vike-react-rsc/__internal/integration/onRenderClient:onRenderClient",
+    "import:vike-react-rsc-rudder/__internal/integration/onRenderClient:onRenderClient",
 
   onBeforeRender:
-    "import:vike-react-rsc/__internal/integration/onBeforeRender:onBeforeRender",
+    "import:vike-react-rsc-rudder/__internal/integration/onBeforeRender:onBeforeRender",
 
   onPageTransitionStart:
-    "import:vike-react-rsc/__internal/integration/onPageTransitionStart:onPageTransitionStart",
+    "import:vike-react-rsc-rudder/__internal/integration/onPageTransitionStart:onPageTransitionStart",
 
-  // RudderJS vendor change: vike >=0.4.257 requires config import strings to
+  // RudderJS fork change: vike >=0.4.257 requires config import strings to
   // name the export (`:default`); the upstream 1.0.0 (built against 0.4.246)
-  // omitted it, which crashes vike's dev optimizeDeps. See VENDORED.md.
-  client: "import:vike-react-rsc/__internal/integration/client:default",
+  // omitted it, which crashes vike's dev optimizeDeps. See README.
+  client: "import:vike-react-rsc-rudder/__internal/integration/client:default",
 
   //@ts-expect-error
-  middleware: "import:vike-react-rsc/__internal/integration/rscMiddleware:default",
+  middleware: "import:vike-react-rsc-rudder/__internal/integration/rscMiddleware:default",
 
   passToClient: ["rscPayloadString"],
 

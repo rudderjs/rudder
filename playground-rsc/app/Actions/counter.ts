@@ -1,6 +1,6 @@
 'use server'
 
-import { rerender } from 'vike-react-rsc/server'
+import { rerender } from 'vike-react-rsc-rudder/server'
 
 export interface CounterState {
   count:      number

@@ -1,9 +1,29 @@
 {
-  "name": "vike-react-rsc",
+  "name": "vike-react-rsc-rudder",
   "version": "1.0.0",
-  "description": "Vendored fork of vike-react-rsc (React Server Components for Vike). See VENDORED.md.",
-  "private": true,
+  "description": "React Server Components for Vike — RudderJS-maintained fork of vike-react-rsc by nitedani (MIT). See README.",
   "type": "module",
+  "author": "nitedani (original); RudderJS (fork)",
+  "homepage": "https://github.com/rudderjs/rudder/tree/main/packages/vike-react-rsc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudderjs/rudder.git",
+    "directory": "packages/vike-react-rsc"
+  },
+  "bugs": {
+    "url": "https://github.com/rudderjs/rudder/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "vike",
+    "rsc",
+    "react-server-components",
+    "react",
+    "ssr",
+    "rudderjs"
+  ],
   "scripts": {
     "build": "tsdown --clean",
     "dev": "tsdown --watch --sourcemap"

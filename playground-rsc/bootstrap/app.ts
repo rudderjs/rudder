@@ -6,7 +6,7 @@ import configs from '../config/index.ts'
 import providers from './providers.ts'
 
 // Minimal RudderJS app for the React Server Components demo. No auth/ORM/cache —
-// just routing + view() rendering through Vike + vike-react-rsc.
+// just routing + view() rendering through Vike + vike-react-rsc-rudder.
 export default Application.configure({
   server:    hono(configs.server),
   config:    configs,

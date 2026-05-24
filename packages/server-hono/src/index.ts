@@ -851,7 +851,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       // Pass Vike's config-declared middlewares (https://vike.dev/middleware) so
       // they mount as their OWN routes ahead of the catch-all, rather than only
       // being dispatched from inside the catch-all's renderPageServer. This is
-      // load-bearing for React Server Components: vike-react-rsc declares a
+      // load-bearing for React Server Components: vike-react-rsc-rudder declares a
       // `/_rsc` middleware that itself calls renderPageServer — reachable only via
       // the catch-all, that becomes a *re-entrant* renderPageServer (catch-all
       // renderPageServer → dispatch `/_rsc` → renderPageServer again), which trips
