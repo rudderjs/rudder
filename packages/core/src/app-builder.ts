@@ -274,6 +274,17 @@ export class RudderJS {
   /** Phase 1 — boot providers + routes. Safe in CLI (no Vike virtual URLs). */
   private async _bootstrapProviders(): Promise<void> {
     this._suppressVikeNoise()
+    // RUDDER_HMR_TRACE=1 — when this boot was triggered by a dev file-watch
+    // reload, `__rudderjs_hmr_t0__` carries the watcher-event timestamp (set by
+    // @rudderjs/vite's rudderjs:routes plugin). Attribute the wall-clock to the
+    // Vite re-import gap (watcher→reimport) vs. our re-boot (reboot→ready).
+    const g = globalThis as Record<string, unknown>
+    const hmrT0 = g['__rudderjs_hmr_t0__']
+    const hmrTrace = process.env['RUDDER_HMR_TRACE'] === '1' && typeof hmrT0 === 'number'
+    const tStart = hmrTrace ? performance.now() : 0
+    if (hmrTrace && typeof hmrT0 === 'number') {
+      console.log(`[hmr] watcher→reimport ${(tStart - hmrT0).toFixed(1)}ms`)
+    }
     if (this._app.isDevelopment()) {
       rudder.reset()
       const { router } = await import('@rudderjs/router') as { router: { reset(): void } }
@@ -288,6 +299,10 @@ export class RudderJS {
     // slower for ≤4 loaders and keeps the group context correct.
     for (const loader of this._loaders) await loader()
     if (this._app.isDevelopment()) this._printDevBootLog()
+    if (hmrTrace) {
+      console.log(`[hmr] reboot→ready ${(performance.now() - tStart).toFixed(1)}ms`)
+      delete g['__rudderjs_hmr_t0__']
+    }
     console.log('[RudderJS] ready')
   }
 

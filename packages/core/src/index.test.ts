@@ -670,6 +670,50 @@ describe('RudderJS.middlewareSnapshot()', () => {
   })
 })
 
+// ─── RUDDER_HMR_TRACE marker (Phase A instrumentation) ───────
+
+describe('RUDDER_HMR_TRACE re-boot marker', () => {
+  const G = globalThis as Record<string, unknown>
+  const bootOf = (i: unknown) => (i as { _providerBoot: Promise<void> })._providerBoot
+
+  beforeEach(() => {
+    reset()
+    resetGroupMiddleware()
+    delete G['__rudderjs_instance__']
+    delete G['__rudderjs_hmr_t0__']
+  })
+
+  it('clears __rudderjs_hmr_t0__ after a traced reboot — no leak into the next boot', async () => {
+    const prev = process.env['RUDDER_HMR_TRACE']
+    process.env['RUDDER_HMR_TRACE'] = '1'
+    G['__rudderjs_hmr_t0__'] = performance.now()
+    try {
+      const instance = Application.configure({ server: {} as never }).create()
+      await bootOf(instance)
+      assert.strictEqual(G['__rudderjs_hmr_t0__'], undefined)
+    } finally {
+      if (prev === undefined) delete process.env['RUDDER_HMR_TRACE']
+      else process.env['RUDDER_HMR_TRACE'] = prev
+    }
+  })
+
+  it('leaves the marker untouched when the flag is off (zero overhead)', async () => {
+    const prev = process.env['RUDDER_HMR_TRACE']
+    delete process.env['RUDDER_HMR_TRACE']
+    const sentinel = performance.now()
+    G['__rudderjs_hmr_t0__'] = sentinel
+    try {
+      const instance = Application.configure({ server: {} as never }).create()
+      await bootOf(instance)
+      // Flag off → the trace path never runs, so it neither reads nor clears the marker.
+      assert.strictEqual(G['__rudderjs_hmr_t0__'], sentinel)
+    } finally {
+      delete G['__rudderjs_hmr_t0__']
+      if (prev !== undefined) process.env['RUDDER_HMR_TRACE'] = prev
+    }
+  })
+})
+
 // ─── ExceptionConfigurator ────────────────────────────────
 
 describe('ExceptionConfigurator', () => {

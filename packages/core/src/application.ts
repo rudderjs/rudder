@@ -275,10 +275,15 @@ export class Application {
 
   private async _bootAll(): Promise<void> {
     this._booting = true
+    // RUDDER_PERF_TRACE=2 — per-provider boot timing. Surfaces which providers
+    // dominate the re-boot on a dev HMR reload (see RUDDER_HMR_TRACE).
+    const deepTrace = process.env['RUDDER_PERF_TRACE'] === '2'
     for (const provider of this.providers) {
       if (this._bootedProviders.has(provider)) continue
       try {
+        const tp = deepTrace ? performance.now() : 0
         await provider.boot?.()
+        if (deepTrace) console.log(`[perf]   ${provider.constructor.name} boot ${(performance.now() - tp).toFixed(1)}ms`)
         this._bootedProviders.add(provider)
       } catch (err) {
         const name  = provider.constructor.name
@@ -295,7 +300,9 @@ export class Application {
 
   async bootstrap(): Promise<this> {
     if (this.booted) return this
-    const trace = process.env['RUDDER_PERF_TRACE'] === '1'
+    // Level 2 implies the level-1 summary (and adds per-provider lines in _bootAll).
+    const traceLevel = process.env['RUDDER_PERF_TRACE']
+    const trace = traceLevel === '1' || traceLevel === '2'
     const t0 = trace ? performance.now() : 0
     this._registerAll()
     const t1 = trace ? performance.now() : 0
