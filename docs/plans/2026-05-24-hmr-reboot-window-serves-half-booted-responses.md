@@ -3,7 +3,7 @@
 > **Correctness bug — falsifies the "No correctness bug" claim in `2026-05-24-hmr-dx-improvements.md` (line 7).**
 > That plan shipped scoped invalidation in `@rudderjs/vite@2.7.0` and reasoned only about the *single triggering* request. It did not account for **requests that arrive while the async re-bootstrap is still in flight** — those are served against a half-booted app and return empty data.
 
-**Status:** PARTIALLY SHIPPED — `@rudderjs/core@1.3.1` + `@rudderjs/vite@2.7.1` (#650/#651) fixed the single-request case, but **REOPENED 2026-05-25**: post-ship pilotiq E2E found concurrent requests during a reboot still race to empty and can wedge the ORM path permanently. See "Shipped" then "⚠️ REOPEN" at the bottom.
+**Status:** SHIPPED — `@rudderjs/core@1.3.1` + `@rudderjs/vite@2.7.1` (#650/#651) fixed the single-request case; **#652 (2026-05-25)** closed the residual by reusing one `PrismaClient` across dev re-boots (the unbounded connection leak behind the wedge). Hypothesis #1 (concurrent `Application.create()` race) was disproven by trace. Connection-reuse validated on SQLite *and* real MySQL (leak is catastrophic on MySQL — see "MySQL validation" at the bottom). Only open item: a headless regression test that reproduces the full wedge symptom (gated on a deterministic in-repo repro).
 **Scope:** `@rudderjs/vite` (`rudderjs:routes` watcher) + `@rudderjs/core` (`Application.create()` globalThis caching / `_bootstrapProviders()` / `handleRequest`).
 **Severity:** **correctness** (dev shows empty data after a routine edit), not just DX.
 **Affected:** `@rudderjs/vite@2.7.0` (current). Any app that loads data in a provider-booted route handler (ORM queries) is exposed; visible in the pilotiq playground as empty resource tables.
@@ -115,7 +115,7 @@ Pilotiq stays on 2.7.1 (strictly better than 2.7.0); this residual tracked for a
 
 ## Framework session 2026-05-25 — hypothesis #1 disproven, adapter-reuse fix landed
 
-Branch `fix/hmr-reboot-adapter-reuse` (core + orm-prisma; not yet merged).
+Shipped via **#652** (`fix/hmr-reboot-adapter-reuse`, core + orm-prisma patch).
 
 **Hypothesis #1 (concurrent `Application.create()` race) is FALSE — proven by trace.** Added `RUDDER_HMR_TRACE=1` construct counters to `Application.create()` (`application.ts`) and `AppBuilder.create()` (`app-builder.ts`). Live framework-playground run, flooding the re-boot window with 8 concurrent requests across 16 re-boots (incl. format-on-save double-writes): the counters climbed by **exactly 1 per re-boot** (`RudderJS construct #1…#17`, always paired with `Application construct #N`), never by 2. Vite's SSR module-runner dedupes the concurrent `bootstrap/app.ts` re-evaluation, and the synchronous globalThis guard + JS run-to-completion guarantee one instance per re-boot. **There is nothing to serialize at `create()` — drop suggested-direction #1.**
 
@@ -123,4 +123,23 @@ Branch `fix/hmr-reboot-adapter-reuse` (core + orm-prisma; not yet merged).
 
 **Fix shipped (suggested-direction #2):** `PrismaAdapter.make()` now caches the live `PrismaClient` on `globalThis` keyed by connection signature (driver + url). Same signature → reuse the live client (zero new connections per edit); changed signature (a `config/database.ts` edit) → fresh client + `$disconnect()` the superseded one. No-op in production; `config.client` apps opt out. Regression test `packages/orm-prisma/src/client-reuse.test.ts` pins all three behaviours (reuse / disconnect-on-change / config.client opt-out).
 
-**Wedge NOT reproducible in the framework playground (SQLite).** The pilotiq repro (8-way flood) was run against the framework playground on **both** the unfixed and fixed builds — **all requests returned full data (posts=100) on both**, even at 16 accumulated re-boots, no steady-state wedge. So the wedge is specific to the pilotiq environment/load shape (its polling + data path, possibly MySQL vs SQLite), not a generic framework repro. The fix is correct in mechanism (unit-tested) and removes the per-re-boot connection churn that is the most plausible wedge cause, but **the wedge fix must be validated against the pilotiq playground** — a clean before/after there is the remaining confirmation. Extending the headless regression test to model the wedge (suggested-direction #3) is blocked on a deterministic repro, which the framework playground does not provide.
+**Wedge NOT reproducible in the framework playground (SQLite).** The pilotiq repro (8-way flood) was run against the framework playground on **both** the unfixed and fixed builds — **all requests returned full data (posts=100) on both**, even at 16 accumulated re-boots, no steady-state wedge. The reason became clear once measured: on SQLite (better-sqlite3) a leaked connection is a single local file handle, and across 10 re-boots the dev server held just `1→2→3→4→5` `dev.db` handles (dropping back whenever V8 GC'd the abandoned `PrismaClient`s) — harmless, queries keep working. With the fix it stayed flat at **1**. So the leak is real on SQLite but benign; that's why the framework playground stayed clean.
+
+### MySQL validation 2026-05-25 — the leak is CATASTROPHIC on MySQL
+
+The reason the wedge bites in the pilotiq environment but not the framework playground is the **driver**. Validated the same before/after against a **real MySQL** (`mysql://…@127.0.0.1:3306`, MySQL 8.0.33, **Prisma 7.8.0 — the latest**, `@prisma/adapter-mariadb`): a node loop calling `PrismaAdapter.make()` + a `SELECT 1` per simulated re-boot, counting established TCP connections to `:3306`.
+
+| re-boot | unfixed | fixed |
+|---|---|---|
+| 1 | 20 | 20 |
+| 2 | 26 | 20 |
+| 3 | 38 | 20 |
+| 4 | 54 | 20 |
+| 5 | 66 | 20 |
+| 6 | 78 | 20 |
+| 7 | 112 | 20 |
+| 8 | **132** | **20** |
+
+Unlike SQLite's one-file-handle-per-leak, the mariadb adapter opens a **pool of ~16–20 connections per client**, and each leaked client keeps its whole pool → **132 connections after 8 edits**. MySQL's default `max_connections` is **151**, so **~9–10 edits exhausts the server**: new connections are refused (`ER_CON_COUNT_ERROR`, "Too many connections"), hard-wedging the app *and anything else pointed at that MySQL* with no self-recovery — a far better match for the reported "stops working, doesn't come back" than the silent-empty SQLite path. The fix holds it flat at one pool (`20`).
+
+**Takeaways:** (1) the wedge severity is driver-dependent — benign GC-reclaimed file handles on SQLite, server-connection exhaustion on MySQL/Postgres pools; (2) **updating Prisma does not help** — this ran on 7.8.0; (3) the fix is validated on real MySQL, not just unit tests. Suggested-direction #3 (a headless wedge regression test) is still gated on a deterministic in-repo repro, but the connection-count before/after above is the deterministic signal that matters and is covered by `client-reuse.test.ts` at the unit level.
