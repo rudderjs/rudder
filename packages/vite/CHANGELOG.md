@@ -1,5 +1,19 @@
 # @rudderjs/vite
 
+## 2.7.0
+
+### Minor Changes
+
+- 93742eb: Dev HMR: add a `watch` option to hot-reload linked/workspace packages, and fix a routes-loss regression in the scoped invalidation.
+
+  **`rudderjs({ watch: ['@scope/pkg'] })`** — watch extra packages (or absolute dirs) for dev HMR. Editing a watched package's source now re-bootstraps the app like an `app/` edit, with no server restart — for packages that register routes, views, or config in a service provider's `boot()`. Package-name entries are also added to `ssr.noExternal` **in dev only**, so Vite owns them in the SSR module graph and re-evaluates them on change (Node's ESM import cache can't be evicted, so an externalized package would otherwise keep re-reading its stale source). Resolution is exports-agnostic — it finds the package directory without tripping `ERR_PACKAGE_PATH_NOT_EXPORTED` on ESM-only packages — and resolves through pnpm/workspace symlinks to the realpath.
+
+  **Fix (regression from the scoped-invalidation change):** the dev re-boot calls `router.reset()` and re-runs the route loaders, which re-import `routes/*.ts`. After scoped invalidation, a backend edit that didn't touch a route's import chain (a `bootstrap/`, `config/`, or unrelated `app/` file) left those route modules cached, so they never re-ran their registration and every loader-registered route 404'd until a route file was edited or the server restarted. The route loader modules are now always re-evaluated on a re-boot.
+
+### Patch Changes
+
+- 44bef3c: Dev HMR: scope SSR invalidation to the edited file's import subtree instead of dumping the whole module graph. On a backend edit (`routes/`, `bootstrap/`, `app/`), the `rudderjs:routes` plugin now invalidates only the changed file + its transitive importers (up to the bootstrap entry), leaving framework packages and unrelated app modules warm — so Vike's runner re-fetches far less on the next request. Measured on the playground: edit-to-ready dropped from ~1.1s to ~75ms (`watcher→reimport` ~911ms → ~45ms). Falls back to the previous whole-graph invalidation when the changed file isn't tracked in the SSR graph, so behaviour is never worse. Dev-only; no production-build or API change.
+
 ## 2.6.0
 
 ### Minor Changes
