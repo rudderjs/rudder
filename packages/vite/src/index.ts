@@ -1,5 +1,5 @@
 import path from 'node:path'
-import type { Plugin } from 'vite'
+import type { EnvironmentModuleNode, Plugin, ViteDevServer } from 'vite'
 import { viewsScannerPlugin } from './views-scanner.js'
 import { routesScannerPlugin } from './routes-scanner.js'
 
@@ -45,6 +45,48 @@ const SSR_EXTERNALS = [
 const SSR_NO_EXTERNALS = [
   '@rudderjs/server-hono',
 ]
+
+// ─── Scoped SSR invalidation (dev HMR) ─────────────────────
+
+/**
+ * Invalidate only the changed file's SSR module + its transitive importers
+ * (the import chain up to `bootstrap/app.ts` and the Vike server entry), instead
+ * of the whole SSR graph. The reload wall-clock is dominated by Vike's runner
+ * re-fetching invalidated modules (~900ms with `invalidateAll()`); scoping the
+ * set to the edited subtree keeps framework packages and unrelated app modules
+ * warm so far less is re-fetched. Run `RUDDER_HMR_TRACE=1` to see the win.
+ *
+ * The re-boot itself only happens when `bootstrap/app.ts` re-evaluates (its
+ * top-level `create()` rebuilds the cleared singletons), so we explicitly
+ * invalidate the bootstrap entry as a safety net in case a non-analyzable
+ * dynamic import means the importer walk doesn't reach it.
+ *
+ * Returns false when the changed file isn't in the SSR graph at all
+ * (externalized package, or never-yet-imported) — the caller falls back to
+ * `invalidateAll()` so behaviour is never worse than before.
+ */
+export function invalidateBackendSubtree(server: ViteDevServer, file: string, cwd: string): boolean {
+  const mg = server.environments.ssr.moduleGraph
+  const changed = mg.getModulesByFile(file)
+  if (!changed || changed.size === 0) return false
+
+  const walked = new Set<EnvironmentModuleNode>()
+  const walk = (mod: EnvironmentModuleNode): void => {
+    if (walked.has(mod)) return
+    walked.add(mod)
+    mg.invalidateModule(mod)
+    for (const importer of mod.importers) walk(importer)
+  }
+  for (const mod of changed) walk(mod)
+
+  // Safety net: guarantee the bootstrap entry re-evaluates even if the importer
+  // chain didn't reach it (e.g. a route loader's dynamic import wasn't linked).
+  for (const entry of ['bootstrap/app.ts', '+server.ts']) {
+    const mods = mg.getModulesByFile(path.resolve(cwd, entry))
+    if (mods) for (const mod of mods) walk(mod)
+  }
+  return true
+}
 
 // ─── Main plugin ───────────────────────────────────────────
 
@@ -210,18 +252,21 @@ export function rudderjs(): Plugin[] {
           delete g['__rudderjs_app__']
           const tCleared = trace ? performance.now() : 0
 
-          // Invalidate all SSR modules so Vike re-executes bootstrap/app.ts
-          // (and transitively all app code) on the next request. This is
-          // lighter than server.restart() and avoids closing the module runner
-          // while requests may still be in flight.
-          server.environments.ssr.moduleGraph.invalidateAll()
+          // Invalidate only the changed file's import subtree (up to the
+          // bootstrap entry) so Vike re-executes bootstrap/app.ts and the edited
+          // module on the next request, while framework packages and unrelated
+          // app modules stay warm. Falls back to invalidating the whole graph
+          // when the file isn't tracked in the SSR graph. Lighter than
+          // server.restart() and safe while requests are in flight.
+          const scoped = invalidateBackendSubtree(server, file, cwd)
+          if (!scoped) server.environments.ssr.moduleGraph.invalidateAll()
           const tInvalidated = trace ? performance.now() : 0
 
           // Tell the browser to do a full page reload so it picks up the
           // changes via a fresh SSR request.
           server.hot.send({ type: 'full-reload' })
           if (trace) {
-            console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms`)
+            console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms (${scoped ? 'scoped' : 'all'})`)
           }
           console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)})`)
         })
