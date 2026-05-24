@@ -1,8 +1,19 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 
-import { rudderjs, invalidateBackendSubtree } from './index.js'
+import { rudderjs, invalidateBackendSubtree, resolveWatchDir } from './index.js'
+
+/** Walk up from the test cwd (dist-test/) to the pnpm workspace root. */
+function repoRootDir(): string {
+  let dir = process.cwd()
+  while (dir !== path.dirname(dir)) {
+    if (existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir
+    dir = path.dirname(dir)
+  }
+  throw new Error('workspace root (pnpm-workspace.yaml) not found')
+}
 
 describe('@rudderjs/vite', () => {
   it('exports rudderjs function', () => {
@@ -32,7 +43,9 @@ describe('@rudderjs/vite', () => {
   it('rudderjs:config returns correct config shape', async () => {
     const plugins = await rudderjs()
     const configPlugin = plugins.find(p => p.name === 'rudderjs:config')!
-    const config = (configPlugin.config as () => Record<string, unknown>)()
+    const config = (configPlugin.config as (c: unknown, e: { command: string; mode: string }) => Record<string, unknown>)(
+      {}, { command: 'serve', mode: 'development' },
+    )
 
     // Check resolve alias (array format: [{ find, replacement }])
     assert.ok(config.resolve, 'should have resolve')
@@ -194,6 +207,7 @@ describe('invalidateBackendSubtree', () => {
       environments: { ssr: { moduleGraph: {
         getModulesByFile: (f: string) => byFile.get(f),
         invalidateModule: (m: Node) => { invalidated.push(m) },
+        fileToModulesMap: byFile,
       } } },
     }
     return { server: server as never, invalidated, abs: (rel: string) => path.resolve(cwd, rel) }
@@ -238,5 +252,71 @@ describe('invalidateBackendSubtree', () => {
     const { server, invalidated } = makeServer({ a, b })
     assert.doesNotThrow(() => invalidateBackendSubtree(server, a.file, cwd))
     assert.ok(invalidated.includes(a) && invalidated.includes(b))
+  })
+
+  it('always re-evaluates route loader modules even when the changed file does not import them', () => {
+    // A config/ edit (or bootstrap/, or unrelated app file): in the graph but
+    // with no import link to the route file. The dev re-boot calls
+    // router.reset() and re-runs the loaders, so routes/*.ts MUST re-evaluate
+    // or every loader-registered route 404s. (Regression for the latent bug
+    // B1's scoped invalidation introduced for non-route-touching edits.)
+    const cfg:   Node = { file: path.resolve(cwd, 'config/app.ts'), importers: new Set() }
+    const route: Node = { file: path.resolve(cwd, 'routes/api.ts'), importers: new Set() }
+    const { server, invalidated } = makeServer({ cfg, route })
+
+    invalidateBackendSubtree(server, cfg.file, cwd)
+    assert.ok(invalidated.includes(cfg),   'changed config file invalidated')
+    assert.ok(invalidated.includes(route), 'route loader module invalidated via the routes/ sweep')
+  })
+})
+
+// ─── watch option (Phase C — external-package HMR) ────────────
+
+describe('resolveWatchDir', () => {
+  const repoRoot = repoRootDir()
+  // Resolve from the playground, which depends on the @rudderjs/* workspace
+  // packages (they aren't resolvable from @rudderjs/vite's own context).
+  const playground = path.join(repoRoot, 'playground')
+
+  it('returns an existing absolute directory as-is', () => {
+    assert.equal(resolveWatchDir(process.cwd(), repoRoot), process.cwd())
+  })
+
+  it('returns null for a non-existent absolute directory', () => {
+    assert.equal(resolveWatchDir(path.resolve('/no/such/dir/xyz'), repoRoot), null)
+  })
+
+  it('returns null for an unresolvable package name', () => {
+    assert.equal(resolveWatchDir('@rudderjs/does-not-exist-xyz', playground), null)
+  })
+
+  it('resolves an ESM-only workspace package to its real src/ dir (exports-agnostic)', () => {
+    // @rudderjs/contracts has no CJS "exports" main — require.resolve(name) would
+    // throw ERR_PACKAGE_PATH_NOT_EXPORTED; resolveWatchDir must still find it.
+    // A non-null result is already known to exist (resolveWatchDir checks).
+    const dir = resolveWatchDir('@rudderjs/contracts', playground)
+    assert.ok(dir, 'should resolve @rudderjs/contracts')
+    assert.ok(dir!.replace(/\\/g, '/').endsWith('/src'), `expected a src/ dir, got ${dir}`)
+    assert.ok(!dir!.includes('node_modules'), 'should be the realpath, not the node_modules symlink')
+  })
+})
+
+describe('rudderjs({ watch }) → ssr.noExternal', () => {
+  const callConfig = (plugins: Awaited<ReturnType<typeof rudderjs>>, command: 'serve' | 'build') => {
+    const cfg = plugins.find(p => p.name === 'rudderjs:config')!
+    return (cfg.config as (c: unknown, e: { command: string; mode: string }) => { ssr: { noExternal: string[] } })(
+      {}, { command, mode: command === 'serve' ? 'development' : 'production' },
+    )
+  }
+
+  it('adds package-name watch entries to ssr.noExternal in dev (serve) only', async () => {
+    const plugins = await rudderjs({ watch: ['@pilotiq/pilotiq'] })
+    assert.ok(callConfig(plugins, 'serve').ssr.noExternal.includes('@pilotiq/pilotiq'), 'dev includes it')
+    assert.ok(!callConfig(plugins, 'build').ssr.noExternal.includes('@pilotiq/pilotiq'), 'build excludes it')
+  })
+
+  it('does not add absolute-dir watch entries to ssr.noExternal', async () => {
+    const plugins = await rudderjs({ watch: [path.resolve('/some/abs/dir')] })
+    assert.ok(!callConfig(plugins, 'serve').ssr.noExternal.includes(path.resolve('/some/abs/dir')))
   })
 })
