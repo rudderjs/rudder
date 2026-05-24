@@ -30,10 +30,26 @@ the `@rudderjs/vite` view scanner detects it and the generated code's bare
   `devDependencies` to `dependencies` (the build externalizes it, so consumers
   need it at runtime); `react` / `react-dom` / `vite` / `vike` dev pins aligned
   to the RudderJS monorepo versions.
+- `src/config.ts`: config import strings name the export (`:default`) — vike
+  ≥0.4.257 requires it; the upstream 1.0.0 (built against 0.4.246) omitted it,
+  which crashed vike's dev `optimizeDeps`.
+- `src/config.ts`: the SSR build's `rollupOptions.input` also includes Vike's
+  server entry (`entry: serverEntryVirtualId`). Upstream targets `vike-server`
+  (no `+server.ts`); RudderJS uses the `+server.ts` → `app.fetch` model, where
+  `@brillout/vite-plugin-server-entry` needs that entry — otherwise the
+  production build fails with "Cannot find build server entry".
+- `src/plugin/plugins/injectManifestBuild.ts`: the page-entry virtual id was
+  renamed by vike (`virtual:vike:pageConfigValuesAll:server:` →
+  `virtual:vike:page-entry:server:`, vike ≥0.4.257). Without the rename the
+  production RSC manifest is empty and rendering 500s ("Cannot read properties
+  of undefined (reading 'getConfig')"). The module shape (`configValuesSerialized`)
+  is unchanged.
 - Added this file and `LICENSE` (the upstream repo ships no `LICENSE` file
   despite declaring MIT in `package.json`).
 
-Source is otherwise unmodified. Build: `tsdown --clean` (→ `dist/`).
+Source is otherwise unmodified. Build: `tsdown --clean` (→ `dist/`). The vike
+version-compat patches above (config import strings, the page-entry virtual id)
+should be re-checked whenever vike is bumped.
 
 ## Updating
 
