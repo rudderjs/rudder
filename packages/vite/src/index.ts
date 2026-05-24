@@ -194,23 +194,35 @@ export function rudderjs(): Plugin[] {
           if (!watchDirs.some(d => file.startsWith(d))) return
           if (file.startsWith(viewsRoot)) return
 
+          // RUDDER_HMR_TRACE=1 — segment the reload wall-clock. t0 is stashed on
+          // globalThis so @rudderjs/core's _bootstrapProviders() can measure the
+          // watcher→reimport gap (Vite/Vike re-fetch) and reboot→ready.
+          const trace = process.env['RUDDER_HMR_TRACE'] === '1'
+          const t0 = trace ? performance.now() : 0
+
           // Clear the two top-level singletons so a new RudderJS + Application
           // pair is created when the module re-executes. App files (models,
           // resources, controllers) are captured in closures during bootstrap
           // so they also need a full re-bootstrap to pick up changes.
           const g = globalThis as Record<string, unknown>
+          if (trace) g['__rudderjs_hmr_t0__'] = t0
           delete g['__rudderjs_instance__']
           delete g['__rudderjs_app__']
+          const tCleared = trace ? performance.now() : 0
 
           // Invalidate all SSR modules so Vike re-executes bootstrap/app.ts
           // (and transitively all app code) on the next request. This is
           // lighter than server.restart() and avoids closing the module runner
           // while requests may still be in flight.
           server.environments.ssr.moduleGraph.invalidateAll()
+          const tInvalidated = trace ? performance.now() : 0
 
           // Tell the browser to do a full page reload so it picks up the
           // changes via a fresh SSR request.
           server.hot.send({ type: 'full-reload' })
+          if (trace) {
+            console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms`)
+          }
           console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)})`)
         })
       },
