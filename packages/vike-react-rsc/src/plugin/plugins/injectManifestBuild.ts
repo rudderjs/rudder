@@ -29,9 +29,15 @@ export function vikeRscManifestPluginBuild(): Plugin {
 
                 const chunk = output as OutputChunk;
 
-                // Check if this is a page entry
+                // Check if this is a page entry.
+                // RudderJS vendor change: vike renamed this virtual id from
+                // `virtual:vike:pageConfigValuesAll:server:` to
+                // `virtual:vike:page-entry:server:` (vike >=0.4.257). Without
+                // this, the production RSC manifest is empty and rendering 500s
+                // with "Cannot read properties of undefined (reading 'getConfig')".
+                // The module shape (`configValuesSerialized`) is unchanged. See VENDORED.md.
                 if (chunk.isEntry && chunk.facadeModuleId) {
-                    const pageId = chunk.facadeModuleId.split('virtual:vike:pageConfigValuesAll:server:')[1];
+                    const pageId = chunk.facadeModuleId.split('virtual:vike:page-entry:server:')[1];
                     if (pageId) {
                         pageEntries[chunk.name] = {
                             chunkName: chunk.name,

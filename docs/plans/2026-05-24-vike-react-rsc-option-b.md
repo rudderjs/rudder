@@ -83,9 +83,14 @@ This was the Option-A routing assumption resurfacing: Phase 3 found `renderPageS
 
 Two upstream vike bugs are still worth filing: the `err = err` typo in `loadPageConfigsLazyClientSideAndExecHook`, and the `getTagSource` assert under re-entrant `renderPageServer` (it shouldn't `[Bug]` even if a renderer re-enters).
 
-### Still open: production build (B2)
+### Production build (B2) — ✅ also fixed (2026-05-24)
 
-Dev render + actions work. The **production build** (`vike build`) still fails at `@brillout/vite-plugin-server-entry` ("cannot find server entry") — unchanged, see B2. The dev-logger crash above was dev-only, so the action would also work in a fixed prod build.
+The **production build now works end-to-end too**: `vike build` completes, and `node dist/server/index.mjs` server-renders the RSC view + round-trips actions (`GET /` → 200, `POST /_rsc` → 200, count 0→1→2, controller props through, zero errors). Two vendored vike-version-compat fixes (the vendored copy was built against vike ~0.4.246; we run 0.4.257):
+
+1. **Build completion.** `@brillout/vite-plugin-server-entry` couldn't find the server entry: it injects `{ entry: serverEntryVirtualId }` into the *base* config, but vike-react-rsc's env-level `environments.ssr.build.rollupOptions.input = { ssr }` override wiped it. Fix (`packages/vike-react-rsc/src/plugin/plugins/config.ts`): include `entry: serverEntryVirtualId` in that SSR input so Vike's `+server.ts` server entry is built alongside the RSC SSR runtime → `dist/server/index.mjs` is emitted.
+2. **Runtime manifest.** With the build completing, `node dist/server/index.mjs` 500'd: `Cannot read properties of undefined (reading 'getConfig')` — the production RSC page-config manifest was empty. vike renamed the page-entry virtual id (`virtual:vike:pageConfigValuesAll:server:` → `virtual:vike:page-entry:server:`); the vendored `injectManifestBuild.ts` matched the old one and found zero pages. Fix: match the new id (module shape `configValuesSerialized` is unchanged).
+
+Both are documented in `packages/vike-react-rsc/VENDORED.md` and flagged to re-check on any vike bump. Dev path (B0/B0.1) re-smoke-tested green after the (build-only) vendored changes.
 
 ### Disk state after B0.1 (uncommitted, on `feat/rsc-phase4-playground`)
 
