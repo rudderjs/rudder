@@ -9,10 +9,18 @@ below.
 ## Why this fork exists
 
 The working version of the upstream package (`1.0.0`) lives **only** in the
-GitHub repository — npm has nothing but a `0.0.0` stub published in 2024-04, and
-the upstream "Publish?" request ([issue #3](https://github.com/nitedani/vike-react-rsc/issues/3),
-2025-11-13) is unanswered. RudderJS's RSC integration needs an installable,
-versioned package, so we publish this maintained fork.
+GitHub repository — npm has nothing but a `0.0.0` stub published in 2024-04.
+RudderJS's RSC integration needs an installable, versioned package, so we
+publish this maintained fork.
+
+> **This fork is temporary.** In the upstream "Publish?" thread
+> ([issue #3](https://github.com/nitedani/vike-react-rsc/issues/3)), nitedani
+> plans to rebuild `vike-react-rsc` as a thin layer over the official
+> [`@vitejs/plugin-rsc`](https://www.npmjs.com/package/@vitejs/plugin-rsc),
+> dropping the custom code this fork patches. When that lands and is published,
+> we deprecate this fork and adopt the official package. Treat it as
+> **experimental** in the meantime — `vike-react` remains RudderJS's default
+> renderer.
 
 ### Why the name isn't `@rudderjs/…`
 
@@ -35,6 +43,29 @@ and generates RSC page stubs that import from whichever is installed.
 - Upstream: https://github.com/nitedani/vike-react-rsc
 - Forked at commit: `094054c7649d70707b8f5749ca3e22e33a67801f` (2025-12-06,
   upstream `main` HEAD as of forking)
+
+## Supported versions
+
+RSC is fragile to `vike` / `@vitejs/plugin-rsc` / `vite` bumps and to an
+upstream re-sync. These are the versions the integration is **verified green**
+against (via the required `RSC E2E` check in CI — `playground-rsc` built for
+production, driven through SSR render + a `"use server"` action round-trip):
+
+| Dependency | Verified | Pinned where | Why it's load-bearing |
+|---|---|---|---|
+| `vike` | `0.4.257` | root `pnpm.overrides` (exact) + `patches/vike@0.4.257.patch` | the `+server.ts` `server` config + the dev `optimizeDeps` patch both target this exact version |
+| `@vitejs/plugin-rsc` | `0.5.1` | this package's `dependencies` + `playground-rsc` (exact) | must resolve to a **single instance** — a forked realpath inlines its CJS vendor and crashes SSR (`module is not defined`) |
+| `vite` | `7.3.1` | `^7.3.0` (floats) — gated by `RSC E2E`, not frozen | minor bumps can shift the SSR module-runner / optimizer behavior RSC depends on |
+| `rolldown` | `1.0.0-beta.8` | root `pnpm.overrides` `tsdown>rolldown` (exact) | newer rolldown breaks `tsdown`'s build of this package |
+| `@types/node` | `20.19.35` | root `pnpm.overrides` (exact) | a 20-vs-24 split forks `vite` → `vike` → `@vitejs/plugin-rsc` into two instances |
+| `react` / `react-dom` | `19.2.4` | `^19.2.0` | RSC requires React ≥ 19.2 |
+| `react-streaming` | `0.4.17` | `^0.4.12` | RSC payload streaming |
+
+**Bump policy:** change one axis at a time and only land it behind a **green
+`RSC E2E`** (a required status check on `main`). `vite` is intentionally *not*
+frozen monorepo-wide — the gate catches an RSC-breaking bump rather than
+freezing every package's `vite`. Because this fork is temporary (see above),
+this matrix is an interim safeguard, not a long-term commitment.
 
 ## Changes from upstream
 
