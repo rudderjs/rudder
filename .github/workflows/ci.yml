@@ -240,3 +240,62 @@ jobs:
 
       - name: Scaffold + boot + render-check
         run: pnpm --filter create-rudder smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}
+
+  rsc-e2e:
+    # React Server Components (vike-react-rsc) is an opt-in renderer built on a
+    # vendored fork + vike version-compat shims (see packages/vike-react-rsc/
+    # VENDORED.md). It's fragile to vike / @vitejs/plugin-rsc bumps and to a
+    # re-vendor, so this gate builds `playground-rsc` for PRODUCTION and drives a
+    # headless browser through the SSR render + the `"use server"` action
+    # round-trip. A red here means a dep bump or a scanner/server-hono change
+    # broke RSC — caught in CI instead of in a user's app. (playground-rsc is not
+    # in the build-test matrix's build filter, so this is its only CI coverage.)
+    name: RSC E2E
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read Playwright version
+        id: playwright
+        # Same cache key shape as scaffolder-e2e — both pin playwright 1.x, so
+        # the chromium binary is shared across both jobs.
+        run: |
+          version=$(node -p "require('./playground-rsc/package.json').devDependencies.playwright.replace(/^[^0-9]*/, '')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter rudderjs-playground-rsc exec playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter rudderjs-playground-rsc exec playwright install-deps chromium
+
+      - name: Build packages + playground-rsc (production)
+        run: pnpm turbo run build --filter='./packages/*' --filter='rudderjs-playground-rsc'
+
+      - name: RSC render + action E2E (production)
+        run: pnpm --filter rudderjs-playground-rsc test:e2e
