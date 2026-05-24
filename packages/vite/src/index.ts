@@ -1,7 +1,27 @@
 import path from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import type { EnvironmentModuleNode, Plugin, ViteDevServer } from 'vite'
 import { viewsScannerPlugin } from './views-scanner.js'
 import { routesScannerPlugin } from './routes-scanner.js'
+
+/** Options for the {@link rudderjs} Vite plugin. */
+export interface RudderjsOptions {
+  /**
+   * Extra packages (or absolute directories) to watch for dev HMR. Use this to
+   * hot-reload a linked/workspace package that registers routes, views, or
+   * config in a service provider's `boot()` (e.g. `@pilotiq/pilotiq`) — editing
+   * its source then re-bootstraps the app like an `app/` edit, with no restart.
+   *
+   * Package-name entries are also added to `ssr.noExternal` **in dev only**, so
+   * Vite owns them in the SSR module graph and re-evaluates them on change
+   * (Node's ESM import cache can't be evicted, so an externalized package would
+   * otherwise re-read its stale source). A package with native deps that can't
+   * be transformed by Vite SSR can't be watched this way — pass an absolute
+   * source dir instead and keep it externalized.
+   */
+  watch?: string[]
+}
 
 // ─── SSR / build externals ─────────────────────────────────
 
@@ -85,7 +105,50 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
     const mods = mg.getModulesByFile(path.resolve(cwd, entry))
     if (mods) for (const mod of mods) walk(mod)
   }
+
+  // Always re-evaluate the route loader modules. The dev re-boot calls
+  // router.reset() then re-runs the loaders (which re-import routes/*.ts); a
+  // cached route module won't re-run its registration side-effects, so its
+  // routes would be cleared and never re-added (404 on every route). The
+  // changed file's subtree only covers route files in *its* import chain, so an
+  // edit elsewhere (bootstrap/, config/, an unrelated app file, or a watched
+  // package) would otherwise drop all loader-registered routes. There are only
+  // a handful of route files, so re-evaluating them on every re-boot is cheap.
+  const routesPrefix = path.resolve(cwd, 'routes') + path.sep
+  for (const [file, mods] of mg.fileToModulesMap) {
+    if (file.startsWith(routesPrefix)) for (const mod of mods) walk(mod)
+  }
   return true
+}
+
+/**
+ * Resolve a `watch` entry — a package name or an absolute directory — to a
+ * directory to add to the dev file watcher. Package names resolve to the
+ * package's `src/` when present (the dev source you edit), else the package
+ * root. Returns null when the entry can't be resolved (caller warns + skips).
+ */
+export function resolveWatchDir(entry: string, cwd: string): string | null {
+  if (path.isAbsolute(entry)) return existsSync(entry) ? entry : null
+  try {
+    // Find the package's directory WITHOUT triggering Node's "exports"
+    // restrictions: require.resolve(name) throws ERR_PACKAGE_PATH_NOT_EXPORTED
+    // for ESM-only packages (every @rudderjs/* package, and the linked packages
+    // this option targets). Walk the node_modules search paths instead and read
+    // the directory directly. realpathSync resolves the pnpm/workspace symlink
+    // so the watched path matches the realpath Vite keys its module graph by.
+    const require = createRequire(path.join(cwd, 'package.json'))
+    for (const base of require.resolve.paths(entry) ?? []) {
+      const pkgDir = path.join(base, entry)
+      if (existsSync(path.join(pkgDir, 'package.json'))) {
+        const real = realpathSync(pkgDir)
+        const src  = path.join(real, 'src')
+        return existsSync(src) ? src : real
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // ─── Main plugin ───────────────────────────────────────────
@@ -121,7 +184,11 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
  *   plugins: [rudderjs(), vike(), tailwindcss(), react()],
  * })
  */
-export function rudderjs(): Plugin[] {
+export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
+  const watchEntries = opts.watch ?? []
+  // Package-name entries (not absolute dirs) are pulled into the SSR graph in
+  // dev so Vite re-evaluates them on change — see RudderjsOptions.watch.
+  const watchPackages = watchEntries.filter(e => !path.isAbsolute(e))
   return [
     viewsScannerPlugin(),
     routesScannerPlugin(),
@@ -231,9 +298,20 @@ export function rudderjs(): Plugin[] {
         // first request after an edit to ~600ms cold SSR. Skip them here.
         const viewsRoot = path.resolve(cwd, 'app', 'Views')
 
-        for (const dir of watchDirs) server.watcher.add(dir)
+        // Opt-in extra dirs (the `watch` option) — a linked package that
+        // registers routes/views/config in a provider boot(). Edits there
+        // re-bootstrap the app exactly like an app/ edit.
+        const extraDirs: string[] = []
+        for (const entry of watchEntries) {
+          const dir = resolveWatchDir(entry, cwd)
+          if (dir) { extraDirs.push(dir); console.log(`[RudderJS] watching package source: ${path.relative(cwd, dir) || dir}`) }
+          else console.warn(`[RudderJS] watch: could not resolve "${entry}" — skipped.`)
+        }
+        const allWatchDirs = [...watchDirs, ...extraDirs]
+
+        for (const dir of allWatchDirs) server.watcher.add(dir)
         server.watcher.on('change', (file) => {
-          if (!watchDirs.some(d => file.startsWith(d))) return
+          if (!allWatchDirs.some(d => file.startsWith(d))) return
           if (file.startsWith(viewsRoot)) return
 
           // RUDDER_HMR_TRACE=1 — segment the reload wall-clock. t0 is stashed on
@@ -288,7 +366,13 @@ export function rudderjs(): Plugin[] {
         config.logger.warn     = (msg, opts) => { if (!filter(msg)) origWarn(msg, opts) }
         config.logger.warnOnce = (msg, opts) => { if (!filter(msg)) origWarnOnce(msg, opts) }
       },
-      config() {
+      config(_config, env) {
+        // Watched packages join ssr.noExternal in DEV only, so Vite owns them
+        // in the SSR module graph and re-evaluates them on change. In build we
+        // leave externalization untouched.
+        const noExternal = env.command === 'serve'
+          ? [...SSR_NO_EXTERNALS, ...watchPackages]
+          : SSR_NO_EXTERNALS
         return {
           resolve: {
             alias: [
@@ -310,7 +394,7 @@ export function rudderjs(): Plugin[] {
           },
           ssr: {
             external: SSR_EXTERNALS,
-            noExternal: SSR_NO_EXTERNALS,
+            noExternal,
           },
           build: {
             rollupOptions: {
