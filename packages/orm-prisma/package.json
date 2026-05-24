@@ -37,7 +37,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/vector.test.js dist-test/doctor.test.js dist-test/non-id-primary-key.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/vector.test.js dist-test/doctor.test.js dist-test/non-id-primary-key.test.js dist-test/client-reuse.test.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {

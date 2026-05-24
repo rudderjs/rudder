@@ -227,6 +227,19 @@ export class AppBuilder {
     const g = globalThis as Record<string, unknown>
     if (g['__rudderjs_instance__']) return g['__rudderjs_instance__'] as RudderJS
 
+    // RUDDER_HMR_TRACE=1 — count fresh RudderJS constructions. Each fresh
+    // instance kicks off a re-boot (its constructor calls _singleFlightBootstrap).
+    // The single-flight + handleRequest gate assume one fresh instance per
+    // re-boot; a count climbing by >1 within one re-boot window means concurrent
+    // re-evaluations are racing past the globalThis guard before the first
+    // publishes — the residual the reboot plan flags. Paired with the
+    // Application construct trace so the two guards can be compared.
+    if (process.env['RUDDER_HMR_TRACE'] === '1') {
+      const n = ((g['__rudderjs_instance_ctor_count__'] as number) ?? 0) + 1
+      g['__rudderjs_instance_ctor_count__'] = n
+      console.log(`[hmr] RudderJS construct #${n}`)
+    }
+
     const app = Application.create({
       ...(this._options.config    && { config:    this._options.config }),
       ...(this._options.providers && { providers: this._options.providers }),

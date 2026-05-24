@@ -26,6 +26,56 @@ type PrismaClientWithEvents = PrismaClient & {
   $on(event: string, listener: (e: unknown) => void): void
 }
 
+// ─── Dev HMR: PrismaClient reuse across re-boots ───────────
+//
+// In dev, the @rudderjs/vite watcher re-bootstraps the app on every `app/`
+// edit, which re-runs `DatabaseProvider.boot()` → `PrismaAdapter.make()`. Before
+// this cache, each re-boot built a brand-new PrismaClient and opened a fresh
+// driver connection (a new better-sqlite3 handle on dev.db, a new pg/mariadb
+// pool, …) every time — and never disconnected the superseded one. Abandoned
+// connections piled up across edits and, under concurrent load, wedged the read
+// path to empty rows with no error and no self-recovery (only a process restart
+// cleared it). See docs/plans/2026-05-24-hmr-reboot-window-serves-half-booted-responses.md.
+//
+// Prisma performs no HMR de-duplication of its own — under the Prisma 7
+// driver-adapter model the app owns the client lifecycle, and the documented
+// pattern is to cache one client on globalThis (`globalThis.prisma ??= new
+// PrismaClient()`). We do the framework-level equivalent here, keyed by the
+// resolved connection signature (driver + url) and stored on globalThis so it
+// survives Vite's SSR module re-evaluation:
+//
+//   • same signature  → reuse the live client (no new connection opened)
+//   • changed signature (a `config/database.ts` edit) → build a fresh client and
+//     `$disconnect()` the superseded one so its handle is released
+//
+// No-op in production: a single boot means a single `make()` call → one entry,
+// built once, never re-entered. Apps passing their own `config.client` opt out
+// entirely (they own that client's lifecycle) via the early return in `make()`.
+interface PrismaClientCacheEntry { signature: string; client: PrismaClient }
+const PRISMA_CLIENT_CACHE_KEY = '__rudderjs_prisma_client__'
+
+/**
+ * Return the cached PrismaClient when its connection signature is unchanged.
+ * On a signature change, disconnect the superseded client (fire-and-forget —
+ * the new client doesn't wait on the old one closing) and report a miss.
+ */
+function reusablePrismaClient(signature: string): PrismaClient | undefined {
+  const g = globalThis as Record<string, unknown>
+  const cached = g[PRISMA_CLIENT_CACHE_KEY] as PrismaClientCacheEntry | undefined
+  if (!cached) return undefined
+  if (cached.signature === signature) return cached.client
+  void Promise.resolve()
+    .then(() => cached.client.$disconnect())
+    .catch(() => { /* best effort — releasing a superseded connection */ })
+  delete g[PRISMA_CLIENT_CACHE_KEY]
+  return undefined
+}
+
+function cachePrismaClient(signature: string, client: PrismaClient): void {
+  ;(globalThis as Record<string, unknown>)[PRISMA_CLIENT_CACHE_KEY] =
+    { signature, client } satisfies PrismaClientCacheEntry
+}
+
 import type {
   AggregateFn,
   AggregateRequest,
@@ -1079,7 +1129,18 @@ class PrismaAdapter implements OrmAdapter {
   get prisma(): PrismaClient { return this.prismaClient }
 
   static async make(config: PrismaConfig = {}): Promise<PrismaAdapter> {
-    if (config.client) return new PrismaAdapter(config.client)
+    if (config.client) return new PrismaAdapter(config.client, config.driver)
+
+    // Resolve the connection signature up front so dev HMR re-boots reuse one
+    // live PrismaClient instead of opening (and leaking) a fresh connection on
+    // every edit. The url falls back to DATABASE_URL, then to the sqlite default,
+    // matching the driver branches below. See reusablePrismaClient().
+    const driver = config.driver ?? 'sqlite'
+    const resolvedUrl = config.url ?? process.env['DATABASE_URL'] ?? (driver === 'sqlite' ? 'file:./dev.db' : '')
+    const signature = `${driver}::${resolvedUrl}`
+
+    const reused = reusablePrismaClient(signature)
+    if (reused) return new PrismaAdapter(reused, config.driver)
 
     const opts: Record<string, unknown> = {}
 
@@ -1107,10 +1168,10 @@ class PrismaAdapter implements OrmAdapter {
       const { PrismaLibSql } = await import('@prisma/adapter-libsql') as typeof import('@prisma/adapter-libsql')
       opts['adapter'] = new PrismaLibSql({ url: config.url })
     } else {
-      // Local SQLite via better-sqlite3 (driver: 'sqlite' or default)
-      const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
+      // Local SQLite via better-sqlite3 (driver: 'sqlite' or default).
+      // `resolvedUrl` already applied the DATABASE_URL / dev.db fallback above.
       const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as typeof import('@prisma/adapter-better-sqlite3')
-      opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
+      opts['adapter'] = new PrismaBetterSqlite3({ url: resolvedUrl })
     }
 
     let PC: PrismaClientConstructor
@@ -1143,7 +1204,9 @@ class PrismaAdapter implements OrmAdapter {
     }
     // Enable query event logging so telescope's QueryCollector can capture queries
     opts['log'] = [{ emit: 'event', level: 'query' }]
-    return new PrismaAdapter(new PC(opts), config.driver)
+    const client = new PC(opts)
+    cachePrismaClient(signature, client)
+    return new PrismaAdapter(client, config.driver)
   }
 
   query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
