@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-// Server-component layout. vike-react-rsc provides the html/body document shell;
+// Server-component layout. vike-react-rsc-rudder provides the html/body document shell;
 // this just wraps the page content.
 export default function Layout({ children }: { children: ReactNode }) {
   return (

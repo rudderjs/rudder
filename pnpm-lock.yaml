@@ -1617,7 +1617,7 @@ importers:
       vike:
         specifier: 0.4.257
         version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      vike-react-rsc:
+      vike-react-rsc-rudder:
         specifier: workspace:*
         version: link:../packages/vike-react-rsc
     devDependencies:

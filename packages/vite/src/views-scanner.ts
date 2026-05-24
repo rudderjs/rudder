@@ -11,12 +11,13 @@
  * `app/Views/**` and regenerates on add/remove/rename.
  *
  * Framework selection is automatic — the scanner resolves `vike-react`,
- * `vike-react-rsc`, `vike-vue`, or `vike-solid` from the project's
- * package.json at plugin construction time. If none are installed, the scanner
- * falls back to **vanilla mode** (the "Blade equivalent"): `.ts`/`.js` views
- * that export a function returning an HTML string, no client hydration.
+ * `vike-react-rsc-rudder` (or the legacy `vike-react-rsc` name), `vike-vue`,
+ * or `vike-solid` from the project's node_modules at plugin construction time.
+ * If none are installed, the scanner falls back to **vanilla mode** (the "Blade
+ * equivalent"): `.ts`/`.js` views that export a function returning an HTML
+ * string, no client hydration.
  *
- * `react-rsc` (React Server Components via `vike-react-rsc`) is a React-only
+ * `react-rsc` (React Server Components via `vike-react-rsc-rudder`) is a React-only
  * renderer variant: same `.tsx` views, but the generated page is a server
  * component that reads pageContext via `getPageContext()` (synchronous,
  * AsyncLocalStorage-backed) instead of the `usePageContext()` client hook.
@@ -98,12 +99,16 @@ function detectFramework(cwd: string): Framework {
   const nodeModules = path.join(cwd, 'node_modules')
   const installed: Framework[] = []
   for (const [pkg, fw] of [
-    ['vike-react',     'react'],
-    ['vike-react-rsc', 'react-rsc'],
-    ['vike-vue',       'vue'],
-    ['vike-solid',     'solid'],
+    ['vike-react',            'react'],
+    ['vike-react-rsc-rudder', 'react-rsc'],
+    ['vike-react-rsc',        'react-rsc'],
+    ['vike-vue',              'vue'],
+    ['vike-solid',            'solid'],
   ] as const) {
-    if (fs.existsSync(path.join(nodeModules, pkg, 'package.json'))) {
+    // Dedupe: our `vike-react-rsc-rudder` fork and the legacy upstream
+    // `vike-react-rsc` both map to `react-rsc` — having both on disk is the
+    // *same* renderer, not a conflict, so it must not trip the guard below.
+    if (fs.existsSync(path.join(nodeModules, pkg, 'package.json')) && !installed.includes(fw)) {
       installed.push(fw)
     }
   }
@@ -111,11 +116,29 @@ function detectFramework(cwd: string): Framework {
   if (installed.length > 1) {
     throw new Error(
       `[rudderjs:views-scanner] Multiple Vike renderers found (${installed.join(', ')}). ` +
-      `Install only one of vike-react, vike-react-rsc, vike-vue, vike-solid ` +
-      `(vike-react and vike-react-rsc are both React renderers — pick one).`,
+      `Install only one of vike-react, vike-react-rsc-rudder, vike-vue, vike-solid ` +
+      `(vike-react and vike-react-rsc-rudder are both React renderers — pick one).`,
     )
   }
   return installed[0] ?? 'vanilla'
+}
+
+/** RSC renderer package names — our fork (preferred) first, then legacy upstream. */
+const RSC_PACKAGES = ['vike-react-rsc-rudder', 'vike-react-rsc'] as const
+
+/**
+ * Resolve which RSC renderer package is installed so generated page stubs
+ * import from the real specifier. Prefers our `vike-react-rsc-rudder` fork,
+ * falls back to the legacy upstream `vike-react-rsc`, and defaults to the fork
+ * name when neither is on disk (only reachable once detection already said
+ * `react-rsc`, so the fallback never produces a broken import in practice).
+ */
+function rscPackageName(cwd: string): string {
+  const nodeModules = path.join(cwd, 'node_modules')
+  for (const pkg of RSC_PACKAGES) {
+    if (fs.existsSync(path.join(nodeModules, pkg, 'package.json'))) return pkg
+  }
+  return RSC_PACKAGES[0]
 }
 
 // ─── Extensions per framework ──────────────────────────────
@@ -323,14 +346,18 @@ export default function Page() {
   }
 }
 
-function reactRscStub(view: DiscoveredView): StubFile {
+function reactRscStub(view: DiscoveredView, pkgName: string = RSC_PACKAGES[0]): StubFile {
   // Identical to reactStub, with one difference: the generated +Page is a
   // React Server Component (no `"use client"`), so it cannot call the
   // `usePageContext()` hook — that throws under the `react-server` condition.
   // RSC reads pageContext via `getPageContext()` (synchronous, backed by an
-  // AsyncLocalStorage store) from `vike-react-rsc/pageContext`. The controller
+  // AsyncLocalStorage store) from `<rsc-pkg>/pageContext`. The controller
   // still injects `viewProps` via `pageContextInit`, so `view('id', props)`
   // keeps working; the server component may also fetch its own data.
+  //
+  // `pkgName` is the actually-installed RSC renderer (our fork or the legacy
+  // upstream name) so the import resolves against the consumer's node_modules
+  // either way.
   const propsImport   = view.hasProps ? `import type { Props } from '${view.importPath}'\n` : ''
   const propsType     = view.hasProps ? 'Props' : 'Record<string, unknown>'
   const propsFallback = view.hasProps ? `({} as ${propsType})` : '{}'
@@ -341,7 +368,7 @@ function reactRscStub(view: DiscoveredView): StubFile {
 // Source: ${view.importPath}
 import type { ReactNode } from 'react'
 import ViewComponent from '${view.importPath}'
-${propsImport}import { getPageContext } from 'vike-react-rsc/pageContext'
+${propsImport}import { getPageContext } from '${pkgName}/pageContext'
 
 // Cast to a permissive component type — controller-supplied props are validated
 // at the call site (view('id', props)), not in this generated stub.
@@ -579,8 +606,8 @@ export default {
 const RSC_VIEW_ROOT_CONFIG = `// AUTO-GENERATED by @rudderjs/vite — do not edit.
 // Forwards controller viewProps + viewHeaders to client hydration, and wires
 // the RudderJS framework hooks via import: strings. RSC can't use physical
-// pages/+<hook>.ts stubs — vike-react-rsc strips them from the client bundle,
-// breaking onCreatePageContext (which runs on the client) during hydration.
+// pages/+<hook>.ts stubs — vike-react-rsc-rudder strips them from the client
+// bundle, breaking onCreatePageContext (which runs on the client) during hydration.
 export default {
   passToClient: ['viewProps', 'viewHeaders'],
   onCreatePageContext: 'import:@rudderjs/vite/hooks/onCreatePageContext:onCreatePageContext',
@@ -720,7 +747,7 @@ export {}
 `
 }
 
-function generate(generatedRoot: string, pagesRoot: string, views: DiscoveredView[], framework: Framework): void {
+function generate(generatedRoot: string, pagesRoot: string, views: DiscoveredView[], framework: Framework, rscPkg: string = RSC_PACKAGES[0]): void {
   if (views.length === 0) return
   const isRsc = framework === 'react-rsc'
   writeIfChanged(path.join(generatedRoot, '+config.ts'), isRsc ? RSC_VIEW_ROOT_CONFIG : VIEW_ROOT_CONFIG)
@@ -734,7 +761,7 @@ function generate(generatedRoot: string, pagesRoot: string, views: DiscoveredVie
   }
   const generator = STUB_GENERATORS[framework]
   for (const v of views) {
-    const stub = generator(v)
+    const stub = isRsc ? reactRscStub(v, rscPkg) : generator(v)
     purgeStalePageFiles(v.outDir, stub.filename)
     writeIfChanged(path.join(v.outDir, stub.filename), stub.contents)
     if (framework === 'react-rsc') {
@@ -855,9 +882,10 @@ export function syncViewsFromDisk(cwd: string = process.cwd()): ViewsSyncResult 
   }
 
   const framework = detectFramework(cwd)
+  const rscPkg    = framework === 'react-rsc' ? rscPackageName(cwd) : RSC_PACKAGES[0]
   const views     = discover(viewsRoot, pagesRoot, framework)
   cleanStale(generatedRoot, views)
-  generate(generatedRoot, pagesRoot, views, framework)
+  generate(generatedRoot, pagesRoot, views, framework, rscPkg)
 
   const result: ViewsSyncResult = {
     viewsRootExists: true,

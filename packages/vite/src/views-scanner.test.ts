@@ -21,7 +21,7 @@ function scaffold(framework: 'react' | 'react-rsc' | 'vue' | 'solid' | 'vanilla'
 
   const pkgByFramework: Record<typeof framework, string | null> = {
     react:       'vike-react',
-    'react-rsc': 'vike-react-rsc',
+    'react-rsc': 'vike-react-rsc-rudder',
     vue:         'vike-vue',
     solid:       'vike-solid',
     vanilla:     null,
@@ -52,6 +52,14 @@ function scaffold(framework: 'react' | 'react-rsc' | 'vue' | 'solid' | 'vanilla'
   return root
 }
 
+/** Write a fake installed package (just enough for the scanner's fs probe). */
+function installPkg(root: string, name: string): void {
+  const dir = path.join(root, 'node_modules', name)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, version: '0.0.0', main: 'index.js' }))
+  fs.writeFileSync(path.join(dir, 'index.js'), '')
+}
+
 describe('views-scanner — framework detection', () => {
   const prevCwd = process.cwd()
   let root = ''
@@ -74,7 +82,7 @@ describe('views-scanner — framework detection', () => {
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+data.ts')))
   })
 
-  it('generates an RSC server-component stub when vike-react-rsc is installed', () => {
+  it('generates an RSC server-component stub when vike-react-rsc-rudder is installed', () => {
     root = scaffold('react-rsc')
     process.chdir(root)
     viewsScannerPlugin()
@@ -82,9 +90,9 @@ describe('views-scanner — framework detection', () => {
     assert.ok(fs.existsSync(generated), '+Page.tsx should exist')
     const contents = fs.readFileSync(generated, 'utf8')
     // The +Page is a server component, so it reads pageContext via
-    // getPageContext() from vike-react-rsc/pageContext — NOT the
+    // getPageContext() from vike-react-rsc-rudder/pageContext — NOT the
     // usePageContext() hook, which throws under the react-server condition.
-    assert.match(contents, /import \{ getPageContext \} from 'vike-react-rsc\/pageContext'/)
+    assert.match(contents, /import \{ getPageContext \} from 'vike-react-rsc-rudder\/pageContext'/)
     assert.match(contents, /getPageContext\(\)/)
     assert.doesNotMatch(contents, /usePageContext/)
     assert.match(contents, /ViewComponent/)
@@ -159,6 +167,32 @@ describe('views-scanner — framework detection', () => {
     fs.writeFileSync(path.join(rscDir, 'index.js'), '')
     process.chdir(root)
     assert.throws(() => viewsScannerPlugin(), /Multiple Vike renderers/)
+  })
+
+  it('detects the legacy upstream `vike-react-rsc` name and imports from it', () => {
+    // Someone on the upstream `vike-react-rsc` package: the scanner still
+    // recognizes it and the generated stub imports from the legacy specifier.
+    root = scaffold('vanilla')          // bare project, no renderer installed
+    installPkg(root, 'vike-react-rsc')  // add ONLY the legacy upstream package
+    // vanilla scaffold wrote a .ts view; RSC needs a .tsx one.
+    fs.rmSync(path.join(root, 'app', 'Views', 'Home.ts'))
+    fs.writeFileSync(path.join(root, 'app', 'Views', 'Home.tsx'), '// placeholder\n')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const contents = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(contents, /import \{ getPageContext \} from 'vike-react-rsc\/pageContext'/)
+    assert.doesNotMatch(contents, /vike-react-rsc-rudder/)
+  })
+
+  it('treats the fork + legacy upstream RSC names as the same renderer (no conflict) and prefers the fork import', () => {
+    // Both names resolving to react-rsc must NOT trip the multiple-renderers
+    // guard, and the fork name wins for the generated import.
+    root = scaffold('react-rsc')        // installs vike-react-rsc-rudder
+    installPkg(root, 'vike-react-rsc')  // also add the legacy upstream name
+    process.chdir(root)
+    assert.doesNotThrow(() => viewsScannerPlugin())
+    const contents = fs.readFileSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx'), 'utf8')
+    assert.match(contents, /import \{ getPageContext \} from 'vike-react-rsc-rudder\/pageContext'/)
   })
 
   it('honors `export const route` override in a React view', () => {

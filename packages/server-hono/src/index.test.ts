@@ -998,9 +998,9 @@ describe('HonoAdapter — controllerViewPatterns (parameterised SPA-nav)', () =>
   })
 })
 
-// vike-react-rsc serves its server-component stream and server actions from a
-// fixed internal path (/_rsc, GET + POST), registered as a vike *config*
-// middleware (`middleware: "import:vike-react-rsc/__internal/integration/rscMiddleware"`).
+// vike-react-rsc-rudder serves its server-component stream and server actions
+// from a fixed internal path (/_rsc, GET + POST), registered as a vike *config*
+// middleware (`middleware: "import:vike-react-rsc-rudder/__internal/integration/rscMiddleware"`).
 // vike's own renderPageServer reads `globalContext.config.middleware` and
 // dispatches to it, so the existing `vike(app)` catch-all already serves /_rsc
 // once an app extends vikeReactRsc — no extra mount is needed (see the RSC
@@ -1025,7 +1025,7 @@ describe('createFetchHandler() — RSC /_rsc pass-through (Phase 3)', () => {
       })
 
       // The response depends on Vike (no app/Views in this sandbox, and
-      // vike-react-rsc isn't installed) and is irrelevant — the rewrite
+      // vike-react-rsc-rudder isn't installed) and is irrelevant — the rewrite
       // decision happens before app.fetch, so the contract holds regardless of
       // whatever Vike returns or throws downstream.
       try {

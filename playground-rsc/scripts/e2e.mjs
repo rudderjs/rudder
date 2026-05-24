@@ -8,13 +8,13 @@
 // We boot the PRODUCTION build (not `vike dev`) — same choice as the scaffolder
 // render-check — so there's no Vite dep-optimizer warmup flakiness. This single
 // gate covers the integration surface that broke repeatedly during the
-// vike-react-rsc bring-up:
+// vike-react-rsc-rudder bring-up:
 //   - prod build: the SSR server entry + the RSC page-config manifest
 //   - scanner codegen: route via +config.ts, framework hooks via import: strings
 //   - single vike / vite / @vitejs/plugin-rsc resolution (no dual instances)
 //   - the /_rsc action route (mounted directly → no re-entrant renderPageServer)
 //
-// If a future vike / @vitejs/plugin-rsc bump (or a re-vendor of vike-react-rsc)
+// If a future vike / @vitejs/plugin-rsc bump (or a re-sync of vike-react-rsc-rudder)
 // breaks any of those, this fails in CI instead of in a user's app.
 
 import { spawn } from 'node:child_process'

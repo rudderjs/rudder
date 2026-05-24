@@ -1,13 +1,14 @@
 # playground-rsc
 
 **Experimental** RudderJS demo app running on **React Server Components** via
-[`vike-react-rsc`](https://github.com/nitedani/vike-react-rsc), instead of the
-default whole-page-hydration `vike-react` renderer.
+[`vike-react-rsc-rudder`](../packages/vike-react-rsc) (a RudderJS-maintained
+fork of nitedani's `vike-react-rsc`), instead of the default
+whole-page-hydration `vike-react` renderer.
 
 It is a separate app because the two renderers are **mutually exclusive** — an
-app installs exactly one of `vike-react` / `vike-react-rsc` (the `@rudderjs/vite`
-scanner enforces this). `playground/` and `playground-web/` use `vike-react`;
-this one uses `vike-react-rsc`.
+app installs exactly one of `vike-react` / `vike-react-rsc-rudder` (the
+`@rudderjs/vite` scanner enforces this). `playground/` and `playground-web/` use
+`vike-react`; this one uses `vike-react-rsc-rudder`.
 
 ## What it demonstrates
 

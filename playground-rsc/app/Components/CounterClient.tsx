@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react'
 import { incrementCount } from 'App/Actions/counter.ts'
 
 // Client component ("use client") — the only part of this page that ships JS.
-// It calls the "use server" action directly; vike-react-rsc handles the RPC
-// round-trip and serializes the result.
+// It calls the "use server" action directly; vike-react-rsc-rudder handles the
+// RPC round-trip and serializes the result.
 export default function CounterClient({ initialCount }: { initialCount: number }) {
   const [count, setCount]         = useState(initialCount)
   const [isPending, startTransition] = useTransition()

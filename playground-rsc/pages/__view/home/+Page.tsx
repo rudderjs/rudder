@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import ViewComponent from 'App/Views/Home.tsx'
 import type { Props } from 'App/Views/Home.tsx'
-import { getPageContext } from 'vike-react-rsc/pageContext'
+import { getPageContext } from 'vike-react-rsc-rudder/pageContext'
 
 // Cast to a permissive component type — controller-supplied props are validated
 // at the call site (view('id', props)), not in this generated stub.

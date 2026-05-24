@@ -20,6 +20,7 @@
     "@rudderjs/server-hono": "workspace:*",
     "@rudderjs/support": "workspace:*",
     "@rudderjs/view": "workspace:*",
+    "vike-react-rsc-rudder": "workspace:*",
     "@vikejs/hono": "^0.2.0",
     "@vitejs/plugin-rsc": "0.5.1",
     "dotenv": "^16.4.0",
@@ -27,8 +28,7 @@
     "react-dom": "^19.2.0",
     "react-streaming": "^0.4.12",
     "reflect-metadata": "^0.2.2",
-    "vike": "0.4.257",
-    "vike-react-rsc": "workspace:*"
+    "vike": "0.4.257"
   },
   "devDependencies": {
     "@rudderjs/cli": "workspace:*",
