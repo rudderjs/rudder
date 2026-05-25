@@ -159,6 +159,23 @@ Enhancers run in registration order on every render — keep them fast.
 
 The first sync also writes `pages/+onCreatePageContext.ts`, `pages/+onError.ts`, and `pages/+headersResponse.ts` re-export stubs. They're stock Vike hooks; you can overwrite any of them in place to customize, and the scanner won't replace your edits on subsequent runs.
 
+## Client-safe imports
+
+View files — and anything reachable from them — are bundled for the **browser**, so they must not pull in server-only framework code. Prefer the [page-context enhancers](#reading-framework-state-from-views) above for per-request state. When you do need framework helpers in client-reachable code, import them from the **client-safe entry points**:
+
+- **`@rudderjs/core/client`** — `app`, `resolve`, `Env`, `env`, `config`, `Container` + the DI decorators, validation (`z`, `FormRequest`, `ValidationError`), exceptions, and contracts types. Import these from `@rudderjs/core/client`, **not** the main `@rudderjs/core` entry: the main entry re-exports the `rudder` CLI surface (which statically imports `node:*`) and crashes the browser bundle.
+- **`@rudderjs/middleware/client`** — browser-safe middleware helpers such as `getCsrfToken()`.
+
+```ts
+// A component shared by the server render and client hydration
+import { Env, config } from '@rudderjs/core/client'   // ✅ client-safe
+// import { Env, config } from '@rudderjs/core'        // ❌ pulls the CLI / node: chain → crashes in the browser
+```
+
+The server keeps importing everything from the main entries (`@rudderjs/core`, providers, `defaultProviders`, the `rudder` CLI) — only code that lands in the client bundle needs the `/client` variants. ORM `Model` classes are themselves client-safe to *import* (the class definition evaluates in the browser); just don't run queries client-side.
+
+Get this wrong and the symptom is a browser-side `ReferenceError: process is not defined` (or `Module "node:…" has been externalized for browser compatibility`) — and in a Vike app the client router never attaches, so navigation silently falls back to full page reloads.
+
 ## Vike pages
 
 Vike pages route by filesystem — the URL is the directory name under `pages/`. Each page is a directory containing `+`-prefixed files.
