@@ -107,19 +107,30 @@ export class PulseProvider extends ServiceProvider {
 
     if (!resolved.enabled) return
 
-      // ── Create storage ────────────────────────────────────
-      let storage: PulseStorage
+    // ── One-time monitoring runtime (survives dev re-boots) ──
+    // boot() re-runs on every @rudderjs/vite dev re-boot; storage, the prune
+    // timer, and the recorders (incl. ServerRecorder's 15s stats timer) are
+    // process-global. Rebuilding them per edit leaks a DB connection + timers
+    // and re-subscribes every recorder to its peer observer registry (fresh
+    // closures → duplicate samples pile up). Build once, keyed on globalThis,
+    // reuse across re-boots. Middleware + routes ARE re-registered every boot
+    // because router.reset() wipes them. No-op cost in production.
+    const g = globalThis as Record<string, unknown>
+    const RT_KEY = '__rudderjs_pulse_runtime__'
+    let runtime = g[RT_KEY] as
+      | { storage: PulseStorage; middleware: Array<ReturnType<RequestRecorder['middleware']> | ReturnType<UserRecorder['middleware']>> }
+      | undefined
 
+    if (!runtime) {
+      // ── Create storage ──
+      let storage: PulseStorage
       if (resolved.storage === 'sqlite') {
         storage = new SqliteStorage(resolved.sqlitePath)
       } else {
         storage = new MemoryStorage()
       }
 
-      PulseRegistry.set(storage)
-      this.app.instance('pulse', storage)
-
-      // ── Auto-prune ────────────────────────────────────────
+      // ── Auto-prune ──
       const pruneHours = resolved.pruneAfterHours
       if (pruneHours > 0) {
         const interval = Math.min(pruneHours * 60 * 60 * 1000, 3_600_000)
@@ -130,17 +141,15 @@ export class PulseProvider extends ServiceProvider {
         timer.unref()
       }
 
-      // ── Register recorders ────────────────────────────────
+      // ── Register recorders (subscribe once per process) ──
       const requestRec = new RequestRecorder(storage, resolved)
       const userRec    = new UserRecorder(storage)
 
       const recorders: Recorder[] = []
-
       if (resolved.recordQueues)     recorders.push(new QueueRecorder(storage))
       if (resolved.recordCache)      recorders.push(new CacheRecorder(storage))
       if (resolved.recordExceptions) recorders.push(new ExceptionRecorder(storage))
       if (resolved.recordServers)    recorders.push(new ServerRecorder(storage, resolved.serverStatsIntervalMs))
-
       // Query recorder for slow queries
       recorders.push(new QueryRecorder(storage, resolved))
 
@@ -148,14 +157,27 @@ export class PulseProvider extends ServiceProvider {
         await rec.register()
       }
 
-      // ── Register middleware ───────────────────────────────
+      const middleware: Array<ReturnType<RequestRecorder['middleware']> | ReturnType<UserRecorder['middleware']>> = []
+      if (resolved.recordRequests) middleware.push(requestRec.middleware())
+      if (resolved.recordUsers)    middleware.push(userRec.middleware())
+
+      runtime = { storage, middleware }
+      g[RT_KEY] = runtime
+    }
+
+    const { storage } = runtime
+    PulseRegistry.set(storage)
+    this.app.instance('pulse', storage)
+
+    // ── Re-register every boot (router.reset() wiped middleware + routes) ──
+    if (runtime.middleware.length > 0) {
       try {
         const { router } = await import('@rudderjs/router')
-        if (resolved.recordRequests) router.use(requestRec.middleware())
-        if (resolved.recordUsers)    router.use(userRec.middleware())
+        for (const mw of runtime.middleware) router.use(mw)
       } catch {
         // @rudderjs/router not available
       }
+    }
 
     // ── Register UI + API routes ──────────────────────────
     await registerPulseRoutes(storage, {
