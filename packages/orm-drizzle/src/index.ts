@@ -997,6 +997,52 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 }
 
+// ─── Dev HMR: Drizzle client reuse across re-boots ─────────
+//
+// Every Vite dev re-boot re-runs DrizzleAdapter.make(). Without reuse, each
+// re-boot opens a fresh driver connection (a postgres-js socket, a mysql2 pool
+// holding ~10 server connections, a libsql client, a better-sqlite3 handle) and
+// never closes the previous one — the same per-re-boot leak that exhausted MySQL
+// `max_connections` for orm-prisma (#652). We cache one live drizzle `db` on
+// globalThis (surviving SSR module re-evaluation), keyed by the resolved
+// connection signature (driver + url), alongside a `dispose` that closes the
+// underlying driver:
+//
+//   • same signature  → reuse the live client (no new connection opened)
+//   • changed signature (a `config/database.ts` edit) → build a fresh client and
+//     dispose the superseded one so its connection(s) are released
+//
+// No-op in production (single boot → one entry, built once). Apps passing their
+// own `config.client` opt out entirely — they own that client's lifecycle.
+interface DrizzleClientCacheEntry {
+  signature: string
+  db:        DrizzleDb
+  dialect:   DrizzleDialect
+  dispose:   () => void | Promise<void>
+}
+const DRIZZLE_CLIENT_CACHE_KEY = '__rudderjs_drizzle_client__'
+
+/**
+ * Return the cached drizzle client when its connection signature is unchanged.
+ * On a signature change, dispose the superseded driver (fire-and-forget — the
+ * new client doesn't wait on the old one closing) and report a miss.
+ */
+function reusableDrizzleClient(signature: string): { db: DrizzleDb; dialect: DrizzleDialect } | undefined {
+  const g = globalThis as Record<string, unknown>
+  const cached = g[DRIZZLE_CLIENT_CACHE_KEY] as DrizzleClientCacheEntry | undefined
+  if (!cached) return undefined
+  if (cached.signature === signature) return { db: cached.db, dialect: cached.dialect }
+  void Promise.resolve()
+    .then(() => cached.dispose())
+    .catch(() => { /* best effort — releasing a superseded connection */ })
+  delete g[DRIZZLE_CLIENT_CACHE_KEY]
+  return undefined
+}
+
+function cacheDrizzleClient(entry: DrizzleClientCacheEntry): void {
+  ;(globalThis as Record<string, unknown>)[DRIZZLE_CLIENT_CACHE_KEY] = entry
+}
+
 // ─── Drizzle Adapter ───────────────────────────────────────
 
 export class DrizzleAdapter implements OrmAdapter {
@@ -1015,33 +1061,55 @@ export class DrizzleAdapter implements OrmAdapter {
       const url    = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
       const driver = config.driver ?? 'sqlite'
 
-      if (driver === 'postgresql') {
-        // postgres uses `export =` so dynamic import wraps it in a `.default`
-        const postgresModule          = await import('postgres') as unknown as { default?: (url: string) => unknown }
-        const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
-        const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
-        db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(postgres(url))
-        resolvedDialect ??= 'pg'
-      } else if (driver === 'libsql') {
-        const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
-        const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
-        db = dzLibsql(createClient({ url })) as unknown as DrizzleDb
-        resolvedDialect ??= 'sqlite'
-      } else if (driver === 'mysql') {
-        // mysql2 ships its own promise wrapper at `mysql2/promise`. The drizzle
-        // mysql core expects the promise pool (not the callback-style client).
-        const mysqlModule             = await import('mysql2/promise') as { createPool: (url: string) => unknown }
-        const pool                    = mysqlModule.createPool(url)
-        const { drizzle: dzMysql }    = await import('drizzle-orm/mysql2') as typeof import('drizzle-orm/mysql2')
-        db = (dzMysql as unknown as (pool: unknown) => DrizzleDb)(pool)
-        resolvedDialect ??= 'mysql'
+      // Reuse the live client across dev re-boots when driver + url are unchanged;
+      // a changed signature disposes the superseded driver. See reusableDrizzleClient().
+      const signature = `${driver}::${url}`
+      const reused = reusableDrizzleClient(signature)
+      if (reused) {
+        db = reused.db
+        resolvedDialect ??= reused.dialect
       } else {
-        // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
-        const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
-        const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
-        const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
-        db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(new Database(url.replace(/^file:/, '')))
-        resolvedDialect ??= 'sqlite'
+        // `dispose` closes the underlying driver (not the drizzle wrapper) so the
+        // cache can release a superseded connection on a signature change.
+        let dispose: () => void | Promise<void>
+
+        if (driver === 'postgresql') {
+          // postgres uses `export =` so dynamic import wraps it in a `.default`
+          const postgresModule          = await import('postgres') as unknown as { default?: (url: string) => unknown }
+          const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
+          const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
+          const sql                     = postgres(url) as { end: () => Promise<void> }
+          db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(sql)
+          dispose = () => sql.end()
+          resolvedDialect ??= 'pg'
+        } else if (driver === 'libsql') {
+          const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
+          const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
+          const client                  = createClient({ url })
+          db = dzLibsql(client) as unknown as DrizzleDb
+          dispose = () => client.close()
+          resolvedDialect ??= 'sqlite'
+        } else if (driver === 'mysql') {
+          // mysql2 ships its own promise wrapper at `mysql2/promise`. The drizzle
+          // mysql core expects the promise pool (not the callback-style client).
+          const mysqlModule             = await import('mysql2/promise') as { createPool: (url: string) => unknown }
+          const pool                    = mysqlModule.createPool(url) as { end: () => Promise<void> }
+          const { drizzle: dzMysql }    = await import('drizzle-orm/mysql2') as typeof import('drizzle-orm/mysql2')
+          db = (dzMysql as unknown as (pool: unknown) => DrizzleDb)(pool)
+          dispose = () => pool.end()
+          resolvedDialect ??= 'mysql'
+        } else {
+          // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
+          const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
+          const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
+          const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
+          const sqliteDb                = new Database(url.replace(/^file:/, '')) as { close: () => void }
+          db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(sqliteDb)
+          dispose = () => sqliteDb.close()
+          resolvedDialect ??= 'sqlite'
+        }
+
+        cacheDrizzleClient({ signature, db, dialect: resolvedDialect ?? 'sqlite', dispose })
       }
     }
 
