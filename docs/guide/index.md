@@ -2,6 +2,22 @@
 
 Rudder is a framework-agnostic Node.js full-stack framework built on [Vike](https://vike.dev) and [Vite](https://vitejs.dev). It gives you service providers, dependency injection, an expressive ORM, a CLI generator, queues, scheduling, auth, validation — everything a typical web application needs — in strict TypeScript, while staying modular and UI-agnostic.
 
+Here's the whole loop — a route loads data with the ORM and returns a view, rendered through Vike with SSR and SPA navigation:
+
+```ts
+// routes/web.ts
+import { Route } from '@rudderjs/router'
+import { view } from '@rudderjs/view'
+import { Post } from '../app/Models/Post.js'
+
+Route.get('/posts', async () => {
+  const posts = await Post.all()
+  return view('posts', { posts: posts.map(p => p.toJSON()) })
+})
+```
+
+That's it — no Inertia adapter, no JSON envelope, no separate API layer to wire up. Build it end-to-end in the [tutorial](/guide/tutorial), or read on for why the framework is shaped this way.
+
 ## Philosophy
 
 Rudder favors expressive APIs, convention over configuration, and clear lifecycle hooks. The framework should fade into the background while your app's code stays readable.
