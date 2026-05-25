@@ -1057,6 +1057,18 @@ export abstract class Model {
                 return { ...r, data }
               } catch (e) { ormTraceThrew(ModelClass, 'paginate', e, _traceAdapter); throw e }
             }
+          case 'count':
+            // Traced so it doesn't fall through to `default` as an untraced
+            // terminal: a list view's count query (total / badge) would otherwise
+            // log a `build` with no matching terminal line and look like a
+            // "dropped" paginate (REOPEN #2 rerun artifact). `rows=` is the count.
+            return async (): Promise<number> => {
+              try {
+                const n = await (target as QueryBuilder<InstanceType<T>>).count()
+                ormTraceTerminal(ModelClass, 'count', n, _traceAdapter)
+                return n
+              } catch (e) { ormTraceThrew(ModelClass, 'count', e, _traceAdapter); throw e }
+            }
           case 'create':
             return async (data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
               wrap(await (target as QueryBuilder<InstanceType<T>>).create(data))

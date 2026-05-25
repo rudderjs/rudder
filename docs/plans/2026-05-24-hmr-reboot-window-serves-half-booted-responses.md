@@ -217,3 +217,26 @@ Bumped the pilotiq playground to `@rudderjs/orm@1.12.1` (within its `^1.12.0` ra
 - **No `build` line** for the wedged requests → cause **#1**: the wedge is upstream of the ORM (route/resource), not the ORM itself. Instrument pilotiq's records handler / the request gate next.
 - **`build` but no terminal/`THREW`** → threw between construction and the terminal (a global-scope fn, the proxy) — narrow there.
 - **`build` + `THREW … :: <msg>`** → cause **#2**: the adapter execution threw; `<msg>` names it (Prisma connection state, undefined access, …) → fix targets that.
+
+### Rerun results — extended trace `orm@1.12.2` (pilotiq agent, 2026-05-25)
+
+Bumped the playground to `@rudderjs/orm@1.12.2`, `RUDDER_ORM_TRACE=1`, reproduced the wedge (double-write edit + 10 concurrent `/articles` in-window → `settled rows=0`, ~5/10 empty). Deps: `orm@1.12.2` + `core@1.3.2` + `orm-prisma@2.0.1` + `vite@2.7.1`, SQLite.
+
+**Lands on your middle branch — `build` present, NO terminal, NO `THREW`.** The wedged requests log `[orm] build model=Article …` but **never a matching `paginate`**, and there are **zero `THREW` lines anywhere**. Counts across the run: `class=#1` → 5 `build` / 2 `paginate`; `class=#2` → 5 `build` / 3 `paginate` ⇒ **5 builds with no terminal and no throw**. So the query is constructed and then the terminal is simply **never executed** — the `.paginate()`/`.get()` call is *dropped*, not failing. (Adapter is `#2` for both — not an adapter-identity issue.)
+
+**New signal the tree didn't anticipate — DUAL model-class identity after one reboot.** Article shows up as **both `class=#1` and `class=#2`** post-edit (it was uniformly `#1` before, and stayed `#1` across reboots that did NOT re-import the model module). So the *wedging* reboot **re-imports `app/Models/Article.ts` → a second class identity** while the first lingers; requests resolve `Resource.model` to one or the other (the per-request flakiness). Both identities show build-without-terminal, so it isn't simply "query the stale one." This fits the `ModelRegistry.register()` no-op-on-collision note: the second import can't re-install, so whichever identity a request lands on, the builder is half-wired and the terminal is silently skipped.
+
+**Suggested next probe:** log at the boundary *between* `build` and the terminal — i.e. whether the deferred/proxy chain actually invokes `.paginate()` (and whether a global-scope/relation closure on the re-imported class returns a non-thenable or swallows). "No throw + no terminal" means execution stops after construction without an exception reaching the read terminal — the drop is in that chain on a re-imported class, not in the adapter.
+
+### ⚠️ Probe gap — `count()` was untraced; "dropped terminal" is likely an ARTIFACT (framework session, 2026-05-25 later)
+
+Before chasing "the terminal is dropped," a confound: **`count()` is a QueryBuilder read terminal that the first two probe versions did NOT trace** — it fell through the proxy's pass-through `default` case and logged **no terminal line**. And `orm-prisma`'s `paginate()` counts **internally** (a single `Promise.all([findMany, count])`), so a `.paginate()` is exactly **1 `build` : 1 `paginate`** — it does *not* create extra builds. So the surplus builds (5 vs. 2–3 `paginate`) are almost certainly **separate `Model.query().count()` calls** (a list total / badge count), which were **invisible**. "build with no terminal" was very likely those counts, **not** dropped `paginate`s.
+
+Two more reasons to distrust the "dropped" reading:
+- The rerun's own **`settled rows=0`** *is* a `paginate` terminal line returning 0 — i.e. at least some wedged renders are **`paginate` returning empty**, not a missing terminal. That points back at the adapter execution returning `[]`, the original empty-not-error question.
+- The **dual `class=#1/#2`** finding is real (the model *was* re-imported this run), but the `register()`-no-op-on-collision only skips re-installing **relation accessors** (`belongsToMany`/morph, on the prototype). `query().paginate()` doesn't use those — it goes through the proxy terminal — so a re-imported class still paginates. That chain doesn't obviously drop a plain list terminal; treat it as unconfirmed.
+
+**Fixed (folded into the same `@rudderjs/orm` patch / PR #659):** `count` is now a traced terminal (`[orm] count … rows=N`). The trace is now **1 `build` : 1 terminal** for the whole read surface. **Rerun read:**
+- the surplus builds resolve to **`count rows=N` lines** → "dropped terminal" disproven; the real signal is the **`rows=` on the `paginate` lines**.
+- if those `paginate` lines show **`rows=0`** → the wedge is **`adapter.paginate()` returning empty** under the concurrent re-boot (instrument the adapter / Prisma execution next — *not* the proxy chain).
+- only if a `build` still has **no** matching `count`/`paginate`/`THREW` is a terminal genuinely dropped.
