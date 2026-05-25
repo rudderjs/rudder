@@ -287,8 +287,9 @@ describe('Custom SyncPersistence adapter', () => {
       assert.strictEqual(cached.getText('content').toString(), 'hello')
       assert.strictEqual(findManyCalls, 1)
 
+      const cachedSV = Y.encodeStateVector(cached)
       text.insert(5, ' world')
-      await persistence.storeUpdate('cached-doc', Y.encodeStateAsUpdate(source))
+      await persistence.storeUpdate('cached-doc', Y.encodeStateAsUpdate(source, cachedSV))
       assert.strictEqual(cached.getText('content').toString(), 'hello world', 'cached in-memory doc should advance on storeUpdate')
       assert.strictEqual(findManyCalls, 1, 'storeUpdate should not trigger another replay for cached docs')
 

@@ -232,7 +232,13 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
       const prisma = await getClient()
       await getDelegate(prisma).create({ data: { docName, update } })
       const cachedDoc = docCache.get(docName)
-      if (cachedDoc) Y.applyUpdate(cachedDoc, update)
+      if (cachedDoc) {
+        try {
+          Y.applyUpdate(cachedDoc, update)
+        } catch {
+          docCache.delete(docName)
+        }
+      }
     },
 
     async getStateVector(docName: string): Promise<Uint8Array> {
