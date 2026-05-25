@@ -55,6 +55,8 @@ Optional packages — `@rudderjs/passport`, `@rudderjs/sanctum`, `@rudderjs/soci
 
 Rudder is **fully on 1.0+** as of 2026-05-02. The first wave (2026-04-29) graduated 29 packages simultaneously; three follow-up waves over the next four days finished the rest. Every published `@rudderjs/*` package has a stable public API — breaking changes from here on require explicit major bumps and migration notes.
 
+A 1.0 badge is only as good as what backs it — [Quality](/guide/quality) describes exactly how the framework is tested and released, and [When Not to Use Rudder](/guide/when-not-to-use) is honest about where another tool fits better.
+
 ## Versioning
 
 Rudder uses **independent versioning** — each `@rudderjs/*` package has its own version line, the same model Laravel's first-party packages, AdonisJS, and most of the npm ecosystem use.

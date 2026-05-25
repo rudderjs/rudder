@@ -40,6 +40,7 @@ export default defineConfig({
           text: 'Prologue',
           items: [
             { text: 'Release Notes', link: 'https://github.com/rudderjs/rudder/releases' },
+            { text: 'Quality', link: '/guide/quality' },
             { text: 'Contributing', link: '/contributing/' },
           ],
         },
@@ -47,6 +48,7 @@ export default defineConfig({
           text: 'Getting Started',
           items: [
             { text: 'What is RudderJS?', link: '/guide/' },
+            { text: 'When Not to Use Rudder', link: '/guide/when-not-to-use' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Configuration', link: '/guide/configuration' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
