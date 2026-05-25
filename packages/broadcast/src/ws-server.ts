@@ -161,6 +161,19 @@ export function initWsServer(options: WsServerOptions = {}): void {
   })
 }
 
+/**
+ * Whether the WS server is already initialized (running on globalThis).
+ *
+ * `initWsServer()` is init-once — it early-returns on subsequent calls (dev HMR
+ * re-boots). Callers that build a resource only consumed on first init (e.g. the
+ * `BroadcastingProvider` building a Redis pub/sub driver) should check this first
+ * and skip the build on re-boot, otherwise the resource is constructed and then
+ * discarded by the early return — leaking its connections per edit.
+ */
+export function isWsServerRunning(): boolean {
+  return Boolean(g[KEY])
+}
+
 // ─── Auth registry ──────────────────────────────────────────
 
 export function registerAuth(pattern: string, callback: AuthCallback): void {

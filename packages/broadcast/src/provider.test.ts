@@ -67,6 +67,27 @@ describe('BroadcastingProvider.boot() — globalThis upgrade-handler registratio
     }
   })
 
+  it('builds the driver only on first boot — re-boots reuse the live ws-server (no leaked connections)', async () => {
+    const core = await import('@rudderjs/core')
+
+    const previous = core.getConfigRepository?.()
+    let factoryCalls = 0
+    const fakeDriver = { subscribe: () => () => {}, publish: async () => {}, close: async () => {} }
+    core.setConfigRepository?.(new core.ConfigRepository({
+      broadcast: { path: '/ws', driver: async () => { factoryCalls++; return fakeDriver } },
+    }))
+    try {
+      const fakeApp = { instance: () => undefined } as never
+      await new BroadcastingProvider(fakeApp).boot()
+      await new BroadcastingProvider(fakeApp).boot() // simulates a dev HMR re-boot (ws already running)
+
+      assert.equal(factoryCalls, 1, 'driver factory must run only on first boot, not per re-boot')
+    } finally {
+      if (previous) core.setConfigRepository?.(previous)
+      clearGlobals()
+    }
+  })
+
   it('honors a custom path from config', async () => {
     const core = await import('@rudderjs/core')
 
