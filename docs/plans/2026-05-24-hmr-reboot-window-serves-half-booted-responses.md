@@ -252,3 +252,18 @@ Bumped the playground to `orm@1.12.3`, `RUDDER_ORM_TRACE=1`, reproduced the wedg
 - **Dual class identity (`#1` + `#2`) still present** post-reboot (model module re-imported) — orthogonal to the above, but a real reboot artifact.
 
 **Next probe suggestion:** instrument *upstream* of the ORM — pilotiq's `modelTableRecords` / the SSR `+data` table-data step — to log whether `R.query().paginate()` is even reached on the wedged requests (vs the records handler short-circuiting / the half-booted page-data builder skipping the table). The "issues `count` but never `paginate`" split says the request is executing *something* (badge) but not the table-data branch.
+
+### ⚠️ Fix confirmation — `@rudderjs/core@1.3.3` does NOT close the pilotiq wedge (pilotiq agent, 2026-05-25)
+
+#664 (`core@1.3.3`) shipped the quiesce barrier — `_bootstrapProviders()` drains in-flight renders (5s cap) before mutating shared state, so a mid-render request shouldn't see a half-booted schema "missing its table element." This matched the diagnosis exactly, so it looked like the fix. **It is not — the wedge reproduces identically.**
+
+**Verified the fix is actually loaded** (not a stale module): `playground/node_modules/@rudderjs/core` resolves **1.3.3**, its `dist` contains the quiesce/drain code, and `lsof -ti :3003` = 1 PID (no orphan). Then ran the exact recipe that wedges it:
+- **Double-write + 10 concurrent `/articles` in-window:** `54 0 54 0 0 0 54 0 0 0` → 3 full / 7 empty (unchanged from pre-fix).
+- **`settled rows=0`** afterward; **three single edits each → `rows=0`** (still wedges, no self-recovery).
+- **Trace unchanged:** dual class identity `#1`+`#2` still present; `count rows=0` (constant); `paginate model=Article class=#2 rows=6` only for the 3 full requests; **the 7 empty requests still issue a `count` but never a `paginate`.**
+
+So the "empty requests run the badge `count` but skip the table-data `paginate`" signal is **identical** before and after #664 — the quiesce barrier didn't change it.
+
+**Why the barrier likely misses this (for the framework session):** the barrier marks a render in-flight **only inside `RudderJS.handleRequest()`**. But pilotiq resource pages load their table data in **Vike's SSR `+data` hook** (`dispatchPageData → resourceIndexData → loadTableRecords → R.query().paginate()`), which runs in the Vike render pipeline — if that pipeline isn't wrapped by (or doesn't mark in-flight via) `handleRequest()`, the barrier has nothing to drain for the very render that wedges. Equally unaddressed: the **dual `class=#1/#2`** model re-import — draining renders doesn't stop the reboot from re-importing `app/Models/Article.ts` into a second identity, and a request resolving the half-wired identity still produces a schema whose table branch doesn't issue `paginate`. Net: the gate/barrier covers `handleRequest`-routed requests, but the wedged path is the **Vike `+data` SSR render**, which appears not to be covered.
+
+**Repro deps:** `core@1.3.3` + `orm@1.12.3` + `orm-prisma@2.0.1` + `vite@2.7.1`, pilotiq playground (SQLite). Recipe = double-write edit to `app/Pilotiq/AdminPanel.ts` + 10 concurrent `/new-admin/articles` immediately, or any single edit then poll.
