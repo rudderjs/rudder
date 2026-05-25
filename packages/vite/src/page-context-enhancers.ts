@@ -56,9 +56,20 @@ export async function runPageContextEnhancers(pageContext: PageContext): Promise
 }
 
 /**
- * Test-only: clear the registry. NEVER call from app code.
+ * Clear the enhancer registry. Called by the dev re-boot (`performReboot`) so
+ * the providers that register enhancers in `boot()` (auth → user, localization
+ * → locale, session → flash) re-register cleanly each re-boot instead of
+ * accumulating a duplicate enhancer per edit — the registry is globalThis-backed
+ * and `registerPageContextEnhancer` only appends (no dedup). Mirrors the
+ * `router.reset()` contract: the re-boot resets, providers re-register on the
+ * next bootstrap. No-op in production (single boot, never re-entered).
  */
-export function _resetPageContextEnhancersForTests(): void {
+export function resetPageContextEnhancers(): void {
   const g = globalThis as Record<string, unknown>
   g[REGISTRY_KEY] = []
+}
+
+/** @deprecated Test alias — use {@link resetPageContextEnhancers}. */
+export function _resetPageContextEnhancersForTests(): void {
+  resetPageContextEnhancers()
 }
