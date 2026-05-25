@@ -143,3 +143,52 @@ The reason the wedge bites in the pilotiq environment but not the framework play
 Unlike SQLite's one-file-handle-per-leak, the mariadb adapter opens a **pool of ~16–20 connections per client**, and each leaked client keeps its whole pool → **132 connections after 8 edits**. MySQL's default `max_connections` is **151**, so **~9–10 edits exhausts the server**: new connections are refused (`ER_CON_COUNT_ERROR`, "Too many connections"), hard-wedging the app *and anything else pointed at that MySQL* with no self-recovery — a far better match for the reported "stops working, doesn't come back" than the silent-empty SQLite path. The fix holds it flat at one pool (`20`).
 
 **Takeaways:** (1) the wedge severity is driver-dependent — benign GC-reclaimed file handles on SQLite, server-connection exhaustion on MySQL/Postgres pools; (2) **updating Prisma does not help** — this ran on 7.8.0; (3) the fix is validated on real MySQL, not just unit tests. Suggested-direction #3 (a headless wedge regression test) is still gated on a deterministic in-repo repro, but the connection-count before/after above is the deterministic signal that matters and is covered by `client-reuse.test.ts` at the unit level.
+
+---
+
+## ⚠️ REOPEN #2 — pilotiq SQLite still wedges on the #652-"fixed" deps; NOT the connection leak (pilotiq session, 2026-05-25 later)
+
+Validated the **pilotiq playground** (SQLite / better-sqlite3) on the exact shipped-fixed deps — `@rudderjs/core@1.3.2` + `@rudderjs/orm-prisma@2.0.1` + `@rudderjs/vite@2.7.1` (#652). **The resource-table wedge still reproduces**, which contradicts "the connection-reuse fix closed the residual" *for the SQLite/pilotiq case*. The prior MySQL validation is not in question — this is a second, distinct mechanism the connection-reuse fix doesn't touch.
+
+**Single most important finding — the pilotiq-SQLite wedge is independent of the orm-prisma version (A/B proven):**
+- Pinned the playground back to `@rudderjs/orm-prisma@1.9.1` (pre-#652, no globalThis client reuse), reinstalled, re-ran the repro: **identical behaviour** — baseline 6 rows → one `AdminPanel.ts` edit → `articles` stuck at `0` for 8s.
+- Pinned forward to `2.0.1` again: same wedge.
+- ∴ the empty/wedge the pilotiq user reports is **NOT the PrismaClient connection-leak** #652 addressed (that path is benign on SQLite anyway, as this plan already established). There is a **second residual** on the half-booted ORM path that survives #652.
+
+**Repro is lighter than the documented 8-way flood** (single server, **confirmed no orphan vike procs** — `lsof -ti :3003` = 1 PID throughout):
+- A **single** one-line `sed`/`perl` edit to `AdminPanel.ts` (no double-write needed) → `change detected — reloading` (one re-boot) → `articles` list wedges empty and **does not self-recover over 24s** of light *sequential* (not concurrent-flood) polling.
+- A **cold boot** can also start wedged (baseline `0` before any edit) — flaky: some fresh boots render full data, some serve empty from the first request. The readiness poll + `predev` doctor + first SSR request supply enough concurrency at initial boot.
+- The browser concurrency is supplied in practice by pilotiq's `databaseNotifications` polling hitting `/_notifications` alongside the page request (already noted in REOPEN #1).
+
+**Two discriminators that point away from "dead shared adapter" and toward per-model / registration staleness** (new signal for the framework session):
+1. **Per-resource:** in the wedged state, `posts` list renders full data while `articles` / `users` / `tags` / `videos` lists are empty — *on the same process and the same globalThis `ModelRegistry` adapter*. A wedged/disconnected shared adapter would empty **all** tables; one resource surviving suggests the breakage is **per-model** (a model class that lost/never-got its registration or adapter binding), not a dead adapter.
+2. **Per-method:** for the *same* wedged resource, the single-record path works while the list path doesn't — `Article.find(id)` (the view page) returns the record while `Article.query().paginate()` (the list) returns empty. pilotiq's `Resource.query()` is just `this.model.query()`, so both use the same `Article` class — yet `query()` empties and `find()` doesn't.
+
+**Pilotiq-side contribution RULED OUT (tested 2026-05-25).** I floated a hypothesis that pilotiq's *own* HMR re-import (`configureServer`'s watcher → `onPanelChange()` → `devServer.ssrLoadModule(AdminPanel.ts)` + `PilotiqRegistry` swap, incl. `watcher.on('add')` firing during initial boot) races the rudder re-boot and re-evaluates `Models/*` into fresh class identities that miss `ModelRegistry`. **Disproven:** disabled pilotiq's `onPanelChange` entirely (commented the three `watcher.on(...)` registrations, rebuilt dist), re-ran the repro → **the wedge still reproduces identically** (warm 6 rows → one edit → 0, stuck 18s; log still shows exactly one `change detected` = the rudder re-boot). So pilotiq's re-import is **not** a contributor — **the wedge is owned entirely by the `@rudderjs/*` re-boot/ORM lifecycle**, confirming this plan's "No pilotiq-side fix is possible" stance. The per-resource (`posts` survives) and per-method (`find()` vs `query().paginate()`) discriminators must therefore be explained **within the rudder ORM re-boot path** (e.g. `ModelRegistry` per-model state or `_store.adapter`/PrismaClient mid-swap), not by a second re-importer. ORM returns **empty, not an error**; nothing logged.
+
+Also note this **broadens the affected surface**: the pilotiq user reports the **SiteSettings Global** (a single-record load via `find`, not a list `paginate`) *also* intermittently loses its data on an edit. So the "find works / list empties" split observed in one snapshot was timing luck, not a structural boundary — the whole booted-ORM data path can wedge, lists and single-record alike.
+
+**Repro (pilotiq playground, deps core@1.3.2 / orm-prisma@2.0.1 / vite@2.7.1):**
+```sh
+# single clean server, then ONE edit (no double-write) — light sequential polling:
+perl -pi -e "s/title: 'Pilotiq'/title: 'PilotiqZ'/" app/Pilotiq/AdminPanel.ts
+for i in $(seq 1 16); do curl -s localhost:3003/new-admin/articles | grep -oc 'articles/cm'; sleep 1.5; done
+# → drops to 0 and stays 0 for the full window; `posts` and the article view page stay full.
+```
+
+### Diagnostic probe shipped — `RUDDER_ORM_TRACE=1` (framework session, 2026-05-25)
+
+Because the framework playground can't reproduce REOPEN #2 (SQLite leak is benign there), patching the ORM blind would be guessing. Instead shipped a probe in **`@rudderjs/orm`** (`ormTraceTerminal`, env-gated, zero overhead off): set `RUDDER_ORM_TRACE=1` and every read terminal logs
+
+```
+[orm] get model=Article class=#7 table=article adapter=#2 softDeletes=false scopes=[] rows=0
+```
+
+Run the repro above with the env var set against the **reproducing pilotiq playground**; the wedged `articles` line names the cause directly:
+- `rows=0` **+ different `class=#N`** than a working query → a **stale re-imported model class** is being queried (closure captured the old/new identity wrongly). This is my leading hypothesis — confirmed in source that `ModelRegistry.register()` is a **no-op on name collision**, so a re-imported model class never re-installs its relation methods/listeners.
+- `rows=0` **+ different `adapter=#M`** than a working query → adapter swap / a second adapter object.
+- `rows=0` **+ unexpected `table=`** → class-name → table drift.
+- `rows=0` **+ non-empty `scopes=[...]` or `softDeletes=true`** → a filter emptying the set.
+- `rows=0` with everything matching a working query → the empty is below the Model layer (adapter/PrismaClient state).
+
+Confirmed from source while building the probe: `find()` (via `_q()`) and `query()` take the **same** adapter + soft-delete + global-scope path, so the earlier "find works / query empties" split is **not structural** (timing luck, as the broadening note above already concluded). Ships via the next `@rudderjs/orm` patch; the pilotiq agent runs the probe and reports the line.

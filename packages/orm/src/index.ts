@@ -99,6 +99,46 @@ if (!_g['__rudderjs_orm_registry__']) {
 }
 const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
 
+// ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
+//
+// Set RUDDER_ORM_TRACE=1 to log one line per read terminal (find/first/get/all/
+// paginate). Built to diagnose the "booted-ORM path returns empty after a dev
+// re-boot, no error" residual (docs/plans/2026-05-24-hmr-reboot-window-...md,
+// REOPEN #2): the symptom is empty-not-error, so the line surfaces exactly which
+// of the plausible causes is in play —
+//   • `table=` ......... a wrong / unexpected table (class-name → table drift)
+//   • `class=#N` ....... the Model class IDENTITY. A re-imported model gets a
+//                        NEW tag; if a query runs against a different #N than the
+//                        one returning rows, stale-class capture is implicated.
+//   • `adapter=#M` ..... the ORM adapter object the query was built from. A
+//                        different #M than a working query = adapter swap/stale.
+//   • `softDeletes` / `scopes=[...]` — a filter that could empty the result set.
+//   • `rows=` .......... the count actually returned (0 = the wedge).
+// Zero overhead when the env var is off (every call early-returns). The class /
+// adapter tag maps live in this module, which is externalized (not re-evaluated
+// on HMR), so tags stay stable across re-boots — re-imported app/Models/* get
+// fresh tags precisely because THEY are re-evaluated. That contrast is the point.
+const _ormTrace = process.env['RUDDER_ORM_TRACE'] === '1'
+let _classSeq = 0
+let _adapterSeq = 0
+const _classTags = new WeakMap<object, number>()
+const _adapterTags = new WeakMap<object, number>()
+function _tagOf(map: WeakMap<object, number>, next: () => number, obj: object | null): string {
+  if (!obj) return 'none'
+  let t = map.get(obj)
+  if (t === undefined) { t = next(); map.set(obj, t) }
+  return `#${t}`
+}
+function ormTraceTerminal(self: typeof Model, terminal: string, rowCount: number, adapter: object | null): void {
+  if (!_ormTrace) return
+  const scopes = Object.keys(self.globalScopes ?? {})
+  console.log(
+    `[orm] ${terminal} model=${self.name} class=${_tagOf(_classTags, () => ++_classSeq, self)} ` +
+    `table=${self.getTable()} adapter=${_tagOf(_adapterTags, () => ++_adapterSeq, adapter)} ` +
+    `softDeletes=${self.softDeletes} scopes=[${scopes.join(',')}] rows=${rowCount}`,
+  )
+}
+
 export class ModelRegistry {
   static set(adapter: OrmAdapter): void {
     _store.adapter = adapter
@@ -828,8 +868,9 @@ export abstract class Model {
   }
 
   /** @internal — wrap a QueryBuilder so its read methods return Model instances. */
-  private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> {
+  private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>, traceAdapter?: object | null): HydratingQueryBuilder<InstanceType<T>> {
     const ModelClass  = self as typeof Model
+    const _traceAdapter = traceAdapter ?? null
     /** Aliases stamped onto rows by the adapter for any aggregates registered
      *  on this QB. Tagged on each hydrated instance via `aggregateKeysOf` so
      *  `_toData()` excludes them on writes. */
@@ -945,24 +986,28 @@ export abstract class Model {
           case 'find':
             return async (id: number | string): Promise<InstanceType<T> | null> => {
               const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
+              ormTraceTerminal(ModelClass, 'find', inst ? 1 : 0, _traceAdapter)
               if (inst) await attachPoly([inst])
               return inst
             }
           case 'first':
             return async (): Promise<InstanceType<T> | null> => {
               const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
+              ormTraceTerminal(ModelClass, 'first', inst ? 1 : 0, _traceAdapter)
               if (inst) await attachPoly([inst])
               return inst
             }
           case 'get':
             return async (): Promise<InstanceType<T>[]> => {
               const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+              ormTraceTerminal(ModelClass, 'get', insts.length, _traceAdapter)
               await attachPoly(insts)
               return insts
             }
           case 'all':
             return async (): Promise<InstanceType<T>[]> => {
               const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
+              ormTraceTerminal(ModelClass, 'all', insts.length, _traceAdapter)
               await attachPoly(insts)
               return insts
             }
@@ -970,6 +1015,7 @@ export abstract class Model {
             return async (page?: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> => {
               const r = await (target as QueryBuilder<InstanceType<T>>).paginate(page ?? 1, perPage)
               const data = wrapMany(r.data)
+              ormTraceTerminal(ModelClass, 'paginate', data.length, _traceAdapter)
               await attachPoly(data)
               return { ...r, data }
             }
@@ -1010,7 +1056,8 @@ export abstract class Model {
     const excludedScopes = new Set<string>()
 
     const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
-      let raw = ModelRegistry.getAdapter().query<InstanceType<T>>(
+      const adapter = ModelRegistry.getAdapter()
+      let raw = adapter.query<InstanceType<T>>(
         modelClass.getTable(),
         { primaryKey: modelClass.primaryKey },
       )
@@ -1023,7 +1070,7 @@ export abstract class Model {
           raw = scopeFn(raw) as HydratingQueryBuilder<InstanceType<T>>
         }
       }
-      return Model._hydratingQb(this, raw)
+      return Model._hydratingQb(this, raw, adapter as object)
     }
 
     const enhance = (q: HydratingQueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } => {
@@ -1047,7 +1094,8 @@ export abstract class Model {
   private static _q<T extends typeof Model>(self: T): HydratingQueryBuilder<InstanceType<T>> {
     ModelRegistry.register(self)
     const ModelClass = self as typeof Model
-    let q = ModelRegistry.getAdapter().query<InstanceType<T>>(
+    const adapter = ModelRegistry.getAdapter()
+    let q = adapter.query<InstanceType<T>>(
       ModelClass.getTable(),
       { primaryKey: ModelClass.primaryKey },
     )
@@ -1058,7 +1106,7 @@ export abstract class Model {
     for (const [, scopeFn] of Object.entries(ModelClass.globalScopes)) {
       q = scopeFn(q) as HydratingQueryBuilder<InstanceType<T>>
     }
-    return Model._hydratingQb(self, q)
+    return Model._hydratingQb(self, q, adapter as object)
   }
 
   static async find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
