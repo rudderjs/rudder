@@ -23,6 +23,51 @@ import {
 } from './exceptions.js'
 import { ValidationError, ValidationResponse } from './validation.js'
 
+// ─── Dev HMR: in-flight request drain barrier ───────────────
+//
+// A dev re-boot mutates process-shared state IN PLACE — `router.reset()`,
+// `resetGroupMiddleware()`, and provider `boot()`s repopulating registries (the
+// global ORM adapter, and framework-package registries such as a panel/resource
+// registry). #652 single-flighted re-boots and gated each request's START on the
+// boot promise — but a request that already passed the gate can be MID-RENDER
+// when the next re-boot stomps that shared state, observing a half-booted graph
+// (e.g. a resource schema missing its `table` element → empty render, no error:
+// docs/plans/2026-05-24-hmr-reboot-window-...md REOPEN #2). This barrier makes a
+// re-boot WAIT for in-flight renders to drain before it mutates; new requests
+// already wait for the re-boot (the gate). The drain is bounded by a timeout so
+// a hung render can't wedge the reload. Dev-only; no-op in production (single
+// boot, nothing in flight, no resets). The store lives on globalThis because the
+// re-boot runs on a fresh instance while in-flight renders may be on the old one.
+interface InFlightStore { count: number; waiters: Array<() => void> }
+const REBOOT_DRAIN_TIMEOUT_MS = 5000
+function _inFlightStore(): InFlightStore {
+  const g = globalThis as Record<string, unknown>
+  if (!g['__rudderjs_inflight__']) g['__rudderjs_inflight__'] = { count: 0, waiters: [] } satisfies InFlightStore
+  return g['__rudderjs_inflight__'] as InFlightStore
+}
+function requestStarted(): void { _inFlightStore().count++ }
+function requestEnded(): void {
+  const s = _inFlightStore()
+  s.count = Math.max(0, s.count - 1)
+  if (s.count === 0 && s.waiters.length > 0) for (const w of s.waiters.splice(0)) w()
+}
+/** Resolve once no request is mid-render, or after `timeoutMs` (so a hung render
+ *  can't wedge the dev reload). Immediate no-op when nothing is in flight. */
+function drainInFlightRequests(timeoutMs = REBOOT_DRAIN_TIMEOUT_MS): Promise<void> {
+  const s = _inFlightStore()
+  if (s.count === 0) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const done = (): void => { clearTimeout(timer); resolve() }
+    const timer = setTimeout(() => {
+      const i = s.waiters.indexOf(done)
+      if (i >= 0) s.waiters.splice(i, 1)
+      resolve()
+    }, timeoutMs)
+    timer.unref?.()
+    s.waiters.push(done)
+  })
+}
+
 // ─── Configure Options ─────────────────────────────────────
 
 export interface ConfigureOptions {
@@ -338,6 +383,11 @@ export class RudderJS {
       console.log(`[hmr] watcher→reimport ${(tStart - hmrT0).toFixed(1)}ms`)
     }
     if (this._app.isDevelopment()) {
+      // Quiesce: let any in-flight render finish before we stomp shared state —
+      // otherwise a request that already passed the handleRequest gate observes a
+      // half-booted graph mid-render (the REOPEN #2 empty-table wedge). Bounded
+      // by a timeout; no-op on cold boot (nothing in flight).
+      await drainInFlightRequests()
       rudder.reset()
       const { router } = await import('@rudderjs/router') as { router: { reset(): void } }
       router.reset()
@@ -508,7 +558,16 @@ export class RudderJS {
       try { await latest } catch { /* the newer boot owns its own failure */ }
     }
     if (!this._handler) throw new Error('[RudderJS] Request handler not initialized.')
-    return this._handler(request, env, ctx)
+    // Production: byte-identical fast path — no drain bookkeeping (single boot).
+    if (!this._app.isDevelopment()) return this._handler(request, env, ctx)
+    // Dev: count this render as in-flight so a concurrent re-boot drains it
+    // before mutating shared state (see the drain barrier at the top of file).
+    requestStarted()
+    try {
+      return await this._handler(request, env, ctx)
+    } finally {
+      requestEnded()
+    }
   }
 
   readonly fetch = (request: Request, env?: unknown, ctx?: unknown): Promise<Response> =>
