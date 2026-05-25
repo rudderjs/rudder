@@ -1,6 +1,6 @@
-import { describe, it } from 'node:test'
+import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { bullmq, type BullMQConfig } from './index.js'
+import { bullmq, sharedBullMqQueues, type BullMQConfig } from './index.js'
 
 // Note: tests that actually dispatch/work require a running Redis instance
 // and are covered by integration tests. These tests verify the factory
@@ -12,6 +12,32 @@ const baseConfig: BullMQConfig = {
   prefix: 'test',
   jobs:   [],
 }
+
+describe('sharedBullMqQueues — dev HMR queue reuse', () => {
+  const KEY = '__rudderjs_bullmq_queues__'
+  const G = globalThis as Record<string, unknown>
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 10))
+  beforeEach(() => { delete G[KEY] })
+
+  it('reuses the same queue map for an unchanged signature (no new connections per re-boot)', () => {
+    const a = sharedBullMqQueues('sig1')
+    const b = sharedBullMqQueues('sig1')
+    assert.strictEqual(b, a, 'same signature must return the same live map')
+  })
+
+  it('closes superseded queues and returns a fresh map on a signature change', async () => {
+    const m1 = sharedBullMqQueues('sig1')
+    let closed = false
+    m1.set('jobs', { close: async () => { closed = true } } as never)
+
+    const m2 = sharedBullMqQueues('sig2')
+    await settle() // close() is fire-and-forget
+
+    assert.notStrictEqual(m2, m1, 'a changed signature builds a fresh map')
+    assert.equal(closed, true, 'the superseded queue was closed')
+    assert.equal(m2.size, 0, 'the fresh map starts empty')
+  })
+})
 
 describe('bullmq() factory', () => {
   it('returns an object with a create() method', () => {
