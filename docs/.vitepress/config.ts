@@ -50,6 +50,7 @@ export default defineConfig({
             { text: 'What is RudderJS?', link: '/guide/' },
             { text: 'When Not to Use Rudder', link: '/guide/when-not-to-use' },
             { text: 'Installation', link: '/guide/installation' },
+            { text: 'Your First App', link: '/guide/tutorial' },
             { text: 'Configuration', link: '/guide/configuration' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
             { text: 'Frontend', link: '/guide/frontend' },
@@ -128,8 +129,13 @@ export default defineConfig({
             { text: 'AI',             link: '/guide/ai' },
             { text: 'Vector Stores',  link: '/guide/vector-stores' },
             { text: 'Computer-use',   link: '/guide/computer-use' },
-            { text: 'MCP',            link: '/guide/mcp' },
             { text: 'Boost',          link: '/packages/boost' },
+          ],
+        },
+        {
+          text: 'Model Context Protocol',
+          items: [
+            { text: 'MCP', link: '/guide/mcp' },
           ],
         },
         {
