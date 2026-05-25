@@ -165,6 +165,41 @@ describe('SyncProvider', () => {
   })
 })
 
+describe('SyncProvider.register — dev HMR persistence reuse', () => {
+  const G = globalThis as Record<string, unknown>
+  const makeFake = (): SyncPersistence => ({
+    async getYDoc()        { return new Y.Doc() },
+    async storeUpdate()    {},
+    async getStateVector() { return new Uint8Array() },
+    async getDiff()        { return new Uint8Array() },
+    async clearDocument()  {},
+    async destroy()        {},
+  })
+  beforeEach(() => { delete G[SYNC_KEYS.persistence] })
+
+  it('reuses the first persistence across re-boots (a re-built syncRedis() does not open a new connection)', async () => {
+    const core     = await import('@rudderjs/core')
+    const previous = core.getConfigRepository?.()
+    const fakeApp  = { bind: () => {} } as never
+    const adapterA = makeFake()
+    const adapterB = makeFake()
+    try {
+      core.setConfigRepository?.(new core.ConfigRepository({ sync: { persistence: adapterA } }))
+      new SyncProvider(fakeApp).register()
+      assert.strictEqual(G[SYNC_KEYS.persistence], adapterA, 'first register stores adapterA')
+
+      // Simulate a dev HMR re-boot: config re-evaluates and hands register() a
+      // freshly-built persistence. It must be ignored — the live one wins.
+      core.setConfigRepository?.(new core.ConfigRepository({ sync: { persistence: adapterB } }))
+      new SyncProvider(fakeApp).register()
+      assert.strictEqual(G[SYNC_KEYS.persistence], adapterA, 're-boot reuses adapterA; adapterB is inert (never connects)')
+    } finally {
+      delete G[SYNC_KEYS.persistence]
+      if (previous) core.setConfigRepository?.(previous)
+    }
+  })
+})
+
 // ─── SyncPersistence interface (custom adapter) ──────────────
 
 describe('Custom SyncPersistence adapter', () => {
