@@ -235,8 +235,14 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
       if (cachedDoc) {
         try {
           Y.applyUpdate(cachedDoc, update)
-        } catch {
+        } catch (err) {
           docCache.delete(docName)
+          syncObservers.emit({
+            kind:    'sync.error',
+            op:      'storeUpdate',
+            docName,
+            error:   err instanceof Error ? err.message : String(err),
+          })
         }
       }
     },
