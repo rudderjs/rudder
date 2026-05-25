@@ -239,8 +239,9 @@ describe('dev HMR re-boot — quiesce barrier', () => {
     await bootOf(a)
 
     // Fire a request — it passes the gate and parks INSIDE the handler (in-flight).
+    // Fire-and-forget: we observe progress via `handling` / `served`, not the promise.
     let served = false
-    const req = a.handleRequest(new Request('http://localhost/')).then(() => { served = true })
+    void a.handleRequest(new Request('http://localhost/')).then(() => { served = true })
     await until(() => handling)
     assert.equal(handling, true, 'request entered the handler (in-flight render)')
     assert.equal(served, false)
