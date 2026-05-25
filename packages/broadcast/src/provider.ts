@@ -1,6 +1,7 @@
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import {
   initWsServer,
+  isWsServerRunning,
   getUpgradeHandler,
   registerAuth,
   registerConnectionAuth,
@@ -110,7 +111,11 @@ export class BroadcastingProvider extends ServiceProvider {
     const cfg  = config<BroadcastConfig>('broadcast', {})
     const path = cfg.path ?? '/ws'
 
-    const driver = cfg.driver ? await cfg.driver() : undefined
+    // Build the driver only on first boot. initWsServer() is init-once (it
+    // early-returns on dev HMR re-boots), so a driver constructed on every boot
+    // would be discarded by that early return — leaking its Redis pub/sub
+    // connections per edit. On re-boot the live ws-server keeps its driver.
+    const driver = cfg.driver && !isWsServerRunning() ? await cfg.driver() : undefined
 
     initWsServer({
       ...(cfg.allowedOrigins      ? { allowedOrigins:      cfg.allowedOrigins      } : {}),
