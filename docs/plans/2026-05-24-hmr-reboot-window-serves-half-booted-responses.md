@@ -192,3 +192,28 @@ Run the repro above with the env var set against the **reproducing pilotiq playg
 - `rows=0` with everything matching a working query → the empty is below the Model layer (adapter/PrismaClient state).
 
 Confirmed from source while building the probe: `find()` (via `_q()`) and `query()` take the **same** adapter + soft-delete + global-scope path, so the earlier "find works / query empties" split is **not structural** (timing luck, as the broadening note above already concluded). Ships via the next `@rudderjs/orm` patch; the pilotiq agent runs the probe and reports the line.
+
+### Probe results — pilotiq agent ran `RUDDER_ORM_TRACE=1` (pilotiq session, 2026-05-25)
+
+Bumped the pilotiq playground to `@rudderjs/orm@1.12.1` (within its `^1.12.0` range), ran `RUDDER_ORM_TRACE=1 pnpm dev`, reproduced against the live wedge. Deps: `orm@1.12.1` + `core@1.3.2` + `orm-prisma@2.0.1` + `vite@2.7.1`, SQLite.
+
+**Headline: the wedged query emits NO trace line at all — so the `rows=0`-line decision tree above does not apply. The signal is the line's ABSENCE.** The wedged list query never reaches the read terminal; it throws/short-circuits *upstream* of `get`/`paginate`.
+
+- **Working baseline + clean reboots:** `paginate model=Article class=#1 table=article adapter=#1 softDeletes=false scopes=[] rows=6`. The **`adapter=#N` object identity increments once per reboot** (`#1→#2→…→#5`); a query landing *after* the reboot window hits the new adapter and returns full rows. **So a swapped adapter is benign on its own — not the wedge.** The **`class=` tag stayed `#1` across every reboot** (model NOT re-imported in these runs) → the "stale re-imported model class" leading hypothesis **did not fire here**: `app/Models/*` kept identity (`Resource.model` is a static class ref imported once; pilotiq's panel re-import is incremental and doesn't re-eval the model modules). The `register()`-no-op-on-collision finding may still bite a *different* edit shape, but it is not what wedges the pilotiq playground.
+- **Wedge captured (in-window concurrent flood):** double-write edit, then 10 concurrent `/articles` fired immediately (no settle). **9/10 returned empty, 1 returned full** — the 1 full logged exactly one line `paginate model=Article class=#1 adapter=#5 rows=6`; the **9 empty produced no `model=Article` line whatsoever**. Server then **stayed wedged** (`settled rows=0`, no self-recovery). A *single* edit followed by a `sleep`+query never wedges (the query lands after the window on the fresh adapter, logs `rows=6`).
+- No error logged anywhere; the wedged response is a normal **200 with the empty-state table** (so the throw is swallowed to an empty render, not surfaced as a 500).
+
+**Implication / next instrumentation:** the read-terminal probe can't see this cause because the wedged path never reaches it. Instrument **upstream** — the query-builder entry and `ModelRegistry.getAdapter()` — and log on the **throw path**, not just on a returned row count. The empty-not-error + no-line strongly indicates `getAdapter()` (or builder construction) **throws while `_store.adapter` is null/mid-swap during a *concurrent* reboot**, and the caller (pilotiq's records handler or the ORM builder) catches it into an empty result. The per-resource flakiness (`posts` survives a reboot that `articles` doesn't) is then just which request's builder-construction lands in the null-adapter gap — consistent with the concurrent-`create()`/adapter-mid-swap race this plan already suspects, now localized to **before** the read terminal.
+
+### Upstream probe shipped + a source correction (framework session, 2026-05-25 later)
+
+⚠️ **Correction to the hypothesis above:** `getAdapter()` is **NOT** the null-throw suspect. Verified against source — `_store.adapter` is only nulled by `ModelRegistry.reset()` (`packages/orm/src/index.ts:196`), and **`reset()` has ZERO callers in the entire non-test codebase**. `ModelRegistry.set()` only ever *overwrites* the adapter (and #652 keeps the client reused for pilotiq's stable SQLite url). So `_store.adapter` is never null after the first boot → `getAdapter()` cannot be the throw. The wedge throw is elsewhere: either (#1) `Model.query()` is never reached (the request dies above the ORM — route/resource not ready under the concurrent re-boot), or (#2) `adapter.paginate()`/`get()` *execution* throws (Prisma errors under the concurrent re-boot) and pilotiq swallows it to an empty 200.
+
+**Extended `RUDDER_ORM_TRACE` (next `@rudderjs/orm` patch)** to discriminate those, two new line types:
+- `[orm] build model=… class=#N table=… adapter=#M …` — at query **construction**, before scopes. **Presence proves `Model.query()` was reached.**
+- `[orm] THREW <terminal> … :: <error.message>` — a terminal's adapter call **threw** (then re-thrown).
+
+**How the agent reads the rerun** (run the single-edit + concurrent-flood repro with `RUDDER_ORM_TRACE=1`, watch the 9 wedged requests):
+- **No `build` line** for the wedged requests → cause **#1**: the wedge is upstream of the ORM (route/resource), not the ORM itself. Instrument pilotiq's records handler / the request gate next.
+- **`build` but no terminal/`THREW`** → threw between construction and the terminal (a global-scope fn, the proxy) — narrow there.
+- **`build` + `THREW … :: <msg>`** → cause **#2**: the adapter execution threw; `<msg>` names it (Prisma connection state, undefined access, …) → fix targets that.
