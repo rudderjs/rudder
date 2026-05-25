@@ -37,6 +37,15 @@ const resolveDir = resolve(repoRoot, 'playground')
 const TARGETS = [
   { name: '@rudderjs/orm', code: `export * from '@rudderjs/orm'` },
   { name: '@rudderjs/core/client', code: `export * from '@rudderjs/core/client'` },
+  // The rest are entries that views / client code already import (audited green
+  // 2026-05-26). Listed here so a future regression in any of them is caught,
+  // not just orm/core. The main `@rudderjs/core` entry is intentionally NOT a
+  // target — it re-exports the CLI/@clack chain and is server-only by design.
+  { name: '@rudderjs/view', code: `export * from '@rudderjs/view'` },
+  { name: '@rudderjs/router', code: `export * from '@rudderjs/router'` },
+  { name: '@rudderjs/support', code: `export * from '@rudderjs/support'` },
+  { name: '@rudderjs/ai', code: `export * from '@rudderjs/ai'` },
+  { name: '@rudderjs/middleware/client', code: `export * from '@rudderjs/middleware/client'` },
 ]
 
 // esbuild plugin: route every `node:` builtin to a module that throws at eval.
