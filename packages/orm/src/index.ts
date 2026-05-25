@@ -187,8 +187,20 @@ export class ModelRegistry {
    * Register a Model class so consumers (e.g. Telescope's model collector)
    * can discover it and attach lifecycle listeners.
    *
-   * Keyed by `ModelClass.name`. Idempotent — registering the same class twice
-   * is a no-op; late listeners only fire on the first registration.
+   * Keyed by `ModelClass.name`. Re-registering the EXACT same class is a no-op;
+   * late listeners only fire on the first registration of a name.
+   *
+   * **Dev HMR re-import:** a re-boot re-evaluates `app/Models/*.ts`, producing a
+   * NEW class identity with the same `name`. The old guard (`_store.models.has(name)`)
+   * silently ignored it — leaving the registry pointed at the STALE class and the
+   * fresh class's `belongsToMany` / morph accessors **never installed** on its
+   * prototype. A consumer that introspects the model (e.g. a schema-builder
+   * walking relations to render a resource table) then sees a half-wired model
+   * and produces an incomplete schema — persistently, with no self-recovery
+   * (docs/plans/2026-05-24-hmr-reboot-window-...md REOPEN #2). So a same-name but
+   * DIFFERENT-identity class now re-points the registry and re-installs its
+   * accessors on the fresh prototype. In production a model is imported once, so
+   * `existing` is never a different identity and this never re-runs.
    *
    * Models are also registered lazily on first query (`query()` / `find()` /
    * `all()` / etc), but eager registration in an `AppServiceProvider` lets
@@ -196,11 +208,18 @@ export class ModelRegistry {
    */
   static register(ModelClass: typeof Model): void {
     const name = ModelClass.name
-    if (!name || _store.models.has(name)) return
+    if (!name) return
+    const existing = _store.models.get(name)
+    if (existing === ModelClass) return // exact same class already registered
+    const reimport = existing !== undefined // same name, fresh identity (dev HMR)
     _store.models.set(name, ModelClass)
     installBelongsToManyMethods(ModelClass)
     installMorphPivotMethods(ModelClass)
-    for (const listener of _store.listeners) listener(name, ModelClass)
+    // First registration → notify listeners (e.g. Telescope's model collector).
+    // A dev re-import skips this: the name is already known, and re-firing risks
+    // double-subscription in listeners. The accessors above are re-installed on
+    // the fresh prototype regardless — that's what the re-imported identity needs.
+    if (!reimport) for (const listener of _store.listeners) listener(name, ModelClass)
   }
 
   /**
