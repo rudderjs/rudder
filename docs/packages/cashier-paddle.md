@@ -499,13 +499,13 @@ await sub.resume()
 ```ts
 await sub.cancel()                  // cancel at end of period (grace period)
 await sub.cancelNow()               // cancel immediately
-await sub.stopCancelation()         // undo a scheduled cancel (only works during grace period)
+await sub.stopCancelation()         // undo a scheduled cancellation (only works during grace period)
 
 if (sub.onGracePeriod()) { /* canceled, still active until period ends */ }
 ```
 
 > [!WARNING]
-> Paddle subscriptions cannot be resumed after cancelation completes. Customers must create a new subscription. (`stopCancelation()` only works while still on grace period.)
+> Paddle subscriptions cannot be resumed after cancellation completes. Customers must create a new subscription. (`stopCancelation()` only works while still on grace period.)
 
 ## Subscription Trials
 
