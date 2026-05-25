@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
+import { reusableConnection } from '@rudderjs/support'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 
 // Side-effect import — pulls in the Vike.PageContext.flash augmentation so
@@ -347,6 +348,7 @@ type RedisClient = {
   get(key: string): Promise<string | null>
   set(key: string, value: string, ...args: unknown[]): Promise<unknown>
   del(...keys: string[]): Promise<unknown>
+  quit(): Promise<unknown>
 }
 
 /** @internal Exported for tests; not part of the public API. */
@@ -369,18 +371,28 @@ export class RedisDriver implements InternalDriver {
 
   private getClient(): Promise<RedisClient> {
     if (!this.clientPromise) {
-      this.clientPromise = (async () => {
-        const mod = await import('ioredis') as unknown as {
-          Redis: new (opts: string | { host?: string; port?: number; password?: string | undefined }) => RedisClient
-        }
-        return this.redisConfig.url
-          ? new mod.Redis(this.redisConfig.url)
-          : new mod.Redis({
-              host:     this.redisConfig.host     ?? '127.0.0.1',
-              port:     this.redisConfig.port     ?? 6379,
-              password: this.redisConfig.password,
-            })
-      })()
+      // Reuse one ioredis client across dev HMR re-boots — SessionProvider.boot()
+      // rebuilds this RedisDriver on every edit, so without reuse each re-boot
+      // opens (and leaks) a fresh Redis connection. See reusableConnection().
+      const signature = this.redisConfig.url
+        ?? `${this.redisConfig.host ?? '127.0.0.1'}:${this.redisConfig.port ?? 6379}:${this.redisConfig.password ?? ''}`
+      this.clientPromise = reusableConnection<RedisClient>(
+        '__rudderjs_session_redis__',
+        signature,
+        async () => {
+          const mod = await import('ioredis') as unknown as {
+            Redis: new (opts: string | { host?: string; port?: number; password?: string | undefined }) => RedisClient
+          }
+          return this.redisConfig.url
+            ? new mod.Redis(this.redisConfig.url)
+            : new mod.Redis({
+                host:     this.redisConfig.host     ?? '127.0.0.1',
+                port:     this.redisConfig.port     ?? 6379,
+                password: this.redisConfig.password,
+              })
+        },
+        (client) => client.quit(),
+      )
       // If the import or constructor throws, drop the rejected promise so
       // the next call retries instead of permanently caching the failure.
       this.clientPromise.catch(() => { this.clientPromise = null })

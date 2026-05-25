@@ -1009,6 +1009,9 @@ importers:
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@rudderjs/vite':
         specifier: workspace:^
