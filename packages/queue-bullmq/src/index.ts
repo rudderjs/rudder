@@ -61,6 +61,39 @@ function redisOpts(config: BullMQConfig): Record<string, unknown> {
   }
 }
 
+// ─── Dev HMR: shared Queue map across re-boots ─────────────
+
+interface BullQueuesCache { signature: string; queues: Map<string, Queue> }
+const BULLMQ_QUEUES_KEY = '__rudderjs_bullmq_queues__'
+
+/**
+ * @internal Reuse the per-name `Queue` map across Vite dev HMR re-boots.
+ *
+ * `QueueProvider` rebuilds the `BullMQAdapter` on every `app/` edit. Without
+ * sharing, each re-boot's first dispatch lazily opens a fresh `Queue` (a Redis
+ * connection) per name and orphans the previous one — a connection leaked per
+ * edit toward Redis's `maxclients`. The map is cached on `globalThis` keyed by
+ * the connection + prefix signature: an unchanged signature reuses the live
+ * queues (no new connection); a changed signature closes the superseded ones.
+ *
+ * Safe to reuse a `Queue`: it's a producer-only handle carrying no app/job code
+ * (job classes live in `jobRegistry`, rebuilt each boot). Workers are NOT shared
+ * — they're created only in `work()` (the `queue:work` CLI, a separate process
+ * that doesn't HMR). No-op in production (single boot).
+ */
+export function sharedBullMqQueues(signature: string): Map<string, Queue> {
+  const g = globalThis as Record<string, unknown>
+  const cached = g[BULLMQ_QUEUES_KEY] as BullQueuesCache | undefined
+  if (cached) {
+    if (cached.signature === signature) return cached.queues
+    for (const q of cached.queues.values()) void q.close().catch(() => { /* releasing a superseded queue */ })
+    delete g[BULLMQ_QUEUES_KEY]
+  }
+  const queues = new Map<string, Queue>()
+  g[BULLMQ_QUEUES_KEY] = { signature, queues } satisfies BullQueuesCache
+  return queues
+}
+
 // ─── Adapter ───────────────────────────────────────────────
 
 class BullMQAdapter implements QueueAdapter {
@@ -72,7 +105,10 @@ class BullMQAdapter implements QueueAdapter {
   readonly supportsChain    = false
   readonly supportsBatch    = false
 
-  private readonly queues            = new Map<string, Queue>()
+  /** Shared across dev HMR re-boots via globalThis (keyed by connection +
+   *  prefix) so a re-boot's first dispatch reuses the live Queue instead of
+   *  opening a fresh Redis connection per name. Assigned in the constructor. */
+  private readonly queues:            Map<string, Queue>
   /** @internal — track active workers so `disconnect()` can close them. Public
    *  read-only access is fine for tests; never mutate externally. */
   readonly         workers:           Worker[] = []
@@ -97,6 +133,7 @@ class BullMQAdapter implements QueueAdapter {
     this.removeOnComplete  = config.removeOnComplete ?? 100
     this.removeOnFail      = config.removeOnFail     ?? 500
     this._shutdown         = () => { void this.disconnect() }
+    this.queues            = sharedBullMqQueues(`${JSON.stringify(this.connection)}::${this.prefix}`)
 
     for (const JobClass of (config.jobs ?? [])) {
       this.jobRegistry.set(JobClass.name, JobClass)
