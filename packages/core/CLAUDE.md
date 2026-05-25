@@ -20,6 +20,7 @@ The framework kernel — Application lifecycle, DI container, service providers,
 - **Deferred providers**: return tokens from `$defer()`, boot lazily on first `resolve()`
 - **Scoped bindings**: per-request via `AsyncLocalStorage` (lazy-loaded, server-only)
 - **No circular deps**: `@rudderjs/router` is loaded at runtime via `resolveOptionalPeer()` — never add it to `dependencies`
+- **Client-safe surface lives at `@rudderjs/core/client`** (`src/client.ts`): the main `.` entry re-exports `@rudderjs/console` (→ `@clack/*` static `node:` imports) + Node-only modules (`default-providers` reads the manifest via `node:fs`, `events-fake` uses `node:assert`, support's `resolveOptionalPeer`/`dump`/`dd`), so it crashes in a browser bundle. `/client` re-exports only the node-free symbols (`app`, `resolve`, `Env`, `env`, `config`, `Container` + DI, validation, exceptions, `ServiceProvider`, events, contracts types). **Anything client-reachable must import from `@rudderjs/core/client`, not `@rudderjs/core`.** Keep `client.ts` free of console/CLI re-exports and static `node:` imports — the `Client Bundle Smoke` CI gate (`scripts/client-bundle-smoke.mjs`) `export *`s it through esbuild + a no-`process` vm and fails on any Node-at-eval. Lazy `await import('node:x')` inside a function is fine (never runs at eval).
 
 ## Introspection commands
 

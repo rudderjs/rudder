@@ -122,6 +122,42 @@ jobs:
       - name: Test
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
+  client-bundle:
+    # Client-bundle smoke gate: some @rudderjs/* packages are legitimately
+    # bundled into the BROWSER (a `Model` reachable from client code, `app`/`Env`
+    # from a shared module). They must evaluate without pulling Node at module
+    # eval — no top-level `process.env`, no static `node:` import in the graph.
+    # Catches the orm 1.12.4 regression (`process is not defined`) and the
+    # @rudderjs/core console/@clack re-export hostility. See
+    # scripts/client-bundle-smoke.mjs.
+    name: Client Bundle Smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm turbo run build --filter='./packages/*'
+
+      - name: Client-bundle smoke
+        run: pnpm test:client-bundle
+
   docs-build:
     # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the
     # only place that catches `.md` parser breakage (plan docs landing
