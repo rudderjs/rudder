@@ -1,5 +1,17 @@
 # @rudderjs/session
 
+## 2.1.1
+
+### Patch Changes
+
+- 3bf71b9: Reuse one Redis client across dev HMR re-boots. `SessionProvider.boot()` rebuilds the `RedisDriver` on every `app/` edit, so without reuse each re-boot opened (and leaked) a fresh ioredis connection. The driver now routes client construction through `@rudderjs/support`'s `reusableConnection` (keyed by `url` / `host:port:password`), reusing the live client across re-boots and disposing it on a connection-signature change. No-op in production.
+- Updated dependencies [6f3cb2a]
+- Updated dependencies [3bf71b9]
+- Updated dependencies [2289785]
+  - @rudderjs/core@1.4.0
+  - @rudderjs/support@1.4.0
+  - @rudderjs/vite@2.7.2
+
 ## 2.1.0
 
 ### Minor Changes

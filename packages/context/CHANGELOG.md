@@ -1,5 +1,13 @@
 # @rudderjs/context
 
+## 1.0.4
+
+### Patch Changes
+
+- b279687: Register the `@rudderjs/log` integration listener only once per process. `ContextProvider.boot()` re-runs on every dev HMR re-boot and called `Log.listen()` each time, which appends to a globalThis-backed listener array with no dedup — so a duplicate context-merge listener accumulated per edit (unbounded across a dev session; every log entry re-ran the merge N times). Now guarded with a globalThis flag so the listener is registered once. No-op in production (single boot).
+- Updated dependencies [6f3cb2a]
+  - @rudderjs/core@1.4.0
+
 ## 1.0.3
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @rudderjs/cache
 
+## 1.3.2
+
+### Patch Changes
+
+- 3bf71b9: Reuse one Redis client across dev HMR re-boots. `CacheProvider.boot()` rebuilds the `RedisAdapter` on every `app/` edit, so without reuse each re-boot opened (and leaked) a fresh ioredis connection toward Redis's `maxclients` cap. The adapter now routes client construction through `reusableConnection` (keyed by `url` / `host:port:db:password`), reusing the live client across re-boots and disposing it on a connection-signature change. No-op in production.
+- Updated dependencies [6f3cb2a]
+- Updated dependencies [3bf71b9]
+  - @rudderjs/core@1.4.0
+  - @rudderjs/support@1.4.0
+
 ## 1.3.1
 
 ### Patch Changes

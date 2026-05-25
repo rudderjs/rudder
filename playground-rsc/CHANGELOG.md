@@ -1,5 +1,14 @@
 # rudderjs-playground-rsc
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [6f3cb2a]
+- Updated dependencies [3bf71b9]
+  - @rudderjs/core@1.4.0
+  - @rudderjs/support@1.4.0
+
 ## 0.0.5
 
 ### Patch Changes
