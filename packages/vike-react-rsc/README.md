@@ -91,6 +91,14 @@ this matrix is an interim safeguard, not a long-term commitment.
   production RSC manifest is empty and rendering 500s ("Cannot read properties
   of undefined (reading 'getConfig')"). The module shape
   (`configValuesSerialized`) is unchanged.
+- `src/config.ts`: the client `optimizeDeps.exclude` names the exact client-entry
+  subpath (`${PKG_NAME}/__internal/integration/client`), not just the package.
+  vike's [#3290](https://github.com/vikejs/vike/issues/3290) fix routes a
+  `client`-config bare specifier into `optimizeDeps.include`; esbuild then tries
+  to pre-bundle this module and fails on its `virtual:client-references` import,
+  killing dev hydration. `exclude` wins over `include`, so naming the subpath
+  keeps it out. No-op on vike without the #3290 fix (Rom confirmed no Vike change
+  needed in the issue thread).
 - Added this file and `LICENSE` (the upstream repo ships no `LICENSE` file
   despite declaring MIT in `package.json`).
 
