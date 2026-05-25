@@ -1,6 +1,6 @@
 # Cashier Paddle
 
-Paddle billing for RudderJS. `Billable` mixin for user models, subscription state machine, signed webhook receiver, checkout sessions, single charges, refunds, pricing previews, and drop-in React components.
+Paddle billing for Rudder. `Billable` mixin for user models, subscription state machine, signed webhook receiver, checkout sessions, single charges, refunds, pricing previews, and drop-in React components.
 
 `@rudderjs/cashier-paddle` integrates with [Paddle Billing](https://www.paddle.com) (Paddle 2.x) — the new Paddle, not Paddle Classic. Before you dig in, skim Paddle's [concept guides](https://developer.paddle.com/concepts/overview) and [API reference](https://developer.paddle.com/api-reference/overview).
 

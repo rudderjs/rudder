@@ -10,7 +10,7 @@ Apply the **tight-coupling checklist** from `Architecture.md` first. A new packa
 
 - It has an **adapter boundary** (e.g., different databases, queues, cloud providers)
 - It has a **portability boundary** (Node.js-only vs edge-compatible)
-- It is **independently useful** without the rest of RudderJS
+- It is **independently useful** without the rest of Rudder
 - It would be **optional** for most apps
 
 If the code is always deployed alongside an existing package and has no meaningful standalone behaviour, merge it instead.
@@ -227,7 +227,7 @@ describe('@rudderjs/my-feature', () => {
 
 ## Optional peer resolution
 
-When your package optionally integrates with another RudderJS package, resolve it at runtime rather than importing it statically:
+When your package optionally integrates with another Rudder package, resolve it at runtime rather than importing it statically:
 
 ```ts
 import { resolveOptionalPeer } from '@rudderjs/support'

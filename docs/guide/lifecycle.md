@@ -149,7 +149,7 @@ Pass the user ID explicitly to queries, or store it in ALS and read it from a wr
 
 ## Coming from Laravel
 
-| Laravel | RudderJS | Note |
+| Laravel | Rudder | Note |
 |---|---|---|
 | `app()->make(Foo::class)` (fresh per request) | `app().make(Foo)` (process singleton) | Use ALS for per-request state |
 | `request()` | `req` / `res` in handlers | Not available outside handlers |

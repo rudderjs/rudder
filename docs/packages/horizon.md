@@ -1,6 +1,6 @@
 # Horizon
 
-Queue monitoring dashboard for RudderJS. Records every job's lifecycle (dispatch → start → complete or fail), tracks per-queue throughput / wait / runtime, and reports the current process's worker status. Mounted at `/horizon` by default with five built-in pages — Dashboard, Recent Jobs, Failed Jobs, Queues, Workers.
+Queue monitoring dashboard for Rudder. Records every job's lifecycle (dispatch → start → complete or fail), tracks per-queue throughput / wait / runtime, and reports the current process's worker status. Mounted at `/horizon` by default with five built-in pages — Dashboard, Recent Jobs, Failed Jobs, Queues, Workers.
 
 ## Install
 
