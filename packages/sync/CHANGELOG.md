@@ -1,4 +1,4 @@
-# @rudderjs/live
+# @rudderjs/sync
 
 ## 1.3.2
 
