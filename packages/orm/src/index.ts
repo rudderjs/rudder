@@ -101,19 +101,24 @@ const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
 
 // ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
 //
-// Set RUDDER_ORM_TRACE=1 to log one line per read terminal (find/first/get/all/
-// paginate). Built to diagnose the "booted-ORM path returns empty after a dev
-// re-boot, no error" residual (docs/plans/2026-05-24-hmr-reboot-window-...md,
-// REOPEN #2): the symptom is empty-not-error, so the line surfaces exactly which
-// of the plausible causes is in play —
-//   • `table=` ......... a wrong / unexpected table (class-name → table drift)
-//   • `class=#N` ....... the Model class IDENTITY. A re-imported model gets a
-//                        NEW tag; if a query runs against a different #N than the
-//                        one returning rows, stale-class capture is implicated.
-//   • `adapter=#M` ..... the ORM adapter object the query was built from. A
-//                        different #M than a working query = adapter swap/stale.
-//   • `softDeletes` / `scopes=[...]` — a filter that could empty the result set.
-//   • `rows=` .......... the count actually returned (0 = the wedge).
+// Set RUDDER_ORM_TRACE=1 to trace the read path. Built to diagnose the
+// "booted-ORM path returns empty after a dev re-boot, no error" residual
+// (docs/plans/2026-05-24-hmr-reboot-window-...md, REOPEN #2). Three line types:
+//   • `[orm] build …`  — at query CONSTRUCTION (query()/_q()), before scopes.
+//                        Proves Model.query() was reached. Its ABSENCE for a
+//                        request that rendered empty ⇒ the wedge is UPSTREAM of
+//                        the ORM (route/resource never queried).
+//   • `[orm] <term> … rows=N` — a read terminal (find/first/get/all/paginate)
+//                        RESOLVED with N rows (0 = empty result).
+//   • `[orm] THREW <term> … :: <err>` — the terminal's adapter call threw
+//                        (re-thrown). The wedge is empty-not-error, so something
+//                        swallows this upstream; the message names the failure.
+// Fields on every line: `class=#N` (Model class IDENTITY — re-imported model =
+// new tag), `table=` (class-name → table), `adapter=#M` (the adapter object the
+// query was built from — increments per re-boot; a benign swap on its own),
+// `softDeletes` / `scopes=[...]` (filters that could empty the set).
+// NOTE: `getAdapter()` is NOT a null-throw suspect — nothing in the re-boot path
+// calls `ModelRegistry.reset()`, so `_store.adapter` is never nulled.
 // Zero overhead when the env var is off (every call early-returns). The class /
 // adapter tag maps live in this module, which is externalized (not re-evaluated
 // on HMR), so tags stay stable across re-boots — re-imported app/Models/* get
@@ -129,14 +134,37 @@ function _tagOf(map: WeakMap<object, number>, next: () => number, obj: object | 
   if (t === undefined) { t = next(); map.set(obj, t) }
   return `#${t}`
 }
+function _ormCtx(self: typeof Model, adapter: object | null): string {
+  const scopes = Object.keys(self.globalScopes ?? {})
+  return `model=${self.name} class=${_tagOf(_classTags, () => ++_classSeq, self)} ` +
+    `table=${self.getTable()} adapter=${_tagOf(_adapterTags, () => ++_adapterSeq, adapter)} ` +
+    `softDeletes=${self.softDeletes} scopes=[${scopes.join(',')}]`
+}
+/**
+ * Logged at query CONSTRUCTION (in `query()`/`_q()`, right after the adapter
+ * builder is obtained, before scopes/terminals). Its presence proves
+ * `Model.query()` was actually reached; its ABSENCE for a request that rendered
+ * empty means the wedge is *upstream of the ORM* (route handler / resource
+ * never queried). This is the REOPEN #2 discriminator — there the wedged query
+ * emits NO terminal line at all (plan doc "Probe results"). `getAdapter()`
+ * cannot be the null-throw the agent suspected: nothing in the re-boot path
+ * calls `ModelRegistry.reset()`, so `_store.adapter` is never nulled.
+ */
+function ormTraceBuild(self: typeof Model, adapter: object | null): void {
+  if (!_ormTrace) return
+  console.log(`[orm] build ${_ormCtx(self, adapter)}`)
+}
+/** Logged when a read terminal's adapter call THROWS (then re-thrown). The
+ *  empty-not-error wedge means something swallows this upstream — capturing the
+ *  message here names the actual failure (Prisma connection state, etc.). */
+function ormTraceThrew(self: typeof Model, terminal: string, err: unknown, adapter: object | null): void {
+  if (!_ormTrace) return
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+  console.log(`[orm] THREW ${terminal} ${_ormCtx(self, adapter)} :: ${msg}`)
+}
 function ormTraceTerminal(self: typeof Model, terminal: string, rowCount: number, adapter: object | null): void {
   if (!_ormTrace) return
-  const scopes = Object.keys(self.globalScopes ?? {})
-  console.log(
-    `[orm] ${terminal} model=${self.name} class=${_tagOf(_classTags, () => ++_classSeq, self)} ` +
-    `table=${self.getTable()} adapter=${_tagOf(_adapterTags, () => ++_adapterSeq, adapter)} ` +
-    `softDeletes=${self.softDeletes} scopes=[${scopes.join(',')}] rows=${rowCount}`,
-  )
+  console.log(`[orm] ${terminal} ${_ormCtx(self, adapter)} rows=${rowCount}`)
 }
 
 export class ModelRegistry {
@@ -985,39 +1013,49 @@ export abstract class Model {
         switch (prop) {
           case 'find':
             return async (id: number | string): Promise<InstanceType<T> | null> => {
-              const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
-              ormTraceTerminal(ModelClass, 'find', inst ? 1 : 0, _traceAdapter)
-              if (inst) await attachPoly([inst])
-              return inst
+              try {
+                const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
+                ormTraceTerminal(ModelClass, 'find', inst ? 1 : 0, _traceAdapter)
+                if (inst) await attachPoly([inst])
+                return inst
+              } catch (e) { ormTraceThrew(ModelClass, 'find', e, _traceAdapter); throw e }
             }
           case 'first':
             return async (): Promise<InstanceType<T> | null> => {
-              const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
-              ormTraceTerminal(ModelClass, 'first', inst ? 1 : 0, _traceAdapter)
-              if (inst) await attachPoly([inst])
-              return inst
+              try {
+                const inst = wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
+                ormTraceTerminal(ModelClass, 'first', inst ? 1 : 0, _traceAdapter)
+                if (inst) await attachPoly([inst])
+                return inst
+              } catch (e) { ormTraceThrew(ModelClass, 'first', e, _traceAdapter); throw e }
             }
           case 'get':
             return async (): Promise<InstanceType<T>[]> => {
-              const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
-              ormTraceTerminal(ModelClass, 'get', insts.length, _traceAdapter)
-              await attachPoly(insts)
-              return insts
+              try {
+                const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+                ormTraceTerminal(ModelClass, 'get', insts.length, _traceAdapter)
+                await attachPoly(insts)
+                return insts
+              } catch (e) { ormTraceThrew(ModelClass, 'get', e, _traceAdapter); throw e }
             }
           case 'all':
             return async (): Promise<InstanceType<T>[]> => {
-              const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
-              ormTraceTerminal(ModelClass, 'all', insts.length, _traceAdapter)
-              await attachPoly(insts)
-              return insts
+              try {
+                const insts = wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
+                ormTraceTerminal(ModelClass, 'all', insts.length, _traceAdapter)
+                await attachPoly(insts)
+                return insts
+              } catch (e) { ormTraceThrew(ModelClass, 'all', e, _traceAdapter); throw e }
             }
           case 'paginate':
             return async (page?: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> => {
-              const r = await (target as QueryBuilder<InstanceType<T>>).paginate(page ?? 1, perPage)
-              const data = wrapMany(r.data)
-              ormTraceTerminal(ModelClass, 'paginate', data.length, _traceAdapter)
-              await attachPoly(data)
-              return { ...r, data }
+              try {
+                const r = await (target as QueryBuilder<InstanceType<T>>).paginate(page ?? 1, perPage)
+                const data = wrapMany(r.data)
+                ormTraceTerminal(ModelClass, 'paginate', data.length, _traceAdapter)
+                await attachPoly(data)
+                return { ...r, data }
+              } catch (e) { ormTraceThrew(ModelClass, 'paginate', e, _traceAdapter); throw e }
             }
           case 'create':
             return async (data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
@@ -1057,6 +1095,7 @@ export abstract class Model {
 
     const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
       const adapter = ModelRegistry.getAdapter()
+      ormTraceBuild(modelClass, adapter as object)
       let raw = adapter.query<InstanceType<T>>(
         modelClass.getTable(),
         { primaryKey: modelClass.primaryKey },
@@ -1095,6 +1134,7 @@ export abstract class Model {
     ModelRegistry.register(self)
     const ModelClass = self as typeof Model
     const adapter = ModelRegistry.getAdapter()
+    ormTraceBuild(ModelClass, adapter as object)
     let q = adapter.query<InstanceType<T>>(
       ModelClass.getTable(),
       { primaryKey: ModelClass.primaryKey },
