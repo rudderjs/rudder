@@ -25,6 +25,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
     "./commands/providers-discover": {
       "import": "./dist/commands/providers-discover.js",
       "types": "./dist/commands/providers-discover.d.ts"
