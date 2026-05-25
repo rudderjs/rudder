@@ -29,11 +29,8 @@
     ],
     "overrides": {
       "tsdown>rolldown": "1.0.0-beta.8",
-      "vike": "0.4.257",
+      "vike": "0.4.259-commit-c9d00d4",
       "@types/node": "20.19.35"
-    },
-    "patchedDependencies": {
-      "vike@0.4.257": "patches/vike@0.4.257.patch"
     }
   },
   "devDependencies": {

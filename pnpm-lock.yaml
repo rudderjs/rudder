@@ -6,13 +6,8 @@ settings:
 
 overrides:
   tsdown>rolldown: 1.0.0-beta.8
-  vike: 0.4.257
+  vike: 0.4.259-commit-c9d00d4
   '@types/node': 20.19.35
-
-patchedDependencies:
-  vike@0.4.257:
-    hash: 24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15
-    path: patches/vike@0.4.257.patch
 
 importers:
 
@@ -980,7 +975,7 @@ importers:
         version: link:../contracts
       '@vikejs/hono':
         specifier: ^0.2.0
-        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       hono:
         specifier: ^4.12.0
         version: 4.12.3
@@ -992,8 +987,8 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
 
   packages/session:
     dependencies:
@@ -1247,8 +1242,8 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
 
   packages/vike-react-rsc:
     dependencies:
@@ -1293,8 +1288,8 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vite:
         specifier: ^7.2.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
@@ -1320,11 +1315,11 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-solid:
         specifier: ^0.8.1
-        version: 0.8.1(solid-js@1.9.11)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite-plugin-solid@2.11.10(solid-js@1.9.11)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.8.1(solid-js@1.9.11)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite-plugin-solid@2.11.10(solid-js@1.9.11)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       vite:
         specifier: ^7.2.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
@@ -1468,7 +1463,7 @@ importers:
         version: 4.2.1(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       '@vikejs/hono':
         specifier: ^0.2.0
-        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       better-sqlite3:
         specifier: ^12.0.0
         version: 12.6.2
@@ -1512,11 +1507,11 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-react:
         specifier: ^0.6.23
-        version: 0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       y-websocket:
         specifier: ^2.0.0
         version: 2.1.0(yjs@13.6.29)
@@ -1595,7 +1590,7 @@ importers:
         version: link:../packages/view
       '@vikejs/hono':
         specifier: ^0.2.0
-        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       '@vitejs/plugin-rsc':
         specifier: 0.5.1
         version: 0.5.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -1615,8 +1610,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-react-rsc-rudder:
         specifier: workspace:*
         version: link:../packages/vike-react-rsc
@@ -1773,7 +1768,7 @@ importers:
         version: 4.2.1(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       '@vikejs/hono':
         specifier: ^0.2.0
-        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1805,11 +1800,11 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1
       vike:
-        specifier: 0.4.257
-        version: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: 0.4.259-commit-c9d00d4
+        version: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-react:
         specifier: ^0.6.23
-        version: 0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
       zod:
         specifier: ^4.0.0
         version: 4.3.6
@@ -2455,8 +2450,14 @@ packages:
   '@brillout/json-serializer@0.5.22':
     resolution: {integrity: sha512-jzcOqcbysKICCeZNlwa755tffF+HfMj8G+ZSuvHe06aCpp4xQiU2D91RHFUeJpF0/RNyfa5uWZ0pRuvFoeoqow==}
 
+  '@brillout/json-serializer@0.5.23':
+    resolution: {integrity: sha512-nM7okvu4UaoxYshKB+903s3/UpIBdkJl++iDT3gOLnHaSqY6HbhAXTsUTxrroAAcIt6RKQfShaKjCBlzR2A1Gg==}
+
   '@brillout/picocolors@1.0.30':
     resolution: {integrity: sha512-xJjdgyN1H0qh2nB2xlzazIipiDixuUd9oD5msh/Qv5bXJG9j8MSD/m4lREt6Z10ej6FF31b8vB4tdT7lDUbiyA==}
+
+  '@brillout/picocolors@1.0.31':
+    resolution: {integrity: sha512-xFCPBefU/AevF8XkwXSd/jIHA0fWw+mZ/gd5x2WOc5ysG7keHnU8m0gwY2Bvq5lvTyjwT4tiyow6fnMoYdmSqw==}
 
   '@brillout/vite-plugin-server-entry@0.7.18':
     resolution: {integrity: sha512-j3neG+vaIZ2AbP2/vGgaIyJwrFIxlK3xd3Ey2EGBswCvAGeI4QSSfXGbb7R3b3H8223PgTTsWOZuZH0Y8Ope2w==}
@@ -5806,8 +5807,13 @@ packages:
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
 
-  '@universal-deploy/node@0.1.5':
-    resolution: {integrity: sha512-Zys7cnZSrhmy7iaXphIAC/CbdE92GY73BONtmXaLmVYk89AxKpsad4rNJ5a2v+/VnkVxdPme7dttsu610imRDQ==}
+  '@universal-deploy/netlify@0.2.2':
+    resolution: {integrity: sha512-10JY+1z0aun66IegHhVdOBTgXioI0+hgA0IVc0zgZvm2C7g2eQWpv48wtqCZZsXyUxajKcIlxiYxIuhuRIdfrQ==}
+    peerDependencies:
+      vite: '>=7.1'
+
+  '@universal-deploy/node@0.1.7':
+    resolution: {integrity: sha512-HxSiVZ2CYGX0M9RFl7cxf7Pfaz+vAA3ZfHJ6Yvflv04Gtyfyus2Z6xGSOluy3c8OxAyVu8fvhoXinU0ziHmaGA==}
     peerDependencies:
       vite: '>=7.1'
     peerDependenciesMeta:
@@ -5822,8 +5828,8 @@ packages:
       srvx:
         optional: true
 
-  '@universal-deploy/vite@0.1.6':
-    resolution: {integrity: sha512-2aLRISsAFr0vjRYGA2iTxCjZLHEolpnJR+VvN6zlAdrkaLa7fT/25PijemsR6rBTTeqeBevi3047XwSEwIU+Nw==}
+  '@universal-deploy/vite@0.1.10':
+    resolution: {integrity: sha512-fORNv7+cTgWT1iS2ywUvwaxVkn7QCUHwXwZjfEEv9tL//MoTdwmosq7z2vB4tyN8ERGgWKU7MaQN+YNxfg/68g==}
     peerDependencies:
       vite: '>=7.1'
     peerDependenciesMeta:
@@ -5871,6 +5877,9 @@ packages:
   '@universal-middleware/node@0.1.0':
     resolution: {integrity: sha512-I03mkOhw0Ka28MtALkpoGJYE8YYSJxmq/iambaqKGXxlFXgLI/VXlw0LmX9iansUzbolNq4hWFMfHyNp2xb4jA==}
 
+  '@universal-middleware/node@0.2.0':
+    resolution: {integrity: sha512-Q7ppCHGYw0wtlF5oW5pDaIimDbnSvbPGWcseXsRWDUvzqM1fI0B6G1r43+Bv7qgCKigj580JKjs+eR3GgzCBrw==}
+
   '@valibot/to-json-schema@1.0.0':
     resolution: {integrity: sha512-/9crJgPptVsGCL6X+JPDQyaJwkalSZ/52WuF8DiRUxJgcmpNdzYRfZ+gqMEP8W3CTVfuMWPqqvIgfwJ97f9Etw==}
     peerDependencies:
@@ -5880,7 +5889,7 @@ packages:
     resolution: {integrity: sha512-kM0CLN+qmjkJTvtHEHo7KiEbqnLAhibn7jqNWzlsfKXVjN0VIkY1U0E9hU7zIWYkxw6KCA2kNDt6IVRRixBsKw==}
     peerDependencies:
       hono: ^4.0.0
-      vike: 0.4.257
+      vike: 0.4.259-commit-c9d00d4
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -8614,6 +8623,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  semver@7.8.1:
+    resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   send@1.2.1:
     resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}
     engines: {node: '>= 18'}
@@ -9178,17 +9192,17 @@ packages:
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
-      vike: 0.4.257
+      vike: 0.4.259-commit-c9d00d4
 
   vike-solid@0.8.1:
     resolution: {integrity: sha512-Zn2wmRmf+KnXb8HYF452kztkwPHiPxwTtthTdCgNXcLWxi8udP1vbkCyXZ1IXJkE0cQtonpqhLviBiotEIh6UA==}
     peerDependencies:
       solid-js: ^1.8.7
-      vike: 0.4.257
+      vike: 0.4.259-commit-c9d00d4
       vite-plugin-solid: ^2.11.10
 
-  vike@0.4.257:
-    resolution: {integrity: sha512-B/RoeJfmhqlgP8cfAfNzBzy6eu0riWbL2XyDYhGcp57IW8w7H19gLwAUe0AsBZ1nxHXrhHeSFJkWJVHZw/Ua/g==}
+  vike@0.4.259-commit-c9d00d4:
+    resolution: {integrity: sha512-ozTE8vXZKyaTB04qFWMzWCsEpIX6NTM2NFurbHMfwjOmAFW5qEC++SultBSAFS6cfpgrlCsaXK8/PGUwXUYY3A==}
     engines: {node: '>=20.19.0'}
     hasBin: true
     peerDependencies:
@@ -10792,7 +10806,11 @@ snapshots:
 
   '@brillout/json-serializer@0.5.22': {}
 
+  '@brillout/json-serializer@0.5.23': {}
+
   '@brillout/picocolors@1.0.30': {}
+
+  '@brillout/picocolors@1.0.31': {}
 
   '@brillout/vite-plugin-server-entry@0.7.18':
     dependencies:
@@ -14613,9 +14631,17 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@universal-deploy/node@0.1.5(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
+  '@universal-deploy/netlify@0.2.2(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@universal-deploy/store': 0.2.1(srvx@0.11.15)
+      vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+    transitivePeerDependencies:
+      - srvx
+
+  '@universal-deploy/node@0.1.7(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
+    dependencies:
+      '@universal-deploy/store': 0.2.1(srvx@0.11.15)
+      magic-string: 0.30.21
       srvx: 0.11.15
     optionalDependencies:
       vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
@@ -14626,9 +14652,10 @@ snapshots:
     optionalDependencies:
       srvx: 0.11.15
 
-  '@universal-deploy/vite@0.1.6(hono@4.12.3)(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
+  '@universal-deploy/vite@0.1.10(hono@4.12.3)(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
-      '@universal-deploy/node': 0.1.5(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@universal-deploy/netlify': 0.2.2(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@universal-deploy/node': 0.1.7(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       '@universal-deploy/store': 0.2.1(srvx@0.11.15)
       '@universal-middleware/express': 0.4.26(hono@4.12.3)(srvx@0.11.15)
       magic-string: 0.30.21
@@ -14697,15 +14724,29 @@ snapshots:
       - hono
       - srvx
 
+  '@universal-middleware/node@0.2.0(hono@4.12.3)(srvx@0.11.15)':
+    dependencies:
+      '@universal-middleware/core': 0.4.17(hono@4.12.3)(srvx@0.11.15)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@hattip/core'
+      - '@types/express'
+      - '@webroute/route'
+      - elysia
+      - fastify
+      - h3
+      - hono
+      - srvx
+
   '@valibot/to-json-schema@1.0.0(valibot@1.0.0(typescript@5.9.3))':
     dependencies:
       valibot: 1.0.0(typescript@5.9.3)
 
-  '@vikejs/hono@0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))':
+  '@vikejs/hono@0.2.0(hono@4.12.3)(srvx@0.11.15)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))':
     dependencies:
       '@universal-middleware/hono': 0.4.21(hono@4.12.3)(srvx@0.11.15)
       hono: 4.12.3
-      vike: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      vike: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@hattip/core'
@@ -17588,6 +17629,8 @@ snapshots:
 
   semver@7.7.4: {}
 
+  semver@7.8.1: {}
+
   send@1.2.1:
     dependencies:
       debug: 4.4.3
@@ -18221,32 +18264,32 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vike-react@0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))):
+  vike-react@0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))):
     dependencies:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
       react-streaming: 0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      vike: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      vike: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
 
-  vike-solid@0.8.1(solid-js@1.9.11)(vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite-plugin-solid@2.11.10(solid-js@1.9.11)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))):
+  vike-solid@0.8.1(solid-js@1.9.11)(vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite-plugin-solid@2.11.10(solid-js@1.9.11)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))):
     dependencies:
       isbot-fast: 1.2.0
       solid-js: 1.9.11
-      vike: 0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      vike: 0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vite-plugin-solid: 2.11.10(solid-js@1.9.11)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
 
-  vike@0.4.257(patch_hash=24f3bb456fe2e893de9a8629f4e9b82304206f363f3a02978ece721d8abaae15)(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)):
+  vike@0.4.259-commit-c9d00d4(hono@4.12.3)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)):
     dependencies:
       '@babel/core': 7.29.0
       '@babel/types': 7.29.0
       '@brillout/import': 0.2.6
-      '@brillout/json-serializer': 0.5.22
-      '@brillout/picocolors': 1.0.30
+      '@brillout/json-serializer': 0.5.23
+      '@brillout/picocolors': 1.0.31
       '@brillout/vite-plugin-server-entry': 0.7.18
       '@universal-deploy/store': 0.2.1(srvx@0.11.15)
-      '@universal-deploy/vite': 0.1.6(hono@4.12.3)(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@universal-deploy/vite': 0.1.10(hono@4.12.3)(srvx@0.11.15)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       '@universal-middleware/core': 0.4.17(hono@4.12.3)(srvx@0.11.15)
-      '@universal-middleware/node': 0.1.0(hono@4.12.3)(srvx@0.11.15)
+      '@universal-middleware/node': 0.2.0(hono@4.12.3)(srvx@0.11.15)
       cac: 6.7.14
       convert-route: 1.1.1
       es-module-lexer: 1.7.0
@@ -18254,7 +18297,7 @@ snapshots:
       json5: 2.2.3
       magic-string: 0.30.21
       picomatch: 4.0.4
-      semver: 7.7.4
+      semver: 7.8.1
       sirv: 3.0.2
       source-map-support: 0.5.21
       tinyglobby: 0.2.16
