@@ -1,6 +1,6 @@
 # Pulse
 
-Lightweight application performance monitoring for RudderJS. Records pre-aggregated time-series for request throughput, queue activity, cache hit rate, exceptions, active users, and server CPU / memory — plus full entries for slow requests, slow queries, and exception details. Mounts a single auto-refreshing dashboard at `/pulse`.
+Lightweight application performance monitoring for Rudder. Records pre-aggregated time-series for request throughput, queue activity, cache hit rate, exceptions, active users, and server CPU / memory — plus full entries for slow requests, slow queries, and exception details. Mounts a single auto-refreshing dashboard at `/pulse`.
 
 Where Telescope captures every event in detail (one row per request, query, job) and Horizon focuses specifically on queue health, Pulse aggregates *over time* — counts and averages per minute bucket — so it stays fast even at production traffic.
 

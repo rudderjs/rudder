@@ -1,6 +1,6 @@
 # Telescope
 
-Debug dashboard for RudderJS. Records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes, CLI commands, outgoing HTTP, authorization decisions, WebSocket lifecycle, Yjs CRDT events, AI agent runs, MCP activity, and `dump()` calls. Serves a built-in UI at `/telescope`.
+Debug dashboard for Rudder. Records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes, CLI commands, outgoing HTTP, authorization decisions, WebSocket lifecycle, Yjs CRDT events, AI agent runs, MCP activity, and `dump()` calls. Serves a built-in UI at `/telescope`.
 
 ::: tip About the version number
 Telescope is currently published at v13.x. The high major doesn't reflect 13 ground-up rewrites — it's the result of Changesets peer-bump cascades across the `@rudderjs/*` workspace. The public API has been stable since v6.

@@ -1,6 +1,6 @@
 # @rudderjs/boost
 
-AI developer-experience layer for RudderJS. Exposes your project's internals to AI coding assistants via MCP — Claude Code, Cursor, GitHub Copilot, Codex CLI, Gemini CLI, and Windsurf. Also ships per-package AI coding guidelines and task-specific skill modules that are concatenated into your agent's instructions on install.
+AI developer-experience layer for Rudder. Exposes your project's internals to AI coding assistants via MCP — Claude Code, Cursor, GitHub Copilot, Codex CLI, Gemini CLI, and Windsurf. Also ships per-package AI coding guidelines and task-specific skill modules that are concatenated into your agent's instructions on install.
 
 ## Installation
 

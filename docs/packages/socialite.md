@@ -1,6 +1,6 @@
 # Socialite
 
-OAuth-based social authentication for RudderJS. Built-in providers for GitHub, Google, Facebook, and Apple, plus an extension point for custom OAuth providers. Use it to add "Sign in with ..." buttons to your app without hand-writing OAuth flows.
+OAuth-based social authentication for Rudder. Built-in providers for GitHub, Google, Facebook, and Apple, plus an extension point for custom OAuth providers. Use it to add "Sign in with ..." buttons to your app without hand-writing OAuth flows.
 
 ## Install
 

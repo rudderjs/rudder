@@ -1,6 +1,6 @@
 # Passport
 
-OAuth 2 server for RudderJS. Turns your app into an OAuth 2 provider that issues RS256-signed JWT access tokens, refresh tokens, and personal access tokens. Also ships the `HasApiTokens` mixin for user models and the `RequireBearer` + `scope` middleware for protecting API routes.
+OAuth 2 server for Rudder. Turns your app into an OAuth 2 provider that issues RS256-signed JWT access tokens, refresh tokens, and personal access tokens. Also ships the `HasApiTokens` mixin for user models and the `RequireBearer` + `scope` middleware for protecting API routes.
 
 ## Install
 

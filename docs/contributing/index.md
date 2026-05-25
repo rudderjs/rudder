@@ -1,6 +1,6 @@
-# Contributing to RudderJS
+# Contributing to Rudder
 
-Guides for working on the RudderJS monorepo — adding packages, extending the panels framework, and following project conventions.
+Guides for working on the Rudder monorepo — adding packages, extending the panels framework, and following project conventions.
 
 ## In this section
 

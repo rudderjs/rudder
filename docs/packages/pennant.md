@@ -1,6 +1,6 @@
 # Pennant
 
-Feature flags for RudderJS. Define a flag once, check it from anywhere — globally, per user, or via a gradual lottery-based rollout. Use it for staged releases, gating beta features behind specific accounts, or A/B'ing alternate UIs.
+Feature flags for Rudder. Define a flag once, check it from anywhere — globally, per user, or via a gradual lottery-based rollout. Use it for staged releases, gating beta features behind specific accounts, or A/B'ing alternate UIs.
 
 ## Install
 

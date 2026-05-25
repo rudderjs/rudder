@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'RudderJS',
+  title: 'Rudder',
   description: 'Laravel-inspired Node.js full-stack framework built on Vike + Vite',
   lang: 'en-US',
   ignoreDeadLinks: 'localhostLinks',
@@ -19,7 +19,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.svg',
-    siteTitle: 'RudderJS',
+    siteTitle: 'Rudder',
 
     nav: [
       { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
@@ -47,7 +47,7 @@ export default defineConfig({
         {
           text: 'Getting Started',
           items: [
-            { text: 'What is RudderJS?', link: '/guide/' },
+            { text: 'What is Rudder?', link: '/guide/' },
             { text: 'When Not to Use Rudder', link: '/guide/when-not-to-use' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Your First App', link: '/guide/tutorial' },
