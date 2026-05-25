@@ -71,6 +71,8 @@ pm2 save && pm2 startup     # auto-start on boot
 
 For schedulers, run them as a separate PM2 app: `pm2 start dist/server/index.mjs --name scheduler -- pnpm rudder schedule:work`.
 
+> **Fork mode, not cluster.** The command above runs a single fork-mode process — keep it that way. Do **not** start the server entry in PM2 **cluster** mode (`-i` / `--instances` / `exec_mode: cluster`): PM2's cluster wrapper doesn't execute the ESM `dist/server/index.mjs` entry, so workers report `online` but never bind the port — you get empty logs and refused connections, with no error. For graceful zero-downtime reloads, either front several fork instances with your proxy, or wrap the entry in a tiny CommonJS shim (`server.cjs` → `await import('./dist/server/index.mjs')`) that PM2 *can* cluster.
+
 ### systemd
 
 ```ini
@@ -197,6 +199,21 @@ pm2 save
 
 Each line stays under ~60 characters — short enough that Forge's editor can't wrap it into a syntax error. PM2 picks up new code on every deploy because `reload` re-points at `current/dist/server/index.mjs` through the symlink.
 
+**pnpm build approval (pnpm 10+).** pnpm refuses to run a dependency's build scripts unless they're allow-listed — and on **pnpm 11 this is a fatal `ERR_PNPM_IGNORED_BUILDS`**, not a warning. Native deps a Rudder app commonly pulls in (`esbuild`, `better-sqlite3`) need approval in `pnpm-workspace.yaml`:
+
+```yaml
+# pnpm 11
+allowBuilds:
+  esbuild: true
+  better-sqlite3: true
+# pnpm 10 (back-compat)
+onlyBuiltDependencies:
+  - esbuild
+  - better-sqlite3
+```
+
+pnpm 11 ignores `pnpm.onlyBuiltDependencies` in `package.json` — it must live in `pnpm-workspace.yaml`. pnpm 11 also enforces **`minimumReleaseAge`**: it rejects dependencies published in the last ~24h (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`). If you regenerate the lockfile the same day a dependency publishes, set `minimumReleaseAge: 2880` (48h) and re-resolve so the lock pins slightly-older versions. Check the **server's** pnpm version (`pnpm --version`) before debugging install failures — pnpm 10 and 11 differ enough that a fix verified against the wrong major won't hold on deploy.
+
 **Env vars** (Forge → Site → Environment):
 
 ```
@@ -242,3 +259,5 @@ Most platforms (Kubernetes, Cloud Run, Fly.io) hit this endpoint before routing 
 - **`APP_DEBUG=true` shipping to production.** Stack traces leak path and dependency info. Hard-set `APP_DEBUG=false` in production environments.
 - **Single instance for everything.** Run web, queue worker, and scheduler as separate supervised processes. Bundling them in one process means a queue spike degrades request handling.
 - **No reverse proxy.** Node serves TLS poorly compared to nginx, and you lose static-asset caching. Even on edge platforms, the platform itself is the proxy.
+- **PM2 cluster mode with the ESM entry.** Workers go `online` but never listen (empty logs, refused connections). Use fork mode — see [Process supervision](#pm2-single-host).
+- **pnpm build scripts blocked.** pnpm won't run native postinstalls (`esbuild`, `better-sqlite3`) without an allow-list; pnpm 11 makes it fatal. Add `allowBuilds` (pnpm 11) / `onlyBuiltDependencies` (pnpm 10) to `pnpm-workspace.yaml` — see [Laravel Forge](#laravel-forge).
