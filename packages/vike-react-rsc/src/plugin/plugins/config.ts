@@ -36,6 +36,15 @@ export const configs: Plugin[] = [
               ],
               exclude: [
                 PKG_NAME,
+                // Exclude the exact client-entry subpath, not just the package.
+                // Vike's #3290 fix routes a `client`-config bare specifier into
+                // optimizeDeps.include; esbuild then tries to pre-bundle this
+                // module and fails on its `virtual:client-references` import
+                // (a @vitejs/plugin-rsc virtual it can't resolve), killing dev
+                // hydration. `exclude` wins over `include`, so naming the subpath
+                // keeps it out. No-op on vike without the #3290 fix. See
+                // https://github.com/vikejs/vike/issues/3290.
+                `${PKG_NAME}/__internal/integration/client`,
                 "@vitejs/plugin-rsc",
                 "virtual:enviroment-name",
               ],
