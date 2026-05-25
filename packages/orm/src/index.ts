@@ -123,7 +123,7 @@ const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
 // adapter tag maps live in this module, which is externalized (not re-evaluated
 // on HMR), so tags stay stable across re-boots — re-imported app/Models/* get
 // fresh tags precisely because THEY are re-evaluated. That contrast is the point.
-const _ormTrace = process.env['RUDDER_ORM_TRACE'] === '1'
+const _ormTrace = typeof process !== 'undefined' && process.env?.['RUDDER_ORM_TRACE'] === '1'
 let _classSeq = 0
 let _adapterSeq = 0
 const _classTags = new WeakMap<object, number>()
@@ -2061,7 +2061,7 @@ export abstract class Model {
       if (targets.length === 0) {
         throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: \`types: () => [...]\` is empty — declare at least one allowed target class.`)
       }
-      if (process.env['NODE_ENV'] !== 'production') {
+      if (typeof process !== 'undefined' && process.env?.['NODE_ENV'] !== 'production') {
         const seen = new Map<string, string>()
         for (const C of targets) {
           const key = C.morphAlias ?? C.name
