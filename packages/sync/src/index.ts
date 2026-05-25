@@ -2,7 +2,7 @@ import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
 import { syncObservers }                               from './observers.js'
-import { syncGlobal, setSyncGlobal, readSyncGlobal }   from './globals.js'
+import { syncGlobal, readSyncGlobal }   from './globals.js'
 
 // ─── Per-WebSocket client id ────────────────────────────────
 //
@@ -844,16 +844,23 @@ export class SyncProvider extends ServiceProvider {
   register(): void {
     const cfg         = config<SyncConfig>('sync', {})
     this._path        = cfg.path        ?? '/ws-sync'
-    this._persistence = cfg.persistence ?? new MemoryPersistence()
+    // Init-once across dev HMR re-boots: `register()` re-runs on every `app/`
+    // edit and `cfg.persistence` (e.g. `syncRedis()`) is rebuilt each time as
+    // the config module re-evaluates. Without reuse the new persistence's lazy
+    // ioredis client opens a fresh connection on the next doc op and leaks the
+    // previous one. `syncGlobal` get-or-creates, so the FIRST persistence wins
+    // and later per-boot instances stay inert (never connect). Mirrors the
+    // connection-reuse fixes in the orm adapters / cache / session.
+    this._persistence = syncGlobal('persistence', () => cfg.persistence ?? new MemoryPersistence())
     const persistence = this._persistence
     this.app.bind('sync.persistence', () => persistence)
   }
 
   async boot(): Promise<void> {
     const path        = this._path
-    const persistence = this._persistence
+    // Reuse the same persistence the first boot stored (see register()).
+    const persistence = syncGlobal('persistence', () => this._persistence)
     const cfg         = config<SyncConfig>('sync', {})
-    setSyncGlobal('persistence', persistence)
 
       const wss = new WebSocketServer({ noServer: true })
 
