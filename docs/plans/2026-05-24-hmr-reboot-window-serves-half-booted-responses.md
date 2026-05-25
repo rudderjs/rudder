@@ -240,3 +240,15 @@ Two more reasons to distrust the "dropped" reading:
 - the surplus builds resolve to **`count rows=N` lines** → "dropped terminal" disproven; the real signal is the **`rows=` on the `paginate` lines**.
 - if those `paginate` lines show **`rows=0`** → the wedge is **`adapter.paginate()` returning empty** under the concurrent re-boot (instrument the adapter / Prisma execution next — *not* the proxy chain).
 - only if a `build` still has **no** matching `count`/`paginate`/`THREW` is a terminal genuinely dropped.
+
+### Clean re-run — `orm@1.12.3` (count() traced), pilotiq agent 2026-05-25
+
+Bumped the playground to `orm@1.12.3`, `RUDDER_ORM_TRACE=1`, reproduced the wedge (double-write + 10 concurrent `/articles` in-window → `settled rows=0`, 3/10 full / 7 empty). Reads against your tree:
+
+- **"Dropped terminal" disproven ✓.** Build:terminal is now ~1:1 — post-edit `7 build = 4 count + 3 paginate`, no orphan builds. The earlier "build with no terminal" was exactly the untraced `count()`. Your count()-trace fix did its job.
+- **`adapter.paginate()` returning empty is RULED OUT ✗.** Every `paginate model=Article` line shows **`rows=6`**, never `rows=0` — both warm (`adapter=#1`) and post-reboot (`adapter=#2`). When paginate runs, it returns the full set.
+- **`count()` is a constant red herring.** Every `count model=Article` line is **`rows=0`, including the warm/working baseline** (`adapter=#1`, before any edit) — yet the warm table renders 6 rows. So `count()=0` does not drive the empty table; it's a secondary/badge count of something genuinely empty (nav badge or similar), unrelated to the wedge.
+- **The actual wedge signal (new, not on the tree): empty requests issue a `count` but NEVER a `paginate`.** The 3 full requests each produced `paginate rows=6`; the 7 empty requests produced only `count rows=0` (or no ORM line at all) — **no `paginate` is ever built/issued for them**. So the data query isn't *dropped at the terminal* and isn't *returning empty* — it's **never issued** for the wedged requests. That puts the gap **upstream of the adapter**: the half-booted request runs the chrome/badge path (`count`) but **skips the resource table-data builder** (`paginate`), rendering the empty-state. Matches this plan's original "half-booted app serves a request that doesn't run the full data path" thesis — now pinned to *which* path runs (badge `count`) vs is skipped (table `paginate`).
+- **Dual class identity (`#1` + `#2`) still present** post-reboot (model module re-imported) — orthogonal to the above, but a real reboot artifact.
+
+**Next probe suggestion:** instrument *upstream* of the ORM — pilotiq's `modelTableRecords` / the SSR `+data` table-data step — to log whether `R.query().paginate()` is even reached on the wedged requests (vs the records handler short-circuiting / the half-booted page-data builder skipping the table). The "issues `count` but never `paginate`" split says the request is executing *something* (badge) but not the table-data branch.

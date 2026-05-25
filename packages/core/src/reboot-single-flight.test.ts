@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { ServerAdapter, ServerAdapterProvider } from '@rudderjs/contracts'
 import {
@@ -71,10 +71,16 @@ function freshState(): void {
   delete G['__rudderjs_instance__']
   delete G['__rudderjs_boot__']
   delete G['__rudderjs_hmr_t0__']
+  delete G['__rudderjs_inflight__']
   Application.resetForTesting()
   container.reset()
   resetGroupMiddleware()
   rudder.reset()
+}
+
+/** Poll the microtask/macrotask queue until `cond()` or `tries` exhausted. */
+async function until(cond: () => boolean, tries = 30): Promise<void> {
+  for (let i = 0; i < tries && !cond(); i++) await settle()
 }
 
 describe('dev HMR re-boot — single-flight', () => {
@@ -186,5 +192,78 @@ describe('dev HMR re-boot — request gate', () => {
     await req
     assert.equal(served, true, 'request is served once the latest re-boot finishes')
     assert.equal(handled, 1)
+  })
+})
+
+// ─── Dev HMR re-boot: quiesce barrier (drain in-flight renders) ──────────────
+//
+// Regression for REOPEN #2: a request that already passed the gate can be
+// MID-RENDER when the next re-boot stomps shared state in place (router.reset()
+// + provider boots repopulating registries), so the render observes a
+// half-booted graph (e.g. a resource schema missing its `table` element → empty
+// render, no error). The fix makes the re-boot DRAIN in-flight renders before it
+// mutates. Modelled with a handler that blocks until released; asserts the
+// re-boot's provider boot does not start until the in-flight render drains.
+// Dev-only — gated on APP_ENV.
+describe('dev HMR re-boot — quiesce barrier', () => {
+  let prevEnv: string | undefined
+  beforeEach(() => { prevEnv = process.env['APP_ENV']; process.env['APP_ENV'] = 'development'; freshState() })
+  afterEach(() => { if (prevEnv === undefined) delete process.env['APP_ENV']; else process.env['APP_ENV'] = prevEnv })
+
+  /** A fake server whose request handler is supplied by the test (so it can block). */
+  function blockingServer(handler: (req: Request) => Promise<Response>): ServerAdapterProvider {
+    return {
+      type: 'fake',
+      create: () => ({} as ServerAdapter),
+      createApp: () => ({}),
+      async createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<(req: Request) => Promise<Response>> {
+        const adapter = {
+          registerRoute() {}, applyMiddleware() {}, applyGroupMiddleware() {},
+          setErrorHandler() {}, listen() {}, getNativeServer() { return {} },
+        } as unknown as ServerAdapter
+        setup?.(adapter)
+        return handler
+      },
+    }
+  }
+
+  it('a re-boot drains an in-flight render before mutating shared state', async () => {
+    const log: string[] = []
+    const handlerGate = gate()
+    let handling = false
+    const server = blockingServer(async () => { handling = true; await handlerGate.promise; return new Response('ok') })
+
+    // Instance A boots fully (no gate), warm its handler is implicit on first request.
+    class QuickProvider extends ServiceProvider { register(): void {} async boot(): Promise<void> { log.push('A:boot') } }
+    const a = Application.configure({ server, providers: [QuickProvider] }).withRouting({}).create()
+    await bootOf(a)
+
+    // Fire a request — it passes the gate and parks INSIDE the handler (in-flight).
+    // Fire-and-forget: we observe progress via `handling` / `served`, not the promise.
+    let served = false
+    void a.handleRequest(new Request('http://localhost/')).then(() => { served = true })
+    await until(() => handling)
+    assert.equal(handling, true, 'request entered the handler (in-flight render)')
+    assert.equal(served, false)
+
+    // Watcher fires → re-boot B with a provider that logs when its boot runs.
+    const gateB = gate()
+    simulateWatcherClear()
+    const b = Application.configure({ server, providers: [gatedProvider('B', log, gateB)] }).withRouting({}).create()
+    await settle()
+
+    // THE FIX: B must DRAIN the in-flight render first — its provider boot (and
+    // the router.reset() that precedes it) must NOT run while a render is live.
+    assert.equal(log.includes('B:start'), false, 'B must not mutate/boot while a render is in flight')
+
+    // Release the in-flight render → it drains → B's re-boot proceeds.
+    handlerGate.release()
+    await until(() => served)
+    assert.equal(served, true, 'in-flight render completed')
+    await until(() => log.includes('B:start'))
+    assert.equal(log.includes('B:start'), true, 'B boots only after the in-flight render drained')
+
+    gateB.release()
+    await bootOf(b)
   })
 })
