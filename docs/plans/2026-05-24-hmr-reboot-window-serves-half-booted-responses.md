@@ -293,3 +293,17 @@ Full chain: `dispatchPageData → findByPath → resourceIndexData → R = panel
 3. `panel.findResource(slug)` + `R.pages.index` identity, pre vs post reboot.
 
 Whichever line shows the table vanishing names the culprit — one of {`R.table()` builds nothing · `getResource()` resolves a half-built resource · `resolveSchema` drops it}. This is firmly in pilotiq's schema-build runtime, not the framework re-boot lifecycle. (Framework side: #665 worth merging as a real artifact fix; #663 stays as concurrent-render hardening — neither closes this.)
+
+## ✅ REOPEN #2 CLOSED — pilotiq `findTables` used `instanceof` (pilotiq agent, 2026-05-25)
+
+**Culprit: none of the three probe candidates — it was `findTables()` itself.** `packages/pilotiq/src/elements/dispatchTable.ts` walked the resolved schema with `if (el instanceof Table)`. A dev re-boot re-imports the schema modules, so the page's `Table` element is an instance of a **different `Table` class identity** than the one `dispatchTable` closed over → `instanceof` returns false → `findTables` returns `[]` → `loadTableRecords` early-returns **without issuing `paginate`**. The `Table` *was* in the `elements` array and `R.table()` built it fully (probe candidates "builds nothing" / "resolveSchema drops it" both negative) — `findTables` simply couldn't recognize it. The nav-badge `count` runs on a separate walk, hence "issues `count`, never `paginate`."
+
+`findTables` was the **last walker still on `instanceof`** — `findForms`/`findActions` were already converted to `getType()` for this exact Vite SSR module-dup reason (`feedback_vite_ssr_module_dup_instanceof`). One-line fix: `el.getType() === 'table'`.
+
+**Fix + verify (pilotiq `0014ef6`, changeset `findtables-gettype-hmr-wedge`):**
+- Pinned repro (single edit to `AdminPanel.ts` → poll `/new-admin/articles` 16×): **`6 6 6 … 6`** (was: drops to `0`, stays `0`).
+- Double-write + 10 concurrent in-window flood: **`54`×10** (was 3/10 full); `settled rows=6` (was `0`).
+- Trace confirms `paginate model=Article rows=6` now reaches across **every adapter (#1–#4) and both class identities (#1/#2)** post-reboot — so it's robust even when the model re-imports (i.e. independent of #665). Rendered cells intact (formatted dates, badges, record links).
+- 3093 pilotiq tests pass incl. a new regression: `findTables` finds a `getType()==='table'` element that is **not** `instanceof Table`.
+
+**Framework PRs:** confirmed neither closes this on its own — #663 (quiesce barrier) is concurrent-render hardening; **#665 (model re-register) is a real artifact fix** (collapses the dual `class=#1/#2`) but the wedge persisted under it until this pilotiq fix (validated locally via `pnpm.overrides` link to the #665 branch — single identity, still wedged). Both worth keeping; this pilotiq one-liner is the actual REOPEN #2 closer. Status line at the top can move to CLOSED.
