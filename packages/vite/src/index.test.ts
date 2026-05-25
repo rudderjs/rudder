@@ -322,6 +322,28 @@ describe('performReboot', () => {
     assert.deepEqual(sends[0], { type: 'full-reload' })
   })
 
+  it('resets the page-context-enhancer registry so per-boot registrants do not accumulate', async () => {
+    _resetPageContextEnhancersForTests()
+    let runs = 0
+    registerPageContextEnhancer(() => { runs++ })
+    await runPageContextEnhancers({} as never)
+    assert.equal(runs, 1, 'enhancer registered + runs once')
+
+    const a: Node = { file: path.resolve(cwd, 'app', 'a.ts'), importers: new Set() }
+    const { server } = makeServer({ a })
+    const log = console.log
+    console.log = () => {}
+    try {
+      performReboot(server, [a.file], cwd)
+    } finally {
+      console.log = log
+    }
+
+    runs = 0
+    await runPageContextEnhancers({} as never)
+    assert.equal(runs, 0, 'registry cleared on re-boot — providers re-register on the next bootstrap')
+  })
+
   it('falls back to invalidateAll when any changed file is not in the SSR graph', () => {
     const tracked: Node = { file: path.resolve(cwd, 'app', 'a.ts'), importers: new Set() }
     const { server, wasInvalidatedAll } = makeServer({ tracked })

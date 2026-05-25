@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import type { EnvironmentModuleNode, Plugin, ViteDevServer } from 'vite'
 import { viewsScannerPlugin } from './views-scanner.js'
 import { routesScannerPlugin } from './routes-scanner.js'
+import { resetPageContextEnhancers } from './page-context-enhancers.js'
 
 /** Options for the {@link rudderjs} Vite plugin. */
 export interface RudderjsOptions {
@@ -157,6 +158,11 @@ export function performReboot(server: ViteDevServer, files: string[], cwd: strin
   if (trace) g['__rudderjs_hmr_t0__'] = t0
   delete g['__rudderjs_instance__']
   delete g['__rudderjs_app__']
+  // Reset the page-context-enhancer registry too: providers (auth/localization/
+  // session) push an enhancer in boot() and the registry is a persistent
+  // globalThis append-only list, so without this each re-boot accumulates a
+  // duplicate enhancer. The re-bootstrap re-runs those boot()s and re-registers.
+  resetPageContextEnhancers()
   const tCleared = trace ? performance.now() : 0
 
   // Invalidate each changed file's import subtree (up to the bootstrap entry)
