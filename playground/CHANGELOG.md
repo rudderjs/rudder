@@ -1,5 +1,27 @@
 # rudderjs-playground
 
+## 0.0.107
+
+### Patch Changes
+
+- Updated dependencies [fc4a9f9]
+- Updated dependencies [3bf71b9]
+- Updated dependencies [6f3cb2a]
+- Updated dependencies [61a6a51]
+- Updated dependencies [3bf71b9]
+- Updated dependencies [3bf71b9]
+- Updated dependencies [9110ae3]
+- Updated dependencies [2289785]
+  - @rudderjs/broadcast@1.2.2
+  - @rudderjs/cache@1.3.2
+  - @rudderjs/core@1.4.0
+  - @rudderjs/queue-bullmq@1.3.1
+  - @rudderjs/session@2.1.1
+  - @rudderjs/support@1.4.0
+  - @rudderjs/sync@1.3.2
+  - @rudderjs/vite@2.7.2
+  - @rudderjs/notification@1.0.4
+
 ## 0.0.106
 
 ### Patch Changes
