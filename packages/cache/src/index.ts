@@ -1,5 +1,5 @@
 import { ServiceProvider, config } from '@rudderjs/core'
-import { resolveIoredisClass } from '@rudderjs/support'
+import { resolveIoredisClass, reusableConnection } from '@rudderjs/support'
 
 import { FakeCacheAdapter } from './fake.js'
 import { MemoryLock, RedisLock, newOwnerToken, type Lock, type RedisLockClient } from './lock.js'
@@ -316,15 +316,27 @@ class RedisAdapter implements CacheAdapter {
     eval(script: string, numKeys: number, ...args: unknown[]): Promise<unknown>
   }> {
     if (!this.client) {
-      const Redis = resolveIoredisClass<import('ioredis').Redis>(await import('ioredis'))
-      this.client = this.config.url
-        ? new Redis(this.config.url)
-        : new Redis({
-            host:     this.config.host     ?? '127.0.0.1',
-            port:     this.config.port     ?? 6379,
-            password: this.config.password,
-            db:       this.config.db       ?? 0,
-          })
+      // Reuse one ioredis client across dev HMR re-boots — CacheProvider.boot()
+      // rebuilds this RedisAdapter on every edit, so without reuse each re-boot
+      // opens (and leaks) a fresh Redis connection. See reusableConnection().
+      const signature = this.config.url
+        ?? `${this.config.host ?? '127.0.0.1'}:${this.config.port ?? 6379}:${this.config.db ?? 0}:${this.config.password ?? ''}`
+      this.client = await reusableConnection<import('ioredis').Redis>(
+        '__rudderjs_cache_redis__',
+        signature,
+        async () => {
+          const Redis = resolveIoredisClass<import('ioredis').Redis>(await import('ioredis'))
+          return this.config.url
+            ? new Redis(this.config.url)
+            : new Redis({
+                host:     this.config.host     ?? '127.0.0.1',
+                port:     this.config.port     ?? 6379,
+                password: this.config.password,
+                db:       this.config.db       ?? 0,
+              })
+        },
+        (client) => client.quit(),
+      )
     }
     return this.client as Awaited<ReturnType<RedisAdapter['getClient']>>
   }

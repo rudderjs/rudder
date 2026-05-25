@@ -42,7 +42,8 @@
   "dependencies": {
     "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
-    "@rudderjs/core": "workspace:^"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/support": "workspace:^"
   },
   "peerDependencies": {
     "@rudderjs/vite": "workspace:^"

@@ -459,3 +459,54 @@ export function resolveIoredisClass<R = unknown>(mod: unknown): new (...args: an
     'This usually means an ioredis upgrade changed its module shape; please file an issue.',
   )
 }
+
+// ─── reusableConnection ────────────────────────────────────
+
+interface ReusableConnectionEntry<T> { signature: string; promise: Promise<T> }
+
+/**
+ * Reuse one long-lived connection (a DB pool, Redis client, …) across Vite dev
+ * HMR re-boots instead of opening a fresh one on every edit.
+ *
+ * The `@rudderjs/vite` watcher re-runs every provider's `boot()` on each `app/`
+ * edit, so a provider that opens a connection in `boot()` (or in a driver it
+ * constructs there) leaks one per edit — racing toward the server's connection
+ * cap (the orm-prisma MySQL `max_connections` wedge, #652). This caches the live
+ * connection on `globalThis[cacheKey]` (surviving SSR module re-evaluation),
+ * keyed by a caller-computed `signature` (e.g. the connection URL / host:port):
+ *
+ *   • same signature  → reuse the live connection (no new one opened)
+ *   • changed signature (a `config/*.ts` edit) → build a fresh one and dispose
+ *     the superseded one (fire-and-forget — the new connection doesn't wait)
+ *
+ * The promise is cached (not just the resolved value) so concurrent first-callers
+ * within one boot dedupe onto a single build. No-op in production: a single boot
+ * means one build, never re-entered.
+ *
+ * Mirrors the inlined reuse in `@rudderjs/orm-prisma` (#652) / `@rudderjs/orm-drizzle`;
+ * use this for new connection-owning providers instead of re-inlining the pattern.
+ *
+ * @param cacheKey   a unique `globalThis` key per connection kind, e.g. `'__rudderjs_cache_redis__'`
+ * @param signature  changes iff a new connection is required (URL / host:port:db)
+ * @param build      opens the connection (async); only called on a cache miss
+ * @param dispose    closes a superseded connection (`client.quit()`, `pool.end()`, …)
+ */
+export function reusableConnection<T>(
+  cacheKey: string,
+  signature: string,
+  build: () => Promise<T>,
+  dispose: (value: T) => unknown,
+): Promise<T> {
+  const g = globalThis as Record<string, unknown>
+  const cached = g[cacheKey] as ReusableConnectionEntry<T> | undefined
+  if (cached) {
+    if (cached.signature === signature) return cached.promise
+    void cached.promise.then((v) => dispose(v)).catch(() => { /* best effort — releasing a superseded connection */ })
+    delete g[cacheKey]
+  }
+  const promise = Promise.resolve().then(build)
+  // Drop a rejected build so the next call retries instead of caching the failure.
+  promise.catch(() => { if ((g[cacheKey] as ReusableConnectionEntry<T> | undefined)?.promise === promise) delete g[cacheKey] })
+  g[cacheKey] = { signature, promise } satisfies ReusableConnectionEntry<T>
+  return promise
+}
