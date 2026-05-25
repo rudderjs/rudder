@@ -206,7 +206,13 @@ export class ContextProvider extends ServiceProvider {
   async boot(): Promise<void> {
     this.app.instance('context', Context)
 
-    // Integrate with @rudderjs/log if available — merge Context.all() into every log entry
+    // Integrate with @rudderjs/log if available — merge Context.all() into every
+    // log entry. Register exactly ONCE per process: boot() re-runs on every dev
+    // HMR re-boot and `Log.listen()` appends to a globalThis-backed listener
+    // array (no dedup), so re-registering would accumulate a duplicate
+    // context-merge listener per edit. Guard with a globalThis flag.
+    const g = globalThis as Record<string, unknown>
+    if (g['__rudderjs_context_log_integrated__']) return
     try {
       const logMod = await resolveOptionalPeer<{
         Log: { listen(fn: (entry: { context: Record<string, unknown> }) => void): void }
@@ -217,6 +223,7 @@ export class ContextProvider extends ServiceProvider {
           Object.assign(entry.context, ctx)
         }
       })
+      g['__rudderjs_context_log_integrated__'] = true
     } catch {
       // @rudderjs/log not installed — skip integration
     }

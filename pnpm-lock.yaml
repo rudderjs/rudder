@@ -349,6 +349,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/log':
+        specifier: workspace:^
+        version: link:../log
       '@types/node':
         specifier: 20.19.35
         version: 20.19.35

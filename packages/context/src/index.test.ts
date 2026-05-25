@@ -1,7 +1,26 @@
-import { describe, it } from 'node:test'
+import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Context, runWithContext, hasContext, ContextMiddleware } from './index.js'
+import { Context, runWithContext, hasContext, ContextMiddleware, ContextProvider } from './index.js'
 import type { DehydratedContext } from './index.js'
+import { LogRegistry } from '@rudderjs/log'
+
+// ─── ContextProvider: dev HMR log-integration register-once ──
+
+describe('ContextProvider.boot — @rudderjs/log integration register-once', () => {
+  const g = globalThis as Record<string, unknown>
+  beforeEach(() => { delete g['__rudderjs_context_log_integrated__'] })
+
+  it('registers the log listener exactly once across re-boots', async () => {
+    const before  = LogRegistry.listeners().length
+    const fakeApp = { instance: () => {} } as never
+
+    await new ContextProvider(fakeApp).boot()
+    await new ContextProvider(fakeApp).boot() // simulates a dev HMR re-boot
+
+    assert.equal(LogRegistry.listeners().length - before, 1, 'must register exactly one log listener, not one per re-boot')
+    assert.equal(g['__rudderjs_context_log_integrated__'], true, 'integration flag is set after first boot')
+  })
+})
 
 // ─── Context.add / get / has / all / forget ───────────────
 
