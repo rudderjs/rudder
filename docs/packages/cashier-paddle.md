@@ -499,13 +499,13 @@ await sub.resume()
 ```ts
 await sub.cancel()                  // cancel at end of period (grace period)
 await sub.cancelNow()               // cancel immediately
-await sub.stopCancelation()         // undo a scheduled cancellation (only works during grace period)
+await sub.stopCancellation()        // undo a scheduled cancellation (only works during grace period)
 
 if (sub.onGracePeriod()) { /* canceled, still active until period ends */ }
 ```
 
 > [!WARNING]
-> Paddle subscriptions cannot be resumed after cancellation completes. Customers must create a new subscription. (`stopCancelation()` only works while still on grace period.)
+> Paddle subscriptions cannot be resumed after cancellation completes. Customers must create a new subscription. (`stopCancellation()` only works while still on grace period.)
 
 ## Subscription Trials
 
@@ -726,7 +726,7 @@ tx.invoicePdfUrl() // → presigned URL from Paddle
       <td>{tx.billedAt.toLocaleDateString()}</td>
       <td>{tx.total()}</td>
       <td>{tx.tax()}</td>
-      <td><a href={tx.invoicePdfUrl()} target="_blank">Download</a></td>
+      <td><a href={tx.invoicePdfUrl()} target="_blank" rel="noopener noreferrer">Download</a></td>
     </tr>
   ))}
 </table>
@@ -738,7 +738,11 @@ tx.invoicePdfUrl() // → presigned URL from Paddle
 const last = await sub.lastPayment()    // Payment | null (null until first webhook)
 const next = await sub.nextPayment()    // Payment | null (null after cancelation)
 
-console.log(`Next: ${next.amount()} due ${next.date().toLocaleDateString()}`)
+if (next) {
+  console.log(`Next: ${next.amount()} due ${next.date().toLocaleDateString()}`)
+} else {
+  console.log("No upcoming payment")
+}
 ```
 
 ## CLI
@@ -782,7 +786,7 @@ pnpm rudder cashier:webhook simulate subscription.created --fixture=tests/fixtur
 ## Pitfalls
 
 - **`PADDLE_WEBHOOK_SECRET` not set** — webhook returns 500 (fail-closed by design).
-- **CSRF blocks the webhook** — exclude `paddle/*` from CSRF if you use CsrfMiddleware on the `web` group.
+- **CSRF blocks the webhook** — exclude `/paddle/webhook` from CSRF if you use CsrfMiddleware on the `web` group.
 - **`@paddle/paddle-node-sdk` not installed** — server-side calls (`subscription.swap()`, `previewPrices()`, etc.) throw with an actionable install message. Checkout-only apps don't need it.
 - **`prisma db push` after install** — `cashier:install` writes the schema fragment but doesn't run Prisma. Run `pnpm exec prisma generate && pnpm exec prisma db push` after.
 - **Decimal arithmetic on amounts** — Paddle sends totals as **strings in minor units**. Never `Number()` them — use string math or BigInt. `formatAmount()` is display-only.
