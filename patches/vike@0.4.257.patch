@@ -1,84 +1,17 @@
 diff --git a/dist/node/vite/plugins/build/pluginProdBuildEntry.js b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
-index c84ab47949ca4307d42e64dc4f4464f1add09947..5948f6c8c46f99c6d4fd794893fd3e4bae1b5c89 100644
+index c84ab47949ca4307d42e64dc4f4464f1add09947..ae1f78f37d8d5d3e857ab089a8371364a568c3f6 100644
 --- a/dist/node/vite/plugins/build/pluginProdBuildEntry.js
 +++ b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
-@@ -65,37 +65,51 @@ function getServerProductionEntryCode(config) {
+@@ -65,6 +65,9 @@ function getServerProductionEntryCode(config) {
      ].join('\n');
      return importerCode;
  }
--// Set the value of the ASSETS_MANIFEST constant inside dist/server/entry.js (or dist/server/index.js)
-+// Set the value of the ASSETS_MANIFEST constant inside the server build's output.
-+// RudderJS patch (Vite 8 / rolldown): upstream located the single chunk whose IN-MEMORY
-+// `chunk.code` contained the placeholder and replaced only that file. Under rolldown-vite the
-+// written server output can carry __VITE_ASSETS_MANIFEST__ in a shared chunk that the in-memory
-+// `bundle` object doesn't reliably reflect (different `code`, or not enumerated at all under a
-+// concurrent full build), so any bundle-based lookup misses it nondeterministically, the
-+// placeholder survives to disk, and prerendering crashes with
-+// `ReferenceError: __VITE_ASSETS_MANIFEST__ is not defined`. We therefore ignore `bundle` and
-+// walk the written server outDir on disk, replacing every occurrence in every JS file — a server
-+// chunk cannot escape outDir, so this can't miss. Backward-compatible with single-chunk Rollup.
++// REPRO BRANCH ONLY (vikejs/vike rolldown __VITE_ASSETS_MANIFEST__ bug): this is the
++// STOCK upstream implementation, restored so `pnpm build` reproduces the prerender
++// `ReferenceError` on Linux. The real fix (walk outDir on disk) lives on `main`.
+ // Set the value of the ASSETS_MANIFEST constant inside dist/server/entry.js (or dist/server/index.js)
  async function set_macro_ASSETS_MANIFEST(assetsJsonFilePath, bundle, outDir) {
      assert(outDir);
--    const chunkPath = find_ASSETS_MANIFEST(bundle);
--    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
--    if (!chunkPath) {
--        const noop = true; // no operation
-+    let entries;
-+    try {
-+        entries = await fs.readdir(outDir, { recursive: true });
-+    }
-+    catch {
-+        const noop = true; // outDir absent (e.g. a server build that emitted nothing)
-         return noop;
-     }
--    assert(assetsJsonFilePath);
--    const chunkFilePath = path.join(outDir, chunkPath);
--    const [assetsJsonString, chunkFileContent] = await Promise.all([
--        await fs.readFile(assetsJsonFilePath, 'utf8'),
--        await fs.readFile(chunkFilePath, 'utf8'),
--    ]);
--    const serverEntryFileContentPatched = chunkFileContent.replace(ASSETS_MANIFEST, assetsJsonString);
--    assert(serverEntryFileContentPatched !== chunkFileContent);
--    await fs.writeFile(chunkFilePath, serverEntryFileContentPatched);
--    const noop = false;
--    return noop;
--}
--function find_ASSETS_MANIFEST(bundle) {
--    let chunkPath;
--    for (const filePath in bundle) {
--        const chunk = bundle[filePath];
--        if ('code' in chunk && chunk.code.includes(ASSETS_MANIFEST)) {
--            assert(!chunkPath);
--            chunkPath = filePath;
-+    const filePaths = entries
-+        .filter((entry) => entry.endsWith('.js') || entry.endsWith('.mjs') || entry.endsWith('.cjs'))
-+        .map((entry) => path.join(outDir, entry));
-+    let assetsJsonString;
-+    let replacedAny = false;
-+    for (const filePath of filePaths) {
-+        let fileContent;
-+        try {
-+            fileContent = await fs.readFile(filePath, 'utf8');
-         }
-+        catch {
-+            continue; // directory entry or unreadable; skip
-+        }
-+        if (!fileContent.includes(ASSETS_MANIFEST))
-+            continue;
-+        if (assetsJsonString === undefined) {
-+            assert(assetsJsonFilePath);
-+            assetsJsonString = await fs.readFile(assetsJsonFilePath, 'utf8');
-+        }
-+        await fs.writeFile(filePath, fileContent.replaceAll(ASSETS_MANIFEST, assetsJsonString));
-+        replacedAny = true;
-     }
--    return chunkPath;
-+    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
-+    const noop = !replacedAny;
-+    return noop;
- }
- function getImportPath(config) {
-     // We resolve filePathAbsolute even if we don't use it: we use require.resolve() as an assertion that the relative path is correct
 diff --git a/dist/node/vite/plugins/pluginDev/optimizeDeps.js b/dist/node/vite/plugins/pluginDev/optimizeDeps.js
 index 21465d0480aeb7e754983942543794b0ef3d4315..5fe34d4c473c5ed8f6ec0b119bdb35fb448f78c9 100644
 --- a/dist/node/vite/plugins/pluginDev/optimizeDeps.js
