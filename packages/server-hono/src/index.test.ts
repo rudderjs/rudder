@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { MalformedBodyError } from '@rudderjs/contracts'
 import { hono, compileControllerViewRegex } from './index.js'
-import { renderErrorPage, buildErrorMarkdown, resolveErrorLine } from './error-page.js'
+import { renderErrorPage, buildErrorMarkdown, resolveErrorLine, applyDevStackFix } from './error-page.js'
 
 // ─── hono() factory ─────────────────────────────────────────
 
@@ -615,6 +615,47 @@ describe('resolveErrorLine()', () => {
     // Reported = 1 (blank). No throw/abort anywhere → null so the renderer
     // can drop the source section rather than mislead with an unrelated line.
     assert.strictEqual(resolveErrorLine(lines, 1), null)
+  })
+})
+
+// ─── applyDevStackFix() — primary line-accuracy mechanism (sourcemap remap) ──
+//
+// In dev, @rudderjs/vite registers a `globalThis.__rudderjs_fix_stacktrace__`
+// hook (Vite's `ssrFixStacktrace`) that rewrites an eval'd SSR module-runner
+// stack to true source positions. applyDevStackFix invokes it so the Ignition
+// page (and the app's error handler) read accurate line numbers instead of
+// transformed-coordinate ones (the wrong-line bug where a route's throw at
+// source line 235 surfaced as ~140 / an unrelated route).
+describe('applyDevStackFix()', () => {
+  const KEY = '__rudderjs_fix_stacktrace__'
+  const g = globalThis as Record<string, unknown>
+
+  it('invokes the globalThis hook with the same error instance and applies its in-place mutation', () => {
+    const seen: Error[] = []
+    g[KEY] = (e: Error) => { seen.push(e); e.stack = 'remapped:' + (e.stack ?? '') }
+    try {
+      const err = new Error('boom'); err.stack = 'raw'
+      applyDevStackFix(err)
+      assert.strictEqual(seen.length, 1, 'hook called exactly once')
+      assert.strictEqual(seen[0], err, 'hook received the same error instance')
+      assert.strictEqual(err.stack, 'remapped:raw', 'in-place stack rewrite is preserved')
+    } finally { delete g[KEY] }
+  })
+
+  it('is a no-op when no hook is registered (production / non-dev)', () => {
+    delete g[KEY]
+    const err = new Error('boom'); err.stack = 'raw'
+    assert.doesNotThrow(() => applyDevStackFix(err))
+    assert.strictEqual(err.stack, 'raw', 'stack untouched without a hook')
+  })
+
+  it('swallows a throwing hook and keeps the original stack', () => {
+    g[KEY] = () => { throw new Error('hook blew up') }
+    try {
+      const err = new Error('boom'); err.stack = 'raw'
+      assert.doesNotThrow(() => applyDevStackFix(err))
+      assert.strictEqual(err.stack, 'raw', 'original stack preserved when the hook throws')
+    } finally { delete g[KEY] }
   })
 })
 
