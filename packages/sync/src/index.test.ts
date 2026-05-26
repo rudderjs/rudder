@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import * as Y from 'yjs'
 import {
   MemoryPersistence,
+  syncPrisma,
   SyncProvider,
   Sync,
   _handleConnection,
@@ -220,6 +221,121 @@ describe('Custom SyncPersistence adapter', () => {
     assert.strictEqual(typeof adapter.destroy,        'function')
   })
 
+  describe('syncPrisma', () => {
+    it('caches reconstructed docs per docName and avoids repeated full replay', async () => {
+      const rowsByDoc = new Map<string, Array<{ update: Uint8Array }>>()
+      const source = new Y.Doc()
+      source.getText('content').insert(0, 'cached')
+      rowsByDoc.set('cached-doc', [{ update: Y.encodeStateAsUpdate(source) }])
+
+      let findManyCalls = 0
+      const persistence = syncPrisma({
+        client: {
+          syncDocument: {
+            async findMany(args: unknown) {
+              findManyCalls++
+              const docName = (args as { where: { docName: string } }).where.docName
+              return rowsByDoc.get(docName) ?? []
+            },
+            async create() { return {} },
+            async deleteMany() { return {} },
+          },
+        },
+      })
+
+      const a = await persistence.getYDoc('cached-doc')
+      const b = await persistence.getYDoc('cached-doc')
+
+      assert.strictEqual(a, b, 'subsequent getYDoc() should return the cached instance')
+      assert.strictEqual(findManyCalls, 1, 'persistence replay should run only once per cached doc')
+    })
+
+    it('applies storeUpdate to cached docs and invalidates cache on clearDocument', async () => {
+      const rowsByDoc = new Map<string, Array<{ update: Uint8Array }>>()
+      let findManyCalls = 0
+
+      const persistence = syncPrisma({
+        client: {
+          syncDocument: {
+            async findMany(args: unknown) {
+              findManyCalls++
+              const docName = (args as { where: { docName: string } }).where.docName
+              return rowsByDoc.get(docName) ?? []
+            },
+            async create(args: unknown) {
+              const { docName, update } = (args as { data: { docName: string; update: Uint8Array } }).data
+              const rows = rowsByDoc.get(docName) ?? []
+              rows.push({ update })
+              rowsByDoc.set(docName, rows)
+              return {}
+            },
+            async deleteMany(args: unknown) {
+              const docName = (args as { where: { docName: string } }).where.docName
+              rowsByDoc.delete(docName)
+              return {}
+            },
+          },
+        },
+      })
+
+      const source = new Y.Doc()
+      const text = source.getText('content')
+      text.insert(0, 'hello')
+      await persistence.storeUpdate('cached-doc', Y.encodeStateAsUpdate(source))
+
+      const cached = await persistence.getYDoc('cached-doc')
+      assert.strictEqual(cached.getText('content').toString(), 'hello')
+      assert.strictEqual(findManyCalls, 1)
+
+      const cachedSV = Y.encodeStateVector(cached)
+      text.insert(5, ' world')
+      await persistence.storeUpdate('cached-doc', Y.encodeStateAsUpdate(source, cachedSV))
+      assert.strictEqual(cached.getText('content').toString(), 'hello world', 'cached in-memory doc should advance on storeUpdate')
+      assert.strictEqual(findManyCalls, 1, 'storeUpdate should not trigger another replay for cached docs')
+
+      await persistence.clearDocument('cached-doc')
+
+      const fresh = new Y.Doc()
+      fresh.getText('content').insert(0, 'fresh')
+      await persistence.storeUpdate('cached-doc', Y.encodeStateAsUpdate(fresh))
+
+      const reloaded = await persistence.getYDoc('cached-doc')
+      assert.notStrictEqual(reloaded, cached, 'clearDocument should evict the cached doc instance')
+      assert.strictEqual(reloaded.getText('content').toString(), 'fresh')
+      assert.strictEqual(findManyCalls, 2, 'a cleared doc should be replayed again on next getYDoc')
+    })
+
+    it('bounds cached docs and evicts least-recently-used entries', async () => {
+      const findManyCallsByDoc = new Map<string, number>()
+      const persistence = syncPrisma({
+        client: {
+          syncDocument: {
+            async findMany(args: unknown) {
+              const docName = (args as { where: { docName: string } }).where.docName
+              findManyCallsByDoc.set(docName, (findManyCallsByDoc.get(docName) ?? 0) + 1)
+              return []
+            },
+            async create() { return {} },
+            async deleteMany() { return {} },
+          },
+        },
+      })
+
+      // Cache max is 256; reading 300 distinct docs should evict older ones.
+      for (let i = 0; i < 300; i++) {
+        await persistence.getYDoc(`doc-${i}`)
+      }
+
+      assert.strictEqual(findManyCallsByDoc.get('doc-0'), 1)
+      await persistence.getYDoc('doc-0')
+      assert.strictEqual(findManyCallsByDoc.get('doc-0'), 2, 'oldest entry should be evicted and replayed')
+
+      assert.strictEqual(findManyCallsByDoc.get('doc-299'), 1)
+      await persistence.getYDoc('doc-299')
+      assert.strictEqual(findManyCallsByDoc.get('doc-299'), 1, 'recently used entry should remain cached')
+    })
+  })
+
   it('persistence.storeUpdate() is called with the correct doc name and update', async () => {
     const calls: Array<{ docName: string; update: Uint8Array }> = []
     const adapter: SyncPersistence = {
@@ -354,6 +470,17 @@ describe('Yjs sync protocol message structure', () => {
     return new Uint8Array(buf)
   }
 
+  function encodeSyncMsg(subType: number, data: Uint8Array): Uint8Array {
+    const subTypeBytes = writeVarUint(subType)
+    const lenBytes = writeVarUint(data.length)
+    const out = new Uint8Array(1 + subTypeBytes.length + lenBytes.length + data.length)
+    out[0] = 0 // messageSync
+    out.set(subTypeBytes, 1)
+    out.set(lenBytes, 1 + subTypeBytes.length)
+    out.set(data, 1 + subTypeBytes.length + lenBytes.length)
+    return out
+  }
+
   it('writeVarUint encodes small values as a single byte', () => {
     assert.deepStrictEqual(writeVarUint(0),   new Uint8Array([0]))
     assert.deepStrictEqual(writeVarUint(1),   new Uint8Array([1]))
@@ -395,6 +522,18 @@ describe('Yjs sync protocol message structure', () => {
     const messageAwareness = 1
     const payload          = new Uint8Array([messageAwareness, 5, 0, 1, 2, 3, 4])
     assert.strictEqual(payload[0], messageAwareness)
+  })
+
+  it('encodes sync subType as varint (supports values >= 128)', () => {
+    const data = new Uint8Array([9, 8, 7])
+    const frame = encodeSyncMsg(130, data)
+
+    assert.strictEqual(frame[0], 0, 'frame must start with messageSync')
+    const [subType, p1] = readVarUint(frame, 1)
+    const [len, p2] = readVarUint(frame, p1)
+    assert.strictEqual(subType, 130)
+    assert.strictEqual(len, data.length)
+    assert.deepStrictEqual(frame.slice(p2, p2 + len), data)
   })
 })
 
