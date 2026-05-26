@@ -364,6 +364,43 @@ describe('performReboot', () => {
   })
 })
 
+describe('rudderjs:routes — dev fix-stacktrace hook', () => {
+  // configureServer registers globalThis.__rudderjs_fix_stacktrace__ so
+  // @rudderjs/server-hono's Ignition error page can remap eval'd SSR
+  // module-runner frames to true source positions via Vite's ssrFixStacktrace.
+  it('registers a globalThis hook that delegates to server.ssrFixStacktrace', () => {
+    const KEY = '__rudderjs_fix_stacktrace__'
+    const g = globalThis as Record<string, unknown>
+    const fixed: Error[] = []
+    const server = {
+      watcher: { add: () => {}, on: () => {} },
+      hot: { send: () => {} },
+      environments: { ssr: { moduleGraph: {
+        getModulesByFile: () => undefined,
+        invalidateModule: () => {},
+        invalidateAll: () => {},
+        fileToModulesMap: new Map(),
+      } } },
+      ssrFixStacktrace: (e: Error) => { fixed.push(e) },
+    }
+    const prev = g[KEY]
+    try {
+      const routes = rudderjs().find(p => p.name === 'rudderjs:routes')!
+      ;(routes.configureServer as (s: unknown) => void)(server as never)
+
+      const hook = g[KEY]
+      assert.equal(typeof hook, 'function', 'fix-stacktrace hook registered on globalThis')
+
+      const err = new Error('boom')
+      ;(hook as (e: Error) => void)(err)
+      assert.equal(fixed.length, 1, 'hook delegates to server.ssrFixStacktrace')
+      assert.strictEqual(fixed[0], err, 'same error instance passed through')
+    } finally {
+      if (prev === undefined) delete g[KEY]; else g[KEY] = prev
+    }
+  })
+})
+
 describe('rudderjs:routes watcher debounce', () => {
   const cwd = process.cwd()
 

@@ -349,6 +349,19 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
     {
       name: 'rudderjs:routes',
       configureServer(server) {
+        // Dev-only: expose Vite's sourcemap-based stack rewriter on globalThis so
+        // @rudderjs/server-hono's Ignition error page can remap eval'd SSR
+        // module-runner frames to real source positions. The module runner reports
+        // transformed-coordinate line numbers (a route's throw at source line 235
+        // surfaces as ~140), which the page's text heuristic can't recover when the
+        // wrong line lands on unrelated real code. `ssrFixStacktrace` mutates
+        // `err.stack` in place using the SSR module graph's sourcemaps. Never
+        // registered in production — `configureServer` only runs under `vite dev`.
+        const g = globalThis as Record<string, unknown>
+        g['__rudderjs_fix_stacktrace__'] = (err: Error): void => {
+          try { server.ssrFixStacktrace(err) } catch { /* best-effort — keep original stack */ }
+        }
+
         // Watch route, bootstrap, and app files for SSR changes. These files
         // are dynamically imported during bootstrap or within route handlers
         // so Vite doesn't track them in its SSR module graph — changes go

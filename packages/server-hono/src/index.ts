@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import type { StatusCode, RedirectStatusCode } from 'hono/utils/http-status'
-import { renderErrorPage } from './error-page.js'
+import { renderErrorPage, applyDevStackFix } from './error-page.js'
 import { serve } from '@hono/node-server'
 import http from 'node:http'
 import { B, startRequest, markBoundary, finishRequest, runWithRequest, currentPerfId } from './perf-boundaries.js'
@@ -825,11 +825,17 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       const userHandler = adapter.getErrorHandler()
       if (userHandler) {
         app.onError(async (err, c) => {
+          // Remap the stack to true source positions BEFORE any consumer reads
+          // it — the app's error handler (e.g. a JSON debug-trace renderer), the
+          // dev Ignition page, and logging all benefit. Dev-only no-op (the hook
+          // is only registered under `vite dev`).
+          if (err instanceof Error) applyDevStackFix(err)
           try {
             return await userHandler(err, normalizeRequest(c, trustProxy))
           } catch (e2) {
             const thrown = e2 instanceof Error ? e2 : new Error(String(e2))
             if (!isProd) {
+              applyDevStackFix(thrown)
               const html = renderErrorPage(thrown, { method: c.req.method, url: c.req.url, headers: Object.fromEntries(Object.entries(c.req.header())) })
               return c.html(html, 500)
             }
@@ -841,7 +847,9 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         })
       } else if (!isProd) {
         app.onError((err, c) => {
-          const html = renderErrorPage(err instanceof Error ? err : new Error(String(err)), { method: c.req.method, url: c.req.url, headers: Object.fromEntries(Object.entries(c.req.header())) })
+          const e = err instanceof Error ? err : new Error(String(err))
+          applyDevStackFix(e)
+          const html = renderErrorPage(e, { method: c.req.method, url: c.req.url, headers: Object.fromEntries(Object.entries(c.req.header())) })
           return c.html(html, 500)
         })
       }

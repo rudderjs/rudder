@@ -1,6 +1,24 @@
 import fs from 'node:fs'
 import { buildEditorUrl, resolveEditor } from './editor-launch.js'
 
+/**
+ * @internal — exposed for tests.
+ *
+ * Dev-only — apply Vite's sourcemap-based stack rewriter (registered on
+ * `globalThis` by @rudderjs/vite's `configureServer`) so error rendering
+ * resolves eval'd SSR module-runner frames to true source positions instead of
+ * transformed-coordinate lines. This is the PRIMARY line-accuracy mechanism;
+ * `resolveErrorLine` below is the heuristic fallback for when no sourcemap remap
+ * is available (tsx-run CLI errors, or the hook absent). Mutates `err.stack` in
+ * place. No-op in production (the hook is never registered) or on failure.
+ */
+export function applyDevStackFix(err: Error): void {
+  const fix = (globalThis as Record<string, unknown>)['__rudderjs_fix_stacktrace__']
+  if (typeof fix === 'function') {
+    try { (fix as (e: Error) => void)(err) } catch { /* keep original stack */ }
+  }
+}
+
 interface StackFrame {
   func: string
   file: string
@@ -35,6 +53,10 @@ const ERROR_TRIGGER = /(?:^|[\s.;{}(])(?:throw\s|abort\s*\()/
  * @internal — exposed for tests.
  *
  * Resolve the reported error line to the actual throw / abort site.
+ *
+ * Heuristic FALLBACK — `applyDevStackFix` (sourcemap remap) is the primary
+ * mechanism and normally feeds this an already-correct line. This runs only
+ * when no remap is available (tsx-run CLI errors, or the dev hook absent).
  *
  * Both `tsx` and Vite SSR's Module Runner report inaccurate line numbers in
  * dev: `new Function()`-evaluated modules don't honor `--enable-source-maps`,
