@@ -424,13 +424,19 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
     {
       name: 'rudderjs:config',
       configResolved(config) {
-        // Suppress "Sourcemap points to missing source files" for @rudderjs/* packages.
-        // Vite emits these via logger.warnOnce() when published dist/ has sourcemaps
-        // referencing the original .ts sources not shipped in the npm package.
+        // Suppress benign sourcemap warnings for our own @rudderjs/* packages.
+        // Vite emits these via logger.warnOnce() because each package ships a
+        // dist/*.js.map whose `sources` point at ../src/*.ts; the pnpm workspace
+        // symlink (node_modules/@rudderjs/x → packages/x) makes Vite resolve that
+        // to the real packages/x/src path, which it considers "outside" the
+        // node_modules package dir. The maps are correct (they power accurate
+        // dev-error stack remapping) — this is just startup noise. Two wordings:
+        //   - "missing source files"                       (older Vite)
+        //   - "points to a source file outside its package" (Vite 8)
         const filter = (msg: string) =>
-          // Suppress sourcemap warnings for published @rudderjs/* packages
           msg.includes('Sourcemap') &&
-          msg.includes('missing source files') &&
+          (msg.includes('missing source files') ||
+            msg.includes('points to a source file outside its package')) &&
           msg.includes('@rudderjs')
         const origWarn     = config.logger.warn.bind(config.logger)
         const origWarnOnce = config.logger.warnOnce.bind(config.logger)
