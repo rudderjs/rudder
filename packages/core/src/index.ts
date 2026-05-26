@@ -30,6 +30,8 @@ export type { DefaultProvidersOptions } from './default-providers.js'
 export { BUILTIN_REGISTRY } from './provider-registry.js'
 export type { ProviderEntry, ProviderManifest, ProviderStage } from './provider-registry.js'
 export { sortByStageAndDepends } from './provider-sort.js'
+export { bootNotice, drainBootNotices } from './boot-notices.js'
+export type { BootNotice } from './boot-notices.js'
 
 // ─── Events ────────────────────────────────────────────────
 

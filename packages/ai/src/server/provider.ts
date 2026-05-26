@@ -1,4 +1,4 @@
-import { ServiceProvider, config } from '@rudderjs/core'
+import { ServiceProvider, config, bootNotice } from '@rudderjs/core'
 import { AiRegistry } from '../registry.js'
 import { setConversationStore, setUserMemory } from '../agent.js'
 import { GoogleCacheRegistry, type CacheStoreLike } from '../providers/google-cache-registry.js'
@@ -135,13 +135,10 @@ export class AiProvider extends ServiceProvider {
       const instance = await build(name, providerConfig, { googleCacheRegistry })
       if (instance === null) {
         // Drivers that need an apiKey return null when it's missing/empty
-        // (see requireKey). Skip with a one-line warning so the app boots
+        // (see requireKey). Skip with a grouped boot notice so the app boots
         // and `AI.use('${name}')` surfaces the standard "not registered"
         // error at the use-site with a clear hint to set the env var.
-        console.warn(
-          `[RudderJS AI] Skipped provider "${name}" (driver "${driver}"): apiKey is empty. ` +
-          `Set config('ai').providers.${name}.apiKey (typically via an env var) to enable.`,
-        )
+        bootNotice('ai', `${name} skipped — apiKey empty (set config('ai').providers.${name}.apiKey)`)
         continue
       }
       AiRegistry.register(instance)
