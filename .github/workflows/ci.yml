@@ -336,3 +336,65 @@ jobs:
 
       - name: RSC render + action E2E (production)
         run: pnpm --filter rudderjs-playground-rsc test:e2e
+
+  playground-build:
+    # Production build of the prerendering playgrounds. The build-test matrix
+    # filters to `./packages/* + create-rudder*` and NEVER builds the
+    # playgrounds, so the only place `vike build` (and its prerender pass) ran
+    # in CI/CD was the Release workflow's unfiltered `pnpm build` — post-merge,
+    # too late. That gap let a Vite 8 / rolldown prerender regression reach main
+    # (Vike left `__VITE_ASSETS_MANIFEST__` unreplaced in a shared server chunk
+    # on Linux → `ReferenceError` during prerender; fixed in
+    # patches/vike@0.4.257.patch). This job runs that path at PR time on Linux.
+    #
+    # `--force` on the playground build defeats turbo cache masking: the
+    # original regression hid behind a warm playground-build cache for three
+    # Release runs. We want the prerender to actually execute on every run.
+    name: Playground Build (production)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache turbo artifacts
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-playground-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-playground-${{ runner.os }}-
+
+      - name: Build packages
+        run: pnpm turbo run build --filter='./packages/*'
+
+      - name: Build playgrounds (prerender, uncached)
+        # --force so the prerender pass runs every time and can't be masked by a
+        # warm turbo cache (the failure mode of the original regression).
+        run: pnpm turbo run build --filter='rudderjs-playground' --filter='rudderjs-playground-web' --force
+
+      - name: Assert manifest placeholder fully replaced
+        # Belt-and-suspenders: catches a leaked __VITE_ASSETS_MANIFEST__ even in
+        # a server bundle that isn't executed at prerender time (e.g. an app with
+        # no prerendered pages still emits the broken chunk).
+        run: |
+          if grep -rl '__VITE_ASSETS_MANIFEST__' playground/dist/server playground-web/dist/server 2>/dev/null; then
+            echo "::error::Vike left __VITE_ASSETS_MANIFEST__ unreplaced in a server chunk (Vite 8 / rolldown — see patches/vike@0.4.257.patch)"
+            exit 1
+          fi
+          echo "OK: no unreplaced __VITE_ASSETS_MANIFEST__ in server output"

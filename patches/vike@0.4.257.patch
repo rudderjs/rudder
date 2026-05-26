@@ -1,5 +1,81 @@
+diff --git a/dist/node/vite/plugins/build/pluginProdBuildEntry.js b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
+index c84ab47949ca4307d42e64dc4f4464f1add09947..66dda383f8edc3460e0da3a2ecf1734082ca8b42 100644
+--- a/dist/node/vite/plugins/build/pluginProdBuildEntry.js
++++ b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
+@@ -65,37 +65,44 @@ function getServerProductionEntryCode(config) {
+     ].join('\n');
+     return importerCode;
+ }
+-// Set the value of the ASSETS_MANIFEST constant inside dist/server/entry.js (or dist/server/index.js)
++// Set the value of the ASSETS_MANIFEST constant inside the server build's chunk(s).
++// RudderJS patch (Vite 8 / rolldown): upstream located the single chunk whose in-memory
++// `chunk.code` contained the placeholder and replaced only that one file. Under rolldown-vite,
++// the written server output can carry __VITE_ASSETS_MANIFEST__ in a shared chunk whose
++// in-memory `chunk.code` no longer reflects the file on disk, so the upstream lookup misses it,
++// the placeholder survives to disk, and prerendering crashes with
++// `ReferenceError: __VITE_ASSETS_MANIFEST__ is not defined`. We instead scan every emitted JS
++// chunk file on disk and replace all occurrences — backward-compatible with single-chunk Rollup output.
+ async function set_macro_ASSETS_MANIFEST(assetsJsonFilePath, bundle, outDir) {
+     assert(outDir);
+-    const chunkPath = find_ASSETS_MANIFEST(bundle);
+-    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
+-    if (!chunkPath) {
+-        const noop = true; // no operation
+-        return noop;
+-    }
+-    assert(assetsJsonFilePath);
+-    const chunkFilePath = path.join(outDir, chunkPath);
+-    const [assetsJsonString, chunkFileContent] = await Promise.all([
+-        await fs.readFile(assetsJsonFilePath, 'utf8'),
+-        await fs.readFile(chunkFilePath, 'utf8'),
+-    ]);
+-    const serverEntryFileContentPatched = chunkFileContent.replace(ASSETS_MANIFEST, assetsJsonString);
+-    assert(serverEntryFileContentPatched !== chunkFileContent);
+-    await fs.writeFile(chunkFilePath, serverEntryFileContentPatched);
+-    const noop = false;
+-    return noop;
+-}
+-function find_ASSETS_MANIFEST(bundle) {
+-    let chunkPath;
+-    for (const filePath in bundle) {
+-        const chunk = bundle[filePath];
+-        if ('code' in chunk && chunk.code.includes(ASSETS_MANIFEST)) {
+-            assert(!chunkPath);
+-            chunkPath = filePath;
++    const chunkFilePaths = Object.keys(bundle)
++        // Only JS chunks carry `code`; static assets carry `source` and are skipped.
++        .filter((filePath) => 'code' in bundle[filePath])
++        .map((filePath) => path.join(outDir, filePath));
++    let assetsJsonString;
++    let replacedAny = false;
++    for (const chunkFilePath of chunkFilePaths) {
++        let chunkFileContent;
++        try {
++            chunkFileContent = await fs.readFile(chunkFilePath, 'utf8');
+         }
++        catch {
++            // The in-memory bundle can reference files not present on disk; skip them.
++            continue;
++        }
++        if (!chunkFileContent.includes(ASSETS_MANIFEST))
++            continue;
++        if (assetsJsonString === undefined) {
++            assert(assetsJsonFilePath);
++            assetsJsonString = await fs.readFile(assetsJsonFilePath, 'utf8');
++        }
++        const chunkFileContentPatched = chunkFileContent.replaceAll(ASSETS_MANIFEST, assetsJsonString);
++        await fs.writeFile(chunkFilePath, chunkFileContentPatched);
++        replacedAny = true;
+     }
+-    return chunkPath;
++    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
++    const noop = !replacedAny;
++    return noop;
+ }
+ function getImportPath(config) {
+     // We resolve filePathAbsolute even if we don't use it: we use require.resolve() as an assertion that the relative path is correct
 diff --git a/dist/node/vite/plugins/pluginDev/optimizeDeps.js b/dist/node/vite/plugins/pluginDev/optimizeDeps.js
-index 21465d0..5fe34d4 100644
+index 21465d0480aeb7e754983942543794b0ef3d4315..5fe34d4c473c5ed8f6ec0b119bdb35fb448f78c9 100644
 --- a/dist/node/vite/plugins/pluginDev/optimizeDeps.js
 +++ b/dist/node/vite/plugins/pluginDev/optimizeDeps.js
 @@ -133,7 +133,11 @@ async function getPageDeps(config, pageConfigs) {
