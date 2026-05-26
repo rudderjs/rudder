@@ -46,7 +46,7 @@ export const configs: Plugin[] = [
                 // https://github.com/vikejs/vike/issues/3290.
                 `${PKG_NAME}/__internal/integration/client`,
                 "@vitejs/plugin-rsc",
-                "virtual:enviroment-name",
+                "virtual:environment-name",
               ],
             },
           },
@@ -65,7 +65,7 @@ export const configs: Plugin[] = [
               exclude: [
                 PKG_NAME,
                 "@vitejs/plugin-rsc",
-                "virtual:enviroment-name",
+                "virtual:environment-name",
               ],
             },
             resolve: {
@@ -105,7 +105,7 @@ export const configs: Plugin[] = [
               exclude: [
                 PKG_NAME,
                 "@vitejs/plugin-rsc",
-                "virtual:enviroment-name",
+                "virtual:environment-name",
               ],
             },
             build: {
