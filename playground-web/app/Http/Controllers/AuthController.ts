@@ -20,10 +20,11 @@ const authLimit = RateLimit.perMinute(10)
   .message('Too many auth attempts. Try again later.')
 
 // Swap MemoryTokenRepository for a persistent one (Prisma/Redis) in production.
+// `secret` is required when NODE_ENV=production; sourced from AUTH_SECRET in .env.
 const broker = new PasswordBroker(
   new MemoryTokenRepository(),
   new EloquentUserProvider(User as unknown as never, (plain, hashed) => Hash.check(plain, hashed)),
-  { expire: 60, throttle: 60 },
+  { expire: 60, throttle: 60, secret: process.env.AUTH_SECRET ?? '' },
 )
 
 /**
