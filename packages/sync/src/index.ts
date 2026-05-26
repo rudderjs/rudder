@@ -190,9 +190,22 @@ type PrismaDelegate = {
 type PrismaLikeClient = Record<string, PrismaDelegate> & { $disconnect?: () => Promise<void> }
 
 export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistence {
+  // Bound in-memory retention: this cache is a hot-path replay optimization,
+  // not an unbounded mirror of every doc ever touched in the process.
+  const PRISMA_DOC_CACHE_MAX_ENTRIES = 256
   const modelName = config.model ?? 'syncDocument'
   let cachedClient: PrismaLikeClient | null = (config.client as PrismaLikeClient | undefined) ?? null
   const docCache = new Map<string, Y.Doc>()
+
+  function cacheDoc(docName: string, doc: Y.Doc): void {
+    if (docCache.has(docName)) docCache.delete(docName)
+    docCache.set(docName, doc)
+    while (docCache.size > PRISMA_DOC_CACHE_MAX_ENTRIES) {
+      const oldest = docCache.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      docCache.delete(oldest)
+    }
+  }
 
   async function getClient(): Promise<PrismaLikeClient> {
     if (cachedClient) return cachedClient
@@ -218,13 +231,16 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
   return {
     async getYDoc(docName: string): Promise<Y.Doc> {
       const cachedDoc = docCache.get(docName)
-      if (cachedDoc) return cachedDoc
+      if (cachedDoc) {
+        cacheDoc(docName, cachedDoc)
+        return cachedDoc
+      }
 
       const prisma = await getClient()
       const doc    = new Y.Doc()
       const rows   = await getDelegate(prisma).findMany({ where: { docName } })
       for (const row of rows) Y.applyUpdate(doc, row.update)
-      docCache.set(docName, doc)
+      cacheDoc(docName, doc)
       return doc
     },
 
@@ -264,6 +280,7 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
     },
 
     async destroy(): Promise<void> {
+      docCache.clear()
       if (!config.client && cachedClient) {
         await cachedClient.$disconnect?.()
       }

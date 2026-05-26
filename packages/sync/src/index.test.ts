@@ -304,6 +304,36 @@ describe('Custom SyncPersistence adapter', () => {
       assert.strictEqual(reloaded.getText('content').toString(), 'fresh')
       assert.strictEqual(findManyCalls, 2, 'a cleared doc should be replayed again on next getYDoc')
     })
+
+    it('bounds cached docs and evicts least-recently-used entries', async () => {
+      const findManyCallsByDoc = new Map<string, number>()
+      const persistence = syncPrisma({
+        client: {
+          syncDocument: {
+            async findMany(args: unknown) {
+              const docName = (args as { where: { docName: string } }).where.docName
+              findManyCallsByDoc.set(docName, (findManyCallsByDoc.get(docName) ?? 0) + 1)
+              return []
+            },
+            async create() { return {} },
+            async deleteMany() { return {} },
+          },
+        },
+      })
+
+      // Cache max is 256; reading 300 distinct docs should evict older ones.
+      for (let i = 0; i < 300; i++) {
+        await persistence.getYDoc(`doc-${i}`)
+      }
+
+      assert.strictEqual(findManyCallsByDoc.get('doc-0'), 1)
+      await persistence.getYDoc('doc-0')
+      assert.strictEqual(findManyCallsByDoc.get('doc-0'), 2, 'oldest entry should be evicted and replayed')
+
+      assert.strictEqual(findManyCallsByDoc.get('doc-299'), 1)
+      await persistence.getYDoc('doc-299')
+      assert.strictEqual(findManyCallsByDoc.get('doc-299'), 1, 'recently used entry should remain cached')
+    })
   })
 
   it('persistence.storeUpdate() is called with the correct doc name and update', async () => {

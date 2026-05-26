@@ -2,4 +2,4 @@
 '@rudderjs/sync': patch
 ---
 
-fix(sync): cache reconstructed persistence docs and encode sync subtype as varint
+fix(sync): bound prisma sync doc caching, serialize concurrent first-connect joins, and encode sync subtype as varint
