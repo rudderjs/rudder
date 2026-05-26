@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { bootNotice } from '@rudderjs/core'
 import type { Authenticatable, UserProvider } from './contracts.js'
 
 // ─── Token Repository Contract ────────────────────────────
@@ -65,10 +66,7 @@ export class PasswordBroker {
       )
     } else {
       if (!_devSecretWarned) {
-        console.warn(
-          '[@rudderjs/auth] PasswordBroker is using a hardcoded dev secret. ' +
-          'Set auth.passwords.secret for production.'
-        )
+        bootNotice('auth', 'using a dev password secret (set auth.passwords.secret for production)')
         _devSecretWarned = true
       }
       this.secret = 'password-reset'

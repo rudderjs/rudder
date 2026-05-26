@@ -13,6 +13,7 @@ import {
   type ProviderClass,
 } from './application.js'
 import { getLastLoadedProviderEntries } from './default-providers.js'
+import { drainBootNotices, formatBootNotices } from './boot-notices.js'
 import {
   HttpException,
   renderHttpException,
@@ -403,6 +404,10 @@ export class RudderJS {
       router.reset()
       resetGroupMiddleware()
     }
+    // Start with an empty notice buffer so a re-boot (or a prior boot that
+    // failed before flushing) doesn't carry stale notices into this boot's
+    // grouped block. Providers repopulate it during bootstrap().
+    drainBootNotices()
     await this._app.bootstrap()
     // Serial loader execution — required for per-loader group tagging in
     // @rudderjs/router's runWithGroup(). Parallel execution would set the
@@ -411,6 +416,11 @@ export class RudderJS {
     // slower for ≤4 loaders and keeps the group context correct.
     for (const loader of this._loaders) await loader()
     if (this._app.isDevelopment()) this._printDevBootLog()
+    // Flush collected boot notices as one grouped block — after the provider
+    // tree (dev) or standalone (prod), but always printed so warnings aren't
+    // lost. Empty → nothing printed (a fully-configured app boots clean).
+    const notices = drainBootNotices()
+    if (notices.length > 0) console.warn('\n' + formatBootNotices(notices).join('\n'))
     if (hmrTrace) {
       console.log(`[hmr] reboot→ready ${(performance.now() - tStart).toFixed(1)}ms`)
       delete g['__rudderjs_hmr_t0__']

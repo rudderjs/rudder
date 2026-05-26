@@ -1880,20 +1880,19 @@ describe('AiProvider — empty apiKey skip-and-warn', () => {
 
   async function bootWith(aiConfig: Record<string, unknown>): Promise<string[]> {
     AiRegistry.reset()
-    const previousRepo  = _core.getConfigRepository?.()
-    const previousWarn  = console.warn
-    const captured: string[] = []
-    console.warn = (...args: unknown[]) => { captured.push(args.map(String).join(' ')) }
+    const previousRepo = _core.getConfigRepository?.()
+    _core.drainBootNotices() // clear any buffered notices before this boot
 
     _core.setConfigRepository(new _core.ConfigRepository({ ai: aiConfig }))
     try {
       const provider = new AiProvider(makeFakeApp())
       await provider.boot()
     } finally {
-      console.warn = previousWarn
       if (previousRepo) _core.setConfigRepository(previousRepo)
     }
-    return captured
+    // Skipped providers now register a grouped boot notice (scope 'ai') instead
+    // of console.warn-ing inline; the framework flushes them after the tree.
+    return _core.drainBootNotices().map(n => `${n.scope}: ${n.message}`)
   }
 
   it('boots cleanly when an apiKey-requiring provider has empty apiKey, warns once', async () => {
@@ -1904,9 +1903,9 @@ describe('AiProvider — empty apiKey skip-and-warn', () => {
       },
     })
 
-    assert.equal(warnings.length, 1, 'one warning for the skipped anthropic provider')
-    assert.match(warnings[0]!, /Skipped provider "anthropic"/)
-    assert.match(warnings[0]!, /apiKey is empty/)
+    assert.equal(warnings.length, 1, 'one notice for the skipped anthropic provider')
+    assert.match(warnings[0]!, /anthropic skipped/)
+    assert.match(warnings[0]!, /apiKey empty/)
     assert.throws(
       () => AiRegistry.getFactory('anthropic'),
       /Unknown AI provider "anthropic"/,
@@ -1925,9 +1924,9 @@ describe('AiProvider — empty apiKey skip-and-warn', () => {
       },
     })
 
-    assert.equal(warnings.length, 2, 'two warnings — openai + google')
-    assert.ok(warnings.some(w => /Skipped provider "openai"/.test(w)),  'openai warned')
-    assert.ok(warnings.some(w => /Skipped provider "google"/.test(w)),  'google warned')
+    assert.equal(warnings.length, 2, 'two notices — openai + google')
+    assert.ok(warnings.some(w => /openai skipped/.test(w)), 'openai noticed')
+    assert.ok(warnings.some(w => /google skipped/.test(w)), 'google noticed')
 
     assert.doesNotThrow(() => AiRegistry.getFactory('anthropic'), 'anthropic registered')
     assert.doesNotThrow(() => AiRegistry.getFactory('ollama'),    'ollama registered (no apiKey needed)')
