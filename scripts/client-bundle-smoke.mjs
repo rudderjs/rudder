@@ -84,7 +84,8 @@ async function checkTarget(t) {
   }
 
   // Evaluate in a sandbox with NO `process` — top-level process.env throws here.
-  const sandbox = { module: { exports: {} }, exports: {}, console, globalThis: {} }
+  const module = { exports: {} }
+  const sandbox = { module, exports: module.exports, console, globalThis: {} }
   sandbox.globalThis = sandbox
   try {
     vm.runInNewContext(out, sandbox, { timeout: 5000 })
