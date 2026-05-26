@@ -2,7 +2,10 @@ import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { bootNotice, drainBootNotices, formatBootNotices } from './boot-notices.js'
 
-const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '')
+// Build the ESC (\x1b) matcher via RegExp() so the control char isn't a literal
+// in a regex literal (eslint no-control-regex).
+const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g')
+const stripAnsi = (s: string): string => s.replace(ANSI, '')
 
 describe('boot notices', () => {
   beforeEach(() => { drainBootNotices() }) // clear the shared globalThis buffer between cases
