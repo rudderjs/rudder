@@ -12,6 +12,8 @@ import { syncGlobal, readSyncGlobal }   from './globals.js'
 // events by client and present a coherent timeline per connection.
 
 const CLIENT_ID_KEY = '__syncClientId'
+const TEXT_ENCODER = new TextEncoder()
+const NULL_JSON = TEXT_ENCODER.encode('null')
 
 /** Read the id we stamped on this socket; undefined on a fresh connection. */
 function readTaggedId(ws: import('ws').WebSocket): string | undefined {
@@ -26,6 +28,14 @@ function writeTaggedId(ws: import('ws').WebSocket, id: string): void {
 let _clientCounter = 0
 function nextClientId(): string {
   return `lv${++_clientCounter}${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** Shared map of docName -> in-flight first-connect promise (survives HMR). */
+function firstConnectInFlight(): Map<string, Promise<void>> {
+  const key = '__syncFirstConnectInFlight'
+  const g = globalThis as unknown as Record<string, unknown>
+  if (!(g[key] instanceof Map)) g[key] = new Map<string, Promise<void>>()
+  return g[key] as Map<string, Promise<void>>
 }
 function getClientId(ws: import('ws').WebSocket): string {
   const tagged = readTaggedId(ws)
@@ -182,6 +192,7 @@ type PrismaLikeClient = Record<string, PrismaDelegate> & { $disconnect?: () => P
 export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistence {
   const modelName = config.model ?? 'syncDocument'
   let cachedClient: PrismaLikeClient | null = (config.client as PrismaLikeClient | undefined) ?? null
+  const docCache = new Map<string, Y.Doc>()
 
   async function getClient(): Promise<PrismaLikeClient> {
     if (cachedClient) return cachedClient
@@ -206,16 +217,22 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
 
   return {
     async getYDoc(docName: string): Promise<Y.Doc> {
+      const cachedDoc = docCache.get(docName)
+      if (cachedDoc) return cachedDoc
+
       const prisma = await getClient()
       const doc    = new Y.Doc()
       const rows   = await getDelegate(prisma).findMany({ where: { docName } })
       for (const row of rows) Y.applyUpdate(doc, row.update)
+      docCache.set(docName, doc)
       return doc
     },
 
     async storeUpdate(docName: string, update: Uint8Array): Promise<void> {
       const prisma = await getClient()
       await getDelegate(prisma).create({ data: { docName, update } })
+      const cachedDoc = docCache.get(docName)
+      if (cachedDoc) Y.applyUpdate(cachedDoc, update)
     },
 
     async getStateVector(docName: string): Promise<Uint8Array> {
@@ -231,6 +248,7 @@ export function syncPrisma(config: PrismaPersistenceConfig = {}): SyncPersistenc
     async clearDocument(docName: string): Promise<void> {
       const prisma = await getClient()
       await getDelegate(prisma).deleteMany({ where: { docName } })
+      docCache.delete(docName)
     },
 
     async destroy(): Promise<void> {
@@ -489,14 +507,15 @@ function writeVarUint(val: number): Uint8Array {
   return new Uint8Array(buf)
 }
 
-/** Encode a sync sub-message: [messageSync, subType, dataLen, ...data] */
+/** Encode a sync sub-message: [messageSync, subType(varint), dataLen, ...data] */
 function encodeSyncMsg(subType: number, data: Uint8Array): Uint8Array {
-  const lenBytes = writeVarUint(data.length)
-  const out      = new Uint8Array(2 + lenBytes.length + data.length)
+  const subTypeBytes = writeVarUint(subType)
+  const lenBytes     = writeVarUint(data.length)
+  const out          = new Uint8Array(1 + subTypeBytes.length + lenBytes.length + data.length)
   out[0] = messageSync
-  out[1] = subType
-  out.set(lenBytes, 2)
-  out.set(data, 2 + lenBytes.length)
+  out.set(subTypeBytes, 1)
+  out.set(lenBytes, 1 + subTypeBytes.length)
+  out.set(data, 1 + subTypeBytes.length + lenBytes.length)
   return out
 }
 
@@ -539,7 +558,6 @@ function decodeAwarenessClientEntries(buf: Uint8Array): Array<{ clientID: number
  */
 function encodeAwarenessRemoval(entries: Array<{ clientID: number; clock: number }>): Uint8Array | null {
   if (entries.length === 0) return null
-  const NULL_JSON = new TextEncoder().encode('null')
   const innerParts: Uint8Array[] = [writeVarUint(entries.length)]
   for (const { clientID, clock } of entries) {
     innerParts.push(writeVarUint(clientID))
@@ -604,19 +622,32 @@ async function handleConnection(
   // best-effort and shouldn't kill the WebSocket.
   if (onFirstConnect) {
     const fired = firstConnectFired()
+    const inFlight = firstConnectInFlight()
+
     if (!fired.has(docName)) {
-      fired.add(docName)
-      try {
-        await onFirstConnect(docName, room.doc, { firstClient: ws, persistence })
-      } catch (err) {
-        fired.delete(docName)
-        syncObservers.emit({
-          kind:    'sync.error',
-          docName,
-          clientId,
-          error:   err instanceof Error ? err.message : String(err),
-        })
+      let hookPromise = inFlight.get(docName)
+
+      if (!hookPromise) {
+        hookPromise = (async () => {
+          try {
+            await onFirstConnect(docName, room.doc, { firstClient: ws, persistence })
+            fired.add(docName)
+          } catch (err) {
+            syncObservers.emit({
+              kind:    'sync.error',
+              docName,
+              clientId,
+              error:   err instanceof Error ? err.message : String(err),
+            })
+          } finally {
+            inFlight.delete(docName)
+          }
+        })()
+
+        inFlight.set(docName, hookPromise)
       }
+
+      await hookPromise
     }
   }
 
