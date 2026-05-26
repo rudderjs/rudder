@@ -347,7 +347,8 @@ export class RudderJS {
       // state. A prior boot's failure is its own concern (surfaced via its own
       // request/handler) — swallow it here so it doesn't cascade into this one.
       if (prev) { try { await prev } catch { /* prior boot owns its failure */ } }
-      await this._bootstrapProviders()
+      // `prev` defined ⟺ a previous boot exists ⟺ this is a re-boot (dev HMR).
+      await this._bootstrapProviders(prev !== undefined)
     })()
     g['__rudderjs_boot__'] = run
     return run
@@ -369,7 +370,7 @@ export class RudderJS {
   }
 
   /** Phase 1 — boot providers + routes. Safe in CLI (no Vike virtual URLs). */
-  private async _bootstrapProviders(): Promise<void> {
+  private async _bootstrapProviders(isReboot = false): Promise<void> {
     this._suppressVikeNoise()
     // RUDDER_HMR_TRACE=1 — when this boot was triggered by a dev file-watch
     // reload, `__rudderjs_hmr_t0__` carries the watcher-event timestamp (set by
@@ -382,7 +383,16 @@ export class RudderJS {
     if (hmrTrace && typeof hmrT0 === 'number') {
       console.log(`[hmr] watcher→reimport ${(tStart - hmrT0).toFixed(1)}ms`)
     }
-    if (this._app.isDevelopment()) {
+    // Reset process-wide shared state before a RE-BOOT — the router routes, the
+    // provider-group middleware store, and the rudder CLI registry — so the
+    // fresh boot re-registers onto clean state. Gated on `isReboot` (a previous
+    // boot exists), NOT `isDevelopment()`: a dev server whose APP_ENV isn't
+    // 'development' (no .env, or APP_ENV=production) still re-boots on every file
+    // edit, and skipping the reset there leaves the router mounted — so a
+    // provider that registers routes in boot() (e.g. Horizon) throws "get()
+    // called after router.mount()" on the 2nd edit. Cold boot needs no reset
+    // (state is already fresh); production is a single boot so this never runs.
+    if (isReboot) {
       // Quiesce: let any in-flight render finish before we stomp shared state —
       // otherwise a request that already passed the handleRequest gate observes a
       // half-booted graph mid-render (the REOPEN #2 empty-table wedge). Bounded

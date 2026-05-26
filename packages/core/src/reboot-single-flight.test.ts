@@ -109,7 +109,10 @@ describe('dev HMR re-boot — single-flight', () => {
     assert.deepEqual(log, ['A:start'], 'B must not begin its re-boot while A is still booting')
 
     gateA.release()
-    await settle()
+    // B's re-boot resets shared state first (drain + `await import('@rudderjs/router')`
+    // + router.reset()), so B:start lands a tick after A:end rather than in the same
+    // settle() — poll for it. The invariant under test is the ORDER (B strictly after A).
+    await until(() => log.includes('B:start'))
     assert.deepEqual(log, ['A:start', 'A:end', 'B:start'], 'B begins only after A finishes')
 
     gateB.release()
@@ -265,5 +268,67 @@ describe('dev HMR re-boot — quiesce barrier', () => {
 
     gateB.release()
     await bootOf(b)
+  })
+})
+
+// ─── Dev HMR re-boot: reset is env-independent (gated on "is re-boot") ────────
+//
+// Regression: the re-boot reset (router.reset() + rudder.reset() +
+// resetGroupMiddleware()) used to be gated on `isDevelopment()`, which reads
+// APP_ENV (default 'production'). A `vike dev` server whose APP_ENV isn't
+// 'development' (no .env, or APP_ENV=production) still re-boots on every file
+// edit — but the reset was skipped, so the router stayed mounted from the first
+// boot. A provider that registers routes in boot() (e.g. @rudderjs/horizon's
+// registerHorizonRoutes → router.get()) then threw
+// "get() called after router.mount()" on the 2nd edit, wedging the dev server.
+// The fix gates the reset on "is this a re-boot" (a previous boot exists) rather
+// than the environment, so the router is reset before every re-boot regardless
+// of APP_ENV. Modelled at APP_ENV=production with a route-registering provider.
+describe('dev HMR re-boot — reset is env-independent', () => {
+  let prevEnv: string | undefined
+  beforeEach(() => { prevEnv = process.env['APP_ENV']; process.env['APP_ENV'] = 'production'; freshState() })
+  afterEach(() => { if (prevEnv === undefined) delete process.env['APP_ENV']; else process.env['APP_ENV'] = prevEnv })
+
+  /** Fake server whose handler setup mounts the real router (the state that makes a 2nd registration throw). */
+  function mountingServer(): ServerAdapterProvider {
+    return {
+      type: 'fake',
+      create: () => ({} as ServerAdapter),
+      createApp: () => ({}),
+      async createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<(req: Request) => Promise<Response>> {
+        const adapter = {
+          registerRoute() {}, applyMiddleware() {}, applyGroupMiddleware() {},
+          setErrorHandler() {}, listen() {}, getNativeServer() { return {} },
+        } as unknown as ServerAdapter
+        setup?.(adapter) // runs router.mount(adapter)
+        return async () => new Response('ok')
+      },
+    }
+  }
+
+  /** Models @rudderjs/horizon: registers a route inside boot() via the real router. */
+  class RouteRegisteringProvider extends ServiceProvider {
+    register(): void {}
+    async boot(): Promise<void> {
+      const { router } = await import('@rudderjs/router') as { router: { get(path: string, h: unknown): unknown } }
+      router.get('/reboot-probe', (() => new Response('ok')) as never)
+    }
+  }
+
+  it('re-boots cleanly at APP_ENV=production — router.reset() runs so boot()-time route registration does not throw "after router.mount()"', async () => {
+    const { router } = await import('@rudderjs/router') as { router: { reset(): void } }
+    router.reset() // isolate from any mount state leaked by a prior test
+
+    // Instance A registers /reboot-probe in boot(); warming the handler mounts the router.
+    const a = Application.configure({ server: mountingServer(), providers: [RouteRegisteringProvider] }).withRouting({}).create()
+    await bootOf(a)
+    await a.handleRequest(new Request('http://localhost/')) // → router.mount(adapter)
+
+    // Watcher fires → re-boot B re-registers /reboot-probe in boot(). On the
+    // unfixed code (env=production → reset skipped) the router is still mounted
+    // and this rejects with the mount-guard error; the fix resets first.
+    simulateWatcherClear()
+    const b = Application.configure({ server: mountingServer(), providers: [RouteRegisteringProvider] }).withRouting({}).create()
+    await assert.doesNotReject(bootOf(b))
   })
 })
