@@ -32,11 +32,11 @@ export interface PasswordResetConfig {
    * HMAC secret for hashing stored reset tokens. **Required in production**
    * — the broker throws on construction when `NODE_ENV === 'production'`
    * and this is unset. In dev/test, an unset secret falls back to a
-   * hardcoded placeholder with a one-time `console.warn`, so apps boot
+   * hardcoded placeholder with a one-time boot notice, so apps boot
    * without configuration but the gap is visible.
    *
-   * Set this to your `APP_KEY` (or a value derived from it) so stored token
-   * hashes are bound to your app instance.
+   * Set this from `AUTH_SECRET` (the scaffolder default — a random string
+   * >= 32 chars) so stored token hashes are bound to your app instance.
    */
   secret?: string
 }
@@ -61,12 +61,12 @@ export class PasswordBroker {
       this.secret = config.secret
     } else if (process.env['NODE_ENV'] === 'production') {
       throw new Error(
-        '[@rudderjs/auth] PasswordBroker requires `secret` in production. ' +
-        'Set auth.passwords.secret in your config (typically derived from APP_KEY).'
+        '[@rudderjs/auth] PasswordBroker requires a `secret` in production. ' +
+        'Pass it as the `secret` option to new PasswordBroker(repo, users, { secret }) — e.g. from AUTH_SECRET in .env.'
       )
     } else {
       if (!_devSecretWarned) {
-        bootNotice('auth', 'using a dev password secret (set auth.passwords.secret for production)')
+        bootNotice('auth', 'using a dev password secret — pass `secret` to PasswordBroker (e.g. from AUTH_SECRET) for production')
         _devSecretWarned = true
       }
       this.secret = 'password-reset'
