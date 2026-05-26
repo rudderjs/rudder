@@ -1,5 +1,19 @@
 # rudderjs-playground-web
 
+## 0.0.78
+
+### Patch Changes
+
+- Updated dependencies [6c90ca9]
+- Updated dependencies [ff64900]
+- Updated dependencies [649b819]
+- Updated dependencies [ac77c4f]
+  - @rudderjs/auth@6.2.1
+  - @rudderjs/server-hono@1.3.1
+  - @rudderjs/vite@2.7.3
+  - @rudderjs/core@1.5.0
+  - @rudderjs/ai@1.8.4
+
 ## 0.0.77
 
 ### Patch Changes
