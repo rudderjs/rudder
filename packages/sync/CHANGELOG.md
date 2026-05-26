@@ -1,5 +1,11 @@
 # @rudderjs/sync
 
+## 1.3.3
+
+### Patch Changes
+
+- afe56f5: fix(sync): bound prisma sync doc caching, serialize concurrent first-connect joins, and encode sync subtype as varint
+
 ## 1.3.2
 
 ### Patch Changes
