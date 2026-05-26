@@ -1,5 +1,17 @@
 # @rudderjs/auth
 
+## 6.2.1
+
+### Patch Changes
+
+- 6c90ca9: Fix the misleading PasswordBroker secret guidance. The dev boot notice, the production-throw error, and the `secret` JSDoc all told you to "Set `auth.passwords.secret` in your config (derived from APP_KEY)" — but `AuthConfig` has no `passwords` field (no such config path), and the canonical source is `AUTH_SECRET`, not `APP_KEY`. The secret is the `secret` option passed to `new PasswordBroker(repo, users, { secret })`, sourced from `AUTH_SECRET` in `.env` — which is what the scaffolder template uses and what `rudder doctor`'s `auth:secret` check validates. All three messages now point at the real mechanism.
+- 649b819: Group non-fatal boot-time warnings into one clean block at the end of dev startup. Previously each provider `console.warn`-ed inline as it booted, scattering messages (AI apiKey-skip, auth dev-secret) between the boot sequence and the provider tree with inconsistent prefixes (`[RudderJS AI]`, `[@rudderjs/auth]`, …). `@rudderjs/core` now exposes `bootNotice(scope, message)` — providers record notices during `boot()` and the framework flushes them as a grouped, scope-aligned `⚠ N notices` block after the provider tree and before `ready`, so the dev boot reads banner → tree → notices → ready. `@rudderjs/ai` (apiKey-empty skips) and `@rudderjs/auth` (dev password secret) now route through it. Notices are still printed in production so warnings aren't lost, and a fully-configured app boots with no notices block.
+- Updated dependencies [ff64900]
+- Updated dependencies [649b819]
+- Updated dependencies [ac77c4f]
+  - @rudderjs/vite@2.7.3
+  - @rudderjs/core@1.5.0
+
 ## 6.2.0
 
 ### Minor Changes
