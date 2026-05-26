@@ -25,14 +25,14 @@ export function packageJson(ctx: TemplateContext): string {
     frameworkDeps['react']      = '^19.0.0'
     frameworkDeps['react-dom']  = '^19.0.0'
     frameworkDeps['vike-react'] = '^0.6.23'
-    frameworkDevDeps['@vitejs/plugin-react'] = '^4.3.4'
+    frameworkDevDeps['@vitejs/plugin-react'] = '^6.0.0'
     frameworkDevDeps['@types/react']         = '^19.0.0'
     frameworkDevDeps['@types/react-dom']     = '^19.0.0'
   }
   if (hasVue) {
     frameworkDeps['vue']      = '^3.5.0'
     frameworkDeps['vike-vue'] = 'latest'
-    frameworkDevDeps['@vitejs/plugin-vue'] = '^5.2.0'
+    frameworkDevDeps['@vitejs/plugin-vue'] = '^6.0.0'
   }
   if (hasSolid) {
     frameworkDeps['solid-js']   = '^1.9.0'
@@ -41,7 +41,7 @@ export function packageJson(ctx: TemplateContext): string {
 
   const tailwindDeps: Record<string, string> = tailwind ? {
     'tailwindcss':       '^4.2.1',
-    '@tailwindcss/vite': '^4.2.1',
+    '@tailwindcss/vite': '^4.3.0',
   } : {}
   const tailwindDevDeps: Record<string, string> = tailwind ? {
     'tw-animate-css': '^1.4.0',
@@ -138,7 +138,7 @@ export function packageJson(ctx: TemplateContext): string {
     '@types/node':   '^20.0.0',
     'tsx':           '^4.21.0',
     'typescript':    '^5.4.0',
-    'vite':          '^7.1.0',
+    'vite':          '^8.0.0',
     ...frameworkDevDeps,
     ...tailwindDevDeps,
     ...shadcnDevDeps,
