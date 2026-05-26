@@ -1,5 +1,12 @@
 # create-rudder-app
 
+## 1.5.0
+
+### Patch Changes
+
+- Updated dependencies [e3b7963]
+  - create-rudder@1.5.0
+
 ## 1.4.1
 
 ### Patch Changes
