@@ -35,7 +35,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
     "zod": "^3.23.0"
   },
