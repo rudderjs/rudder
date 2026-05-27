@@ -29,6 +29,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job here only checks out, installs, builds, and tests — none push,
+# comment, or write. Pin the GITHUB_TOKEN to least privilege at the workflow
+# level (applies to all jobs); raise per-job only if a future job needs more.
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: Detect changes

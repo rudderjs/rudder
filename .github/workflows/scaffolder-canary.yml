@@ -26,6 +26,11 @@ on:
     - cron: '0 8 * * 1'
   workflow_dispatch: {}
 
+# Read-only: scaffolds against real npm, builds, boots, curls. Uploading the
+# failure log artifact needs no GITHUB_TOKEN scope. Least privilege.
+permissions:
+  contents: read
+
 jobs:
   canary:
     name: Scaffold from npm + boot
