@@ -29,10 +29,16 @@ describe('htmlToText — web_fetch content extraction', () => {
     assert.equal(htmlToText(html), 'Hello world')
   })
 
-  it('tolerates a space before the closing script tag (drops its content)', () => {
-    // With `</script\s*>` tolerance the whole block is removed → "ab". Without
-    // it, the script body "x" would leak through as "axb".
+  it('drops script content regardless of whitespace/junk in the end tag', () => {
+    // The linear scan finds `</script` then the next `>`, so end-tag variants a
+    // regex would miss (`</script >`, `</script\t\n bar>`) all work — the body
+    // "x" never leaks as text.
     assert.equal(htmlToText('a<script>x</script >b'), 'ab')
+    assert.equal(htmlToText('a<script>x</script\t\n bar>b'), 'ab')
+  })
+
+  it('does not hang on adversarial all-"<" input (linear scan, no ReDoS)', () => {
+    assert.equal(htmlToText('<'.repeat(50000)), '')
   })
 
   it('collapses whitespace and is a fixed point', () => {

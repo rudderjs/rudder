@@ -5,23 +5,38 @@ import type { ProviderHint } from './types.js'
 /**
  * Best-effort HTML → plain text for the `web_fetch` tool. The result is handed
  * to the model as text content (never rendered as HTML), so this is content
- * extraction, not a security sanitizer. Two robustness details satisfy CodeQL
- * and improve extraction quality:
- *   - script/style removal uses `\b` after the tag name and tolerates a space
- *     before the closing `>` (`</script >`) — a stricter `bad-tag-filter`.
- *   - tag stripping loops until the string is stable, because removing one
- *     `<...>` can reveal another that a single pass would miss
- *     (`incomplete-multi-character-sanitization`).
+ * extraction, not a security sanitizer.
+ *
+ * Implemented as a single linear scan (indexOf/startsWith), not a regex. A
+ * regex tag-stripper trips every CodeQL HTML query — `<[^>]+>` is polynomial
+ * ReDoS on `<<<<…`, and a `</script…>` end-tag regex is always "incomplete"
+ * for some whitespace/junk variant. A character scan has none of those issues
+ * and removes `<script>`/`<style>` element *content* (not just the tags) so it
+ * never leaks into the extracted text.
  */
 export function htmlToText(html: string): string {
-  let out = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
-  let prev: string
-  do {
-    prev = out
-    out = out.replace(/<[^>]*>/g, ' ')
-  } while (out !== prev)
+  const lower = html.toLowerCase()
+  let out = ''
+  let i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) { out += html.slice(i); break }
+    out += html.slice(i, lt)
+    // script/style: skip the whole element, including its text content.
+    const skipTag = lower.startsWith('<script', lt) ? '</script'
+      : lower.startsWith('<style', lt) ? '</style'
+      : null
+    if (skipTag) {
+      const close = lower.indexOf(skipTag, lt)
+      if (close === -1) break                 // unterminated → drop the rest
+      const gt = html.indexOf('>', close)
+      i = gt === -1 ? html.length : gt + 1
+      continue
+    }
+    const gt = html.indexOf('>', lt)
+    if (gt === -1) break                       // unterminated tag → drop the rest
+    i = gt + 1
+  }
   return out.replace(/\s+/g, ' ').trim()
 }
 

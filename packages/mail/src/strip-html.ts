@@ -3,18 +3,20 @@
  * and the LogAdapter preview — both consume the result as plain text, never
  * re-render it as HTML, so this is text extraction, not a security sanitizer.
  *
- * Tags are removed iteratively until the string is stable: a single
- * `replace(/<[^>]+>/g, '')` pass can expose a new `<...>` that was hidden inside
- * another (e.g. `<<b>script>`), which CodeQL flags as
- * `incomplete-multi-character-sanitization`. Looping to a fixed point both
- * satisfies the scanner and is strictly more correct.
+ * Implemented as a single linear scan (indexOf), not a regex: a `<[^>]+>` strip
+ * is polynomial ReDoS on adversarial input (`<<<<…`), and the character scan is
+ * both safe and strictly more complete (no `<...>` can survive a pass).
  */
 export function stripHtmlTags(html: string): string {
-  let out = html
-  let prev: string
-  do {
-    prev = out
-    out = out.replace(/<[^>]+>/g, '')
-  } while (out !== prev)
+  let out = ''
+  let i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) { out += html.slice(i); break }
+    out += html.slice(i, lt)
+    const gt = html.indexOf('>', lt)
+    if (gt === -1) break       // unterminated tag → drop the rest
+    i = gt + 1
+  }
   return out.replace(/\s+/g, ' ').trim()
 }

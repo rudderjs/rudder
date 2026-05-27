@@ -19,4 +19,8 @@ describe('stripHtmlTags', () => {
   it('returns plain text unchanged', () => {
     assert.equal(stripHtmlTags('just text'), 'just text')
   })
+
+  it('does not hang on adversarial all-"<" input (linear scan, no ReDoS)', () => {
+    assert.equal(stripHtmlTags('<'.repeat(50000)), '')
+  })
 })
