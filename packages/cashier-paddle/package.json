@@ -61,7 +61,7 @@
     "@rudderjs/orm": "workspace:^"
   },
   "peerDependencies": {
-    "@paddle/paddle-node-sdk": "^1.0.0",
+    "@paddle/paddle-node-sdk": "^1.0.0 || ^2.0.0 || ^3.0.0",
     "@rudderjs/auth": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@rudderjs/view": "workspace:^"
@@ -81,6 +81,7 @@
     }
   },
   "devDependencies": {
+    "@paddle/paddle-node-sdk": "^3.0.0",
     "@rudderjs/auth": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@rudderjs/view": "workspace:^",
