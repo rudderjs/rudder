@@ -2,6 +2,7 @@
 import { program } from 'commander'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { makeCommand } from './commands/make.js'
 import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
@@ -13,6 +14,18 @@ import { doctorCommand } from './commands/doctor.js'
 import { tinkerCommand } from './commands/tinker.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
+
+// The `rudder` CLI's own version, read from its package.json at runtime — works
+// in both the published `dist/index.js` and the tsx `src/index.ts` form (both
+// sit one level under the package root). Replaces a hardcoded `0.0.2` that
+// never tracked the real version.
+const VERSION: string = (() => {
+  try {
+    return (createRequire(import.meta.url)('../package.json') as { version: string }).version
+  } catch {
+    return '0.0.0'
+  }
+})()
 
 const C = {
   green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -247,7 +260,7 @@ async function main(): Promise<void> {
   program
     .name('rudder')
     .helpOption('-h, --help', 'Display help for the given command')
-    .version('0.0.2', '-V, --version', 'Display RudderJS version')
+    .version(VERSION, '-V, --version', 'Display Rudder version')
 
   // Laravel-style custom help output
   program.configureHelp({
@@ -296,7 +309,7 @@ async function main(): Promise<void> {
         else groups[ns] = [...(groups[ns] ?? []), c]
       }
 
-      let out = `\n  Rudder Framework ${C.yellow('0.0.2')}\n`
+      let out = `\n  Rudder Framework ${C.yellow(VERSION)}\n`
       out += `\n  ${C.dim('Usage:')}\n`
       out += `    command [options] [arguments]\n`
       out += `\n  ${C.dim('Available commands:')}\n`
