@@ -34,7 +34,9 @@
       "@types/node": "20.19.35",
       "hono": "^4.12.4",
       "protobufjs@7": "^7.6.1",
-      "protobufjs@8": "^8.4.2"
+      "protobufjs@8": "^8.4.2",
+      "@google/genai>ws": "^8.21.0",
+      "express>qs": "^6.15.2"
     },
     "patchedDependencies": {
       "vike@0.4.257": "patches/vike@0.4.257.patch"
