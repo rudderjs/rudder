@@ -36,7 +36,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "clean": "rm -rf dist"
   },
   "dependencies": {
