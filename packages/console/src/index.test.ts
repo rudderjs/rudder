@@ -1,6 +1,9 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Rudder, Command, CommandBuilder, CommandRegistry, parseSignature, CancelledError } from './index.js'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { Rudder, Command, CommandBuilder, CommandRegistry, parseSignature, CancelledError, executeMakeSpec, type MakeSpec } from './index.js'
 
 // ─── CommandRegistry ──────────────────────────────────────
 
@@ -498,5 +501,40 @@ describe('Command', () => {
     it('defaults to Cancelled.', () => {
       assert.strictEqual(new CancelledError().message, 'Cancelled.')
     })
+  })
+})
+
+describe('executeMakeSpec — file extension', () => {
+  let root: string
+  let cwd: string
+
+  beforeEach(() => {
+    cwd = process.cwd()
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudder-make-ext-'))
+    process.chdir(root)
+  })
+
+  afterEach(() => {
+    process.chdir(cwd)
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('defaults to .ts when no extension is set', async () => {
+    const spec: MakeSpec = {
+      command: 'make:thing', description: '', label: 'Thing',
+      directory: 'app/Things', stub: (n) => `export class ${n} {}\n`,
+    }
+    const res = await executeMakeSpec(spec, 'Widget', {})
+    assert.equal(res.relPath, 'app/Things/Widget.ts')
+  })
+
+  it('honors a custom extension (tsx) for JSX stubs', async () => {
+    const spec: MakeSpec = {
+      command: 'make:thing', description: '', label: 'Thing',
+      directory: 'app/Things', extension: 'tsx', stub: (n) => `export const ${n} = () => <div/>\n`,
+    }
+    const res = await executeMakeSpec(spec, 'Widget', {})
+    assert.equal(res.relPath, 'app/Things/Widget.tsx')
+    assert.ok(fs.existsSync(path.join(root, 'app/Things/Widget.tsx')))
   })
 })
