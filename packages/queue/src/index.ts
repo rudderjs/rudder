@@ -392,6 +392,9 @@ export class QueueProvider extends ServiceProvider {
         console.log(`  Failed:    ${stats.failed}`)
         console.log(`  Delayed:   ${stats.delayed}`)
         console.log(`  Paused:    ${stats.paused}\n`)
+        // Close the adapter's connection so this one-shot command exits — an open
+        // BullMQ/Redis connection keeps the event loop alive and hangs the CLI.
+        await a.disconnect?.()
       }).description('Show queue stats — pnpm rudder queue:status [queue=default]')
 
       rudder.command('queue:clear', async (args) => {
@@ -402,6 +405,7 @@ export class QueueProvider extends ServiceProvider {
         const queueName = args[0] ?? 'default'
         await a.flush(queueName)
         console.log(`Queue "${queueName}" cleared.`)
+        await a.disconnect?.()
       }).description('Drain waiting + delayed jobs — pnpm rudder queue:clear [queue=default]')
 
       rudder.command('queue:failed', async (args) => {
@@ -413,17 +417,18 @@ export class QueueProvider extends ServiceProvider {
         const jobs = await a.failures(queueName)
         if (jobs.length === 0) {
           console.log(`No failed jobs in queue "${queueName}".`)
-          return
+        } else {
+          console.log(`\nFailed jobs in queue "${queueName}" (${jobs.length}):\n`)
+          for (const job of jobs) {
+            console.log(`  ID:       ${job.id}`)
+            console.log(`  Name:     ${job.name}`)
+            console.log(`  Error:    ${job.error}`)
+            console.log(`  Attempts: ${job.attempts}`)
+            console.log(`  Failed:   ${job.failedAt.toISOString()}`)
+            console.log()
+          }
         }
-        console.log(`\nFailed jobs in queue "${queueName}" (${jobs.length}):\n`)
-        for (const job of jobs) {
-          console.log(`  ID:       ${job.id}`)
-          console.log(`  Name:     ${job.name}`)
-          console.log(`  Error:    ${job.error}`)
-          console.log(`  Attempts: ${job.attempts}`)
-          console.log(`  Failed:   ${job.failedAt.toISOString()}`)
-          console.log()
-        }
+        await a.disconnect?.()
       }).description('List failed jobs — pnpm rudder queue:failed [queue=default]')
 
       rudder.command('queue:retry', async (args) => {
@@ -434,6 +439,7 @@ export class QueueProvider extends ServiceProvider {
         const queueName = args[0] ?? 'default'
         const count = await a.retryFailed(queueName)
         console.log(`Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
+        await a.disconnect?.()
       }).description('Retry all failed jobs — pnpm rudder queue:retry [queue=default]')
 
     // Cloud adapters (Inngest etc.) expose a serve endpoint.
