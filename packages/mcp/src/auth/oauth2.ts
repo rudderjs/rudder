@@ -203,7 +203,13 @@ function challenge(
     header?: (key: string, value: string) => unknown
   }
   const parts: string[] = [`resource_metadata="${metadataUrl}"`, `error="${error}"`]
-  if (description) parts.push(`error_description="${description.replace(/"/g, '\\"')}"`)
+  // Escape backslashes BEFORE quotes — otherwise a description ending in `\`
+  // would let the trailing backslash escape the closing quote and break out of
+  // the RFC 7235 quoted-string. Order matters: `\` → `\\`, then `"` → `\"`.
+  if (description) {
+    const escaped = description.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    parts.push(`error_description="${escaped}"`)
+  }
   if (scope) parts.push(`scope="${scope}"`)
   r.header?.('WWW-Authenticate', `Bearer ${parts.join(', ')}`)
 

@@ -14,7 +14,12 @@ export class Str {
   /** Convert to snake_case. */
   static snake(value: string): string {
     return value
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+      // Acronym→word boundary (e.g. "HTMLParser" → "HTML_Parser"). The run of
+      // caps is matched as a fixed-width lookbehind, not a greedy `[A-Z]+` that
+      // overlaps the following `[A-Z]` — that overlap is a polynomial ReDoS on
+      // long all-caps input. Behaviour is identical: insert one `_` before the
+      // final cap of the run.
+      .replace(/(?<=[A-Z])([A-Z][a-z])/g, '_$1')
       .replace(/([a-z\d])([A-Z])/g, '$1_$2')
       .replace(/[-\s]+/g, '_')
       .toLowerCase()
@@ -44,7 +49,9 @@ export class Str {
    */
   static headline(value: string): string {
     const words = value
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      // Same acronym-boundary fix as snake() — fixed-width lookbehind instead
+      // of an overlapping `[A-Z]+`/`[A-Z]` pair (polynomial ReDoS).
+      .replace(/(?<=[A-Z])([A-Z][a-z])/g, ' $1')
       .replace(/([a-z\d])([A-Z])/g, '$1 $2')
       .replace(/[-_]+/g, ' ')
       .trim()
