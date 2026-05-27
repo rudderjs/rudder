@@ -15,7 +15,7 @@
     "@rudderjs/orm-drizzle": "workspace:*",
     "@rudderjs/session": "workspace:*",
     "better-sqlite3": "^12.0.0",
-    "drizzle-orm": "^0.38.0"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.0.0",
