@@ -1,5 +1,20 @@
 # rudderjs-playground
 
+## 0.0.113
+
+### Patch Changes
+
+- Updated dependencies [746caca]
+- Updated dependencies [76da150]
+- Updated dependencies [76da150]
+- Updated dependencies [76da150]
+  - @rudderjs/support@1.4.1
+  - @rudderjs/mcp@6.1.1
+  - @rudderjs/ai@1.10.0
+  - @rudderjs/broadcast@1.2.3
+  - @rudderjs/queue-bullmq@1.3.2
+  - @rudderjs/notification@1.0.4
+
 ## 0.0.112
 
 ### Patch Changes
