@@ -39,7 +39,7 @@
   "dependencies": {
     "@rudderjs/console": "workspace:^",
     "@rudderjs/queue": "workspace:^",
-    "inngest": "^3.0.0"
+    "inngest": "^3.54.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
