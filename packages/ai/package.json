@@ -91,7 +91,7 @@
   "peerDependencies": {
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.13.0"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "peerDependenciesMeta": {
     "@rudderjs/core": {
@@ -115,7 +115,7 @@
     "@rudderjs/core": "workspace:^",
     "@rudderjs/console": "workspace:^",
     "@rudderjs/orm": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

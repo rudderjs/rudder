@@ -64,14 +64,14 @@
     "test": "tsc -p tsconfig.test.json && cd dist-test && node --test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
     "reflect-metadata": "^0.2.0",
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:^",
-    "@rudderjs/console": "workspace:^"
+    "@rudderjs/console": "workspace:^",
+    "@rudderjs/router": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/router": {
@@ -82,8 +82,8 @@
     }
   },
   "devDependencies": {
-    "@rudderjs/router": "workspace:^",
     "@rudderjs/console": "workspace:^",
+    "@rudderjs/router": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
