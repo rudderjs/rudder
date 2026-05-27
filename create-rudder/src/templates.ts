@@ -41,7 +41,7 @@ import { terminalDashboardView } from './templates/app/terminal-dashboard.js'
 import { routesApi } from './templates/routes/api.js'
 import { routesWeb, welcomeExt } from './templates/routes/web.js'
 import { routesConsole } from './templates/routes/console.js'
-import { pagesRootConfig, pagesRootRenderHtml, pagesIndexConfig, pagesIndexData, pagesIndexPage } from './templates/pages/index.js'
+import { pagesRootConfig, pagesRootTitle, pagesRootRenderHtml, pagesIndexConfig, pagesIndexData, pagesIndexPage } from './templates/pages/index.js'
 import { welcomeView } from './templates/views/welcome.js'
 import { siteHeaderComponent, siteHeaderExt } from './templates/components/site-header.js'
 import { pagesErrorConfig, pagesErrorPage } from './templates/pages/error.js'
@@ -179,11 +179,17 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   //   - frameworks.length > 1: pages/index/+Page.* picks a primary renderer.
   //     No `app/Views/` (scanner can't resolve a single framework).
   files['pages/+config.ts']              = pagesRootConfig(ctx)
+  // Renderer recipes get a default document <title> via a +title.ts file
+  // (per-page override through view props). No-frontend sets its title inline
+  // in +onRenderHtml instead, since it has no vike renderer to consume +title.
+  if (ctx.frameworks.length >= 1) {
+    files['pages/+title.ts']             = pagesRootTitle(ctx)
+  }
   if (ctx.frameworks.length === 0) {
     // Vanilla render hook lives in its own file — Vike rejects `onRenderHtml`
     // declared inline in +config.ts ("runtime in config" error). Vike
     // auto-discovers the adjacent +onRenderHtml.ts file.
-    files['pages/+onRenderHtml.ts']      = pagesRootRenderHtml()
+    files['pages/+onRenderHtml.ts']      = pagesRootRenderHtml(ctx)
     // Welcome.ts is a vanilla view — no vike-* import. Lives in app/Views/
     // so the @rudderjs/vite scanner picks it up and generates the matching
     // `pages/__view/welcome/+Page.ts` stub. Apps can swap to a real

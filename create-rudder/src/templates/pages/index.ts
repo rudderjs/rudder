@@ -45,6 +45,23 @@ export default {
 `
 }
 
+/**
+ * `pages/+title.ts` — default document <title> for every page. A separate file
+ * (not an inline `title` in +config.ts) because vike rejects a function value
+ * in +config.ts ("runtime in config"). A controller overrides per page by
+ * passing one in the view props — view('dashboard', { title: 'Dashboard' }) —
+ * which arrives on pageContext.viewProps (passed to the client → browser-safe).
+ */
+export function pagesRootTitle(ctx: TemplateContext): string {
+  return `import type { PageContext } from 'vike/types'
+
+export default function title(pageContext: PageContext): string {
+  const t = (pageContext as { viewProps?: { title?: string } }).viewProps?.title
+  return t ? t + ' · ' + ${JSON.stringify(ctx.name)} : ${JSON.stringify(ctx.name)}
+}
+`
+}
+
 export function pagesIndexConfig(ctx: TemplateContext): string {
   switch (ctx.primary) {
     case 'vue':
@@ -367,7 +384,7 @@ export default function Page() {
  * (like a render hook) must live in its own file. See
  * https://vike.dev/error/runtime-in-config.
  */
-export function pagesRootRenderHtml(): string {
+export function pagesRootRenderHtml(ctx: TemplateContext): string {
   return `import { escapeInject, dangerouslySkipEscape } from 'vike/server'
 
 export default async function onRenderHtml(pageContext: unknown): Promise<unknown> {
@@ -378,7 +395,7 @@ export default async function onRenderHtml(pageContext: unknown): Promise<unknow
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RudderJS</title>
+    <title>${ctx.name}</title>
   </head>
   <body>\${dangerouslySkipEscape(body)}</body>
 </html>\`

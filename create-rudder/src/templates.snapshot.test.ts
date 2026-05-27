@@ -59,8 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-20 — vue/solid `+config.ts` now emit
-  // plain `satisfies Config` (vikejs/vike#3251 fixed upstream).
+  // Baseline last captured 2026-05-28 — root +config.ts now emits a default
+  // document `title` (per-page override via view props); no-frontend
+  // +onRenderHtml uses the app name instead of a hardcoded "RudderJS".
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -69,9 +70,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 60
-const EXPECTED_TOTAL_BYTES = 49425
-const EXPECTED_CONTENT_HASH = '002d3955a63a81cdd6a949f8dd9c486d237fcc4a7fcf0f56e430f1d56391ed78'
+const EXPECTED_FILE_COUNT = 61
+const EXPECTED_TOTAL_BYTES = 49678
+const EXPECTED_CONTENT_HASH = 'cb1d4d5057c82368a88556118f1c8b321d023d517dac18e077ee2b636136826e'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -111,6 +112,7 @@ const EXPECTED_PATHS = [
   'env.d.ts',
   'package.json',
   'pages/+config.ts',
+  'pages/+title.ts',
   'pages/_error/+Page.tsx',
   'pages/_error/+config.ts',
   'pages/ai-chat/+Page.tsx',
