@@ -2,6 +2,7 @@ import { ServiceProvider, config } from '@rudderjs/core'
 import { Mailable } from './mailable.js'
 import type { MailMessage } from './mailable.js'
 import { isNodemailerConfig, nodemailer } from './nodemailer-adapter.js'
+import { stripHtmlTags } from './strip-html.js'
 
 export { Mailable } from './mailable.js'
 export type { MailMessage } from './mailable.js'
@@ -165,7 +166,7 @@ export class LogAdapter implements MailAdapter {
     console.log(`[RudderJS Mail]  To:      ${options.to.join(', ')}`)
     console.log(`[RudderJS Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
     console.log(`[RudderJS Mail]  Subject: ${msg.subject}`)
-    if (msg.html) console.log(`[RudderJS Mail]  HTML:    ${msg.html.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`)
+    if (msg.html) console.log(`[RudderJS Mail]  HTML:    ${stripHtmlTags(msg.html).slice(0, 120)}`)
     if (msg.text) console.log(`[RudderJS Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
     console.log(`[RudderJS Mail] ${line}\n`)
   }

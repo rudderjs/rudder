@@ -23,7 +23,16 @@ export function detectORM(cwd: string = process.cwd()): ORM | null {
   }
 }
 
-/** Run a shell command with inherited stdio. Returns exit code. */
+/**
+ * Run a shell command with inherited stdio. Returns exit code.
+ *
+ * `shell: true` is load-bearing on Windows — the `pnpm` shim is `pnpm.cmd`,
+ * and modern Node's BatBadBut mitigation throws when a `.cmd`/`.bat` is spawned
+ * with `shell: false`. We therefore keep the shell and instead guarantee that
+ * the ONLY caller-influenced token (a make:migration `--name`) carries no shell
+ * metacharacters — see `assertSafeName()`, applied where it enters the argv.
+ * Every other arg in this file is a hardcoded literal.
+ */
 function run(cmd: string, args: string[], cwd: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, { cwd, stdio: 'inherit', shell: true })
@@ -57,6 +66,22 @@ export function hasPrismaSeedConfig(cwd: string = process.cwd()): boolean {
   }
 }
 
+/**
+ * Validate a migration name before it reaches the (shelled) spawn. Migration
+ * names become directory/file names downstream, so a strict identifier
+ * allowlist is both safe and more than permissive enough — and it closes the
+ * one shell-injection path through `make:migration --name`.
+ */
+export function assertSafeName(name: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+    throw new Error(
+      `[RudderJS ORM] Invalid migration name ${JSON.stringify(name)}. ` +
+      `Use only letters, digits, dots, dashes, and underscores (no spaces or shell metacharacters).`,
+    )
+  }
+  return name
+}
+
 /** Build the args array for a given ORM and command. Exported for testing. */
 export function buildArgs(
   orm: ORM,
@@ -75,7 +100,7 @@ export function buildArgs(
       case 'migrate:status':
         return ['exec', 'prisma', 'migrate', 'status']
       case 'make:migration':
-        return ['exec', 'prisma', 'migrate', 'dev', '--create-only', '--name', options.name ?? 'migration']
+        return ['exec', 'prisma', 'migrate', 'dev', '--create-only', '--name', assertSafeName(options.name ?? 'migration')]
       case 'db:push':
         return ['exec', 'prisma', 'db', 'push']
       case 'db:generate':
@@ -92,7 +117,7 @@ export function buildArgs(
     case 'migrate:status':
       return ['exec', 'drizzle-kit', 'check']
     case 'make:migration':
-      return ['exec', 'drizzle-kit', 'generate', '--name', options.name ?? 'migration']
+      return ['exec', 'drizzle-kit', 'generate', '--name', assertSafeName(options.name ?? 'migration')]
     case 'db:push':
       return ['exec', 'drizzle-kit', 'push']
     case 'db:generate':

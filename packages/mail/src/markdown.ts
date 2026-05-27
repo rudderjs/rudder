@@ -1,4 +1,5 @@
 import { Mailable, type MailMessage } from './mailable.js'
+import { stripHtmlTags } from './strip-html.js'
 
 // ─── Markdown Components ────────────────────────────────────
 
@@ -142,7 +143,7 @@ function _escHtml(s: string): string {
 }
 
 function _stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  return stripHtmlTags(html)
 }
 
 function _processComponents(md: string): string {

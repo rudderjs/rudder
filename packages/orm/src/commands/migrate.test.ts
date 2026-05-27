@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import os from 'node:os'
 import {
-  detectORM, buildArgs, findSeederFile, hasPrismaSeedConfig, runSeeder,
+  detectORM, buildArgs, assertSafeName, findSeederFile, hasPrismaSeedConfig, runSeeder,
   buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
   writeVectorMigration,
 } from './migrate.js'
@@ -122,6 +122,31 @@ describe('migrate — buildArgs()', () => {
   it('drizzle make:migration with name', () => {
     const args = buildArgs('drizzle', 'make:migration', { name: 'add-posts' })
     assert.deepEqual(args, ['exec', 'drizzle-kit', 'generate', '--name', 'add-posts'])
+  })
+
+  // ── make:migration name validation (shell-injection guard) ──
+
+  it('rejects a make:migration name with shell metacharacters (prisma)', () => {
+    assert.throws(
+      () => buildArgs('prisma', 'make:migration', { name: 'x; rm -rf .' }),
+      /Invalid migration name/,
+    )
+  })
+
+  it('rejects a make:migration name with shell metacharacters (drizzle)', () => {
+    assert.throws(
+      () => buildArgs('drizzle', 'make:migration', { name: '$(whoami)' }),
+      /Invalid migration name/,
+    )
+  })
+
+  it('assertSafeName accepts identifier-style names, rejects metacharacters', () => {
+    for (const ok of ['add-users', 'add_users', 'AddUsers', 'v1.2.0', 'migration']) {
+      assert.equal(assertSafeName(ok), ok)
+    }
+    for (const bad of ['x; rm -rf .', '$(whoami)', 'a b', 'a`b`', 'a|b', 'a&b', '']) {
+      assert.throws(() => assertSafeName(bad), /Invalid migration name/)
+    }
   })
 
   it('drizzle db:push', () => {

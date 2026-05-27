@@ -3,6 +3,29 @@ import { toolDefinition } from './tool.js'
 import type { ProviderHint } from './types.js'
 
 /**
+ * Best-effort HTML → plain text for the `web_fetch` tool. The result is handed
+ * to the model as text content (never rendered as HTML), so this is content
+ * extraction, not a security sanitizer. Two robustness details satisfy CodeQL
+ * and improve extraction quality:
+ *   - script/style removal uses `\b` after the tag name and tolerates a space
+ *     before the closing `>` (`</script >`) — a stricter `bad-tag-filter`.
+ *   - tag stripping loops until the string is stable, because removing one
+ *     `<...>` can reveal another that a single pass would miss
+ *     (`incomplete-multi-character-sanitization`).
+ */
+export function htmlToText(html: string): string {
+  let out = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
+  let prev: string
+  do {
+    prev = out
+    out = out.replace(/<[^>]*>/g, ' ')
+  } while (out !== prev)
+  return out.replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Web search tool — uses provider-native web search when available.
  *
  * Native emission via `providerHint: { type: 'web-search', ... }`:
@@ -117,13 +140,7 @@ export class WebFetch {
           signal: AbortSignal.timeout(10000),
         })
         const html = await res.text()
-        const text = html
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]*>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, maxLength)
+        const text = htmlToText(html).slice(0, maxLength)
         return { content: text, url: targetUrl, status: res.status }
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'Fetch failed', url: targetUrl }

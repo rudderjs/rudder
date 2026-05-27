@@ -14,13 +14,33 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { WebSearch } from './provider-tools.js'
+import { WebSearch, htmlToText } from './provider-tools.js'
 import { toAnthropicTools } from './providers/anthropic.js'
 import { GoogleAdapter } from './providers/google.js'
 import { toolToSchema } from './tool.js'
 import type { ToolDefinitionSchema } from './types.js'
 
 // ─── WebSearch factory ────────────────────────────────────
+
+describe('htmlToText — web_fetch content extraction', () => {
+  it('drops script + style content, keeps visible text', () => {
+    const html = '<html><head><style>body{color:red}</style></head>' +
+      '<body>Hello <script>alert(1)</script>world</body></html>'
+    assert.equal(htmlToText(html), 'Hello world')
+  })
+
+  it('tolerates a space before the closing script tag (drops its content)', () => {
+    // With `</script\s*>` tolerance the whole block is removed → "ab". Without
+    // it, the script body "x" would leak through as "axb".
+    assert.equal(htmlToText('a<script>x</script >b'), 'ab')
+  })
+
+  it('collapses whitespace and is a fixed point', () => {
+    const once = htmlToText('<p>one</p>\n\n  <p>two</p>')
+    assert.equal(once, 'one two')
+    assert.equal(htmlToText(once), once)
+  })
+})
 
 describe('WebSearch — providerHint cascade', () => {
   it('toTool() carries providerHint with type "web-search"', () => {
