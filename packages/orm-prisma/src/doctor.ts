@@ -211,9 +211,21 @@ registerDoctorCheck({
 
 // ─── --deep checks ────────────────────────────────────────
 //
-// runtime:db-connect — spawn a fresh PrismaClient (NOT the app's bound one;
-// fail-fast on connection issues without depending on the app's DI graph)
-// and run a trivial $queryRaw. Disconnects regardless of outcome.
+// runtime:db-connect — verify the DB is reachable by running a trivial $queryRaw
+// on the app's ALREADY-CONSTRUCTED client. --deep boots the app, so the adapter
+// has built + cached the client (with the correct driver adapter / options) on
+// globalThis. We reuse it rather than spawning a fresh `new PrismaClient()`:
+// Prisma 7's `prisma-client` generator REJECTS a bare client (it needs the
+// driver adapter the app wires), so a bare construction throws an unhandled
+// exception (https://github.com/rudderjs/rudder — doctor was broken on Prisma 7).
+// Reusing the app's client also tests exactly what the app uses. We do NOT
+// disconnect it — it's the app's shared, HMR-reused pool.
+
+// Shape of the orm-prisma adapter's globalThis client cache (see index.ts).
+type CachedPrismaClient = {
+  $queryRaw(strings: TemplateStringsArray, ...args: unknown[]): Promise<unknown>
+}
+const PRISMA_CLIENT_CACHE_KEY = '__rudderjs_prisma_client__'
 
 registerDoctorCheck({
   id:        'orm-prisma:db-connect',
@@ -225,24 +237,19 @@ registerDoctorCheck({
     if (!dsn) {
       return { status: 'ok', message: 'no DATABASE_URL — skip (covered by orm-prisma:database-url)' }
     }
-    // Resolve @prisma/client through the user's node_modules so we get the
-    // generated client (the framework's lazy peer-resolver pattern).
-    const userRequire = (await import('node:module')).createRequire(path.join(process.cwd(), 'package.json'))
-    let PrismaClient: new () => { $connect(): Promise<void>; $disconnect(): Promise<void>; $queryRaw(strings: TemplateStringsArray, ...args: unknown[]): Promise<unknown> }
-    try {
-      const mod = userRequire('@prisma/client')
-      PrismaClient = mod.PrismaClient
-    } catch {
+    const cached = (globalThis as Record<string, unknown>)[PRISMA_CLIENT_CACHE_KEY] as
+      | { client?: CachedPrismaClient }
+      | undefined
+    const client = cached?.client
+    if (!client) {
       return {
         status:  'warn',
-        message: '@prisma/client not resolvable — skip',
-        fix:     'pnpm rudder db:generate',
+        message: 'no Prisma client constructed during boot — skip (app may not use @rudderjs/orm-prisma, or boot failed)',
+        fix:     'Run `pnpm rudder doctor --deep` from the app root; if the app uses Prisma, check the boot error above.',
       }
     }
-    const client = new PrismaClient()
     const t0 = performance.now()
     try {
-      await client.$connect()
       await client.$queryRaw`SELECT 1`
       const ms = Math.round(performance.now() - t0)
       return { status: 'ok', message: `connected in ${ms}ms (${dsn.split(':')[0]})` }
@@ -257,9 +264,8 @@ registerDoctorCheck({
         fix:     `Check DATABASE_URL (${redactDsn(dsn)}) is reachable and credentials are correct; run \`pnpm rudder db:push\` if the schema isn't applied yet.`,
         detail:  msg,
       }
-    } finally {
-      try { await client.$disconnect() } catch { /* best effort */ }
     }
+    // NB: no $disconnect — `client` is the app's shared pool (reused across HMR re-boots).
   },
 })
 
