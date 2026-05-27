@@ -298,17 +298,19 @@ export function registerMigrateCommands(
   async function exec(
     orm: ORM,
     command: Parameters<typeof buildArgs>[1],
-    options?: { name?: string },
-  ): Promise<void> {
-    const args = buildArgs(orm, command, { ...options, env: process.env['NODE_ENV'] ?? 'development' })
+    options?: { name?: string; tolerateNonZero?: boolean },
+  ): Promise<number> {
+    const { tolerateNonZero, ...buildOpts } = options ?? {}
+    const args = buildArgs(orm, command, { ...buildOpts, env: process.env['NODE_ENV'] ?? 'development' })
     if (args.length === 0) {
       console.log('Nothing to do (not needed for this ORM).')
-      return
+      return 0
     }
     const code = await run('pnpm', args, cwd)
-    if (code !== 0) {
+    if (code !== 0 && !tolerateNonZero) {
       throw new Error(`Migration command failed (exit ${code})`)
     }
+    return code
   }
 
   // ── migrate ───────────────────────────────────────────
@@ -330,7 +332,13 @@ export function registerMigrateCommands(
   // ── migrate:status ────────────────────────────────────
   rudder.command('migrate:status', async () => {
     const orm = requireORM()
-    await exec(orm, 'migrate:status')
+    // `prisma migrate status` exits non-zero for *informational* states (drift,
+    // pending migrations, or a db:push-managed DB with no migrations dir) — not
+    // just hard failures. Surface its output (already printed via inherited
+    // stdio) and preserve the exit code for CI, but don't throw: throwing here
+    // dumps a JS stack trace on what is really just a status report.
+    const code = await exec(orm, 'migrate:status', { tolerateNonZero: true })
+    if (code !== 0) process.exitCode = code
   }).description('Show the status of each migration')
 
   // ── make:migration ────────────────────────────────────
