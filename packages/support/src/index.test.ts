@@ -504,6 +504,20 @@ describe('ConfigRepository', () => {
     const repo = new ConfigRepository({})
     assert.doesNotThrow(() => repo.set('constructor.polluted', true))
   })
+
+  it('set() ignores a dangerous segment in the middle of the path', () => {
+    const repo = new ConfigRepository({})
+    repo.set('a.__proto__.polluted', true)
+    assert.strictEqual(({} as Record<string, unknown>)['polluted'], undefined)
+  })
+
+  it('set() ignores a dangerous segment as the final key', () => {
+    const repo = new ConfigRepository({})
+    repo.set('a.b.prototype', true)
+    // The dangerous final key bails before assignment; the safe prefix may be
+    // created, but nothing is written under the forbidden name.
+    assert.strictEqual(repo.get('a.b.prototype'), undefined)
+  })
 })
 
 // ─── config() helper ───────────────────────────────────────

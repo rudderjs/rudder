@@ -157,17 +157,22 @@ export class ConfigRepository {
 
   set(key: string, value: unknown): void {
     const parts = key.split('.')
-    const dangerous = new Set(['__proto__', 'constructor', 'prototype'])
-    if (parts.some(p => dangerous.has(p))) return
     let current = this.data
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i] ?? ''
+      // Guard each segment with a literal comparison at the assignment site:
+      // a prototype-polluting key (`__proto__`/`constructor`/`prototype`) bails
+      // out before it can index into `current`. The barrier sits directly on
+      // the dynamic key so the no-pollution property holds by construction.
+      if (part === '__proto__' || part === 'constructor' || part === 'prototype') return
       if (typeof current[part] !== 'object' || current[part] === null) {
         current[part] = {}
       }
       current = current[part] as Record<string, unknown>
     }
-    current[parts[parts.length - 1] ?? ''] = value
+    const last = parts[parts.length - 1] ?? ''
+    if (last === '__proto__' || last === 'constructor' || last === 'prototype') return
+    current[last] = value
   }
 
   has(key: string): boolean {
