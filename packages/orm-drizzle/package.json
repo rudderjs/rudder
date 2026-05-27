@@ -43,7 +43,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "@rudderjs/console": "workspace:^",
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^",
@@ -67,6 +67,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.0.0",
+    "kysely": "^0.28.17",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"
