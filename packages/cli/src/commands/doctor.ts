@@ -1,4 +1,5 @@
 import type { Command as CommanderCommand } from 'commander'
+import { loadDotenvForChecks } from '../doctor/load-dotenv.js'
 import { runChecks } from '../doctor/orchestrator.js'
 import { renderReport, renderFixReport, exitCodeFor } from '../doctor/reporter.js'
 import { loadPackageChecks } from '../doctor/load-package-checks.js'
@@ -34,6 +35,12 @@ export function doctorCommand(program: CommanderCommand, deps: DoctorCommandDeps
         console.error('rudder doctor: --json is reserved for a future release (v1 has no JSON output).')
         process.exit(2)
       }
+
+      // Load `.env` so env-var checks reflect runtime. The fast-path `doctor` is
+      // skip-boot, so the app's `import 'dotenv/config'` never runs; without this,
+      // vars defined in `.env` (AUTH_SECRET, DATABASE_URL, …) falsely read as unset.
+      // cwd is the app root by now (the CLI chdir's there during app discovery).
+      loadDotenvForChecks()
 
       // Built-in CLI-owned checks (env, structure, deps, runtime) — registered
       // eagerly via side-effect imports so they're present even if no framework
