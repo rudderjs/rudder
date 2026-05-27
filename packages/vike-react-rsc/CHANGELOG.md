@@ -1,5 +1,11 @@
 # vike-react-rsc-rudder
 
+## 1.0.2
+
+### Patch Changes
+
+- c566cc8: Bump `@vitejs/plugin-rsc` to `0.5.26` to clear two critical and several high-severity advisories.
+
 ## 1.0.1
 
 ### Patch Changes

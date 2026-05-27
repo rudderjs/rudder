@@ -1,5 +1,18 @@
 # rudderjs-playground
 
+## 0.0.112
+
+### Patch Changes
+
+- Updated dependencies [d2cf530]
+- Updated dependencies [abcab7b]
+- Updated dependencies [db8510a]
+- Updated dependencies [c566cc8]
+  - @rudderjs/ai@1.9.0
+  - @rudderjs/cashier-paddle@4.3.0
+  - @rudderjs/mail@1.2.0
+  - @rudderjs/server-hono@1.3.2
+
 ## 0.0.111
 
 ### Patch Changes

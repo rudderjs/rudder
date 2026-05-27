@@ -1,5 +1,16 @@
 # @rudderjs/orm-drizzle
 
+## 1.7.0
+
+### Minor Changes
+
+- 5d80f06: Require `drizzle-orm` `^0.45.2` (was `^0.38.0`) to clear a high-severity advisory in the 0.38–0.44 range, and pin `kysely` (drizzle's optional peer) to `^0.28.17` to clear its advisory. The adapter's drizzle imports (`sqliteTable`, `pgTable`, `mysqlTable`, `PgDialect`, `drizzle`, etc.) are unchanged across the bump — build, typecheck, and the full 105-test integration suite (better-sqlite3 + pglite) pass against 0.45.2.
+
+### Patch Changes
+
+- Updated dependencies [d2cf530]
+  - @rudderjs/ai@1.9.0
+
 ## 1.6.2
 
 ### Patch Changes
