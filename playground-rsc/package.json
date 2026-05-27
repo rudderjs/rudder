@@ -22,7 +22,7 @@
     "@rudderjs/view": "workspace:*",
     "vike-react-rsc-rudder": "workspace:*",
     "@vikejs/hono": "^0.2.0",
-    "@vitejs/plugin-rsc": "0.5.1",
+    "@vitejs/plugin-rsc": "0.5.26",
     "dotenv": "^16.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
