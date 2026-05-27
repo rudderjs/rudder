@@ -258,9 +258,6 @@ importers:
 
   packages/cashier-paddle:
     dependencies:
-      '@paddle/paddle-node-sdk':
-        specifier: ^1.0.0
-        version: 1.10.0
       '@rudderjs/console':
         specifier: workspace:^
         version: link:../console
@@ -274,6 +271,9 @@ importers:
         specifier: workspace:^
         version: link:../orm
     devDependencies:
+      '@paddle/paddle-node-sdk':
+        specifier: ^3.0.0
+        version: 3.8.0
       '@rudderjs/auth':
         specifier: workspace:^
         version: link:../auth
@@ -4054,8 +4054,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@paddle/paddle-node-sdk@1.10.0':
-    resolution: {integrity: sha512-7HEl8UmPbICxTyGx/z6ZOss71K/GTS1EnEJ324IQWIo0ijTw6m9z+QpD8Tpje+08TDi0aesbBTtZq4X4HTFVkw==}
+  '@paddle/paddle-node-sdk@3.8.0':
+    resolution: {integrity: sha512-4RS6AhZisloYaT2jiFgx9hwm22qwLRUx4EgIVb1gS3bS96lhDBQWq8BC1/Zow2i3CuxMkehXQUc3qKSBS77ozA==}
+    engines: {node: '>=20'}
 
   '@phc/format@1.0.0':
     resolution: {integrity: sha512-m7X9U6BG2+J+R1lSOdCiITLLrxm+cWlNI3HUFA92oLO77ObGNzaKdh8pMLqdZcshtkKuV84olNNXDfMc4FezBQ==}
@@ -12217,12 +12218,7 @@ snapshots:
   '@oxc-transform/binding-win32-x64-msvc@0.68.1':
     optional: true
 
-  '@paddle/paddle-node-sdk@1.10.0':
-    dependencies:
-      lodash: 4.17.21
-      node-fetch: 2.7.0
-    transitivePeerDependencies:
-      - encoding
+  '@paddle/paddle-node-sdk@3.8.0': {}
 
   '@phc/format@1.0.0':
     optional: true
