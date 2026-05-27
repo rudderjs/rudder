@@ -296,7 +296,7 @@ async function main(): Promise<void> {
         else groups[ns] = [...(groups[ns] ?? []), c]
       }
 
-      let out = `\n  RudderJS Framework ${C.yellow('0.0.2')}\n`
+      let out = `\n  Rudder Framework ${C.yellow('0.0.2')}\n`
       out += `\n  ${C.dim('Usage:')}\n`
       out += `    command [options] [arguments]\n`
       out += `\n  ${C.dim('Available commands:')}\n`

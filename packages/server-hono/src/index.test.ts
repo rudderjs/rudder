@@ -512,7 +512,7 @@ describe('buildErrorMarkdown()', () => {
     assert.ok(md.includes(':42'),          'line number from topFrame')
     assert.ok(md.includes('**Request**: `GET http://localhost/demo`'), 'request line')
     assert.ok(md.includes('Node v22.14.0'),  'node version')
-    assert.ok(md.includes('RudderJS 1.2.3'), 'rudderjs version')
+    assert.ok(md.includes('Rudder 1.2.3'), 'rudder version')
   })
 
   it('renders source with `>` marker on the error line', () => {

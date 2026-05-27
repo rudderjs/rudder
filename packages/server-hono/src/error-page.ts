@@ -152,7 +152,7 @@ export function buildErrorMarkdown(
     lines.push(`**Location**: \`${rel(parts.topFrame.file)}:${parts.topFrame.line}\``)
   }
   lines.push(`**Request**: \`${req.method} ${req.url}\``)
-  lines.push(`**Versions**: Node ${parts.nodeVersion} · RudderJS ${parts.rudderjsVersion}`)
+  lines.push(`**Versions**: Node ${parts.nodeVersion} · Rudder ${parts.rudderjsVersion}`)
 
   if (parts.source && parts.topFrame) {
     lines.push('')
@@ -264,7 +264,7 @@ export function renderErrorPage(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(error.name)} — RudderJS</title>
+<title>${esc(error.name)} — Rudder</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d0d0f;color:#d4d4d4;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
