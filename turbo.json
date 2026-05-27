@@ -17,6 +17,31 @@
         ".vitepress/dist/**"
       ]
     },
+    // The Vike apps share `@brillout/vite-plugin-server-entry`'s autoImporter in
+    // node_modules; building them concurrently races on that shared file (one
+    // app's prerender imports another's not-yet-built dist/server/entry.mjs →
+    // "Cannot find module", intermittently failing the Release). These artificial
+    // dependsOn edges force playground → playground-web → playground-rsc to build
+    // serially. Packages/docs still build in parallel; cached app builds complete
+    // instantly, so this is a no-op on cache hits.
+    "rudderjs-playground-web#build": {
+      "dependsOn": [
+        "^build",
+        "rudderjs-playground#build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "rudderjs-playground-rsc#build": {
+      "dependsOn": [
+        "^build",
+        "rudderjs-playground-web#build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
     "dev": {
       "cache": false,
       "persistent": true
