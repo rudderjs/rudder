@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { executeMakeSpec } from '@rudderjs/console'
 import { idToPath, resolveComponent } from './resolve.js'
+import { makeTerminalSpec } from './commands/make-terminal.js'
 import { guardTTY } from './terminal.js'
 
 describe('idToPath()', () => {
@@ -119,5 +121,37 @@ describe('resolveComponent()', () => {
     )
     const c = await resolveComponent('admin.users', appRoot)
     assert.equal((c as () => unknown)(), 'nested')
+  })
+})
+
+describe('make:terminal spec', () => {
+  it('writes a .tsx file (the stub is JSX — a .ts file would not compile)', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudder-make-terminal-'))
+    const cwd = process.cwd()
+    try {
+      process.chdir(root)
+      const res = await executeMakeSpec(makeTerminalSpec, 'Dashboard', {})
+      assert.equal(res.relPath, 'app/Terminal/Dashboard.tsx')
+      assert.ok(fs.existsSync(path.join(root, res.relPath)))
+    } finally {
+      process.chdir(cwd)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('produces a file that terminal(\'id\') can resolve (no spurious suffix)', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudder-make-terminal-'))
+    const cwd = process.cwd()
+    try {
+      process.chdir(root)
+      const { className, relPath } = await executeMakeSpec(makeTerminalSpec, 'Dashboard', {})
+      // No 'Terminal' suffix — otherwise the file would be DashboardTerminal.tsx
+      // and `terminal('dashboard')` → app/Terminal/Dashboard could never find it.
+      assert.equal(className, 'Dashboard')
+      assert.equal(relPath, `${idToPath('dashboard')}.tsx`)
+    } finally {
+      process.chdir(cwd)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 })

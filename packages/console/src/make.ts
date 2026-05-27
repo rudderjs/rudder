@@ -11,6 +11,12 @@ export interface MakeSpec {
   suffix?:     string
   /** Destination directory under the app root, e.g. `app/Http/Controllers` */
   directory:   string
+  /**
+   * File extension (no leading dot). Defaults to `ts`. Set `tsx` for stubs that
+   * contain JSX (e.g. Ink terminal components) — a `.ts` file with JSX doesn't
+   * compile.
+   */
+  extension?:  string
   /** Stub generator — receives the normalized class name */
   stub:        (className: string) => string
   /** Optional hook run after the file is created */
@@ -63,7 +69,7 @@ export async function executeMakeSpec(
   const className = spec.suffix && !name.endsWith(spec.suffix)
     ? `${name}${spec.suffix}`
     : name
-  const relPath = `${spec.directory}/${className}.ts`
+  const relPath = `${spec.directory}/${className}.${spec.extension ?? 'ts'}`
   const outPath = resolve(process.cwd(), relPath)
 
   if (existsSync(outPath) && !opts.force) {
