@@ -1078,3 +1078,39 @@ describe('createFetchHandler() — RSC /_rsc pass-through (Phase 3)', () => {
     })
   }
 })
+
+describe('HonoAdapter — null-body statuses (204/205/304)', () => {
+  function appWith(method: 'GET' | 'DELETE', handler: RouteDefinition['handler']) {
+    const adapter = hono().create()
+    adapter.registerRoute({ method, path: '/r', handler, middleware: [] })
+    return adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+  }
+
+  it('res.status(204).send("") → 204 with no body (no undici throw)', async () => {
+    const app = appWith('DELETE', async (_req, res) => res.status(204).send(''))
+    const r = await app.fetch(new Request('http://localhost/r', { method: 'DELETE' }))
+    assert.strictEqual(r.status, 204)
+    assert.strictEqual(await r.text(), '')
+  })
+
+  it('res.status(304).send("body") drops the body', async () => {
+    const app = appWith('GET', async (_req, res) => res.status(304).send('ignored'))
+    const r = await app.fetch(new Request('http://localhost/r'))
+    assert.strictEqual(r.status, 304)
+    assert.strictEqual(await r.text(), '')
+  })
+
+  it('res.status(204).json({...}) does not crash and sends no body', async () => {
+    const app = appWith('GET', async (_req, res) => res.status(204).json({ a: 1 }))
+    const r = await app.fetch(new Request('http://localhost/r'))
+    assert.strictEqual(r.status, 204)
+    assert.strictEqual(await r.text(), '')
+  })
+
+  it('a normal 200 send still carries its body (regression guard)', async () => {
+    const app = appWith('GET', async (_req, res) => res.send('hello'))
+    const r = await app.fetch(new Request('http://localhost/r'))
+    assert.strictEqual(r.status, 200)
+    assert.strictEqual(await r.text(), 'hello')
+  })
+})
