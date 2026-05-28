@@ -170,6 +170,129 @@ describe('FakeManager', () => {
   })
 })
 
+// ─── Sequence (Http.fakeSequence / FakeManager.sequence) ───
+//
+// Differs from `register(pattern, [r1, r2])` (which repeats the last response
+// forever) — Sequence throws on exhaustion unless `whenEmpty(fallback)` is
+// configured. Useful for retry / pagination tests where each call sees a
+// different response.
+
+describe('Sequence', () => {
+  it('returns queued responses in push order', async () => {
+    const fake = new FakeManager()
+    fake.sequence('example.com')
+      .push({ status: 503, body: 'retry', headers: {} })
+      .push({ status: 200, body: 'ok',    headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/a')).status, 503)
+    assert.equal((await client.get('/a')).status, 200)
+  })
+
+  it('throws on exhaustion by default', async () => {
+    const fake = new FakeManager()
+    fake.sequence('example.com').push({ status: 200, body: '', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.get('/a')
+    await assert.rejects(
+      () => client.get('/a'),
+      /Fake sequence is empty/,
+    )
+  })
+
+  it('whenEmpty(fallback) is returned for every call past the queue', async () => {
+    const fake = new FakeManager()
+    fake.sequence('example.com')
+      .push({ status: 503, body: '', headers: {} })
+      .whenEmpty({ status: 200, body: 'fallback', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/a')).status, 503)
+
+    // Now exhausted — every subsequent call gets the fallback
+    assert.equal((await client.get('/a')).status, 200)
+    assert.equal((await client.get('/a')).status, 200)
+  })
+
+  it('default pattern (wildcard) matches every URL', async () => {
+    const fake = new FakeManager()
+    fake.sequence()
+      .push({ status: 201, body: 'a', headers: {} })
+      .push({ status: 202, body: 'b', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/anything')).status, 201)
+    assert.equal((await client.get('/other')).status,    202)
+  })
+
+  it('explicit pattern only matches the requested URLs', async () => {
+    const fake = new FakeManager()
+    fake.sequence('/api/users')
+      .push({ status: 200, body: 'u', headers: {} })
+    fake.register('/api/other', { status: 418, body: 'other', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/api/users')).status, 200)
+    // The other path falls through to the static register, not the sequence
+    assert.equal((await client.get('/api/other')).status, 418)
+  })
+
+  it('regex pattern works the same as string pattern', async () => {
+    const fake = new FakeManager()
+    fake.sequence(/\/api\/users\/\d+/)
+      .push({ status: 200, body: 'first',  headers: {} })
+      .push({ status: 200, body: 'second', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/api/users/42')).body, 'first')
+    assert.equal((await client.get('/api/users/99')).body, 'second')
+  })
+
+  it('isEmpty / remaining reflect queue state', () => {
+    const fake = new FakeManager()
+    const seq  = fake.sequence()
+      .push({ status: 200, body: '', headers: {} })
+      .push({ status: 200, body: '', headers: {} })
+
+    assert.equal(seq.isEmpty(), false)
+    assert.equal(seq.remaining(), 2)
+  })
+
+  it('pairs with assertSent / assertSentCount as usual', async () => {
+    const fake = new FakeManager()
+    fake.sequence('example.com')
+      .push({ status: 200, body: '', headers: {} })
+      .push({ status: 200, body: '', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.get('/a')
+    await client.post('/b', { x: 1 })
+
+    fake.assertSentCount(2)
+    fake.assertSent((r) => r.method === 'POST' && r.url.includes('/b'))
+  })
+
+  it('Http.fakeSequence(pattern) returns [fake, sequence] tuple', async () => {
+    const [fake, seq] = Http.fakeSequence('example.com')
+    seq.push({ status: 200, body: 'first',  headers: {} })
+       .push({ status: 200, body: 'second', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/a')).body, 'first')
+    assert.equal((await client.get('/a')).body, 'second')
+    fake.assertSentCount(2)
+  })
+
+  it('Http.fakeSequence() with no pattern catches every URL', async () => {
+    const [fake, seq] = Http.fakeSequence()
+    seq.push({ status: 200, body: 'whatever', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    assert.equal((await client.get('/anywhere')).body, 'whatever')
+  })
+})
+
 // ─── Pool ─────────────────────────────────────────────────
 
 describe('Pool', () => {
