@@ -1,12 +1,24 @@
 # @rudderjs/session
 
+## 2.1.3
+
+### Patch Changes
+
+- ace88f0: Reworded "lost-context" errors so they name the correct alternative instead of recommending middleware that won't run on the surface where the error fired. Since the web/api route-group split (`AuthMiddleware` and `sessionMiddleware` auto-install on the `web` group only), the previous messages told API / queue / CLI callers to "use AuthMiddleware" — which is exactly the wrong fix on those surfaces.
+
+  - **`currentAuth()` (`auth-manager.ts`)** — was: `[RudderJS Auth] No auth context. Use AuthMiddleware.` Now points API callers at `RequireBearer() + req.user` (via `@rudderjs/passport`) and queue/CLI callers at passing the user id explicitly.
+  - **`Session.current()` (`session/index.ts`)** — was: `[RudderJS Session] No session in context. Use sessionMiddleware.` Now points at `Session.maybeCurrent()` for a non-throwing read on API routes, and mentions per-route `sessionMiddleware()` for the explicit-opt-in case.
+  - **`AuthorizationError` from `Gate.authorize()` / `Policy.authorize()` (`auth/gate.ts`)** — base message unchanged ("This action is unauthorized. [<ability>]"). In dev (`NODE_ENV !== 'production'`) we now append a one-line hint at the most common cause of an _unexpected_ 403: typo'd ability or missing `Gate.define()` / `Policy.<ability>()`. Stripped in prod so the client-facing JSON stays terse.
+
+  Tests assertions updated to match the new strings. Found by the Phase 2 error-message audit.
+
 ## 2.1.2
 
 ### Patch Changes
 
 - 2d2dd52: Two fixes found by dogfooding the playground.
 
-  - `@rudderjs/session` — the `session:secret` doctor check returned a green "unset (sessions will sign with APP_KEY)" even when `APP_KEY` was _also_ unset, contradicting the `APP_KEY` error the env category raises and giving false reassurance (there's no signing secret at all). It now warns when both are unset.
+  - `@rudderjs/session` — the `session:secret` doctor check returned a green "unset (sessions will sign with APP*KEY)" even when `APP_KEY` was \_also* unset, contradicting the `APP_KEY` error the env category raises and giving false reassurance (there's no signing secret at all). It now warns when both are unset.
   - `create-rudder` — scaffolded apps with a frontend renderer rendered pages with **no `<title>`**. New projects now ship a `pages/+title.ts` that defaults the document title to the app name and lets a controller override it per page via the view props (`view('dashboard', { title: 'Dashboard' })`). The no-frontend recipe's hand-rolled `+onRenderHtml` now uses the app name too, instead of a hardcoded `RudderJS`. (Defined in `+title.ts` rather than inline in `+config.ts` because vike rejects a function `title` there — "runtime in config".)
 
 - Updated dependencies [14a50d9]
