@@ -1,5 +1,18 @@
 # @rudderjs/cli
 
+## 4.6.7
+
+### Patch Changes
+
+- 4e388a4: `rudder --version` and the `rudder` banner printed a hardcoded `0.0.2` regardless of the installed version. They now read the CLI's real version from its `package.json` at runtime (works in both the published `dist` and `tsx` source forms). Also fixes a stale "Display RudderJS version" → "Display Rudder version" string the rebrand missed.
+- c6ddef0: Fix leftover "RudderJS" brand strings in user-facing output (the 2026 rebrand to "Rudder" missed these — found by dogfooding).
+
+  - `@rudderjs/server-hono` — the dev (Ignition) error page rendered `<title>… — RudderJS</title>` and a `· RudderJS <version>` line in its Copy-as-Markdown report. Both now say "Rudder".
+  - `@rudderjs/cli` — the `rudder` command banner read `RudderJS Framework`; now `Rudder Framework`.
+
+- Updated dependencies [bdfb88c]
+  - @rudderjs/console@1.2.0
+
 ## 4.6.6
 
 ### Patch Changes
