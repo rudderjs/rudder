@@ -259,6 +259,37 @@ Doctor will pick it up automatically — `--fix` discovers fixers from the regis
 - **In CI** — fast path is sub-second on a built tree; runs without booting anything.
 - **When something breaks** — green doctor isn't a guarantee, but a red doctor is the answer in 90 % of "the app won't start" cases.
 
+## See also: `rudder about`
+
+Doctor tells you *what's broken*. `rudder about` prints a one-screen snapshot of *what you're running on* — useful for bug reports, shared context with teammates, and feeding to an LLM that's helping you debug:
+
+```bash
+pnpm rudder about
+```
+
+```
+Environment
+  App Name ................................................. my-app
+  Framework ........................................ @rudderjs/core 1.5.1
+  CLI ............................................... @rudderjs/cli 4.7.1
+  Node ......................................................... v22.14.0
+  Package Manager .................................................. pnpm
+  OS .............................................. Darwin 25.1.0 (arm64)
+  APP_ENV ....................................................... local
+  APP_DEBUG ..................................................... true
+  APP_URL ............................................. http://localhost:3000
+
+Installed @rudderjs/* packages (11)
+  @rudderjs/cli         ........................................... 4.7.1
+  @rudderjs/core        ........................................... 1.5.1
+  @rudderjs/router      ........................................... 1.7.1
+  ...
+```
+
+Pass `--json` for a machine-readable snapshot — ideal for bug-report attachments and LLM context.
+
+Like `doctor`, `about` skips the app boot — it's fast (under 50ms) and works even when the app can't boot.
+
 ## Pitfalls
 
 - **Doctor doesn't replace error messages.** A red doctor names the layer; you still need the stack trace for app-code bugs. `--deep`'s `runtime:app-boot` shows the boot error verbatim — that's the primary debugging signal, not the doctor.
