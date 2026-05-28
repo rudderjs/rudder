@@ -125,7 +125,7 @@ registerDoctorCheck({
       return {
         status:  'warn',
         message: `present but only ${decodedLen} bytes — needs ≥ 32 for AES-256`,
-        fix:     'Generate a fresh 32-byte key with `node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"`',
+        fix:     'Run `pnpm rudder key:generate --force` to replace it with a 32-byte key',
       }
     }
     return { status: 'ok', message: `set, ${decodedLen} bytes` }

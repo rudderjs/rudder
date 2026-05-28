@@ -73,7 +73,7 @@ export function dotenvExample(ctx: TemplateContext): string {
 
   if (ctx.packages.crypt) {
     lines.push('')
-    lines.push('# Generate with: node -e "console.log(\'base64:\' + require(\'crypto\').randomBytes(32).toString(\'base64\'))"')
+    lines.push('# Generate with: pnpm rudder key:generate')
     lines.push('APP_KEY=')
   }
 

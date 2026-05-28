@@ -1,5 +1,6 @@
 ---
 '@rudderjs/cli': minor
+'create-rudder': patch
 ---
 
 `rudder key:generate` — Laravel-parity command for generating a 32-byte `APP_KEY` and writing it to `.env`.
@@ -20,4 +21,10 @@ Idempotent behavior:
 
 Commented-out lines (`# APP_KEY=...`) and similar-prefixed names (`APP_KEYS=...`) are not touched. Preserves all other lines, comments, and ordering in `.env`.
 
-Also updates the doctor's `APP_KEY` fix hint from a one-liner `node -e crypto.randomBytes...` recipe to the new command.
+Also updates every place in the framework that previously emitted the verbose `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` recipe:
+
+- **doctor → APP_KEY unset** now says `Run \`pnpm rudder key:generate\` to generate a 32-byte APP_KEY and write it to .env`
+- **doctor → APP_KEY too short** now says `Run \`pnpm rudder key:generate --force\` to replace it with a 32-byte key`
+- **`create-rudder` scaffolder** — `.env.example`'s `# Generate with:` hint now points at `pnpm rudder key:generate` instead of the inline `node -e` recipe.
+
+The scaffolder still generates `APP_KEY` automatically at scaffold time (it always did) — the change only affects the `.env.example` documentation hint, so users cloning a fresh project know which command to run when they need to rotate or regenerate.
