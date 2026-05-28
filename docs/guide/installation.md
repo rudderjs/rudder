@@ -261,6 +261,31 @@ pnpm rudder upgrade --check
 
 Major bumps are highlighted in red — review the relevant `CHANGELOG.md` before applying. The framework follows semver: a `feat:` release goes minor, a `feat!:` release goes major.
 
+### CHANGELOG snippets
+
+For every package being bumped, `rudder upgrade` fetches its `CHANGELOG.md` from the framework's public GitHub repo, parses out every `## X.Y.Z` section in the window between your current and target versions, and prints a one-line headline per version under the bump row:
+
+```
+  @rudderjs/cli  4.6.5 → 4.7.1  (devDependencies)
+      4.7.1  rudder upgrade — handle floating dist-tag ranges (latest, *, next)
+      4.7.0  rudder upgrade — one-step bump of every @rudderjs/* dep to latest
+      4.6.9  stripInternal: true is now set in tsconfig.base.json
+      4.6.8  make:controller (and --resource / --api / --singleton) — fix generated stub
+      4.6.7  rudder --version and the rudder banner printed a hardcoded 0.0.2
+      4.6.6  fix(doctor): load .env before env-var checks
+```
+
+Headlines are pulled from the first non-trivial bullet of each version's changeset entry; the cite-prefix (`abc1234:`) is stripped and the noisy `Updated dependencies [...]` lines are skipped.
+
+Flags:
+
+| Flag | Behavior |
+|---|---|
+| `--no-changelog` | Skip the CHANGELOG fetch entirely. Faster, quieter output — useful for CI gates that only care about `--check`'s exit code. |
+| `--changelog-base <url>` | Override the GitHub raw base URL. Useful for fork-based development; default is `https://raw.githubusercontent.com/rudderjs/rudder/main`. |
+
+Fetch failures degrade gracefully — a row whose CHANGELOG can't be fetched simply renders without the indented detail block.
+
 ### Peer-dependency mismatches
 
 `rudder upgrade` also fetches each upgraded `@rudderjs/*` package's `peerDependencies` and diffs them against the peers declared in your `package.json`. If a framework package has bumped a peer major past what your app carries, you'll see a warning like:

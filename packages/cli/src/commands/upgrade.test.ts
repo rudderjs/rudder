@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { _internal, collectPeerMismatches } from './upgrade.js'
+import { _internal, collectPeerMismatches, collectChangelogs, parseChangelog } from './upgrade.js'
 
 const {
   parseVersion,
@@ -15,6 +15,7 @@ const {
   acceptedMajors,
   diffPeerRange,
   readConsumerPeers,
+  extractHeadline,
 } = _internal
 
 // ── shapeOfRange ──────────────────────────────────────────────
@@ -417,3 +418,138 @@ describe('upgrade — collectPeerMismatches', () => {
     assert.deepEqual(await collectPeerMismatches(rows, consumer, fetcher), [])
   })
 })
+
+// ── extractHeadline ───────────────────────────────────────────
+
+describe('upgrade — extractHeadline', () => {
+  it('returns the first bullet, stripping the changesets cite-prefix', () => {
+    const body = '## 1.2.3\n\n### Patch Changes\n\n- abc1234: First-line headline\n- def5678: Second line\n'
+    assert.equal(extractHeadline(body), 'First-line headline')
+  })
+
+  it('skips Updated dependencies lines', () => {
+    const body = '## 1.2.3\n\n### Patch Changes\n\n- Updated dependencies [foo]\n- abc1234: real change\n'
+    assert.equal(extractHeadline(body), 'real change')
+  })
+
+  it('truncates long headlines with an ellipsis', () => {
+    const long = 'A'.repeat(120)
+    const body = `## 1.2.3\n\n### Patch Changes\n\n- abc1234: ${long}\n`
+    const out = extractHeadline(body)
+    assert.equal(out.length, 90)
+    assert.ok(out.endsWith('...'), 'should end with ellipsis')
+  })
+
+  it('returns empty string when no usable bullet exists', () => {
+    assert.equal(extractHeadline('## 1.2.3\n\n### Patch Changes\n\n- Updated dependencies\n'), '')
+    assert.equal(extractHeadline('## 1.2.3\n'), '')
+  })
+
+  it('handles bullets without a cite-prefix', () => {
+    const body = '## 1.2.3\n\n### Minor Changes\n\n- A plain bullet without sha\n'
+    assert.equal(extractHeadline(body), 'A plain bullet without sha')
+  })
+})
+
+// ── parseChangelog ────────────────────────────────────────────
+
+const SAMPLE = `# @rudderjs/cli
+
+## 4.7.1
+
+### Patch Changes
+
+- dc78211: Handle floating ranges
+
+## 4.7.0
+
+### Minor Changes
+
+- c6ff344: rudder upgrade — bump @rudderjs/*
+
+## 4.6.9
+
+### Patch Changes
+
+- Updated dependencies [foo]
+- abc1234: stripInternal flipped
+
+## 4.6.5
+
+### Patch Changes
+
+- def5678: an older fix
+`
+
+describe('upgrade — parseChangelog', () => {
+  it('returns entries strictly above `from` and at-or-below `to`', () => {
+    const entries = parseChangelog(
+      SAMPLE,
+      { major: 4, minor: 6, patch: 9 },
+      { major: 4, minor: 7, patch: 1 },
+    )
+    assert.deepEqual(entries.map(e => e.version), ['4.7.1', '4.7.0'])
+  })
+
+  it('returns headlines per entry', () => {
+    const entries = parseChangelog(
+      SAMPLE,
+      { major: 4, minor: 6, patch: 5 },
+      { major: 4, minor: 7, patch: 1 },
+    )
+    assert.deepEqual(entries.map(e => e.headline), [
+      'Handle floating ranges',
+      'rudder upgrade — bump @rudderjs/*',
+      'stripInternal flipped',
+    ])
+  })
+
+  it('returns empty when no version in range', () => {
+    const entries = parseChangelog(
+      SAMPLE,
+      { major: 4, minor: 7, patch: 1 },                    // already at latest
+      { major: 4, minor: 7, patch: 1 },
+    )
+    assert.deepEqual(entries, [])
+  })
+
+  it('tolerates a malformed / empty CHANGELOG', () => {
+    assert.deepEqual(parseChangelog('', { major: 1, minor: 0, patch: 0 }, { major: 2, minor: 0, patch: 0 }), [])
+    assert.deepEqual(parseChangelog('# Random header\n\nno versions\n', { major: 1, minor: 0, patch: 0 }, { major: 2, minor: 0, patch: 0 }), [])
+  })
+})
+
+// ── collectChangelogs (integration) ───────────────────────────
+
+describe('upgrade — collectChangelogs', () => {
+  function fakeRow(name: string, current: ParsedVersionShape, target: ParsedVersionShape) {
+    return {
+      name, section: 'dependencies' as const,
+      current, latest: target, target,
+      newRange: `^${target.major}.${target.minor}.${target.patch}`,
+    }
+  }
+
+  it('returns one entry-list per row that has CHANGELOG data in range', async () => {
+    const fetcher = async (pkg: string) => pkg === '@rudderjs/cli' ? SAMPLE : null
+    const rows = [
+      fakeRow('@rudderjs/cli',  { major: 4, minor: 6, patch: 9 }, { major: 4, minor: 7, patch: 1 }),
+      fakeRow('@rudderjs/core', { major: 1, minor: 0, patch: 0 }, { major: 1, minor: 1, patch: 0 }),
+    ]
+    const map = await collectChangelogs(rows, fetcher)
+    assert.ok(map.has('@rudderjs/cli'))
+    assert.equal(map.get('@rudderjs/cli')!.length, 2)
+    assert.ok(!map.has('@rudderjs/core'))   // fetcher returned null → no entry
+  })
+
+  it('returns empty map when no row produces in-range entries', async () => {
+    const fetcher = async () => SAMPLE
+    const rows = [
+      fakeRow('@rudderjs/cli', { major: 4, minor: 7, patch: 1 }, { major: 4, minor: 7, patch: 1 }),
+    ]
+    const map = await collectChangelogs(rows, fetcher)
+    assert.equal(map.size, 0)
+  })
+})
+
+interface ParsedVersionShape { major: number; minor: number; patch: number }
