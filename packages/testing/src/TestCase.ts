@@ -73,6 +73,12 @@ export class TestCase {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _actingAs: Record<string, unknown> | undefined
 
+  /** Accumulated headers applied to every subsequent request until cleared. */
+  private _pendingHeaders: Record<string, string> = {}
+
+  /** Accumulated cookies applied to every subsequent request until cleared. */
+  private _pendingCookies: Record<string, string> = {}
+
   /** Active trait instances (for teardown). */
   private _traits: TestTrait[] = []
 
@@ -140,6 +146,8 @@ export class TestCase {
     }
     this._traits = []
     this._actingAs = undefined
+    this._pendingHeaders = {}
+    this._pendingCookies = {}
   }
 
   // ── Auth ────────────────────────────────────────────────
@@ -147,6 +155,51 @@ export class TestCase {
   /** Set the authenticated user for subsequent requests. */
   actingAs(user: Record<string, unknown>): this {
     this._actingAs = user
+    return this
+  }
+
+  // ── Request setup ───────────────────────────────────────
+
+  /**
+   * Set headers to be sent on every subsequent request, until cleared by
+   * `flushHeaders()` or `teardown()`. Last-write-wins for duplicate keys.
+   */
+  withHeaders(headers: Record<string, string>): this {
+    this._pendingHeaders = { ...this._pendingHeaders, ...headers }
+    return this
+  }
+
+  /** Set a single header for every subsequent request. */
+  withHeader(name: string, value: string): this {
+    this._pendingHeaders[name] = value
+    return this
+  }
+
+  /** Clear all accumulated headers from prior `withHeaders` / `withHeader` calls. */
+  flushHeaders(): this {
+    this._pendingHeaders = {}
+    return this
+  }
+
+  /**
+   * Set cookies to be sent on every subsequent request, until cleared by
+   * `flushCookies()` or `teardown()`. Values are URI-encoded into a single
+   * `Cookie` header.
+   */
+  withCookies(cookies: Record<string, string>): this {
+    this._pendingCookies = { ...this._pendingCookies, ...cookies }
+    return this
+  }
+
+  /** Set a single cookie for every subsequent request. */
+  withCookie(name: string, value: string): this {
+    this._pendingCookies[name] = value
+    return this
+  }
+
+  /** Clear all accumulated cookies from prior `withCookies` / `withCookie` calls. */
+  flushCookies(): this {
+    this._pendingCookies = {}
     return this
   }
 
@@ -189,7 +242,16 @@ export class TestCase {
     const url = `http://localhost${path.startsWith('/') ? path : '/' + path}`
     const reqHeaders: Record<string, string> = {
       'content-type': 'application/json',
+      ...this._pendingHeaders,
       ...headers,
+    }
+
+    // Inject accumulated cookies — per-request `headers.cookie` (passed via the
+    // helper's last arg) wins over the accumulated set.
+    if (Object.keys(this._pendingCookies).length > 0 && !('cookie' in reqHeaders)) {
+      reqHeaders['cookie'] = Object.entries(this._pendingCookies)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('; ')
     }
 
     // Inject authenticated user

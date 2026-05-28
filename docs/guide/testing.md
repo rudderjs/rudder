@@ -59,6 +59,21 @@ const user = await User.query().first()
 const res  = await t.actingAs(user).get('/api/profile')
 ```
 
+### Request setup
+
+Use the fluent `with*` chain to attach headers or cookies to every subsequent request until `teardown()` (or an explicit `flush*` call):
+
+```ts
+t.withHeader('x-trace', 'abc')
+ .withHeaders({ 'accept-language': 'en', 'x-feature-flag': 'beta' })
+ .withCookies({ session: 'abc123', csrf: 'def456' })
+
+await t.get('/api/users')      // sends all of the above
+await t.get('/api/users/1')    // same — they persist
+```
+
+The per-request `headers` argument (e.g. `t.get('/api/users', { 'x-app': 'local' })`) wins over the accumulated set, so individual tests can override without disturbing the test-wide defaults. Call `flushHeaders()` / `flushCookies()` to clear mid-test.
+
 ## Response assertions
 
 Every request returns a `TestResponse` with a fluent assertion API. Every `assert*` method returns the response, so chains compose without re-binding:

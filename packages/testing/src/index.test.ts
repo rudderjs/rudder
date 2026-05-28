@@ -293,6 +293,104 @@ describe('TestCase — model assertions', () => {
   })
 })
 
+// ─── TestCase: Request setup chain ────────────────────────
+
+describe('TestCase — request setup chain', () => {
+  // Build a TestCase pre-wired with a stub fetchHandler that echoes the
+  // observed request headers/body back to the test.
+  type EchoSeen = { headers: Record<string, string>, body: string | undefined }
+  function caseWithEchoHandler(): { tc: TestCase, lastReq: EchoSeen } {
+    const tc = Object.create(TestCase.prototype) as TestCase
+    const tcAny = tc as unknown as Record<string, unknown>
+    tcAny['_pendingHeaders'] = {}
+    tcAny['_pendingCookies'] = {}
+    const lastReq: EchoSeen = { headers: {}, body: undefined }
+    const handler = async (req: Request) => {
+      const headers: Record<string, string> = {}
+      req.headers.forEach((v, k) => { headers[k] = v })
+      lastReq.headers = headers
+      lastReq.body = req.body ? await req.text() : undefined
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    tcAny['_handler'] = handler
+    return { tc, lastReq }
+  }
+
+  it('withHeader sets a single header on the next request', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    await tc.withHeader('x-test', 'one').get('/anywhere')
+    assert.equal(lastReq.headers['x-test'], 'one')
+  })
+
+  it('withHeaders merges multiple headers', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    await tc.withHeaders({ 'x-a': '1', 'x-b': '2' }).get('/anywhere')
+    assert.equal(lastReq.headers['x-a'], '1')
+    assert.equal(lastReq.headers['x-b'], '2')
+  })
+
+  it('withHeaders persists across multiple requests until flushed', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    tc.withHeader('x-trace', 'abc')
+    await tc.get('/one')
+    assert.equal(lastReq.headers['x-trace'], 'abc')
+    await tc.get('/two')
+    assert.equal(lastReq.headers['x-trace'], 'abc')
+    tc.flushHeaders()
+    await tc.get('/three')
+    assert.equal(lastReq.headers['x-trace'], undefined)
+  })
+
+  it('per-request headers arg overrides accumulated headers', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    tc.withHeader('x-app', 'global')
+    await tc.get('/path', { 'x-app': 'local' })
+    assert.equal(lastReq.headers['x-app'], 'local')
+  })
+
+  it('withCookies sets a single Cookie header', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    await tc.withCookies({ session: 'abc', csrf: 'def' }).get('/anywhere')
+    assert.ok(lastReq.headers['cookie']?.includes('session=abc'))
+    assert.ok(lastReq.headers['cookie']?.includes('csrf=def'))
+  })
+
+  it('withCookie encodes name and value', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    await tc.withCookie('weird name', 'a=b;c').get('/anywhere')
+    assert.ok(lastReq.headers['cookie']?.includes('weird%20name=a%3Db%3Bc'))
+  })
+
+  it('per-request cookie header wins over accumulated', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    tc.withCookie('session', 'global')
+    await tc.get('/path', { cookie: 'session=local' })
+    assert.equal(lastReq.headers['cookie'], 'session=local')
+  })
+
+  it('flushCookies clears accumulated cookies', async () => {
+    const { tc, lastReq } = caseWithEchoHandler()
+    tc.withCookie('session', 'abc')
+    tc.flushCookies()
+    await tc.get('/anywhere')
+    assert.equal(lastReq.headers['cookie'], undefined)
+  })
+
+  it('all setup methods return this for chaining', () => {
+    const { tc } = caseWithEchoHandler()
+    const result = tc
+      .withHeader('x-a', '1')
+      .withHeaders({ 'x-b': '2' })
+      .withCookie('s', 'x')
+      .withCookies({ csrf: 'y' })
+
+    assert.strictEqual(result, tc)
+  })
+})
+
 // ─── TestResponse: text() and json() ──────────────────────
 
 describe('TestResponse — accessors', () => {
