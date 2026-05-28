@@ -132,6 +132,41 @@ export function runWithAuth<T>(manager: AuthManager, fn: () => T): T {
   return _als.run(manager, fn)
 }
 
+// ─── Test-user override (request-scoped) ──────────────────
+//
+// Set by `AuthMiddleware` when `APP_ENV=testing` and `x-testing-user` is
+// present on the request. Consumed by `SessionGuard.user()` to short-circuit
+// the session-based lookup so `actingAs(user)` from `@rudderjs/testing` makes
+// `req.user`, `auth().user()`, `Auth.guard().check()`, and `RequireAuth`
+// behave consistently for a synthetic test user — even one that doesn't
+// exist in the database.
+//
+// Routed through `globalThis` for the same duplicate-bundle reason as `_als`.
+
+const TEST_USER_ALS_KEY = '__rudderjs_test_user_als__'
+const _testUserAls: AsyncLocalStorage<Authenticatable> = (_alsGlobal[TEST_USER_ALS_KEY] as AsyncLocalStorage<Authenticatable> | undefined)
+  ?? (() => { const a = new AsyncLocalStorage<Authenticatable>(); _alsGlobal[TEST_USER_ALS_KEY] = a; return a })()
+
+/**
+ * Run `fn` with the given user installed as the request's authenticated user.
+ *
+ * Used by `AuthMiddleware` in test mode to wire up `actingAs(user)` from
+ * `@rudderjs/testing`. Outside test mode this is unused and incurs no cost.
+ */
+export function runWithTestUser<T>(user: Authenticatable, fn: () => T): T {
+  return _testUserAls.run(user, fn)
+}
+
+/**
+ * Read the request-scoped test user, or `null` when none is installed.
+ *
+ * Checked by `SessionGuard.user()` BEFORE going to the session store so a
+ * test acting as a synthetic user resolves without a DB round-trip.
+ */
+export function currentTestUser(): Authenticatable | null {
+  return _testUserAls.getStore() ?? null
+}
+
 export function currentAuth(): AuthManager {
   const m = _als.getStore()
   if (!m) {

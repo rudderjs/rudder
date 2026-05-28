@@ -317,6 +317,81 @@ describe('TestResponse — chaining', () => {
   })
 })
 
+// ─── TestCase: Auth assertions ────────────────────────────
+
+describe('TestCase — auth assertions', () => {
+  function bareCase(): TestCase {
+    return Object.create(TestCase.prototype) as TestCase
+  }
+
+  it('assertAuthenticated passes after actingAs', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 1, name: 'Alice' })
+    tc.assertAuthenticated()
+  })
+
+  it('assertAuthenticated throws when actingAs was not called', () => {
+    const tc = bareCase()
+    assert.throws(() => tc.assertAuthenticated(), /Expected a user to be authenticated/)
+  })
+
+  it('assertGuest passes when actingAs was not called', () => {
+    const tc = bareCase()
+    tc.assertGuest()
+  })
+
+  it('assertGuest throws after actingAs', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 7, name: 'Bob' })
+    assert.throws(() => tc.assertGuest(), /Expected no actingAs.*id: 7/)
+  })
+
+  it('assertGuest passes after actingAsGuest clears the user', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 1 }).actingAsGuest().assertGuest()
+  })
+
+  it('assertAuthenticatedAs passes for matching id', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 42, name: 'Alice' })
+    tc.assertAuthenticatedAs({ id: 42 })
+  })
+
+  it('assertAuthenticatedAs coerces ids to string for comparison', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 42 })
+    tc.assertAuthenticatedAs({ id: '42' })   // numeric vs string still matches
+  })
+
+  it('assertAuthenticatedAs throws when ids differ', () => {
+    const tc = bareCase()
+    tc.actingAs({ id: 1 })
+    assert.throws(
+      () => tc.assertAuthenticatedAs({ id: 2 }),
+      /Expected acting-as user id 2, got 1/,
+    )
+  })
+
+  it('assertAuthenticatedAs throws when no user is set', () => {
+    const tc = bareCase()
+    assert.throws(
+      () => tc.assertAuthenticatedAs({ id: 1 }),
+      /Expected a user to be authenticated/,
+    )
+  })
+
+  it('all auth helpers return this for chaining', () => {
+    const tc = bareCase()
+    const result = tc
+      .actingAs({ id: 1 })
+      .assertAuthenticated()
+      .assertAuthenticatedAs({ id: 1 })
+      .actingAsGuest()
+      .assertGuest()
+    assert.strictEqual(result, tc)
+  })
+})
+
 // ─── TestCase: Model assertions ───────────────────────────
 
 describe('TestCase — model assertions', () => {

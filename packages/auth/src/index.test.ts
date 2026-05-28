@@ -17,6 +17,8 @@ import {
   MemoryTokenRepository,
   runWithAuth,
   currentAuth,
+  runWithTestUser,
+  currentTestUser,
   toAuthenticatable,
   userToPlain,
   BaseAuthController,
@@ -462,6 +464,66 @@ describe('AuthProvider', () => {
 describe('AuthMiddleware()', () => {
   it('returns a function', () => {
     assert.strictEqual(typeof AuthMiddleware(), 'function')
+  })
+})
+
+// ─── Test-user override (for `@rudderjs/testing`'s actingAs) ──
+
+describe('runWithTestUser / currentTestUser', () => {
+  it('currentTestUser returns null outside a runWithTestUser scope', () => {
+    assert.strictEqual(currentTestUser(), null)
+  })
+
+  it('runWithTestUser installs a user for the duration of the callback', () => {
+    const user = toAuthenticatable(fakeUser({ id: '99', name: 'Eve' }))
+    let observed: Authenticatable | null = null
+    runWithTestUser(user, () => {
+      observed = currentTestUser()
+    })
+    assert.ok(observed)
+    assert.strictEqual((observed as unknown as Authenticatable).getAuthIdentifier(), '99')
+    // ALS cleared after the scope
+    assert.strictEqual(currentTestUser(), null)
+  })
+
+  it('SessionGuard.user() returns the test user when one is installed, without hitting session/provider', async () => {
+    const testUser = toAuthenticatable(fakeUser({ id: '42', name: 'Test' }))
+    // A provider/session that would FAIL if consulted — proves the override
+    // short-circuits BEFORE either is touched.
+    const provider = {
+      async retrieveById() { throw new Error('provider must not be called when test user is installed') },
+      async retrieveByCredentials() { throw new Error('not used') },
+      async validateCredentials() { throw new Error('not used') },
+    } as unknown as EloquentUserProvider
+    const session = {
+      get() { throw new Error('session must not be touched') },
+      put() { throw new Error('not used') },
+      forget() { throw new Error('not used') },
+      regenerate: async () => { throw new Error('not used') },
+    }
+    const guard = new SessionGuard(provider, session)
+    const resolved = await runWithTestUser(testUser, () => guard.user())
+    assert.ok(resolved)
+    assert.strictEqual(resolved.getAuthIdentifier(), '42')
+  })
+
+  it('SessionGuard.user() falls back to the session lookup when no test user is installed', async () => {
+    const dbUser = toAuthenticatable(fakeUser({ id: '7', name: 'Alice' }))
+    const provider = {
+      async retrieveById(id: string) { return id === '7' ? dbUser : null },
+      async retrieveByCredentials() { return null },
+      async validateCredentials() { return false },
+    } as unknown as EloquentUserProvider
+    const session = {
+      get<T>(_k: string) { return '7' as T },
+      put() { /* no-op */ },
+      forget() { /* no-op */ },
+      regenerate: async () => { /* no-op */ },
+    }
+    const guard = new SessionGuard(provider, session)
+    const resolved = await guard.user()
+    assert.ok(resolved)
+    assert.strictEqual(resolved.getAuthIdentifier(), '7')
   })
 })
 

@@ -59,6 +59,18 @@ const user = await User.query().first()
 const res  = await t.actingAs(user).get('/api/profile')
 ```
 
+`actingAs(user)` serializes the user into an `x-testing-user` header. In test mode (`APP_ENV=testing`), `AuthMiddleware` honors it and populates `req.user`, `auth().user()`, `Auth.guard().check()`, and `RequireAuth` — all four resolve to the synthetic user, even one that doesn't exist in the database. Call `actingAsGuest()` to clear and run subsequent requests unauthenticated.
+
+```ts
+t.actingAs(user)
+t.assertAuthenticated()                 // passes after actingAs
+t.assertAuthenticatedAs({ id: 42 })     // matched by string-coerced id
+t.actingAsGuest()
+t.assertGuest()                         // passes after actingAsGuest / teardown
+```
+
+The auth assertions check the test-side intent set via `actingAs` — they don't verify that a specific request (e.g. a login form) authenticated end-to-end. For that, assert against the response of a follow-up request to a route that requires auth.
+
 ### Time travel
 
 For testing time-sensitive code (expirations, scheduled jobs, rate-limit windows) the case ships a Laravel-style time-travel API built on Node's `mock.timers`:
