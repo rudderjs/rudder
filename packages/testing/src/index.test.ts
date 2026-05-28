@@ -293,6 +293,131 @@ describe('TestCase — model assertions', () => {
   })
 })
 
+// ─── TestCase: Time travel ────────────────────────────────
+
+describe('TestCase — time travel', () => {
+  // Build a bare TestCase instance — no app needed for the time-travel paths.
+  function bareCase(): TestCase {
+    const tc = Object.create(TestCase.prototype) as TestCase
+    ;(tc as unknown as Record<string, unknown>)['_timersMocked'] = false
+    return tc
+  }
+
+  // Always restore real time, even when an assertion fails mid-test.
+  function restore(tc: TestCase): void { tc.travelBack() }
+
+  // Anchor the mock at a fixed timestamp so `Date.now()` comparisons are
+  // deterministic across platforms. Without this, Windows + Node 20 has
+  // ~15ms wall-clock granularity — the test's `start = Date.now()` capture
+  // can race ahead of the mock's internal `now: Date.now()` and break
+  // strict-equality assertions.
+  const ANCHOR = Date.UTC(2026, 0, 1)
+  function anchor(tc: TestCase): void { tc.travelTo(ANCHOR) }
+
+  it('travel(N).seconds advances Date.now by N * 1000', () => {
+    const tc = bareCase()
+    try {
+      anchor(tc)
+      tc.travel(5).seconds()
+      assert.equal(Date.now(), ANCHOR + 5_000)
+    } finally { restore(tc) }
+  })
+
+  it('travel(N).minutes advances by N * 60_000', () => {
+    const tc = bareCase()
+    try {
+      anchor(tc)
+      tc.travel(2).minutes()
+      assert.equal(Date.now(), ANCHOR + 120_000)
+    } finally { restore(tc) }
+  })
+
+  it('travel(N).hours advances by N * 3_600_000', () => {
+    const tc = bareCase()
+    try {
+      anchor(tc)
+      tc.travel(3).hours()
+      assert.equal(Date.now(), ANCHOR + 10_800_000)
+    } finally { restore(tc) }
+  })
+
+  it('travel(N).days advances by N * 86_400_000', () => {
+    const tc = bareCase()
+    try {
+      anchor(tc)
+      tc.travel(7).days()
+      assert.equal(Date.now(), ANCHOR + 7 * 86_400_000)
+    } finally { restore(tc) }
+  })
+
+  it('travelTo sets the clock to an absolute Date', () => {
+    const tc = bareCase()
+    try {
+      const target = new Date('2030-06-15T12:00:00.000Z')
+      tc.travelTo(target)
+      assert.equal(Date.now(), +target)
+    } finally { restore(tc) }
+  })
+
+  it('travelTo accepts a numeric timestamp', () => {
+    const tc = bareCase()
+    try {
+      const target = Date.UTC(2030, 0, 1)
+      tc.travelTo(target)
+      assert.equal(Date.now(), target)
+    } finally { restore(tc) }
+  })
+
+  it('travelBack restores real time', () => {
+    const tc = bareCase()
+    tc.travelTo(new Date('2030-01-01T00:00:00.000Z'))
+    tc.travelBack()
+    const realNow = Date.now()
+    // After reset, Date.now() should be close to wall-clock time, not 2030.
+    assert.ok(realNow < +new Date('2029-01-01'), `Expected real time after travelBack, got ${new Date(realNow).toISOString()}`)
+  })
+
+  it('travelBack is a no-op when time was not mocked', () => {
+    const tc = bareCase()
+    // Should not throw even though mock.timers was never enabled.
+    tc.travelBack()
+  })
+
+  it('freezeTime pins Date.now across multiple reads', async () => {
+    const tc = bareCase()
+    try {
+      const captured: number[] = []
+      await tc.freezeTime(async () => {
+        captured.push(Date.now())
+        await new Promise((r) => setImmediate(r))
+        captured.push(Date.now())
+      })
+      assert.equal(captured[0], captured[1], 'Date.now() should be stable inside freezeTime')
+    } finally { restore(tc) }
+  })
+
+  it('freezeTime restores real time after fn returns (when not previously mocked)', async () => {
+    const tc = bareCase()
+    await tc.freezeTime(async () => {
+      // do nothing
+    })
+    // Timers should be restored — Date.now() should be a real wall-clock value.
+    const realNow = Date.now()
+    assert.ok(realNow > +new Date('2025-01-01'), `Expected real time after freezeTime, got ${new Date(realNow).toISOString()}`)
+  })
+
+  it('freezeTime leaves an existing mock in place', async () => {
+    const tc = bareCase()
+    try {
+      tc.travelTo(new Date('2030-06-15T00:00:00.000Z'))
+      const before = Date.now()
+      await tc.freezeTime(async () => { /* no-op */ })
+      // Still mocked at 2030 (freezeTime didn't reset on exit since we were already mocked).
+      assert.equal(Date.now(), before)
+    } finally { restore(tc) }
+  })
+})
+
 // ─── TestCase: Request setup chain ────────────────────────
 
 describe('TestCase — request setup chain', () => {
