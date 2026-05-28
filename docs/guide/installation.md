@@ -221,7 +221,7 @@ Never commit `.env`. Provide `.env.example` as a template.
 
 ## Keeping up to date
 
-Rudder releases frequently — sometimes daily across the 33 published packages. To bump every `@rudderjs/*` dependency to the latest version published on npm in one step:
+Rudder releases frequently — sometimes daily across the 48 published `@rudderjs/*` packages. To bump every `@rudderjs/*` dependency to the latest version published on npm in one step:
 
 ```bash
 pnpm rudder upgrade

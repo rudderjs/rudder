@@ -61,7 +61,13 @@ interface NpmDistTag { version: string }
  * package with a clear warning rather than aborting the whole upgrade.
  */
 async function fetchLatest(pkg: string, registry: string): Promise<string | null> {
-  const url = `${registry.replace(/\/+$/, '')}/${pkg.replace('/', '%2F')}/latest`
+  // `encodeURIComponent` correctly encodes every character that's invalid in a
+  // URL path segment — handles the scope separator `/` AND any future-edge
+  // character without us tracking the spec. CodeQL's
+  // `js/incomplete-string-escaping` flagged the prior `.replace('/', '%2F')`
+  // for replacing only the first occurrence (false-positive for scoped npm
+  // names, which only have one `/`, but the safer encoding has no downside).
+  const url = `${registry.replace(/\/+$/, '')}/${encodeURIComponent(pkg)}/latest`
   try {
     const res = await fetch(url, { headers: { accept: 'application/json' } })
     if (!res.ok) return null
