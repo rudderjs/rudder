@@ -1728,7 +1728,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot refresh a ${ctor.name} without a primary key.`)
+      throw new Error(`[RudderJS ORM] Cannot refresh a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const fresh = await (ctor as typeof Model & { find(i: string | number): Promise<Model | null> }).find(id)
     if (!fresh) throw new ModelNotFoundError(ctor.name, id)
@@ -1753,7 +1753,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key.`)
+      throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
     if (ctor.softDeletes) {
@@ -1771,7 +1771,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot restore a ${ctor.name} without a primary key.`)
+      throw new Error(`[RudderJS ORM] Cannot restore a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const restored = await (ctor as typeof Model & {
       restore(i: string | number): Promise<Model>
@@ -1816,7 +1816,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot increment a ${ctor.name} without a primary key.`)
+      throw new Error(`[RudderJS ORM] Cannot increment a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const updated = await (ctor as typeof Model & {
       increment(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
@@ -1901,7 +1901,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot decrement a ${ctor.name} without a primary key.`)
+      throw new Error(`[RudderJS ORM] Cannot decrement a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const updated = await (ctor as typeof Model & {
       decrement(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
@@ -2055,7 +2055,7 @@ export abstract class Model {
       const idVal   = readField(this, idCol)
       const typeVal = readField(this, typeCol)
       if (idVal === undefined || idVal === null || typeVal === undefined || typeVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} unset.`)
+        throw new Error(`[RudderJS ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} is null/undefined. Save the morph host first, or assign both columns before calling .related().`)
       }
       const targets = def.types()
       if (targets.length === 0) {
@@ -2096,7 +2096,7 @@ export abstract class Model {
       const meta = resolveBelongsToManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return belongsToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -2105,7 +2105,7 @@ export abstract class Model {
       const meta = resolveMorphToManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return morphToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -2114,7 +2114,7 @@ export abstract class Model {
       const meta = resolveMorphedByManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return morphedByManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -2125,7 +2125,7 @@ export abstract class Model {
       const localCol  = def.localKey   ?? fk
       const localVal  = readField(this, localCol)
       if (localVal === undefined || localVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is unset.`)
+        throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return Related.where(Related.primaryKey, localVal) as QueryBuilder<Model>
     }
@@ -2135,7 +2135,7 @@ export abstract class Model {
     const localCol = def.localKey   ?? ctor.primaryKey
     const localVal = readField(this, localCol)
     if (localVal === undefined || localVal === null) {
-      throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
+      throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
     }
     return Related.where(fk, localVal) as QueryBuilder<Model>
   }

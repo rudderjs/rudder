@@ -200,7 +200,7 @@ describe('Model.related — morphMany', () => {
     const post = Post.hydrate({ id: null as unknown as number })!
     assert.throws(
       () => post.related('comments'),
-      /id is unset/,
+      /id is null\/undefined/,
     )
   })
 
@@ -342,7 +342,7 @@ describe('Model.related — morphTo', () => {
     const c = Comment.hydrate({ id: 1, commentableType: 'Post' })!
     assert.throws(
       () => c.related('commentable'),
-      /commentableId\/commentableType unset/,
+      /commentableId\/commentableType is null\/undefined/,
     )
   })
 
@@ -359,7 +359,7 @@ describe('Model.related — morphTo', () => {
     const c = Comment.hydrate({ id: 1, commentableId: 5 })!
     assert.throws(
       () => c.related('commentable'),
-      /commentableId\/commentableType unset/,
+      /commentableId\/commentableType is null\/undefined/,
     )
   })
 

@@ -244,7 +244,7 @@ describe('Model.related — morphToMany', () => {
     const post = Post.hydrate({ id: null as unknown as number })!
     assert.throws(
       () => post.related('tags'),
-      /id is unset/,
+      /id is null\/undefined/,
     )
   })
 })

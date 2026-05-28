@@ -30,7 +30,7 @@ export function morphParentQuery(
   const localVal = (self as unknown as Record<string, unknown>)[localCol]
   const typeVal  = def.morphType ?? ctor.morphAlias ?? ctor.name
   if (localVal === undefined || localVal === null) {
-    throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
+    throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
   }
   return Related.where(idCol, localVal).where(typeCol, typeVal) as QueryBuilder<Model>
 }
