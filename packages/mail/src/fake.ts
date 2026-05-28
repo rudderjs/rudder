@@ -119,6 +119,79 @@ export class FakeMailAdapter implements MailAdapter {
     )
   }
 
+  // ─── Assertions: exact-count variants ────────────────────
+
+  /** Assert that a mailable of the given class was sent exactly `count` times. */
+  assertSentTimes(
+    mailableClass: new (...args: unknown[]) => Mailable,
+    count: number,
+  ): void {
+    const matching = this._matchingSent(mailableClass)
+    assert.strictEqual(
+      matching.length,
+      count,
+      `[RudderJS Mail] Expected "${mailableClass.name}" to be sent ${count} time(s), but it was sent ${matching.length} time(s).`,
+    )
+  }
+
+  /** Assert that a mailable of the given class was queued exactly `count` times. */
+  assertQueuedTimes(
+    mailableClass: new (...args: unknown[]) => Mailable,
+    count: number,
+  ): void {
+    const matching = this._matchingQueued(mailableClass)
+    assert.strictEqual(
+      matching.length,
+      count,
+      `[RudderJS Mail] Expected "${mailableClass.name}" to be queued ${count} time(s), but it was queued ${matching.length} time(s).`,
+    )
+  }
+
+  // ─── Assertions: combined sent + queued ──────────────────
+
+  /**
+   * Assert the total number of outgoing mailables — sent + queued combined,
+   * across all classes. Useful when a code path might either dispatch
+   * synchronously or via queue and the test just cares that mail goes out.
+   */
+  assertOutgoingCount(count: number): void {
+    const total = this._sent.length + this._queued.length
+    assert.strictEqual(
+      total,
+      count,
+      `[RudderJS Mail] Expected ${count} outgoing mail(s) (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
+    )
+  }
+
+  /** Assert no mail went out at all — neither sent nor queued. */
+  assertNothingOutgoing(): void {
+    const total = this._sent.length + this._queued.length
+    assert.strictEqual(
+      total,
+      0,
+      `[RudderJS Mail] Expected no outgoing mail (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
+    )
+  }
+
+  /**
+   * Assert that a mailable of the given class went out (sent OR queued) at
+   * least once. Useful for tests that don't care whether a job ran synchronously
+   * or via the queue.
+   */
+  assertOutgoing(
+    mailableClass: new (...args: unknown[]) => Mailable,
+    predicate?: (entry: { mailable: Mailable; options: SendOptions }) => boolean,
+  ): void {
+    const matching = [
+      ...this._matchingSent(mailableClass, predicate),
+      ...this._matchingQueued(mailableClass, predicate),
+    ]
+    assert.ok(
+      matching.length > 0,
+      `[RudderJS Mail] Expected "${mailableClass.name}" to be sent or queued, but it was neither.`,
+    )
+  }
+
   // ─── Access ──────────────────────────────────────────────
 
   /** Get all sent mailables, optionally filtered by class. */
@@ -135,6 +208,18 @@ export class FakeMailAdapter implements MailAdapter {
   ): Array<{ mailable: Mailable; options: SendOptions }> {
     if (!mailableClass) return [...this._queued]
     return this._matchingQueued(mailableClass)
+  }
+
+  /**
+   * Get every outgoing entry — sent + queued combined — optionally filtered
+   * by mailable class. Useful when a test doesn't care which channel was used.
+   */
+  outgoing(
+    mailableClass?: new (...args: unknown[]) => Mailable,
+  ): Array<{ mailable: Mailable; options: SendOptions }> {
+    const all = [...this._sent, ...this._queued]
+    if (!mailableClass) return all
+    return all.filter((entry) => this._isInstance(entry.mailable, mailableClass))
   }
 
   // ─── Cleanup ─────────────────────────────────────────────
