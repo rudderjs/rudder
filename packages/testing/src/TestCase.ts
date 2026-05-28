@@ -364,7 +364,19 @@ export class TestCase {
     const responseHeaders: Record<string, string> = {}
     response.headers.forEach((v: string, k: string) => { responseHeaders[k] = v })
 
-    return new TestResponse(response.status, responseHeaders, parsed, text)
+    // Capture every Set-Cookie value separately — Headers.forEach collapses
+    // duplicates, but a response can set many cookies in one go. Falls back
+    // to splitting the joined header on Node runtimes that don't expose
+    // getSetCookie() (unlikely on >=18.16, but safe).
+    let setCookies: string[] = []
+    const headersAny = response.headers as unknown as { getSetCookie?: () => string[] }
+    if (typeof headersAny.getSetCookie === 'function') {
+      setCookies = headersAny.getSetCookie()
+    } else if (responseHeaders['set-cookie']) {
+      setCookies = [responseHeaders['set-cookie']]
+    }
+
+    return new TestResponse(response.status, responseHeaders, parsed, text, setCookies)
   }
 
   // ─── Database Assertions ───────────────────────────────

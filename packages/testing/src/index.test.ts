@@ -66,6 +66,143 @@ describe('TestResponse — status assertions', () => {
   it('assertStatus throws for mismatch', () => {
     assert.throws(() => new TestResponse(200, {}, {}, '').assertStatus(201), /Expected status 201/)
   })
+
+  it('additional status helpers (202, 400, 409, 410, 429)', () => {
+    new TestResponse(202, {}, {}, '').assertAccepted()
+    new TestResponse(400, {}, {}, '').assertBadRequest()
+    new TestResponse(409, {}, {}, '').assertConflict()
+    new TestResponse(410, {}, {}, '').assertGone()
+    new TestResponse(429, {}, {}, '').assertTooManyRequests()
+  })
+})
+
+// ─── TestResponse: JSON variants ──────────────────────────
+
+describe('TestResponse — JSON variants', () => {
+  it('assertExactJson passes on exact deep-equal', () => {
+    const body = { name: 'Alice', age: 30 }
+    new TestResponse(200, {}, body, JSON.stringify(body)).assertExactJson({ name: 'Alice', age: 30 })
+  })
+
+  it('assertExactJson throws on extra keys', () => {
+    const body = { name: 'Alice', age: 30, extra: true }
+    assert.throws(
+      () => new TestResponse(200, {}, body, '').assertExactJson({ name: 'Alice', age: 30 }),
+      /does not exactly match/,
+    )
+  })
+
+  it('assertJsonMissingExact passes when body differs from expected', () => {
+    const body = { name: 'Alice', age: 30 }
+    new TestResponse(200, {}, body, '').assertJsonMissingExact({ name: 'Bob' })
+  })
+
+  it('assertJsonFragment finds fragment at top level', () => {
+    const body = { name: 'Alice', email: 'a@x.com' }
+    new TestResponse(200, {}, body, '').assertJsonFragment({ email: 'a@x.com' })
+  })
+
+  it('assertJsonFragment finds fragment in nested object', () => {
+    const body = { data: { user: { name: 'Alice', role: 'admin' } } }
+    new TestResponse(200, {}, body, '').assertJsonFragment({ name: 'Alice', role: 'admin' })
+  })
+
+  it('assertJsonFragment finds fragment inside an array', () => {
+    const body = { items: [{ id: 1 }, { id: 2, tag: 'x' }, { id: 3 }] }
+    new TestResponse(200, {}, body, '').assertJsonFragment({ id: 2, tag: 'x' })
+  })
+
+  it('assertJsonFragment throws when fragment is split across siblings', () => {
+    // {a:1} on one object, {b:2} on another — the fragment {a:1,b:2} should NOT match
+    const body = { items: [{ a: 1 }, { b: 2 }] }
+    assert.throws(
+      () => new TestResponse(200, {}, body, '').assertJsonFragment({ a: 1, b: 2 }),
+      /does not contain fragment/,
+    )
+  })
+})
+
+// ─── TestResponse: Content assertions ─────────────────────
+
+describe('TestResponse — content assertions', () => {
+  it('assertContent passes on exact text match', () => {
+    new TestResponse(200, {}, null, 'hello world').assertContent('hello world')
+  })
+
+  it('assertContent throws on mismatch', () => {
+    assert.throws(
+      () => new TestResponse(200, {}, null, 'hello world').assertContent('goodbye'),
+      /Expected response body to equal/,
+    )
+  })
+
+  it('assertSee passes on substring match', () => {
+    new TestResponse(200, {}, null, '<p>Welcome, Alice!</p>').assertSee('Alice')
+  })
+
+  it('assertSee throws when text is absent', () => {
+    assert.throws(
+      () => new TestResponse(200, {}, null, '<p>Hello</p>').assertSee('Alice'),
+      /to contain "Alice"/,
+    )
+  })
+
+  it('assertDontSee passes when text is absent', () => {
+    new TestResponse(200, {}, null, '<p>Hello</p>').assertDontSee('Alice')
+  })
+
+  it('assertSeeText strips HTML tags before matching', () => {
+    new TestResponse(200, {}, null, '<div><span>Welcome</span> Alice</div>').assertSeeText('Welcome Alice')
+  })
+
+  it('assertDontSeeText strips HTML before NOT-matching', () => {
+    new TestResponse(200, {}, null, '<div>Bob</div>').assertDontSeeText('Alice')
+  })
+
+  it('assertSeeInOrder finds substrings in order', () => {
+    new TestResponse(200, {}, null, 'Alice, then Bob, then Carol').assertSeeInOrder(['Alice', 'Bob', 'Carol'])
+  })
+
+  it('assertSeeInOrder throws when out of order', () => {
+    assert.throws(
+      () => new TestResponse(200, {}, null, 'Carol, Alice').assertSeeInOrder(['Alice', 'Carol']),
+      /missing or out of order/,
+    )
+  })
+})
+
+// ─── TestResponse: Cookie assertions ──────────────────────
+
+describe('TestResponse — cookie assertions', () => {
+  it('assertCookie passes when Set-Cookie has the named cookie', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc123; Path=/; HttpOnly'])
+    res.assertCookie('session')
+  })
+
+  it('assertCookie verifies a value substring', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc123; Path=/'])
+    res.assertCookie('session', 'abc')
+  })
+
+  it('assertCookie throws when cookie is missing', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc123; Path=/'])
+    assert.throws(() => res.assertCookie('csrf'), /Expected response to set cookie "csrf"/)
+  })
+
+  it('assertCookie throws when value substring does not match', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc123; Path=/'])
+    assert.throws(() => res.assertCookie('session', 'wrong'), /to contain "wrong"/)
+  })
+
+  it('assertCookieMissing passes when no Set-Cookie for the name', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc; Path=/'])
+    res.assertCookieMissing('csrf')
+  })
+
+  it('assertCookieMissing throws when the cookie IS set', () => {
+    const res = new TestResponse(200, {}, {}, '', ['session=abc; Path=/'])
+    assert.throws(() => res.assertCookieMissing('session'), /found one/)
+  })
 })
 
 // ─── TestResponse: JSON assertions ────────────────────────
