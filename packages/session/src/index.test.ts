@@ -298,7 +298,7 @@ describe('Session facade', () => {
   }
 
   it('throws outside a session context', () => {
-    assert.throws(() => Session.get('k'), /No session in context/)
+    assert.throws(() => Session.get('k'), /no session in context/)
   })
 
   it('get/put inside middleware context', async () => {

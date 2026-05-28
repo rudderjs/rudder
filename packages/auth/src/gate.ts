@@ -11,6 +11,21 @@ function _getGateObservers(): GateObserverRegistry | null {
   return (globalThis as Record<string, unknown>)['__rudderjs_gate_observers__'] as GateObserverRegistry | undefined ?? null
 }
 
+/**
+ * Compose the `AuthorizationError` message thrown by `Gate.authorize()`/policy
+ * `authorize()` denials. The base form ("This action is unauthorized.
+ * [<ability>]") is what the client sees through the duck-typed `httpStatus`
+ * renderer (status 403). In dev (`NODE_ENV !== 'production'`) we append a
+ * targeted hint at the most common cause of an *unexpected* 403 — typo'd
+ * ability name or a missing `Gate.define()` / `Policy.<ability>()`. Strip the
+ * dev tail in prod so the JSON message stays terse.
+ */
+function describeUnauthorized(ability: string): string {
+  const base = `This action is unauthorized. [${ability}]`
+  if (process.env['NODE_ENV'] === 'production') return base
+  return `${base} (if you didn't expect a 403 here, check that the "${ability}" gate or policy method exists — Gate.define("${ability}", ...) or Policy.${ability}(user, ...).)`
+}
+
 // ─── Types ────────────────────────────────────────────────
 
 type AbilityCallback = (user: Authenticatable, ...args: unknown[]) => boolean | Promise<boolean>
@@ -125,7 +140,7 @@ export class Gate {
    */
   static async authorize(ability: string, ...args: unknown[]): Promise<void> {
     if (await this.denies(ability, ...args)) {
-      throw new AuthorizationError(`This action is unauthorized. [${ability}]`)
+      throw new AuthorizationError(describeUnauthorized(ability))
     }
   }
 
@@ -316,7 +331,7 @@ class GateForUser {
 
   async authorize(ability: string, ...args: unknown[]): Promise<void> {
     if (await this.denies(ability, ...args)) {
-      throw new AuthorizationError(`This action is unauthorized. [${ability}]`)
+      throw new AuthorizationError(describeUnauthorized(ability))
     }
   }
 }
