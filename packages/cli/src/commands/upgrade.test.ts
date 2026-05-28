@@ -3,9 +3,19 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { _internal } from './upgrade.js'
+import { _internal, collectPeerMismatches } from './upgrade.js'
 
-const { parseVersion, compareVersions, buildTarget, collectDeps, detectPackageManager, shapeOfRange } = _internal
+const {
+  parseVersion,
+  compareVersions,
+  buildTarget,
+  collectDeps,
+  detectPackageManager,
+  shapeOfRange,
+  acceptedMajors,
+  diffPeerRange,
+  readConsumerPeers,
+} = _internal
 
 // ── shapeOfRange ──────────────────────────────────────────────
 
@@ -201,5 +211,209 @@ describe('upgrade — detectPackageManager', () => {
     } finally {
       if (saved !== undefined) process.env['npm_config_user_agent'] = saved
     }
+  })
+})
+
+// ── acceptedMajors ────────────────────────────────────────────
+
+describe('upgrade — acceptedMajors', () => {
+  it('caret/tilde/exact: one major', () => {
+    assert.deepEqual([...(acceptedMajors('^8.0.0') as Set<number>)],  [8])
+    assert.deepEqual([...(acceptedMajors('~8.0.0') as Set<number>)],  [8])
+    assert.deepEqual([...(acceptedMajors('8.0.0')  as Set<number>)],  [8])
+  })
+
+  it('OR-chained alternatives', () => {
+    const set = acceptedMajors('^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0') as Set<number>
+    assert.deepEqual([...set].sort((a, b) => a - b), [4, 5, 6, 7, 8])
+  })
+
+  it('unbounded lower-bound comparators are treated as any', () => {
+    assert.equal(acceptedMajors('>=5.0.0'), 'any')
+    assert.equal(acceptedMajors('>5.0.0'),  'any')
+  })
+
+  it('wildcards / floating refs are treated as any', () => {
+    assert.equal(acceptedMajors('*'),       'any')
+    assert.equal(acceptedMajors('latest'),  'any')
+    assert.equal(acceptedMajors('next'),    'any')
+    assert.equal(acceptedMajors(''),        'any')
+  })
+
+  it('fails open on unparseable input', () => {
+    assert.equal(acceptedMajors('workspace:*'),    'any')
+    assert.equal(acceptedMajors('garbage'),        'any')
+  })
+})
+
+// ── diffPeerRange ─────────────────────────────────────────────
+
+describe('upgrade — diffPeerRange', () => {
+  it('returns null when the consumer satisfies the required range', () => {
+    assert.equal(diffPeerRange('^8.0.0', '^8.0.0'),  null)
+    assert.equal(diffPeerRange('^7.1.0', '^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0'), null)
+    assert.equal(diffPeerRange('*',      '^8.0.0'),  null)
+    assert.equal(diffPeerRange('^7.1.0', '>=4.0.0'), null)
+  })
+
+  it('returns a reason when the consumer is behind the framework requirement', () => {
+    const reason = diffPeerRange('^7.1.0', '^8.0.0')
+    assert.match(reason!, /consumer accepts major 7/)
+    assert.match(reason!, /framework needs major 8/)
+  })
+
+  it('returns a reason when the consumer is ahead of the framework requirement', () => {
+    const reason = diffPeerRange('^9.0.0', '^8.0.0')
+    assert.match(reason!, /consumer accepts major 9.*framework needs major 8/)
+  })
+})
+
+// ── readConsumerPeers ─────────────────────────────────────────
+
+describe('upgrade — readConsumerPeers', () => {
+  it('reads from every section with the documented precedence', () => {
+    const pkg = {
+      dependencies:     { vite: '^8.0.0' },
+      devDependencies:  { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0' },
+      peerDependencies: { vite: '^6.0.0', react: '^19.0.0' },
+    }
+    const m = readConsumerPeers(pkg)
+    // dependencies wins over devDependencies wins over peerDependencies
+    assert.deepEqual(m.get('vite'),                   { range: '^8.0.0', section: 'dependencies' })
+    assert.deepEqual(m.get('@vitejs/plugin-react'),   { range: '^5.0.0', section: 'devDependencies' })
+    assert.deepEqual(m.get('react'),                  { range: '^19.0.0', section: 'peerDependencies' })
+  })
+
+  it('returns an empty map when no sections are present', () => {
+    assert.equal(readConsumerPeers({}).size, 0)
+  })
+})
+
+// ── collectPeerMismatches (integration) ───────────────────────
+
+describe('upgrade — collectPeerMismatches', () => {
+  // Mock fetcher — returns manifests from a fixed lookup table. Lets us drive
+  // collectPeerMismatches end-to-end without hitting the npm registry.
+  function mkFetcher(table: Record<string, { peerDependencies?: Record<string, string> }>) {
+    return async (pkg: string, version: string) => {
+      const m = table[`${pkg}@${version}`]
+      if (!m) return null
+      return { version, ...m }
+    }
+  }
+
+  it('flags a strict peer mismatch (the rudderjs.com-shaped case)', async () => {
+    // Hypothetical: @rudderjs/vite@3.0.0 tightens vite from >=5 to strict ^8.
+    // Consumer still on vite ^7.1.0 — the bump silently breaks the peer.
+    const rows = [{
+      name:     '@rudderjs/vite',
+      section:  'devDependencies' as const,
+      current:  { major: 2, minor: 4, patch: 0 },
+      latest:   { major: 3, minor: 0, patch: 0 },
+      target:   { major: 3, minor: 0, patch: 0 },
+      newRange: '^3.0.0',
+    }]
+    const consumer = new Map([
+      ['vite', { range: '^7.1.0', section: 'devDependencies' as const }],
+    ])
+    const fetcher = mkFetcher({
+      '@rudderjs/vite@3.0.0': { peerDependencies: { vite: '^8.0.0' } },
+    })
+    const mismatches = await collectPeerMismatches(rows, consumer, fetcher)
+    assert.equal(mismatches.length, 1)
+    assert.equal(mismatches[0]!.peer,           'vite')
+    assert.equal(mismatches[0]!.causedBy,       '@rudderjs/vite@3.0.0')
+    assert.equal(mismatches[0]!.consumerRange,  '^7.1.0')
+    assert.equal(mismatches[0]!.requiredRange,  '^8.0.0')
+    assert.match(mismatches[0]!.reason, /consumer accepts major 7.*framework needs major 8/)
+  })
+
+  it('does NOT flag when the consumer satisfies the required range', async () => {
+    const rows = [{
+      name:     '@rudderjs/vite',
+      section:  'devDependencies' as const,
+      current:  { major: 2, minor: 4, patch: 0 },
+      latest:   { major: 2, minor: 7, patch: 3 },
+      target:   { major: 2, minor: 7, patch: 3 },
+      newRange: '^2.7.3',
+    }]
+    const consumer = new Map([
+      ['vite', { range: '^7.1.0', section: 'devDependencies' as const }],
+    ])
+    const fetcher = mkFetcher({
+      // The real @rudderjs/vite@2.7.3 shape: permissive `>=5.0.0` accepts vite 7.
+      '@rudderjs/vite@2.7.3': { peerDependencies: { vite: '>=5.0.0' } },
+    })
+    assert.deepEqual(await collectPeerMismatches(rows, consumer, fetcher), [])
+  })
+
+  it('does NOT flag when the consumer does not even declare the peer', async () => {
+    // Real-world case: an app that doesn't use vite at all (an api-only app)
+    // shouldn't get a peer warning when bumping @rudderjs/vite.
+    const rows = [{
+      name:     '@rudderjs/vite',
+      section:  'devDependencies' as const,
+      current:  { major: 2, minor: 4, patch: 0 },
+      latest:   { major: 3, minor: 0, patch: 0 },
+      target:   { major: 3, minor: 0, patch: 0 },
+      newRange: '^3.0.0',
+    }]
+    const consumer = new Map<string, { range: string; section: 'dependencies' | 'devDependencies' | 'peerDependencies' }>()
+    const fetcher = mkFetcher({
+      '@rudderjs/vite@3.0.0': { peerDependencies: { vite: '^8.0.0' } },
+    })
+    assert.deepEqual(await collectPeerMismatches(rows, consumer, fetcher), [])
+  })
+
+  it('ignores @rudderjs/* peer cross-refs (handled by the main bump plan)', async () => {
+    const rows = [{
+      name:     '@rudderjs/vite',
+      section:  'devDependencies' as const,
+      current:  { major: 2, minor: 4, patch: 0 },
+      latest:   { major: 2, minor: 7, patch: 3 },
+      target:   { major: 2, minor: 7, patch: 3 },
+      newRange: '^2.7.3',
+    }]
+    const consumer = new Map([
+      ['@rudderjs/core', { range: '^1.0.0', section: 'dependencies' as const }],
+    ])
+    const fetcher = mkFetcher({
+      '@rudderjs/vite@2.7.3': { peerDependencies: { '@rudderjs/core': '^2.0.0' } },
+    })
+    assert.deepEqual(await collectPeerMismatches(rows, consumer, fetcher), [])
+  })
+
+  it('dedups when the same peer is required by multiple bumps', async () => {
+    const rows = [
+      { name: '@rudderjs/a', section: 'dependencies' as const, current: { major: 1, minor: 0, patch: 0 }, latest: { major: 2, minor: 0, patch: 0 }, target: { major: 2, minor: 0, patch: 0 }, newRange: '^2.0.0' },
+      { name: '@rudderjs/b', section: 'dependencies' as const, current: { major: 1, minor: 0, patch: 0 }, latest: { major: 2, minor: 0, patch: 0 }, target: { major: 2, minor: 0, patch: 0 }, newRange: '^2.0.0' },
+    ]
+    const consumer = new Map([
+      ['vite', { range: '^7.0.0', section: 'devDependencies' as const }],
+    ])
+    const fetcher = mkFetcher({
+      '@rudderjs/a@2.0.0': { peerDependencies: { vite: '^8.0.0' } },
+      '@rudderjs/b@2.0.0': { peerDependencies: { vite: '^8.0.0' } },
+    })
+    const mismatches = await collectPeerMismatches(rows, consumer, fetcher)
+    // One mismatch — first match wins; attributed to the first bump that triggered it.
+    assert.equal(mismatches.length, 1)
+    assert.equal(mismatches[0]!.causedBy, '@rudderjs/a@2.0.0')
+  })
+
+  it('tolerates a failed manifest fetch (returns null) — skip silently', async () => {
+    const rows = [{
+      name:     '@rudderjs/vite',
+      section:  'devDependencies' as const,
+      current:  { major: 2, minor: 4, patch: 0 },
+      latest:   { major: 3, minor: 0, patch: 0 },
+      target:   { major: 3, minor: 0, patch: 0 },
+      newRange: '^3.0.0',
+    }]
+    const consumer = new Map([
+      ['vite', { range: '^7.0.0', section: 'devDependencies' as const }],
+    ])
+    const fetcher = async () => null   // always-fail fetcher
+    assert.deepEqual(await collectPeerMismatches(rows, consumer, fetcher), [])
   })
 })

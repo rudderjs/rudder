@@ -72,9 +72,73 @@ function fmt(v: ParsedVersion): string {
   return `${v.major}.${v.minor}.${v.patch}`
 }
 
+// ── Peer-dep range satisfaction (just enough) ────────────────
+
+/**
+ * Extract the set of major versions a peer-dep range accepts, plus an
+ * `'any'` flag for unbounded ranges (`*`, `>=4.2.0`, `||`-chained
+ * everything). The CLI uses this to detect when a framework package has
+ * bumped a peer-dep major past what the consumer's `package.json` carries
+ * — the rudderjs.com case from 2026-05-29 was `@rudderjs/vite@2.7` requiring
+ * `vite ^8` while the consumer was on `^7.1.0`.
+ *
+ * Handles the shapes that show up in real `peerDependencies` fields:
+ * - `^8.0.0`                          → {8}
+ * - `~8.0.0`                          → {8}
+ * - `8.0.0`                           → {8}  (exact pin, but we widen to
+ *                                              the major so an exact-pinned
+ *                                              consumer doesn't false-fire)
+ * - `^4.2.0 \|\| ^5.0.0 \|\| ^6.0.0 \|\| ^7.0.0 \|\| ^8.0.0`  → {4,5,6,7,8}
+ * - `>=5.0.0`                         → 'any' (no upper bound)
+ * - `*`                               → 'any'
+ *
+ * Unparseable alternatives are skipped; if every alternative is
+ * unparseable, returns `'any'` (defensive — never block on a range we
+ * can't read).
+ */
+function acceptedMajors(range: string): Set<number> | 'any' {
+  const t = range.trim()
+  if (t === '' || t === '*' || t === 'latest' || t === 'next') return 'any'
+  const accepted = new Set<number>()
+  let sawAny = false
+  for (const alt of t.split('||').map((s) => s.trim())) {
+    // Unbounded lower-bound comparators (`>=N`, `>N`, `>=N.M`, etc.) accept
+    // anything past the floor — treat as 'any' for our purposes.
+    if (/^(>=?|>)\s*\d+/.test(alt)) { sawAny = true; continue }
+    const m = /^[\^~]?\s*(\d+)\./.exec(alt)
+    if (m) accepted.add(Number(m[1]))
+  }
+  if (sawAny && accepted.size === 0) return 'any'
+  if (accepted.size === 0) return 'any'   // unparseable — fail open
+  return accepted
+}
+
+/**
+ * Decide whether the consumer's installed range for a peer dep satisfies
+ * the framework's required range. Returns `null` when satisfied; a
+ * short reason string when not (used as the warning line).
+ *
+ * Strategy: both sides are reduced to "accepted majors" (or `'any'`) and
+ * intersected. Any overlap = satisfied. No overlap = mismatch.
+ */
+function diffPeerRange(consumerRange: string, requiredRange: string): string | null {
+  const consumer = acceptedMajors(consumerRange)
+  const required = acceptedMajors(requiredRange)
+  if (consumer === 'any' || required === 'any') return null
+  for (const m of consumer) if (required.has(m)) return null
+  // No overlap.
+  const consumerList = [...consumer].sort((a, b) => a - b).join(', ')
+  const requiredList = [...required].sort((a, b) => a - b).join(', ')
+  return `consumer accepts major ${consumerList}, framework needs major ${requiredList}`
+}
+
 // ── NPM registry ──────────────────────────────────────────────
 
 interface NpmDistTag { version: string }
+interface NpmManifest {
+  version: string
+  peerDependencies?: Record<string, string>
+}
 
 /**
  * Fetch the `latest` dist-tag for a single package. Returns `null` when the
@@ -97,6 +161,110 @@ async function fetchLatest(pkg: string, registry: string): Promise<string | null
   } catch {
     return null
   }
+}
+
+/**
+ * Fetch the full package manifest for `<pkg>@<version>` so we can read
+ * `peerDependencies`. Used after the upgrade plan is built — only the
+ * packages we're actually bumping get fetched, not every dep we checked.
+ *
+ * Returns `null` on any failure; caller silently drops peer-dep checking
+ * for that package rather than aborting the whole upgrade.
+ */
+async function fetchManifest(pkg: string, version: string, registry: string): Promise<NpmManifest | null> {
+  const url = `${registry.replace(/\/+$/, '')}/${encodeURIComponent(pkg)}/${version}`
+  try {
+    const res = await fetch(url, { headers: { accept: 'application/json' } })
+    if (!res.ok) return null
+    return await res.json() as NpmManifest
+  } catch {
+    return null
+  }
+}
+
+// ── Peer-dep mismatch collection ──────────────────────────────
+
+interface ConsumerPeer {
+  range:   string
+  section: 'dependencies' | 'devDependencies' | 'peerDependencies'
+}
+
+/**
+ * Read every consumer-side dep into a flat map for peer-dep lookups. Used to
+ * answer: "does the consumer's `vite` range satisfy `@rudderjs/vite@2.7`'s
+ * `peerDependencies.vite` requirement?". A `peer` appearing in multiple
+ * sections (rare but possible) resolves with `dependencies` ≻
+ * `devDependencies` ≻ `peerDependencies` precedence — what npm picks at
+ * install time.
+ */
+export function readConsumerPeers(pkg: Record<string, unknown>): Map<string, ConsumerPeer> {
+  const out = new Map<string, ConsumerPeer>()
+  for (const section of ['peerDependencies', 'devDependencies', 'dependencies'] as const) {
+    const map = pkg[section]
+    if (!map || typeof map !== 'object') continue
+    for (const [name, range] of Object.entries(map as Record<string, string>)) {
+      if (typeof range === 'string') out.set(name, { range, section })
+    }
+  }
+  return out
+}
+
+interface PeerMismatch {
+  peer:            string                                // e.g. "vite"
+  causedBy:        string                                // e.g. "@rudderjs/vite@2.7.3"
+  consumerRange:   string                                // what the consumer's package.json says
+  consumerSection: ConsumerPeer['section'] | null
+  requiredRange:   string                                // what the framework declares as peer
+  reason:          string                                // from diffPeerRange
+}
+
+type FetchManifestFn = (pkg: string, version: string) => Promise<NpmManifest | null>
+
+/**
+ * Walk every bump in the plan, fetch its manifest at the target version, and
+ * collect any peerDependencies that disagree with the consumer's declared
+ * ranges. Same peer triggered by multiple framework packages dedups on the
+ * first one found.
+ *
+ * Network: one extra registry call per bumped package, in parallel — but
+ * the `fetcher` argument is pluggable so tests can drive it with synthetic
+ * manifests.
+ */
+export async function collectPeerMismatches(
+  rows:     PlanRow[],
+  consumer: Map<string, ConsumerPeer>,
+  fetcher:  FetchManifestFn,
+): Promise<PeerMismatch[]> {
+  const manifests = await Promise.all(
+    rows.map(async (r) => ({ row: r, manifest: await fetcher(r.name, fmt(r.target)) })),
+  )
+
+  const out: PeerMismatch[] = []
+  const seenPeer = new Set<string>()
+  for (const { row, manifest } of manifests) {
+    const peers = manifest?.peerDependencies
+    if (!peers) continue
+    for (const [peer, requiredRange] of Object.entries(peers)) {
+      // Skip @rudderjs/* peer cross-refs — those are handled by the main
+      // bump plan, not the peer-mismatch warning.
+      if (peer.startsWith('@rudderjs/')) continue
+      if (seenPeer.has(peer)) continue
+      const c = consumer.get(peer)
+      if (!c) continue              // consumer doesn't declare this peer — install will surface it
+      const reason = diffPeerRange(c.range, requiredRange)
+      if (!reason) continue          // satisfied — nothing to warn about
+      seenPeer.add(peer)
+      out.push({
+        peer,
+        causedBy:        `${row.name}@${fmt(row.target)}`,
+        consumerRange:   c.range,
+        consumerSection: c.section,
+        requiredRange,
+        reason,
+      })
+    }
+  }
+  return out
 }
 
 // ── Upgrade plan ──────────────────────────────────────────────
@@ -311,8 +479,40 @@ export function upgradeCommand(program: Command): void {
         console.log(dim('  Major bumps may contain breaking changes — review CHANGELOGs before applying.'))
       }
 
+      // ── Peer-dep mismatch check ─────────────────────────────
+      //
+      // Closes the gap that bit rudderjs.com on 2026-05-29: `pnpm update --latest
+      // "@rudderjs/*"` happily bumped the framework packages, but didn't notice
+      // that `@rudderjs/vite@2.7.x` requires `vite ^8` while the consumer's
+      // package.json still declared `"vite": "^7.1.0"`. Apps stayed on the old
+      // peer, got a (silent or warned-but-tolerated) peer mismatch, and missed
+      // the framework upgrade.
+      //
+      // Strategy: for every package we're bumping, fetch its manifest at the
+      // TARGET version and look up its peerDependencies. Each peer is
+      // intersected against the consumer's declared range in package.json. No
+      // overlap = mismatch. Mismatches are shown loudly and (in --check mode)
+      // promote the exit code.
+      const consumerPeers = readConsumerPeers(pkg)
+      const peerMismatches = await collectPeerMismatches(
+        rows,
+        consumerPeers,
+        (n, v) => fetchManifest(n, v, registry),
+      )
+      if (peerMismatches.length) {
+        console.log(`\n  ${yel(bold('⚠ Peer-dependency mismatches:'))}`)
+        for (const m of peerMismatches) {
+          console.log(`    ${bold(m.peer)}  ${dim('— required by')} ${m.causedBy}`)
+          console.log(`      ${dim('your package.json:')} ${m.consumerSection ? `${m.consumerSection}.` : ''}${m.peer} = ${red(`"${m.consumerRange}"`)}`)
+          console.log(`      ${dim('framework needs:    ')} ${green(`"${m.requiredRange}"`)}`)
+          console.log(`      ${dim('reason:             ')} ${m.reason}`)
+        }
+        console.log(dim('\n  Update these peer ranges in your package.json (then re-run upgrade).'))
+      }
+
       if (opts.check) {
-        console.log(dim(`\n  --check mode: ${rows.length} update(s) available (exit 1).`))
+        const peerSuffix = peerMismatches.length ? `, ${peerMismatches.length} peer mismatch(es)` : ''
+        console.log(dim(`\n  --check mode: ${rows.length} update(s) available${peerSuffix} (exit 1).`))
         process.exit(1)
       }
 
@@ -345,4 +545,7 @@ export const _internal = {
   collectDeps,
   detectPackageManager,
   shapeOfRange,
+  acceptedMajors,
+  diffPeerRange,
+  readConsumerPeers,
 }

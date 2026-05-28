@@ -261,6 +261,24 @@ pnpm rudder upgrade --check
 
 Major bumps are highlighted in red — review the relevant `CHANGELOG.md` before applying. The framework follows semver: a `feat:` release goes minor, a `feat!:` release goes major.
 
+### Peer-dependency mismatches
+
+`rudder upgrade` also fetches each upgraded `@rudderjs/*` package's `peerDependencies` and diffs them against the peers declared in your `package.json`. If a framework package has bumped a peer major past what your app carries, you'll see a warning like:
+
+```
+  ⚠ Peer-dependency mismatches:
+    vite  — required by @rudderjs/vite@3.0.0
+      your package.json: devDependencies.vite = "^7.1.0"
+      framework needs:    "^8.0.0"
+      reason:             consumer accepts major 7, framework needs major 8
+
+  Update these peer ranges in your package.json (then re-run upgrade).
+```
+
+The warning is informational — `rudder upgrade` still completes — but `--check` treats peer mismatches as part of the exit-1 condition, so CI gates catch them.
+
+This closes the gap where `pnpm update --latest "@rudderjs/*"` happily bumps the framework but leaves a stale peer (the `vite 7 → 8` situation behind the scenes on `rudderjs.com`).
+
 ## Next steps
 
 - [Configuration](/guide/configuration) — environment variables, runtime config, framework wiring
