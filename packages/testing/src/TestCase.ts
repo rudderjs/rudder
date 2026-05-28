@@ -127,6 +127,15 @@ export class TestCase {
   }
 
   private async _bootstrap(): Promise<void> {
+    // Flip the global test-mode flag BEFORE booting providers — server-hono
+    // checks it on every response to decide whether to emit the
+    // `x-rudderjs-test-*` side-channel headers (session payload, rendered
+    // view id/props) that the new `assertSessionHas` / `assertViewIs` /
+    // `assertViewHas` / `assertValid` / `assertInvalid` assertions consume.
+    // The flag is cleared on teardown so test order doesn't leak the headers
+    // into other code running in the same process.
+    ;(globalThis as Record<string, unknown>)['__rudderjs_test_mode__'] = true
+
     // Create application in testing mode
     this.app = Application.create({
       env: 'testing',
@@ -168,6 +177,7 @@ export class TestCase {
     this._pendingHeaders = {}
     this._pendingCookies = {}
     this.travelBack()
+    delete (globalThis as Record<string, unknown>)['__rudderjs_test_mode__']
   }
 
   // ── Auth ────────────────────────────────────────────────
@@ -437,7 +447,30 @@ export class TestCase {
       setCookies = [responseHeaders['set-cookie']]
     }
 
-    return new TestResponse(response.status, responseHeaders, parsed, text, setCookies)
+    // Decode the test-mode side channel emitted by server-hono. Headers are
+    // present only when the test-mode flag was on for this response; absence
+    // means the route returned nothing session/view-shaped (or the adapter
+    // doesn't support the side channel — TestResponse degrades gracefully).
+    // `exactOptionalPropertyTypes` requires omitting absent keys entirely
+    // rather than setting them to `undefined`.
+    const extras: Record<string, unknown> = {}
+    const session = decodeTestHeader<{ data: Record<string, unknown>; flash: Record<string, unknown> }>(
+      responseHeaders['x-rudderjs-test-session'],
+    )
+    if (session) extras['session'] = session
+    const view = decodeTestHeader<{ id: string; props: Record<string, unknown> }>(
+      responseHeaders['x-rudderjs-test-view'],
+    )
+    if (view) extras['view'] = view
+
+    return new TestResponse(
+      response.status,
+      responseHeaders,
+      parsed,
+      text,
+      setCookies,
+      extras,
+    )
   }
 
   // ─── Database Assertions ───────────────────────────────
@@ -565,5 +598,19 @@ export class TestCase {
         { cause: err },
       )
     }
+  }
+}
+
+/**
+ * Decode a `x-rudderjs-test-*` header value (base64-encoded JSON) into a
+ * typed payload. Returns `undefined` when the header is absent OR the value
+ * can't be decoded — defensive on purpose, the side channel is best-effort.
+ */
+function decodeTestHeader<T>(value: string | undefined): T | undefined {
+  if (!value) return undefined
+  try {
+    return JSON.parse(Buffer.from(value, 'base64').toString('utf8')) as T
+  } catch {
+    return undefined
   }
 }

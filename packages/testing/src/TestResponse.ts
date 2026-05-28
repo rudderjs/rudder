@@ -9,6 +9,37 @@ import assert from 'node:assert/strict'
  * response.assertJson({ name: 'John' })
  * response.assertJsonPath('data.0.email', 'john@test.com')
  */
+/**
+ * Decoded payload from the server-hono test-mode side channel. Surfaced to
+ * `assertSessionHas` / `assertSessionMissing` / `assertSessionHasErrors`.
+ *
+ * `data` mirrors `SessionInstance.all()`; `flash` mirrors `allFlash()` —
+ * Laravel's `withErrors(...)` redirects flash a `Record<string, string[]>`
+ * under the `errors` key, which both `assertSessionHasErrors` and the
+ * web-side `assertInvalid` read from.
+ */
+export interface TestResponseSession {
+  data:  Record<string, unknown>
+  flash: Record<string, unknown>
+}
+
+/**
+ * Decoded payload from the server-hono test-mode side channel for routes
+ * that returned a `view('...', props)` from `@rudderjs/view`. Surfaced to
+ * `assertViewIs` / `assertViewHas`.
+ */
+export interface TestResponseView {
+  id:    string
+  props: Record<string, unknown>
+}
+
+export interface TestResponseExtras {
+  /** Server-side session payload, decoded from the test-mode side channel. */
+  session?: TestResponseSession
+  /** Rendered view info, decoded from the test-mode side channel. */
+  view?:    TestResponseView
+}
+
 export class TestResponse {
   readonly status: number
   readonly headers: Record<string, string>
@@ -20,6 +51,8 @@ export class TestResponse {
    */
   readonly setCookies: string[]
   private _text: string
+  private _session: TestResponseSession | undefined
+  private _view:    TestResponseView | undefined
 
   constructor(
     status: number,
@@ -27,12 +60,15 @@ export class TestResponse {
     body: unknown,
     text: string,
     setCookies: string[] = [],
+    extras: TestResponseExtras = {},
   ) {
     this.status     = status
     this.headers    = headers
     this.body       = body
     this._text      = text
     this.setCookies = setCookies
+    this._session   = extras.session
+    this._view      = extras.view
   }
 
   /** Raw response text. */
@@ -237,6 +273,178 @@ export class TestResponse {
     return this
   }
 
+  // ─── Session assertions ────────────────────────────────
+
+  /**
+   * Assert the response's session has `key` set in the data bag. When `value`
+   * is provided, compares deep-equal. Reads from the `x-rudderjs-test-session`
+   * side channel emitted by server-hono in test mode — requires a session
+   * provider on the route (auto-installed on the `web` group).
+   */
+  assertSessionHas(key: string, value?: unknown): this {
+    const session = this._requireSession('assertSessionHas')
+    assert.ok(
+      key in session.data,
+      `Expected session to have key "${key}", but it was missing. ` +
+      `Keys: [${Object.keys(session.data).join(', ')}]`,
+    )
+    if (value !== undefined) {
+      assert.deepStrictEqual(
+        session.data[key],
+        value,
+        `Expected session["${key}"] to deeply equal ${JSON.stringify(value)}, ` +
+        `got ${JSON.stringify(session.data[key])}`,
+      )
+    }
+    return this
+  }
+
+  /** Assert the response's session does NOT have `key` set in the data bag. */
+  assertSessionMissing(key: string): this {
+    const session = this._requireSession('assertSessionMissing')
+    assert.ok(
+      !(key in session.data),
+      `Expected session NOT to have key "${key}", but it was present ` +
+      `(value: ${JSON.stringify(session.data[key])})`,
+    )
+    return this
+  }
+
+  /**
+   * Assert the response flashed validation errors for each of the given keys.
+   * Matches Laravel's session-based error bag — `errors` lives in the flash
+   * payload as a `Record<string, string[]>` (the shape `withErrors($validator)`
+   * produces on redirect).
+   */
+  assertSessionHasErrors(keys: string[]): this {
+    const session = this._requireSession('assertSessionHasErrors')
+    const errors = (session.flash['errors'] ?? {}) as Record<string, unknown>
+    for (const key of keys) {
+      assert.ok(
+        key in errors,
+        `Expected session flash["errors"] to contain "${key}", ` +
+        `got [${Object.keys(errors).join(', ')}]`,
+      )
+    }
+    return this
+  }
+
+  // ─── View assertions ───────────────────────────────────
+
+  /**
+   * Assert the route returned `view(id, ...)` from `@rudderjs/view` with the
+   * given id. Reads from the `x-rudderjs-test-view` side channel emitted by
+   * server-hono in test mode — fails when the response wasn't a `ViewResponse`.
+   */
+  assertViewIs(id: string): this {
+    const view = this._requireView('assertViewIs')
+    assert.equal(view.id, id, `Expected view "${id}", got "${view.id}"`)
+    return this
+  }
+
+  /**
+   * Assert the rendered view received `key` in its props. When `value` is
+   * provided, compares deep-equal.
+   */
+  assertViewHas(key: string, value?: unknown): this {
+    const view = this._requireView('assertViewHas')
+    assert.ok(
+      key in view.props,
+      `Expected view "${view.id}" to have prop "${key}", ` +
+      `got props: [${Object.keys(view.props).join(', ')}]`,
+    )
+    if (value !== undefined) {
+      assert.deepStrictEqual(
+        view.props[key],
+        value,
+        `Expected view "${view.id}" prop "${key}" to deeply equal ` +
+        `${JSON.stringify(value)}, got ${JSON.stringify(view.props[key])}`,
+      )
+    }
+    return this
+  }
+
+  // ─── Validation assertions ─────────────────────────────
+
+  /**
+   * Assert the response carries no validation errors — neither in the JSON
+   * body (`{ errors: { ... } }`, the API shape) nor in the session flash
+   * `errors` bag (the web/redirect shape). Status code is not checked here;
+   * pair with `assertOk()` / `assertRedirect()` as appropriate.
+   */
+  assertValid(): this {
+    const jsonErrors = this._jsonValidationErrors()
+    if (jsonErrors) {
+      assert.fail(
+        `Expected no validation errors, got JSON errors for: ` +
+        `[${Object.keys(jsonErrors).join(', ')}]`,
+      )
+    }
+    if (this._session) {
+      const flashErrors = (this._session.flash['errors'] ?? {}) as Record<string, unknown>
+      const keys = Object.keys(flashErrors)
+      if (keys.length > 0) {
+        assert.fail(`Expected no validation errors, got session errors for: [${keys.join(', ')}]`)
+      }
+    }
+    return this
+  }
+
+  /**
+   * Assert the response carries validation errors. With `keys`, every listed
+   * key must be present. Looks at the JSON body's `errors` map and the
+   * session flash `errors` bag — whichever applies. Call sites that *only*
+   * want the JSON path can use `assertJsonValidationErrors` instead.
+   */
+  assertInvalid(keys?: string[]): this {
+    const jsonErrors = this._jsonValidationErrors()
+    const flashErrors = this._session
+      ? (this._session.flash['errors'] ?? {}) as Record<string, unknown>
+      : {}
+
+    const hasJson  = jsonErrors !== undefined && Object.keys(jsonErrors).length > 0
+    const hasFlash = Object.keys(flashErrors).length > 0
+    assert.ok(
+      hasJson || hasFlash,
+      `Expected validation errors on the response, but found none ` +
+      `(no JSON body.errors and no session flash.errors).`,
+    )
+    if (keys?.length) {
+      const merged = { ...flashErrors, ...(jsonErrors ?? {}) }
+      for (const key of keys) {
+        assert.ok(
+          key in merged,
+          `Expected validation error for "${key}", ` +
+          `got errors for: [${Object.keys(merged).join(', ')}]`,
+        )
+      }
+    }
+    return this
+  }
+
+  /**
+   * Assert the JSON body contains validation errors for each of the given
+   * keys. Matches Laravel's `assertJsonValidationErrors` — strictly the JSON
+   * path; session flash isn't consulted. Pair with `assertUnprocessable()`
+   * when asserting the typical 422 response from a form-request rejection.
+   */
+  assertJsonValidationErrors(keys: string[]): this {
+    const errors = this._jsonValidationErrors()
+    assert.ok(
+      errors !== undefined,
+      `Expected JSON body to have an "errors" object, ` +
+      `got ${JSON.stringify(this.body)}`,
+    )
+    for (const key of keys) {
+      assert.ok(
+        key in errors,
+        `Expected JSON validation error for "${key}", ` +
+        `got errors for: [${Object.keys(errors).join(', ')}]`,
+      )
+    }
+    return this
+  }
+
   // ─── Redirect assertions ───────────────────────────────
 
   assertRedirect(location?: string): this {
@@ -249,6 +457,48 @@ export class TestResponse {
       assert.ok(actual?.includes(location), `Expected redirect to "${location}", got "${actual}"`)
     }
     return this
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────
+
+  private _requireSession(label: string): TestResponseSession {
+    if (!this._session) {
+      assert.fail(
+        `${label} called but the response carries no session payload. ` +
+        `The session test-mode side channel only fires when a session ` +
+        `provider is registered (auto-installed on the "web" group) and ` +
+        `the route ran through that group.`,
+      )
+    }
+    return this._session
+  }
+
+  private _requireView(label: string): TestResponseView {
+    if (!this._view) {
+      assert.fail(
+        `${label} called but the response was not produced by view(...). ` +
+        `Either the route returned JSON / a raw Response, or the route is ` +
+        `outside the controller-view path.`,
+      )
+    }
+    return this._view
+  }
+
+  /**
+   * Return the JSON body's `errors` map when present (Laravel's API-style
+   * validation error envelope: `{ message?, errors: { field: [...] } }`).
+   * Returns `undefined` when the body isn't an object or has no `errors` key
+   * — both states mean "no JSON validation errors here, check elsewhere".
+   */
+  private _jsonValidationErrors(): Record<string, unknown> | undefined {
+    if (this.body === null || typeof this.body !== 'object' || Array.isArray(this.body)) {
+      return undefined
+    }
+    const errors = (this.body as Record<string, unknown>)['errors']
+    if (errors === null || errors === undefined || typeof errors !== 'object' || Array.isArray(errors)) {
+      return undefined
+    }
+    return errors as Record<string, unknown>
   }
 }
 

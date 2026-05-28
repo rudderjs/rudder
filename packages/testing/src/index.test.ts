@@ -630,6 +630,82 @@ describe('TestCase — time travel', () => {
   })
 })
 
+// ─── TestCase: side-channel decoding ──────────────────────
+
+describe('TestCase — side-channel decoding', () => {
+  // Build a TestCase pre-wired with a stub fetchHandler that returns a fake
+  // server-hono response carrying the x-rudderjs-test-* side channel.
+  function caseWithSideChannel(payload: {
+    session?: { data: Record<string, unknown>; flash: Record<string, unknown> }
+    view?:    { id: string; props: Record<string, unknown> }
+  }): TestCase {
+    const tc = Object.create(TestCase.prototype) as TestCase
+    const tcAny = tc as unknown as Record<string, unknown>
+    tcAny['_pendingHeaders'] = {}
+    tcAny['_pendingCookies'] = {}
+    const headers = new Headers({ 'content-type': 'application/json' })
+    if (payload.session) {
+      headers.set(
+        'x-rudderjs-test-session',
+        Buffer.from(JSON.stringify(payload.session)).toString('base64'),
+      )
+    }
+    if (payload.view) {
+      headers.set(
+        'x-rudderjs-test-view',
+        Buffer.from(JSON.stringify(payload.view)).toString('base64'),
+      )
+    }
+    tcAny['_handler'] = async () => new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers,
+    })
+    return tc
+  }
+
+  it('decodes the session payload into TestResponse', async () => {
+    const tc = caseWithSideChannel({
+      session: { data: { user_id: 7 }, flash: { errors: { email: ['required'] } } },
+    })
+    const res = await tc.get('/anywhere')
+    res.assertSessionHas('user_id', 7)
+    res.assertSessionHasErrors(['email'])
+  })
+
+  it('decodes the view payload into TestResponse', async () => {
+    const tc = caseWithSideChannel({
+      view: { id: 'dashboard', props: { count: 3 } },
+    })
+    const res = await tc.get('/anywhere')
+    res.assertViewIs('dashboard')
+    res.assertViewHas('count', 3)
+  })
+
+  it('tolerates a missing side channel — assertions surface a clear error', async () => {
+    const tc = caseWithSideChannel({})  // no headers attached
+    const res = await tc.get('/anywhere')
+    assert.throws(() => res.assertSessionHas('foo'), /response carries no session payload/)
+    assert.throws(() => res.assertViewIs('home'), /response was not produced by view/)
+  })
+
+  it('ignores a malformed side-channel header without crashing', async () => {
+    const tc = Object.create(TestCase.prototype) as TestCase
+    const tcAny = tc as unknown as Record<string, unknown>
+    tcAny['_pendingHeaders'] = {}
+    tcAny['_pendingCookies'] = {}
+    tcAny['_handler'] = async () => new Response('{}', {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-rudderjs-test-session': '!!!not-base64-json!!!',
+      },
+    })
+    const res = await tc.get('/anywhere')
+    // Decode silently dropped — assertSessionHas surfaces the no-session error
+    assert.throws(() => res.assertSessionHas('foo'), /response carries no session payload/)
+  })
+})
+
 // ─── TestCase: Request setup chain ────────────────────────
 
 describe('TestCase — request setup chain', () => {
@@ -740,5 +816,188 @@ describe('TestResponse — accessors', () => {
     const body = { a: 1 }
     const res = new TestResponse(200, {}, body, '{"a":1}')
     assert.deepStrictEqual(res.json(), { a: 1 })
+  })
+})
+
+// ─── TestResponse: Session assertions ─────────────────────
+
+describe('TestResponse — session assertions', () => {
+  const sessionExtras = {
+    session: {
+      data:  { user_id: 42, theme: 'dark' },
+      flash: { success: 'Saved!', errors: { email: ['required'] } },
+    },
+  }
+  const makeRes = () => new TestResponse(200, {}, {}, '', [], sessionExtras)
+
+  it('assertSessionHas passes for present key', () => {
+    makeRes().assertSessionHas('user_id')
+  })
+
+  it('assertSessionHas with value compares deep-equal', () => {
+    makeRes().assertSessionHas('user_id', 42)
+  })
+
+  it('assertSessionHas throws on missing key', () => {
+    assert.throws(() => makeRes().assertSessionHas('missing'), /Expected session to have key "missing"/)
+  })
+
+  it('assertSessionHas throws on value mismatch', () => {
+    assert.throws(() => makeRes().assertSessionHas('user_id', 99), /to deeply equal 99/)
+  })
+
+  it('assertSessionMissing passes for absent key', () => {
+    makeRes().assertSessionMissing('missing')
+  })
+
+  it('assertSessionMissing throws when key is present', () => {
+    assert.throws(() => makeRes().assertSessionMissing('user_id'), /but it was present/)
+  })
+
+  it('assertSessionHasErrors passes when all keys are in the errors bag', () => {
+    makeRes().assertSessionHasErrors(['email'])
+  })
+
+  it('assertSessionHasErrors throws when a key is missing', () => {
+    assert.throws(
+      () => makeRes().assertSessionHasErrors(['email', 'name']),
+      /to contain "name"/,
+    )
+  })
+
+  it('session assertions fail clearly when no session payload is present', () => {
+    const res = new TestResponse(200, {}, {}, '')
+    assert.throws(
+      () => res.assertSessionHas('foo'),
+      /response carries no session payload/,
+    )
+  })
+})
+
+// ─── TestResponse: View assertions ────────────────────────
+
+describe('TestResponse — view assertions', () => {
+  const viewExtras = {
+    view: {
+      id:    'dashboard',
+      props: { user: { id: 1, name: 'Alice' }, count: 3 },
+    },
+  }
+  const makeRes = () => new TestResponse(200, {}, {}, '', [], viewExtras)
+
+  it('assertViewIs matches the rendered view id', () => {
+    makeRes().assertViewIs('dashboard')
+  })
+
+  it('assertViewIs throws on mismatch', () => {
+    assert.throws(() => makeRes().assertViewIs('home'), /Expected view "home", got "dashboard"/)
+  })
+
+  it('assertViewHas passes for present prop', () => {
+    makeRes().assertViewHas('count')
+  })
+
+  it('assertViewHas with value compares deep-equal', () => {
+    makeRes().assertViewHas('user', { id: 1, name: 'Alice' })
+  })
+
+  it('assertViewHas throws on missing prop', () => {
+    assert.throws(() => makeRes().assertViewHas('missing'), /to have prop "missing"/)
+  })
+
+  it('assertViewHas throws on value mismatch', () => {
+    assert.throws(() => makeRes().assertViewHas('count', 5), /to deeply equal 5/)
+  })
+
+  it('view assertions fail clearly when the response was not a view', () => {
+    const res = new TestResponse(200, {}, { ok: true }, '{"ok":true}')
+    assert.throws(() => res.assertViewIs('home'), /response was not produced by view/)
+  })
+})
+
+// ─── TestResponse: Validation assertions ──────────────────
+
+describe('TestResponse — validation assertions', () => {
+  it('assertValid passes when no JSON errors and no session errors', () => {
+    new TestResponse(200, {}, { data: 'ok' }, '').assertValid()
+    new TestResponse(200, {}, { data: 'ok' }, '', [], {
+      session: { data: {}, flash: {} },
+    }).assertValid()
+  })
+
+  it('assertValid throws when JSON body has errors', () => {
+    const body = { errors: { email: ['required'] } }
+    assert.throws(
+      () => new TestResponse(422, {}, body, '').assertValid(),
+      /got JSON errors for: \[email\]/,
+    )
+  })
+
+  it('assertValid throws when session flash has errors', () => {
+    const res = new TestResponse(302, {}, null, '', [], {
+      session: { data: {}, flash: { errors: { name: ['required'] } } },
+    })
+    assert.throws(() => res.assertValid(), /got session errors for: \[name\]/)
+  })
+
+  it('assertInvalid passes when JSON body has errors', () => {
+    const body = { errors: { email: ['required'] } }
+    new TestResponse(422, {}, body, '').assertInvalid()
+  })
+
+  it('assertInvalid with keys passes when every key is present (JSON)', () => {
+    const body = { errors: { email: ['required'], name: ['min'] } }
+    new TestResponse(422, {}, body, '').assertInvalid(['email', 'name'])
+  })
+
+  it('assertInvalid with keys also reads from session flash errors', () => {
+    const res = new TestResponse(302, {}, null, '', [], {
+      session: { data: {}, flash: { errors: { name: ['required'] } } },
+    })
+    res.assertInvalid(['name'])
+  })
+
+  it('assertInvalid throws when no errors are present anywhere', () => {
+    assert.throws(
+      () => new TestResponse(200, {}, { ok: true }, '').assertInvalid(),
+      /Expected validation errors/,
+    )
+  })
+
+  it('assertInvalid throws when a requested key is missing', () => {
+    const body = { errors: { email: ['required'] } }
+    assert.throws(
+      () => new TestResponse(422, {}, body, '').assertInvalid(['name']),
+      /Expected validation error for "name"/,
+    )
+  })
+
+  it('assertJsonValidationErrors checks the JSON body for the listed keys', () => {
+    const body = { errors: { email: ['required'], name: ['min'] } }
+    new TestResponse(422, {}, body, '').assertJsonValidationErrors(['email', 'name'])
+  })
+
+  it('assertJsonValidationErrors throws when the body has no errors object', () => {
+    assert.throws(
+      () => new TestResponse(200, {}, { ok: true }, '').assertJsonValidationErrors(['email']),
+      /to have an "errors" object/,
+    )
+  })
+
+  it('assertJsonValidationErrors throws when a listed key is missing', () => {
+    const body = { errors: { email: ['required'] } }
+    assert.throws(
+      () => new TestResponse(422, {}, body, '').assertJsonValidationErrors(['name']),
+      /Expected JSON validation error for "name"/,
+    )
+  })
+
+  it('all validation assertions return this for chaining', () => {
+    const body = { errors: { email: ['required'] } }
+    const res = new TestResponse(422, {}, body, '')
+    const result = res
+      .assertInvalid(['email'])
+      .assertJsonValidationErrors(['email'])
+    assert.strictEqual(result, res)
   })
 })
