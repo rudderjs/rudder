@@ -143,7 +143,9 @@ export class ThrottleMiddleware extends Middleware {
     }
 
     if (rec.count >= this.max) {
-      res.status(429).json({ message: 'Too many requests. Please slow down.' })
+      const retryAfter = Math.max(1, Math.ceil((rec.reset - now) / 1000))
+      res.header('Retry-After', String(retryAfter))
+      res.status(429).json({ message: `Too many requests. Retry after ${retryAfter}s.` })
       return Promise.resolve()
     }
 
@@ -239,7 +241,13 @@ class _CsrfMiddleware extends Middleware {
                       ?? (body?.[this.fieldName] as string | undefined)
 
     if (!existing || !requestToken || !timingSafeEqual(existing, requestToken)) {
-      res.status(419).json({ message: 'CSRF token mismatch.', error: 'CSRF_MISMATCH' })
+      res.status(419).json({
+        message:
+          'CSRF token mismatch. The "_token" form field or "X-CSRF-Token" header didn\'t match the ' +
+          '"csrf_token" cookie. For fetch() calls, read the token via getCsrfToken() and set the ' +
+          'X-CSRF-Token header.',
+        error: 'CSRF_MISMATCH',
+      })
       return
     }
 
@@ -295,6 +303,24 @@ function isRateLimitAsset(path: string): boolean {
   return (path.split('/').pop() ?? '').includes('.')
 }
 
+// First-time warning when RateLimit runs with no cache provider registered.
+// The middleware deliberately falls through to `next()` (silent bypass) so a
+// missing cache doesn't 500 every request — but a deployment that THOUGHT it
+// had rate limits when it doesn't is a security-relevant gap. One stderr line
+// per process surfaces the misconfiguration without log-spamming on every
+// hit. Process-scoped (module variable) is fine: re-evaluation under HMR
+// re-arms the warning, which is desirable in dev.
+let _warnedNoCache = false
+function _warnNoCacheOnce(): void {
+  if (_warnedNoCache) return
+  _warnedNoCache = true
+  console.warn(
+    '[RudderJS Middleware] RateLimit installed but no cache provider is registered — ' +
+    'limits are NOT being enforced. Register @rudderjs/cache (or another cache adapter) ' +
+    'to enable.',
+  )
+}
+
 // Per-limiter cache-key namespace. Every `RateLimit.perMinute(...)` call
 // (and every chained `.by(...).message(...)` derivation) gets its own slot.
 // Without this, two limiters keyed by the same client identifier (e.g. IP)
@@ -315,7 +341,10 @@ function makeRateLimitHandler(opts: RateLimitOptions, instanceId: string): Middl
     if (opts.skipIf?.(req))         return next()
 
     const cache = CacheRegistry.get()
-    if (!cache) return next()
+    if (!cache) {
+      _warnNoCacheOnce()
+      return next()
+    }
 
     const now    = Date.now()
     const ttlSec = Math.max(1, Math.ceil(opts.windowMs / 1000))
