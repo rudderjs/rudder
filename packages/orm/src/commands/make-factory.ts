@@ -26,11 +26,16 @@ export const makeFactorySpec: MakeSpec = {
     return `import { ModelFactory, sequence } from '@rudderjs/orm'
 import { ${modelName} } from 'App/Models/${modelName}.js'
 
-export class ${className} extends ModelFactory<{
-  // Fill in the attribute shape for ${modelName} — TS infers definition() against this.
-  name:  string
-  email: string
-}> {
+// Tighten the generic to a concrete attribute shape once ${modelName}'s
+// fields are declared — e.g. \`ModelFactory<{ name: string; email: string }>\`
+// for tsc to type-check definition() returns and create() arguments. The
+// initial \`any\` is intentional: a concrete generic only type-checks against
+// the model's declared fields, and a freshly scaffolded model has none, so
+// pinning a shape here would mean every \`make:model X; make:factory X\`
+// pair fails tsc until the model is filled in. Replace once your shape is
+// stable.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export class ${className} extends ModelFactory<any> {
   protected modelClass = ${modelName}
 
   definition() {
