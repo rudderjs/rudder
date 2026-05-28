@@ -495,6 +495,73 @@ function consumeBraceBlockLocal(path: string, start: number): number {
   return path.length
 }
 
+// ─── Test-mode side channel ───────────────────────────────
+//
+// `@rudderjs/testing` flips `globalThis['__rudderjs_test_mode__']` during
+// bootstrap so the route handler emits two extra response headers:
+//
+//   x-rudderjs-test-session   base64(JSON({ data, flash }))   — when a session
+//                                                              instance is on
+//                                                              the request
+//   x-rudderjs-test-view      base64(JSON({ id, props }))     — when the route
+//                                                              returned a
+//                                                              ViewResponse
+//
+// TestResponse on the test side reads + decodes these so apps can call
+// `assertSessionHas('cart', ...)` / `assertViewIs('dashboard')` without
+// re-coupling the testing package to session or view internals.
+//
+// Headers are inert in production — the global flag is never set unless a
+// TestCase is running in this process.
+function attachTestSideChannel(
+  res:  Response,
+  ctx:  Record<string, unknown>,
+  meta: Record<string, unknown>,
+): void {
+  // Session — duck-typed on `.all()` so we don't depend on @rudderjs/session.
+  // SessionInstance exposes `.all()` (data) and `.allFlash()` (flash).
+  const sess = ctx['__rjs_session'] as
+    | { all?: () => Record<string, unknown>; allFlash?: () => Record<string, unknown> }
+    | undefined
+  if (sess && typeof sess.all === 'function') {
+    try {
+      const payload = {
+        data:  sess.all(),
+        flash: typeof sess.allFlash === 'function' ? sess.allFlash() : {},
+      }
+      res.headers.set(
+        'x-rudderjs-test-session',
+        Buffer.from(JSON.stringify(payload)).toString('base64'),
+      )
+    } catch {
+      // best-effort — a serialization failure (e.g. a circular value) must
+      // not break the test response itself
+    }
+  }
+
+  // View — `__rjs_view` only gets stashed when the handler returned a
+  // ViewResponse. Full props live on `__rjs_response_body` (telescope already
+  // captures them there).
+  const view = meta['__rjs_view'] as { id?: string } | undefined
+  if (view?.id) {
+    const body = ctx['__rjs_response_body'] as
+      | { view?: string; props?: Record<string, unknown> }
+      | undefined
+    try {
+      const payload = {
+        id:    view.id,
+        props: body?.view === view.id ? (body.props ?? {}) : {},
+      }
+      res.headers.set(
+        'x-rudderjs-test-view',
+        Buffer.from(JSON.stringify(payload)).toString('base64'),
+      )
+    } catch {
+      // best-effort — same rationale as session
+    }
+  }
+}
+
 // ─── Hono Adapter ─────────────────────────────────────────
 
 class HonoAdapter implements ServerAdapter {
@@ -734,6 +801,17 @@ class HonoAdapter implements ServerAdapter {
       }
 
       await next()
+
+      // Test-mode side channel — only emitted when @rudderjs/testing has
+      // flipped the global flag during bootstrap. Lets TestResponse assert on
+      // session payload and rendered view id/props without re-coupling to the
+      // session or view packages on the test side. Headers use the reserved
+      // `x-rudderjs-` prefix (so apps can't set them) and base64-encode JSON
+      // to dodge header-value escaping rules.
+      if (g['__rudderjs_test_mode__'] === true && c.res) {
+        attachTestSideChannel(c.res, stash(c), meta)
+      }
+
       return c.res as Response
     })
   }

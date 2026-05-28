@@ -164,6 +164,44 @@ res
   .assertHeader('content-type', 'application/json')
 ```
 
+### Session assertions
+
+For routes on the `web` group, the test response carries the resolved session payload — `assertSessionHas`, `assertSessionMissing`, and `assertSessionHasErrors` assert on it the same way Laravel does. The payload comes from the `@rudderjs/server-hono` test-mode side channel; it's automatic on `web` routes (session middleware is auto-installed on the group) and unavailable on stateless `api` routes.
+
+```ts
+res.assertSessionHas('user_id')            // key present in session data
+res.assertSessionHas('user_id', 42)        // and deep-equals 42
+res.assertSessionMissing('cart')           // key NOT present
+
+// validation errors flashed via withErrors() on redirect
+res.assertSessionHasErrors(['email', 'password'])
+```
+
+### View assertions
+
+When a controller returns `view('id', props)` (from `@rudderjs/view`), `assertViewIs` / `assertViewHas` assert on the rendered view id and the props that the view component received:
+
+```ts
+res.assertViewIs('dashboard')                                  // matches the id
+res.assertViewHas('user')                                      // prop present
+res.assertViewHas('user', { id: 1, name: 'Suleiman' })         // prop deep-equals
+```
+
+If the route returned JSON or a raw `Response`, view assertions surface a clear error pointing that out.
+
+### Validation assertions
+
+`assertValid` / `assertInvalid` cover both the JSON path (form requests returning `{ errors: { ... } }` with status 422) and the web/redirect path (validation errors flashed to the session). `assertJsonValidationErrors` is the JSON-only variant when you want to be explicit:
+
+```ts
+res.assertValid()                                  // no JSON errors, no flash errors
+res.assertInvalid()                                // any errors present
+res.assertInvalid(['email', 'password'])           // each listed key present
+res.assertJsonValidationErrors(['email'])          // strictly the JSON body's errors map
+```
+
+Status code is not implied — pair with `assertOk()` / `assertUnprocessable()` / `assertRedirect()` for the full check.
+
 ## Database assertions
 
 ```ts

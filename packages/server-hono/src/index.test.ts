@@ -1114,3 +1114,112 @@ describe('HonoAdapter — null-body statuses (204/205/304)', () => {
     assert.strictEqual(await r.text(), 'hello')
   })
 })
+
+// ─── Test-mode side channel ─────────────────────────────────
+//
+// `@rudderjs/testing` flips `globalThis['__rudderjs_test_mode__']` during
+// bootstrap. The route handler then emits two extra base64-JSON headers on
+// the response so TestResponse can call `assertSessionHas` / `assertViewIs`
+// without coupling to @rudderjs/session or @rudderjs/view internals.
+
+describe('HonoAdapter — test-mode side channel', () => {
+  const G = globalThis as Record<string, unknown>
+
+  function withTestMode(fn: () => Promise<void>): () => Promise<void> {
+    return async () => {
+      const prior = G['__rudderjs_test_mode__']
+      G['__rudderjs_test_mode__'] = true
+      try {
+        await fn()
+      } finally {
+        if (prior === undefined) delete G['__rudderjs_test_mode__']
+        else G['__rudderjs_test_mode__'] = prior
+      }
+    }
+  }
+
+  function decodeHeader<T>(value: string | null): T | undefined {
+    if (!value) return undefined
+    return JSON.parse(Buffer.from(value, 'base64').toString('utf8')) as T
+  }
+
+  it('emits x-rudderjs-test-session when a session instance is on the request', withTestMode(async () => {
+    const adapter = hono().create()
+    // Mimic sessionMiddleware: stash a SessionInstance-shaped object on the
+    // request before the chain runs. The duck-typed read in
+    // attachTestSideChannel only requires `.all()` (and uses `.allFlash()`
+    // when present).
+    adapter.applyMiddleware(async (req, _res, next) => {
+      ;(req.raw as Record<string, unknown>)['__rjs_session'] = {
+        all:      () => ({ user_id: 9 }),
+        allFlash: () => ({ message: 'Saved!' }),
+      }
+      await next()
+    })
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/r',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const r   = await app.fetch(new Request('http://localhost/r'))
+
+    const payload = decodeHeader<{ data: Record<string, unknown>; flash: Record<string, unknown> }>(
+      r.headers.get('x-rudderjs-test-session'),
+    )
+    assert.ok(payload, 'expected x-rudderjs-test-session header')
+    assert.deepStrictEqual(payload.data, { user_id: 9 })
+    assert.deepStrictEqual(payload.flash, { message: 'Saved!' })
+  }))
+
+  it('does NOT emit x-rudderjs-test-session in normal (non-test) mode', async () => {
+    delete G['__rudderjs_test_mode__']
+    const adapter = hono().create()
+    adapter.applyMiddleware(async (req, _res, next) => {
+      ;(req.raw as Record<string, unknown>)['__rjs_session'] = { all: () => ({ user_id: 9 }) }
+      await next()
+    })
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/r',
+      handler: async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const r   = await app.fetch(new Request('http://localhost/r'))
+    assert.strictEqual(r.headers.get('x-rudderjs-test-session'), null)
+  })
+
+  it('emits x-rudderjs-test-view when the handler returns a ViewResponse', withTestMode(async () => {
+    // Build a duck-typed ViewResponse stand-in — server-hono detects this
+    // via `constructor.__rudder_view__ === true` plus `.toResponse()`.
+    class StubViewResponse {
+      static readonly __rudder_view__ = true
+      constructor(public readonly id: string, public readonly props: Record<string, unknown>) {}
+      async toResponse(_ctx: { url: string }): Promise<Response> {
+        return new Response(`<html>${this.id}</html>`, {
+          status:  200,
+          headers: { 'Content-Type': 'text/html' },
+        })
+      }
+    }
+
+    const adapter = hono().create()
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/r',
+      handler: async () => new StubViewResponse('dashboard', { count: 5 }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const r   = await app.fetch(new Request('http://localhost/r'))
+
+    const payload = decodeHeader<{ id: string; props: Record<string, unknown> }>(
+      r.headers.get('x-rudderjs-test-view'),
+    )
+    assert.ok(payload, 'expected x-rudderjs-test-view header')
+    assert.equal(payload.id, 'dashboard')
+    assert.deepStrictEqual(payload.props, { count: 5 })
+  }))
+})
