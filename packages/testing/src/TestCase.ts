@@ -319,7 +319,7 @@ export class TestCase {
    */
   travelTo(date: Date | number): this {
     this._enableTimers()
-    mock.timers.setTime(typeof date === 'number' ? date : +date)
+    mock.timers.setTime(typeof date === 'number' ? date : date.getTime())
     return this
   }
 
