@@ -1,6 +1,6 @@
 export { withTestConfig } from './withTestConfig.js'
 export { TestCase } from './TestCase.js'
-export type { TestTrait, TestTraitClass } from './TestCase.js'
+export type { TestTrait, TestTraitClass, TestModelLike } from './TestCase.js'
 export { TestResponse } from './TestResponse.js'
 export { RefreshDatabase } from './traits/RefreshDatabase.js'
 export { WithFaker } from './traits/WithFaker.js'
