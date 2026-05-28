@@ -1,5 +1,36 @@
 # @rudderjs/telescope
 
+## 15.1.2
+
+### Patch Changes
+
+- 161c5c4: `stripInternal: true` is now set in `tsconfig.base.json` — symbols annotated `/** @internal */` no longer leak into the published `.d.ts` declarations. Runtime is unchanged; only the TypeScript public-types contract shrinks.
+
+  Consumers using a `@internal`-annotated symbol (typically underscore-prefixed framework helpers like `_match`, `_attachFake`, internal observer registries) will see a fresh `TS2339` / `TS2724` from `tsc`. The fix is to stop reaching into framework internals; if you have a legitimate cross-package use-case, open an issue.
+
+  Cross-package test/HMR escape hatches (`Application.resetForTesting`, observer registry `.reset()` methods, `Session._runWithSession`, `Command._setContext`, `DispatchOptions.__context`, `QueryBuilder._aggregate`, `setConfigRepository`/`getConfigRepository`) had their `@internal` annotations removed — these were legitimate cross-package contract members mis-tagged, and they remain on the public types.
+
+  Found by the Phase 4 public-API-surface audit (`docs/plans/findings/2026-05-28-phase-4-public-api.md`).
+
+- Updated dependencies [2c9fe2b]
+- Updated dependencies [ffbe0b9]
+- Updated dependencies [255ca27]
+- Updated dependencies [161c5c4]
+  - @rudderjs/auth@6.3.0
+  - @rudderjs/http@1.1.0
+  - @rudderjs/mail@1.3.0
+  - @rudderjs/ai@1.10.2
+  - @rudderjs/broadcast@1.2.4
+  - @rudderjs/console@1.2.1
+  - @rudderjs/core@1.5.1
+  - @rudderjs/mcp@6.1.2
+  - @rudderjs/orm@1.12.10
+  - @rudderjs/queue@4.2.2
+  - @rudderjs/router@1.7.1
+  - @rudderjs/schedule@1.0.7
+  - @rudderjs/sync@1.3.4
+  - @rudderjs/notification@1.0.4
+
 ## 15.1.1
 
 ### Patch Changes

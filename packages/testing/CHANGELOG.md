@@ -1,5 +1,104 @@
 # @rudderjs/testing
 
+## 1.2.0
+
+### Minor Changes
+
+- 448ed8d: Laravel-parity `AssertableJson` fluent DSL — the canonical JSON-response assertion in Laravel 12 — exposed via a new overload on `TestResponse.assertJson(callback)`:
+
+  ```ts
+  res.assertJson((json) =>
+    json
+      .has("user")
+      .where("user.name", "Suleiman")
+      .whereType("user.email", "string")
+      .has("items", 3, (item) => item.where("id", 1).etc())
+      .missing("user.password")
+      .etc()
+  );
+  ```
+
+  **Strict-by-default** is the headline — at the end of any scope (root or scoped callback), the DSL asserts that every key on the object was touched. Unchecked keys throw. So an extra field accidentally added to a response surfaces in the test instead of leaking through.
+
+  Public surface:
+
+  - `AssertableJson` — exported class for direct use, also driven by the callback overload on `TestResponse.assertJson`.
+  - Methods: `has(key, n?, fn?)`, `missing(key)`, `missingAll(keys)`, `where(key, value)`, `whereNot(key, value)`, `whereType(key, type)`, `whereContains(key, value)`, `count(key, n)`, `first(fn)`, `each(fn)`, `etc()`.
+  - Dot-notation paths (`user.profile.name`, `items.0.id`).
+  - Existing subset-match form (`res.assertJson({ name: 'Alice' })`) is unchanged — the overload only triggers on a function argument.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 8).
+
+- 2c9fe2b: Add Laravel-parity auth assertions to `TestCase` + an `actingAsGuest()` helper:
+
+  - **`actingAsGuest()`** — clear any acting-as user; subsequent requests run unauthenticated.
+  - **`assertAuthenticated()`** — passes when `actingAs(user)` is in effect.
+  - **`assertGuest()`** — passes when no acting-as user is set.
+  - **`assertAuthenticatedAs({ id })`** — passes when the acting-as user has the matching id (coerced to string for comparison).
+
+  Pairs with the matching wiring in `@rudderjs/auth` (this release) — `actingAs(user)` now actually populates `req.user`, `auth().user()`, `Auth.guard().check()`, and `RequireAuth` end-to-end in test mode.
+
+  The assertions check the test-side intent set via `actingAs` — they don't verify that a specific request authenticated end-to-end (for that, assert on the response of a follow-up request to a route that requires auth).
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 2).
+
+- 0ce372f: Expand `TestResponse` with Laravel-parity content, cookie, JSON, and status assertions.
+
+  **New status helpers:** `assertAccepted` (202), `assertBadRequest` (400), `assertConflict` (409), `assertGone` (410), `assertTooManyRequests` (429).
+
+  **JSON variants:**
+
+  - `assertExactJson(expected)` — deep-equal at top level (no extra keys).
+  - `assertJsonMissingExact(expected)` — opposite of `assertExactJson`.
+  - `assertJsonFragment(fragment)` — match every key/value pair on any object node in the body (walks arrays and nested objects).
+
+  **Content assertions:**
+
+  - `assertContent(value)` — raw body equals.
+  - `assertSee(value)` / `assertDontSee(value)` — substring match on raw body.
+  - `assertSeeText(value)` / `assertDontSeeText(value)` — strips HTML tags + collapses whitespace before matching.
+  - `assertSeeInOrder([a, b, c])` — substrings appear in this order.
+
+  **Cookie assertions** (response `Set-Cookie` inspection):
+
+  - `assertCookie(name, value?)` — Set-Cookie present (optionally verify value substring).
+  - `assertCookieMissing(name)` — no Set-Cookie for that name.
+
+  To support multi-value `Set-Cookie`, `TestResponse` now exposes a `setCookies: string[]` field (one entry per cookie set; empty when none). Captured automatically from `Response.headers.getSetCookie()` when available. Pre-existing `TestResponse` constructor calls remain compatible — the new `setCookies` constructor parameter is optional and defaults to `[]`.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 5a — pure-additive subset of the TestResponse expansion).
+
+- cae47a9: Laravel-parity session / view / validation assertions on `TestResponse`, plus a test-mode side channel to deliver the data:
+
+  - **`assertSessionHas(key, value?)`**, **`assertSessionMissing(key)`**, **`assertSessionHasErrors(keys)`** — assert on the resolved session payload of a `web`-group route (where `sessionMiddleware` is auto-installed). `assertSessionHasErrors` reads the `errors` flash bag (the `withErrors($validator)` shape).
+  - **`assertViewIs(id)`**, **`assertViewHas(key, value?)`** — assert on the rendered view id / props when the controller returned `view('id', props)` from `@rudderjs/view`. Fails with a clear message when the route returned JSON or a raw `Response`.
+  - **`assertValid()`**, **`assertInvalid(keys?)`** — combined JSON-body + session-flash check, so the same assertion covers both API (422 + `body.errors`) and web (redirect + flashed `errors`) flows.
+  - **`assertJsonValidationErrors(keys)`** — JSON-only variant for callers that want to be explicit.
+
+  All assertions return `this` for chaining.
+
+  Internally, `@rudderjs/server-hono` now emits two response headers — `x-rudderjs-test-session` and `x-rudderjs-test-view` (base64-encoded JSON) — only when `globalThis['__rudderjs_test_mode__']` is set. `TestCase._bootstrap()` flips the flag on creation and clears it in `teardown()`, so production traffic never sees the headers. The session payload is duck-typed (`.all()` / `.allFlash()`) so server-hono stays decoupled from `@rudderjs/session` and `@rudderjs/view`.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 5b — the session/view/validation slice that #749 deferred to a follow-up because it needed cross-package coordination).
+
+- ed06615: Add Laravel-style time-travel helpers to `TestCase`, wrapping Node 22's `mock.timers`:
+
+  - **`travel(amount).milliseconds()` / `.seconds()` / `.minutes()` / `.hours()` / `.days()` / `.weeks()` / `.years()`** — advance the mocked clock by the chosen unit.
+  - **`travelTo(date | timestamp)`** — set the clock to an absolute moment.
+  - **`travelBack()`** — restore real time. Called automatically from `teardown()`.
+  - **`freezeTime(fn)`** — pin `Date.now()` for the duration of the callback; restores afterward when not already mocked.
+
+  The mock initializes at the real wall-clock time so `Date.now()` stays continuous across travel/restore boundaries. `setImmediate` is intentionally NOT mocked so `await new Promise(r => setImmediate(r))` still yields the event loop between travels.
+
+  Also exports a new public class `TravelBuilder` returned by `travel(amount)` for unit selection — apps can use it directly if they need lower-level access.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 6).
+
+### Patch Changes
+
+- Updated dependencies [161c5c4]
+  - @rudderjs/core@1.5.1
+
 ## 1.1.0
 
 ### Minor Changes

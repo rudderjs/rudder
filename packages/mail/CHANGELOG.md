@@ -1,5 +1,41 @@
 # @rudderjs/mail
 
+## 1.3.0
+
+### Minor Changes
+
+- 255ca27: Expand `FakeMailAdapter` with combined sent + queued assertions and exact-count variants.
+
+  **Combined (sent OR queued):**
+
+  - `assertOutgoing(mailableClass, predicate?)` — match either channel; useful when the code under test might dispatch synchronously or via the queue.
+  - `assertOutgoingCount(n)` — total across both channels; failure message breaks down sent vs queued.
+  - `assertNothingOutgoing()` — neither sent nor queued.
+  - `outgoing(mailableClass?)` — access every entry across both channels (sent + queued).
+
+  **Exact-count per channel:**
+
+  - `assertSentTimes(mailableClass, count)` — exact sent count for the class.
+  - `assertQueuedTimes(mailableClass, count)` — exact queued count for the class.
+
+  The new combined helpers let tests assert that mail went out without coupling to the dispatch channel — useful for feature-flagged paths and retry policies where the implementation may switch between sync send and queue.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 7).
+
+### Patch Changes
+
+- 161c5c4: `stripInternal: true` is now set in `tsconfig.base.json` — symbols annotated `/** @internal */` no longer leak into the published `.d.ts` declarations. Runtime is unchanged; only the TypeScript public-types contract shrinks.
+
+  Consumers using a `@internal`-annotated symbol (typically underscore-prefixed framework helpers like `_match`, `_attachFake`, internal observer registries) will see a fresh `TS2339` / `TS2724` from `tsc`. The fix is to stop reaching into framework internals; if you have a legitimate cross-package use-case, open an issue.
+
+  Cross-package test/HMR escape hatches (`Application.resetForTesting`, observer registry `.reset()` methods, `Session._runWithSession`, `Command._setContext`, `DispatchOptions.__context`, `QueryBuilder._aggregate`, `setConfigRepository`/`getConfigRepository`) had their `@internal` annotations removed — these were legitimate cross-package contract members mis-tagged, and they remain on the public types.
+
+  Found by the Phase 4 public-API-surface audit (`docs/plans/findings/2026-05-28-phase-4-public-api.md`).
+
+- Updated dependencies [161c5c4]
+  - @rudderjs/console@1.2.1
+  - @rudderjs/core@1.5.1
+
 ## 1.2.1
 
 ### Patch Changes

@@ -1,5 +1,28 @@
 # @rudderjs/auth
 
+## 6.3.0
+
+### Minor Changes
+
+- 2c9fe2b: Wire `actingAs(user)` from `@rudderjs/testing` through `AuthMiddleware` so authenticated integration tests actually authenticate.
+
+  In test mode (`APP_ENV=testing`), `AuthMiddleware` now reads the `x-testing-user` header that `@rudderjs/testing` writes via `TestCase.actingAs(user)` and installs the user into a request-scoped ALS via `runWithTestUser(user, ...)`. `SessionGuard.user()` checks this override BEFORE the session/provider lookup — so `req.user`, `auth().user()`, `Auth.guard().check()`, and `RequireAuth` all resolve to the synthetic user, even one that doesn't exist in the database.
+
+  Production is unaffected: the test-mode branch is gated on `process.env.APP_ENV === 'testing'`. The new `runWithTestUser` / `currentTestUser` helpers are exported for completeness; outside test mode they incur no cost.
+
+  **Before this change**, `TestCase.actingAs(user)` wrote the header but no middleware read it — `req.user` was empty and any route guarded by `RequireAuth` (or that called `auth().user()`) failed in tests.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 2).
+
+### Patch Changes
+
+- Updated dependencies [161c5c4]
+  - @rudderjs/console@1.2.1
+  - @rudderjs/core@1.5.1
+  - @rudderjs/router@1.7.1
+  - @rudderjs/session@2.1.4
+  - @rudderjs/view@1.2.3
+
 ## 6.2.2
 
 ### Patch Changes
