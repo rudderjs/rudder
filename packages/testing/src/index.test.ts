@@ -567,7 +567,7 @@ describe('TestCase — time travel', () => {
     try {
       const target = new Date('2030-06-15T12:00:00.000Z')
       tc.travelTo(target)
-      assert.equal(Date.now(), +target)
+      assert.equal(Date.now(), target.getTime())
     } finally { restore(tc) }
   })
 
@@ -586,7 +586,7 @@ describe('TestCase — time travel', () => {
     tc.travelBack()
     const realNow = Date.now()
     // After reset, Date.now() should be close to wall-clock time, not 2030.
-    assert.ok(realNow < +new Date('2029-01-01'), `Expected real time after travelBack, got ${new Date(realNow).toISOString()}`)
+    assert.ok(realNow < new Date('2029-01-01').getTime(), `Expected real time after travelBack, got ${new Date(realNow).toISOString()}`)
   })
 
   it('travelBack is a no-op when time was not mocked', () => {
@@ -615,7 +615,7 @@ describe('TestCase — time travel', () => {
     })
     // Timers should be restored — Date.now() should be a real wall-clock value.
     const realNow = Date.now()
-    assert.ok(realNow > +new Date('2025-01-01'), `Expected real time after freezeTime, got ${new Date(realNow).toISOString()}`)
+    assert.ok(realNow > new Date('2025-01-01').getTime(), `Expected real time after freezeTime, got ${new Date(realNow).toISOString()}`)
   })
 
   it('freezeTime leaves an existing mock in place', async () => {

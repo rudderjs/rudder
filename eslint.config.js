@@ -52,6 +52,30 @@ export default tseslint.config(
 
       // non-null assertion is sometimes the right call
       '@typescript-eslint/no-non-null-assertion': 'warn',
+
+      // ── Code-quality rules (CodeQL Quality Suite parity) ─────────
+      // Same rule classes as the CodeQL Quality Suite covers — catching
+      // them at dev-time in the editor + `pnpm lint` is faster feedback
+      // than a weekly post-merge scan.
+
+      // `==` / `!=` → require `===` / `!==`. `== null` is still allowed
+      // (idiomatic null-OR-undefined check); `null` is the only exception.
+      eqeqeq: ['error', 'smart'],
+
+      // `cond ? true : false` and `cond ? false : true` — collapse to
+      // `cond` / `!cond`. Catches `js/trivial-conditional` cases.
+      'no-unneeded-ternary': ['error', { defaultAssignment: false }],
+
+      // `+x` / `!!x` / `'' + x` / etc. as type coercions — explicit
+      // `Number(x)` / `Boolean(x)` / `String(x)` is clearer.
+      // Allow `!!x` (boolean coercion is widely-read idiom).
+      'no-implicit-coercion': ['error', { boolean: false }],
+
+      // `no-use-before-define` deliberately NOT enabled — the framework uses
+      // the facade-then-impl class pattern (e.g. `AnthropicProvider` declared
+      // before `AnthropicAdapter` it instantiates) and lazy template-constant
+      // references inside arrow functions (e.g. `add.ts`'s `CFG_*` map). Both
+      // are safe at runtime; ESLint can't see through them.
     },
   },
 

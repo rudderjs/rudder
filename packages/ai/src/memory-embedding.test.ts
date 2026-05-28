@@ -222,7 +222,7 @@ describe('EmbeddingUserMemory', () => {
     assert.equal(storedRows.length, 1)
     const stored = storedRows[0]!
     assert.ok(stored.embedding instanceof Uint8Array, 'embedding column populated')
-    assert.deepStrictEqual(deserializeVector(stored.embedding!).map(n => +n.toFixed(2)), [0.1, 0.2, 0.3])
+    assert.deepStrictEqual(deserializeVector(stored.embedding!).map(n => Number(n.toFixed(2))), [0.1, 0.2, 0.3])
   })
 
   it('remember swallows embed failures — entry persists with null embedding', async () => {
