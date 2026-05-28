@@ -1,5 +1,31 @@
 # @rudderjs/http
 
+## 1.1.0
+
+### Minor Changes
+
+- ffbe0b9: Laravel-parity sequenced HTTP fakes — useful for testing retry, pagination, and back-off paths where each call should see a different response.
+
+  - **`FakeManager.sequence(pattern?)`** returns a `Sequence` builder registered to the manager. `pattern` defaults to a wildcard regex (`/.*/`) — pass a string or `RegExp` to scope.
+  - **`Sequence.push(response)`** appends a response to the queue.
+  - **`Sequence.whenEmpty(fallback)`** sets the response returned for every call past the queue.
+  - **`Sequence.isEmpty()` / `Sequence.remaining()`** — queue introspection.
+  - **`Http.fakeSequence(pattern?)`** shortcut returning `[fake, sequence]` for the common one-fake-one-sequence pattern.
+
+  Key difference from `register(pattern, [r1, r2])` (which silently repeats the last response forever): a `Sequence` **throws on exhaustion** unless `whenEmpty()` is set — so a hidden extra call surfaces in the test instead of getting a duplicate success response.
+
+  Found by the Phase 3 testing-ergonomics audit (cluster 9).
+
+### Patch Changes
+
+- 161c5c4: `stripInternal: true` is now set in `tsconfig.base.json` — symbols annotated `/** @internal */` no longer leak into the published `.d.ts` declarations. Runtime is unchanged; only the TypeScript public-types contract shrinks.
+
+  Consumers using a `@internal`-annotated symbol (typically underscore-prefixed framework helpers like `_match`, `_attachFake`, internal observer registries) will see a fresh `TS2339` / `TS2724` from `tsc`. The fix is to stop reaching into framework internals; if you have a legitimate cross-package use-case, open an issue.
+
+  Cross-package test/HMR escape hatches (`Application.resetForTesting`, observer registry `.reset()` methods, `Session._runWithSession`, `Command._setContext`, `DispatchOptions.__context`, `QueryBuilder._aggregate`, `setConfigRepository`/`getConfigRepository`) had their `@internal` annotations removed — these were legitimate cross-package contract members mis-tagged, and they remain on the public types.
+
+  Found by the Phase 4 public-API-surface audit (`docs/plans/findings/2026-05-28-phase-4-public-api.md`).
+
 ## 1.0.2
 
 ### Patch Changes
