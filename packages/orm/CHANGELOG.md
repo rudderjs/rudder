@@ -1,5 +1,30 @@
 # @rudderjs/orm
 
+## 1.12.9
+
+### Patch Changes
+
+- 27c0e0e: ORM cast and `JsonResource` errors now include the column / cast type / next step instead of bare opaque text.
+
+  - **`Invalid JSON in "<column>" cast`** (`packages/orm/src/cast.ts:_parseJson`) — now reads `Invalid JSON in cast column "<col>": <first 80 chars>… Verify the column stores serialized JSON; if it stores raw strings, change the cast to "string" or remove it.`
+  - **`Vector column "<col>" expected number[], got <type>`** (`cast.ts:103`) — gains a next-step hint pointing at `JSON.parse()` for pgvector text strings AND the `static casts = { <col>: vector({ dimensions: N }) }` declaration.
+  - **`Vector cast failed to parse value (…)`** (`cast.ts:91`) — now leads with the column name (renamed the cast `get()` parameter from `_key` → `key` since we're now using it), names the failed input, and points at the `vector(N)` schema column type.
+  - **`JsonResource.toJSON() does not support async toArray()`** (`resource.ts:108`) — now names the concrete resource class (`<UserResource>.toJSON()…`) via `this.constructor.name`, and the proposed fix becomes `res.json(await resource.toArray())` instead of the unhelpful "Use toArray() directly."
+
+  No behavior change; only message text + one parameter rename. All 430 ORM tests pass. Found by the Phase 2 error-message audit.
+
+- 2af4fb6: ORM "unset relation key" and "unsaved model" error messages now distinguish `null/undefined` from `not selected` and name the recovery step instead of leaving the user to figure it out.
+
+  - **`Cannot resolve "<relation>" on <Model>`** — `belongsTo`, `hasOne`, `hasMany`, `belongsToMany`, `morphToMany`, `morphedByMany`, and pivot lazy-fetch deferred-query throws now end with: `… is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.` Same shape across all six call sites in `packages/orm/src/index.ts` plus `packages/orm/src/relations/pivot-deferred.ts`.
+  - **`Cannot resolve morphTo "<relation>" on <Model>`** — was `commentableId/commentableType unset.` now `… is null/undefined. Save the morph host first, or assign both columns before calling .related().`
+  - **`Cannot {refresh,delete,restore,increment,decrement} a <Model> without a primary key`** — now ends with `. Call .save() / Model.create() first so a primary key is assigned.` across all five instance lifecycle methods.
+
+  No behavior change — only message text. Tests that asserted on the literal `is unset` / `commentableId/commentableType unset` substrings were updated to the new wording (`is null\/undefined`). Found by the Phase 2 error-message audit.
+
+- 18dc667: `make:factory` paired with `make:model` of the same name didn't compile — the factory stub declared `extends ModelFactory<{ name: string; email: string }>`, but `make:model` emits a class with no field declarations, so `Partial<InstanceType<typeof Model>>` (what `Model.create` accepts) had no `name`/`email` keys. TypeScript failed function-parameter contravariance on `modelClass = <Model>` and surfaced `TS2416: Property 'modelClass' is not assignable …`.
+
+  Switched the stub's initial generic to `ModelFactory<any>` so the default `make:model X; make:factory X` pair compiles out of the box. A multi-line comment in the stub explains why and points at the concrete shape the user should tighten to once the model's fields are declared (e.g. `ModelFactory<{ name: string; email: string }>` — the documented pattern). The `any` is intentionally scaffolded-only — `definition()` and the `Model.create` call site still constrain the runtime data. An `// eslint-disable-next-line @typescript-eslint/no-explicit-any` keeps the stub lint-clean. Found by the Phase 1 scaffolder audit.
+
 ## 1.12.8
 
 ### Patch Changes
