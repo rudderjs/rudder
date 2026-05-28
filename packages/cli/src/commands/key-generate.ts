@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { Command } from 'commander'
@@ -32,6 +32,29 @@ type EnvWriteOutcome =
   | { kind: 'skipped' }        // APP_KEY already set, --force NOT passed
 
 /**
+ * Atomically write `content` to `path`. Writes to a sibling temp file first,
+ * then renames into place — `rename(2)` is atomic on POSIX (and on Windows for
+ * paths on the same volume). Prevents partial reads if the process crashes
+ * mid-write, and sidesteps `js/file-system-race` CodeQL warnings that fire on
+ * any sequence like `existsSync → writeFileSync` or `readFileSync →
+ * writeFileSync`.
+ *
+ * `wx` flag on the temp file refuses to clobber a leftover from a prior
+ * crash; cleanup-on-failure removes the temp so a botched run never leaves
+ * stray files.
+ */
+function atomicWriteFile(target: string, content: string): void {
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+  try {
+    writeFileSync(tmp, content, { flag: 'wx' })
+    renameSync(tmp, target)
+  } catch (err) {
+    try { unlinkSync(tmp) } catch { /* never mind — temp may not exist */ }
+    throw err
+  }
+}
+
+/**
  * Idempotent set of `APP_KEY=<value>` in an `.env` file. Preserves all other
  * lines, comments, and ordering. Returns the outcome so the caller can render
  * a meaningful message.
@@ -39,19 +62,34 @@ type EnvWriteOutcome =
  * The match is anchored on a line starting with `APP_KEY=` (Laravel's shape).
  * Lines that are commented out (`# APP_KEY=...`) or use a different name
  * (`APP_KEYS=...`) are not touched.
+ *
+ * Race-free: a single `readFileSync` decides every branch, and the write is
+ * atomic via temp-file + rename. Branching on whether the file exists comes
+ * from the read's error code (ENOENT) — no `existsSync` + `writeFileSync`
+ * TOCTOU window.
  */
 export function setEnvKey(envPath: string, value: string, force: boolean): EnvWriteOutcome {
-  if (!existsSync(envPath)) {
-    writeFileSync(envPath, `APP_KEY=${value}\n`)
+  let text: string | null
+  try {
+    text = readFileSync(envPath, 'utf8')
+  } catch (err) {
+    // ENOENT is the only "expected" failure here; anything else is a real
+    // I/O error and surfaces to the caller.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    text = null
+  }
+
+  if (text === null) {
+    atomicWriteFile(envPath, `APP_KEY=${value}\n`)
     return { kind: 'wrote-new' }
   }
-  const text = readFileSync(envPath, 'utf8')
+
   const lines = text.split('\n')
   const idx = lines.findIndex((l) => /^APP_KEY=/.test(l))
   if (idx === -1) {
     // No line — append. Preserve trailing newline if present.
     const sep = text.endsWith('\n') ? '' : '\n'
-    writeFileSync(envPath, `${text}${sep}APP_KEY=${value}\n`)
+    atomicWriteFile(envPath, `${text}${sep}APP_KEY=${value}\n`)
     return { kind: 'appended' }
   }
   // Found an APP_KEY line. Replace only when --force, OR when the existing
@@ -62,7 +100,7 @@ export function setEnvKey(envPath: string, value: string, force: boolean): EnvWr
     return { kind: 'skipped' }
   }
   lines[idx] = `APP_KEY=${value}`
-  writeFileSync(envPath, lines.join('\n'))
+  atomicWriteFile(envPath, lines.join('\n'))
   return { kind: 'replaced' }
 }
 
