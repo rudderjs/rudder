@@ -145,7 +145,7 @@ Each fake exposes the assertions that match its API surface — see the per-feat
 
 ## Testing AI agents
 
-For agent-level testing, `@rudderjs/ai/eval` ships a dedicated eval framework with built-in metrics (`exactMatch`, `regex`, `llmJudge`, `jsonShape`, `semanticMatch`, `tokenCost`), `compose(...)`, `--record` / `--replay` for fixture-driven runs (zero API calls), HTML report output, and the `pnpm rudder ai:eval` CLI. See [AI / Evals](/guide/ai#evals) for the full surface.
+For agent-level testing, `@rudderjs/ai/eval` ships a dedicated eval framework with built-in metrics (`exactMatch`, `regex`, `llmJudge`, `jsonShape`, `semanticMatch`, `tokenCost`), `compose(...)`, `--record` / `--replay` for fixture-driven runs (zero API calls), HTML report output, and the `pnpm rudder ai:eval` CLI. See [AI / Evals](/guide/ai#evals-against-real-models) for the full surface.
 
 For lower-level mocking (no model calls, no eval runner), `AiFake.fake()` swaps in a deterministic adapter — same `.fake()` / `.restore()` shape as the other facades.
 

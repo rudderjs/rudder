@@ -503,7 +503,7 @@ Visit `http://localhost:3000`. Done.
 
 | Layer | Default | Swap with |
 |---|---|---|
-| HTTP | Hono | Express, Fastify, H3 |
+| HTTP | Hono | pluggable server adapter |
 | ORM | Prisma | Drizzle |
 | Auth | Native session | Sanctum (API tokens), Socialite (OAuth) |
 | Queue | BullMQ | Inngest |

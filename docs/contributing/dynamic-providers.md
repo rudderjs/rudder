@@ -1,6 +1,6 @@
 # Dynamic Provider Registration
 
-Providers can be registered at runtime using `app.register()`. This is useful when a provider needs to conditionally register other providers during its own `boot()` phase.
+Providers can be registered at runtime using `app().register()`. This is useful when a provider needs to conditionally register other providers during its own `boot()` phase.
 
 ## API
 
