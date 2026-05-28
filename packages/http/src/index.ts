@@ -27,11 +27,16 @@ export type ResponseInterceptor = (res: HttpResponseData) => HttpResponseData | 
 
 // ─── Fake response entry ────────────────────────────────────
 
-interface FakeEntry {
-  pattern: string | RegExp
-  responses: FakeResponse[]
-  index: number
-}
+/**
+ * Two flavors of fake registration:
+ *  - `array` — a fixed list cycled through, repeating the last entry on
+ *    exhaustion (legacy `register(pattern, [r1, r2])` behavior).
+ *  - `sequence` — a Sequence builder; once exhausted, either throws or
+ *    returns the `whenEmpty` fallback (Laravel-parity `Http::sequence()`).
+ */
+type FakeEntry =
+  | { kind: 'array';    pattern: string | RegExp; responses: FakeResponse[]; index: number }
+  | { kind: 'sequence'; pattern: string | RegExp; sequence:  Sequence }
 
 interface FakeResponse {
   status:  number
@@ -417,6 +422,63 @@ export class Pool {
   }
 }
 
+// ─── Sequence ──────────────────────────────────────────────
+
+/**
+ * Queue of fake responses consumed in order on successive calls. Created via
+ * `FakeManager.sequence()` (or the `Http.fakeSequence()` shortcut) and
+ * registered to a URL pattern at construction time.
+ *
+ * Exhaustion behavior matches Laravel's `ResponseSequence`:
+ * - Default: the next call throws a clear "sequence is empty" error.
+ * - With `whenEmpty(fallback)`: the fallback response is returned for every
+ *   call past the queue.
+ */
+export class Sequence {
+  private _queue:     FakeResponse[]      = []
+  private _whenEmpty: FakeResponse | null = null
+
+  /** Append a response to the queue. */
+  push(response: FakeResponse): this {
+    this._queue.push(response)
+    return this
+  }
+
+  /**
+   * Set the fallback response returned for every call after the queue is
+   * exhausted. Without this, an exhausted sequence throws.
+   */
+  whenEmpty(response: FakeResponse): this {
+    this._whenEmpty = response
+    return this
+  }
+
+  /** Whether the queue still has unused responses (excludes whenEmpty). */
+  isEmpty(): boolean {
+    return this._queue.length === 0
+  }
+
+  /** Remaining response count (excludes whenEmpty). */
+  remaining(): number {
+    return this._queue.length
+  }
+
+  /**
+   * @internal — called by FakeManager when a request matches this sequence's
+   * pattern. Pops the next queued response; falls back to `whenEmpty` when
+   * exhausted; throws otherwise.
+   */
+  _next(url: string): FakeResponse {
+    const next = this._queue.shift()
+    if (next) return next
+    if (this._whenEmpty) return this._whenEmpty
+    throw new Error(
+      `[RudderJS/Http] Fake sequence is empty — request to "${url}" has no queued response. ` +
+      `Add more .push(...) calls, or set a fallback via .whenEmpty(response).`,
+    )
+  }
+}
+
 // ─── FakeManager ────────────────────────────────────────────
 
 export class FakeManager {
@@ -432,8 +494,30 @@ export class FakeManager {
     const responses = Array.isArray(responseOrSequence)
       ? responseOrSequence
       : [responseOrSequence]
-    this._entries.push({ pattern, responses, index: 0 })
+    this._entries.push({ kind: 'array', pattern, responses, index: 0 })
     return this
+  }
+
+  /**
+   * Build a sequenced fake — responses are consumed in order on successive
+   * calls. When the sequence is exhausted, `_next()` throws unless
+   * `whenEmpty(fallback)` has been configured. Useful for testing retry,
+   * pagination, and back-off paths where each call should see a different
+   * response.
+   *
+   * @example
+   * const fake = Http.fake()
+   * fake.sequence()
+   *   .push({ status: 503, body: 'retry me', headers: {} })
+   *   .push({ status: 200, body: { ok: true }, headers: {} })
+   *
+   * @param pattern URL substring or regex; omit for a wildcard sequence that
+   *                matches every URL.
+   */
+  sequence(pattern: string | RegExp = /.*/): Sequence {
+    const seq = new Sequence()
+    this._entries.push({ kind: 'sequence', pattern, sequence: seq })
+    return seq
   }
 
   /** Throw if a request is made to an unregistered URL. */
@@ -450,11 +534,15 @@ export class FakeManager {
           ? url.includes(entry.pattern)
           : entry.pattern.test(url)
 
-      if (matched) {
+      if (!matched) continue
+
+      if (entry.kind === 'array') {
         const res = entry.responses[entry.index] ?? entry.responses[entry.responses.length - 1]
         if (entry.index < entry.responses.length - 1) entry.index++
         return res!
       }
+      // kind === 'sequence' — exhaustion throws (or returns whenEmpty fallback)
+      return entry.sequence._next(url)
     }
     return null
   }
@@ -557,6 +645,24 @@ export class Http {
   /** Create a new `FakeManager` for testing. */
   static fake(): FakeManager {
     return new FakeManager()
+  }
+
+  /**
+   * Shortcut — `Http.fake()` + `.sequence(pattern)` in one call. Returns a
+   * tuple of `[fake, sequence]` so the test can hold onto both: the fake for
+   * `.client()` / assertions, the sequence for `.push(...).whenEmpty(...)`.
+   *
+   * @example
+   * const [fake, seq] = Http.fakeSequence('example.com')
+   * seq.push({ status: 503, body: '', headers: {} })
+   *    .push({ status: 200, body: { ok: true }, headers: {} })
+   *    .whenEmpty({ status: 200, body: { ok: true }, headers: {} })
+   * const client = fake.client()
+   */
+  static fakeSequence(pattern: string | RegExp = /.*/): [FakeManager, Sequence] {
+    const fake = new FakeManager()
+    const seq  = fake.sequence(pattern)
+    return [fake, seq]
   }
 
   /** Create a request pool. */

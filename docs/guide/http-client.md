@@ -162,6 +162,43 @@ fake.preventStrayRequests()   // throw on requests to unstubbed URLs
 
 Patterns can be substring strings or `RegExp`. Pass an array as the second argument for a sequence of responses (first request returns the first entry, second returns the second, etc.).
 
+### Sequenced fakes
+
+When a test needs each call to see a different response — retry chains, paginated cursors, back-off paths — use a `Sequence` instead of `register(pattern, [...])`. The key difference: a sequence **throws on exhaustion** so a hidden extra call surfaces immediately, where `register([...])` silently repeats the last response forever.
+
+```ts
+const fake = Http.fake()
+
+fake.sequence('example.com')                     // returns a Sequence builder
+  .push({ status: 503, body: 'retry me',     headers: {} })
+  .push({ status: 200, body: { ok: true },   headers: {} })
+
+const client = fake.client()
+await client.get('https://example.com/data')     // → 503
+await client.get('https://example.com/data')     // → 200
+await client.get('https://example.com/data')     // throws — sequence empty
+```
+
+Set a fallback for every call past the queue with `.whenEmpty()`:
+
+```ts
+fake.sequence('example.com')
+  .push({ status: 503, body: '', headers: {} })
+  .whenEmpty({ status: 200, body: { ok: true }, headers: {} })
+```
+
+For the common "one fake, one sequence" shape, `Http.fakeSequence()` returns both as a tuple:
+
+```ts
+const [fake, seq] = Http.fakeSequence('example.com')
+seq.push({ status: 503, body: '', headers: {} })
+   .push({ status: 200, body: { ok: true }, headers: {} })
+
+const client = fake.client()
+```
+
+`fake.sequence()` (no pattern) is a wildcard sequence — every URL gets the next queued response. Useful when a test only makes one host's calls.
+
 ## Pitfalls
 
 - **Forgetting to call `.json()`.** `res.body` is the raw string. `res.json<T>()` parses and types it.
