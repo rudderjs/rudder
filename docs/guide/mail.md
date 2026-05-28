@@ -179,9 +179,31 @@ fake.assertSent(WelcomeEmail)
 // Predicate receives { mailable, options } — recipient lives on options.to
 fake.assertSent(WelcomeEmail, (entry) => entry.options.to.includes('a@b.com'))
 fake.assertSentCount(1)
+fake.assertSentTimes(WelcomeEmail, 1)
 fake.assertNotSent(PasswordResetEmail)
 fake.assertNothingSent()
 fake.restore()   // clear the fake adapter and reset the registry
+```
+
+### Combined sent + queued assertions
+
+When the code under test might either dispatch synchronously OR via the queue (a feature-flagged path, a retry policy, etc.) the combined helpers assert against both channels together so the test doesn't have to know which one ran:
+
+```ts
+fake.assertOutgoing(WelcomeEmail)                // sent OR queued
+fake.assertOutgoing(WelcomeEmail, ({ mailable, options }) => options.to.includes('a@b.com'))
+fake.assertOutgoingCount(2)                      // sent + queued combined
+fake.assertNothingOutgoing()                     // neither sent nor queued
+
+fake.outgoing()                // all entries across both channels
+fake.outgoing(WelcomeEmail)    // filtered by class
+```
+
+Exact-count variants are also available per-channel:
+
+```ts
+fake.assertSentTimes(WelcomeEmail, 2)
+fake.assertQueuedTimes(WelcomeEmail, 1)
 ```
 
 The fake captures every send into memory — no real delivery, no queue side effects. Call `fake.restore()` in `afterEach` so subsequent tests start with a fresh registry.
