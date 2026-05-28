@@ -211,6 +211,14 @@ function normalizeResponse(c: Context): AppResponse {
   // each writing a cookie don't clobber each other when applied to Hono.
   const cookies: string[] = []
 
+  // 204/205/304 (and 1xx) are null-body statuses: undici's Response constructor
+  // throws "Invalid response status code" when a body is attached. send()/json()
+  // must emit a bodyless response for these — e.g. a route doing
+  // `res.status(204).send('')` (the Laravel `noContent()` equivalent).
+  const isNullBodyStatus = () =>
+    statusCode === 204 || statusCode === 205 || statusCode === 304 ||
+    (statusCode >= 100 && statusCode < 200)
+
   const applyHeaders = () => {
     for (const [k, v] of Object.entries(headers)) c.header(k, v)
     for (const cookie of cookies) c.header('Set-Cookie', cookie, { append: true })
@@ -254,15 +262,18 @@ function normalizeResponse(c: Context): AppResponse {
       stash(c)['__rjs_response_body'] = data
       // Hono v4: c.json() returns a Response but does NOT set c.res automatically.
       // We must set c.res explicitly so Hono/srvx always has a valid response to send.
-      c.res = c.json(data)
+      c.res = isNullBodyStatus() ? c.body(null) : c.json(data)
       return c.res
     },
     send(data) {
       applyHeaders()
       c.status(statusCode as StatusCode)
-      // Use c.body() (not c.text()) so a custom Content-Type set via res.header()
-      // is preserved. c.text() forces Content-Type: text/plain and overrides headers.
-      if (headers['Content-Type'] || headers['content-type']) {
+      if (isNullBodyStatus()) {
+        // No body allowed on 204/205/304 — honor the status, drop the body.
+        c.res = c.body(null)
+      } else if (headers['Content-Type'] || headers['content-type']) {
+        // Use c.body() (not c.text()) so a custom Content-Type set via res.header()
+        // is preserved. c.text() forces Content-Type: text/plain and overrides headers.
         c.res = c.body(data)
       } else {
         c.res = c.text(data)
