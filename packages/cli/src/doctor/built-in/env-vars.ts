@@ -111,7 +111,7 @@ registerDoctorCheck({
       return {
         status:  'error',
         message: 'unset',
-        fix:     'Generate a 32-byte base64 key (e.g. `node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"`) and put it in .env',
+        fix:     'Run `pnpm rudder key:generate` to generate a 32-byte APP_KEY and write it to .env',
       }
     }
     // APP_KEY can be raw or base64-encoded. Accept either form, validate decoded length.
@@ -125,7 +125,7 @@ registerDoctorCheck({
       return {
         status:  'warn',
         message: `present but only ${decodedLen} bytes — needs ≥ 32 for AES-256`,
-        fix:     'Generate a fresh 32-byte key with `node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"`',
+        fix:     'Run `pnpm rudder key:generate --force` to replace it with a 32-byte key',
       }
     }
     return { status: 'ok', message: `set, ${decodedLen} bytes` }
