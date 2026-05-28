@@ -207,7 +207,14 @@ const _als = new AsyncLocalStorage<SessionInstance>()
 export class Session {
   private static current(): SessionInstance {
     const s = _als.getStore()
-    if (!s) throw new Error('[RudderJS Session] No session in context. Use sessionMiddleware.')
+    if (!s) {
+      throw new Error(
+        '[RudderJS Session] Session.current() called with no session in context. ' +
+        'sessionMiddleware auto-installs only on the "web" route group — API routes ' +
+        'are stateless. Use Session.maybeCurrent() for a non-throwing read, or mount ' +
+        'sessionMiddleware() per-route on the api side if you really need it.',
+      )
+    }
     return s
   }
 

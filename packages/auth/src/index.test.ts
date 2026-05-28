@@ -444,7 +444,7 @@ describe('Auth facade', () => {
   })
 
   it('throws outside runWithAuth', () => {
-    assert.throws(() => Auth.check(), /No auth context/)
+    assert.throws(() => Auth.check(), /has no request context/)
   })
 })
 

@@ -134,7 +134,14 @@ export function runWithAuth<T>(manager: AuthManager, fn: () => T): T {
 
 export function currentAuth(): AuthManager {
   const m = _als.getStore()
-  if (!m) throw new Error('[RudderJS Auth] No auth context. Use AuthMiddleware.')
+  if (!m) {
+    throw new Error(
+      '[RudderJS Auth] auth() has no request context. AuthMiddleware runs only ' +
+      'on the "web" route group — for API routes, use RequireBearer() + req.user ' +
+      '(see @rudderjs/passport). For queue jobs and CLI commands, pass the user ' +
+      'id explicitly.',
+    )
+  }
   return m
 }
 
