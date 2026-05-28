@@ -12,6 +12,7 @@ import { addCommand } from './commands/add.js'
 import { removeCommand } from './commands/remove.js'
 import { upgradeCommand } from './commands/upgrade.js'
 import { keyGenerateCommand } from './commands/key-generate.js'
+import { aboutCommand } from './commands/about.js'
 import { doctorCommand } from './commands/doctor.js'
 import { tinkerCommand } from './commands/tinker.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
@@ -343,6 +344,7 @@ async function main(): Promise<void> {
   removeCommand(program)
   upgradeCommand(program)
   keyGenerateCommand(program)
+  aboutCommand(program)
   doctorCommand(program, { bootApp })
   tinkerCommand(program)
 
@@ -375,7 +377,7 @@ async function main(): Promise<void> {
     'providers:discover', 'module:publish', 'view:sync', 'routes:sync',
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status',
-    'add', 'remove', 'upgrade', 'key:generate',
+    'add', 'remove', 'upgrade', 'key:generate', 'about',
     // `doctor` fast-path runs filesystem/env checks only. `--deep` is handled
     // inside the command's handler, which boots the app on demand (Phase 4).
     'doctor',
