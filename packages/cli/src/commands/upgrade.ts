@@ -182,6 +182,100 @@ async function fetchManifest(pkg: string, version: string, registry: string): Pr
   }
 }
 
+// ── CHANGELOG fetch + parse ───────────────────────────────────
+
+/**
+ * Per-version entry parsed from a changesets-style CHANGELOG.md. `headline` is
+ * the first meaningful bullet (changesets cite-prefix `abc1234: ` is stripped;
+ * "Updated dependencies" lines are skipped); empty string when no usable line
+ * exists.
+ */
+export interface ChangelogEntry {
+  version:  string
+  parsed:   ParsedVersion
+  headline: string
+}
+
+/**
+ * Fetch the CHANGELOG.md for a published `@rudderjs/<name>` package from
+ * GitHub raw at `main`. The npm tarball intentionally excludes CHANGELOG.md
+ * (every package's `files` field is just `["dist"]`), so unpkg returns 404;
+ * the public-repo raw URL is the simplest reliable source.
+ *
+ * Returns `null` on any failure — caller silently drops changelog rendering
+ * for that package rather than aborting the upgrade.
+ */
+async function fetchChangelog(pkg: string, baseUrl: string): Promise<string | null> {
+  // `@rudderjs/foo` → `packages/foo/CHANGELOG.md` (matches the monorepo layout)
+  if (!pkg.startsWith('@rudderjs/')) return null
+  const dir = pkg.slice('@rudderjs/'.length)
+  const url = `${baseUrl.replace(/\/+$/, '')}/packages/${dir}/CHANGELOG.md`
+  try {
+    const res = await fetch(url, { headers: { accept: 'text/plain' } })
+    if (!res.ok) return null
+    return await res.text()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Walk a changesets-format CHANGELOG.md, returning one entry per `## X.Y.Z`
+ * header whose version is in `(from, to]`. Entries are returned in the order
+ * they appear in the file (newest first, since changesets prepends).
+ */
+export function parseChangelog(
+  md:   string,
+  from: ParsedVersion,
+  to:   ParsedVersion,
+): ChangelogEntry[] {
+  // Pre-collect header positions so we can slice each section without scanning
+  // the file twice.
+  const re = /^## (\d+\.\d+\.\d+)\s*$/gm
+  const positions: Array<{ version: string; start: number; end: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(md)) !== null) {
+    positions.push({ version: m[1]!, start: m.index, end: -1 })
+  }
+  for (let i = 0; i < positions.length; i++) {
+    positions[i]!.end = i + 1 < positions.length ? positions[i + 1]!.start : md.length
+  }
+
+  const out: ChangelogEntry[] = []
+  for (const pos of positions) {
+    const parsed = parseVersion(pos.version)
+    if (!parsed) continue
+    if (compareVersions(parsed, from) <= 0) continue   // not above current
+    if (compareVersions(parsed, to)    >  0) continue   // beyond target
+    const body = md.slice(pos.start, pos.end)
+    out.push({ version: pos.version, parsed, headline: extractHeadline(body) })
+  }
+  return out
+}
+
+/**
+ * Pick a one-line summary from a CHANGELOG section's body. Skips the `##`
+ * version header, the `### Patch/Minor Changes` subheaders, and the noisy
+ * `- Updated dependencies [...]` lines. Strips the changesets cite-prefix
+ * (`- abc1234: text` → `text`). Returns the first useful line, truncated.
+ */
+function extractHeadline(body: string): string {
+  for (const raw of body.split('\n')) {
+    const line = raw.trim()
+    if (!line)                                  continue
+    if (line.startsWith('## ') || line.startsWith('### ')) continue
+    if (!line.startsWith('-'))                  continue
+    // After the dash, drop a leading short-sha cite (`abc1234: `).
+    const text = line.slice(1).trim().replace(/^[a-f0-9]{6,12}:\s*/, '').trim()
+    if (!text)                                  continue
+    if (text.toLowerCase().startsWith('updated dependencies')) continue
+    // Take first line only (multi-line bullets are possible).
+    const first = text.split('\n')[0]!.trim()
+    return first.length > 90 ? `${first.slice(0, 87)}...` : first
+  }
+  return ''
+}
+
 // ── Peer-dep mismatch collection ──────────────────────────────
 
 interface ConsumerPeer {
@@ -338,6 +432,50 @@ function renderPlan(rows: PlanRow[]): void {
   }
 }
 
+/**
+ * Same as `renderPlan` but follows each row with an indented block of
+ * `version  headline` lines from the package's CHANGELOG (one per version in
+ * the bump range). Rows whose CHANGELOG fetch returned nothing render as a
+ * plain row — graceful degradation.
+ */
+function renderPlanWithChangelogs(rows: PlanRow[], changelogs: Map<string, ChangelogEntry[]>): void {
+  const nameWidth = Math.max(...rows.map(r => r.name.length))
+  for (const row of rows) {
+    const color = colorBump(row.current, row.latest)
+    const left  = row.name.padEnd(nameWidth)
+    const arrow = dim('→')
+    console.log(`  ${left}  ${dim(fmt(row.current))} ${arrow} ${color(fmt(row.target))}  ${dim('(' + row.section + ')')}`)
+    const entries = changelogs.get(row.name) ?? []
+    if (entries.length === 0) continue
+    const verWidth = Math.max(...entries.map(e => e.version.length))
+    for (const e of entries) {
+      const ver = e.version.padStart(verWidth)
+      const head = e.headline || dim('(no summary line)')
+      console.log(`      ${dim(ver)}  ${head}`)
+    }
+  }
+}
+
+type FetchChangelogFn = (pkg: string) => Promise<string | null>
+
+/**
+ * Walk the plan, fetch + parse each package's CHANGELOG in parallel, return a
+ * map of `pkgName → entries-in-range`. Pluggable fetcher for testability.
+ */
+export async function collectChangelogs(
+  rows:    PlanRow[],
+  fetcher: FetchChangelogFn,
+): Promise<Map<string, ChangelogEntry[]>> {
+  const out = new Map<string, ChangelogEntry[]>()
+  await Promise.all(rows.map(async (row) => {
+    const md = await fetcher(row.name)
+    if (!md) return
+    const entries = parseChangelog(md, row.current, row.target)
+    if (entries.length > 0) out.set(row.name, entries)
+  }))
+  return out
+}
+
 // ── Apply ─────────────────────────────────────────────────────
 
 function applyUpdates(pkgPath: string, pkg: Record<string, unknown>, rows: PlanRow[]): void {
@@ -359,12 +497,14 @@ function runInstall(pm: PackageManager, cwd: string): Promise<boolean> {
 // ── Command ───────────────────────────────────────────────────
 
 interface UpgradeOptions {
-  check?:    boolean
-  dryRun?:   boolean
-  latest?:   boolean
-  minor?:    boolean
-  patch?:    boolean
-  registry?: string
+  check?:         boolean
+  dryRun?:        boolean
+  latest?:        boolean
+  minor?:         boolean
+  patch?:         boolean
+  registry?:      string
+  changelog?:     boolean
+  changelogBase?: string
 }
 
 export function upgradeCommand(program: Command): void {
@@ -376,7 +516,9 @@ export function upgradeCommand(program: Command): void {
     .option('--latest',         'bump to the latest version regardless of current range (default)')
     .option('--minor',          'bump within the current major only')
     .option('--patch',          'bump within the current minor only')
-    .option('--registry <url>', 'override the npm registry URL', 'https://registry.npmjs.org')
+    .option('--registry <url>',  'override the npm registry URL', 'https://registry.npmjs.org')
+    .option('--no-changelog',    'skip fetching CHANGELOG snippets (faster, less output)')
+    .option('--changelog-base <url>', 'override the GitHub raw base URL used to fetch CHANGELOGs', 'https://raw.githubusercontent.com/rudderjs/rudder/main')
     .action(async (opts: UpgradeOptions) => {
       const cwd = process.cwd()
       const pkgPath = path.join(cwd, 'package.json')
@@ -470,7 +612,22 @@ export function upgradeCommand(program: Command): void {
       }
 
       console.log(`\n  ${bold('Updates available:')}`)
-      renderPlan(rows)
+
+      // ── CHANGELOG snippets ────────────────────────────────
+      //
+      // For each bump, fetch the package's CHANGELOG.md from GitHub raw,
+      // parse out every `## X.Y.Z` section in the (current, target] window,
+      // and pluck a one-line headline per version. Shown inline under each
+      // plan row so the user can see WHAT changed before applying.
+      //
+      // `--no-changelog` skips the fetch entirely for users who want speed
+      // or quieter output. CHANGELOG failures degrade gracefully — a row
+      // with no entries simply renders without the indented detail block.
+      const changelogs = opts.changelog === false
+        ? new Map<string, ChangelogEntry[]>()
+        : await collectChangelogs(rows, (n) => fetchChangelog(n, opts.changelogBase ?? 'https://raw.githubusercontent.com/rudderjs/rudder/main'))
+
+      renderPlanWithChangelogs(rows, changelogs)
 
       // Legend — only show when there are colored bumps to explain.
       const hasMajor = rows.some(r => r.target.major > r.current.major)
@@ -548,4 +705,5 @@ export const _internal = {
   acceptedMajors,
   diffPeerRange,
   readConsumerPeers,
+  extractHeadline,
 }
