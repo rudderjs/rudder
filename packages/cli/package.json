@@ -24,7 +24,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/commands/add.test.js dist-test/commands/remove.test.js dist-test/commands/tinker.test.js dist-test/doctor/orchestrator.test.js dist-test/doctor/reporter.test.js dist-test/doctor/fixer.test.js dist-test/doctor/load-dotenv.test.js dist-test/doctor/built-in/built-in.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/commands/add.test.js dist-test/commands/upgrade.test.js dist-test/commands/remove.test.js dist-test/commands/tinker.test.js dist-test/doctor/orchestrator.test.js dist-test/doctor/reporter.test.js dist-test/doctor/fixer.test.js dist-test/doctor/load-dotenv.test.js dist-test/doctor/built-in/built-in.test.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
