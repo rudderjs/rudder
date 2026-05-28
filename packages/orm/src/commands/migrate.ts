@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
+import { CliError } from '@rudderjs/console'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -333,7 +334,12 @@ export function registerMigrateCommands(
     }
     const code = await run('pnpm', args, cwd)
     if (code !== 0 && !tolerateNonZero) {
-      throw new Error(`Migration command failed (exit ${code})`)
+      // Throw a CliError (printed as a clean red line + exit code by the CLI)
+      // rather than a plain Error — the underlying tool (prisma/drizzle-kit)
+      // already printed its actionable message via inherited stdio, so dumping
+      // a Node stack trace on top is pure noise. Mirrors the migrate:status
+      // tolerate-non-zero fix; here we still fail, just cleanly.
+      throw new CliError(`Migration command failed (exit ${code})`, code)
     }
     return code
   }
