@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { mock } from 'node:test'
 import { Application } from '@rudderjs/core'
 import type { ServiceProvider } from '@rudderjs/core'
 import type { AppRequest } from '@rudderjs/contracts'
@@ -25,6 +26,21 @@ type ProviderClass = new (app: Application) => ServiceProvider
  */
 export interface TestModelLike {
   constructor: { table?: string, primaryKey?: string, name?: string }
+}
+
+/**
+ * Returned by `TestCase.travel(amount)` to advance the mocked clock by `amount`
+ * in the chosen unit. Each terminal method ticks the mock once and returns void.
+ */
+export class TravelBuilder {
+  constructor(private readonly amount: number) {}
+  milliseconds(): void { mock.timers.tick(this.amount) }
+  seconds():      void { mock.timers.tick(this.amount * 1_000) }
+  minutes():      void { mock.timers.tick(this.amount * 60_000) }
+  hours():        void { mock.timers.tick(this.amount * 3_600_000) }
+  days():         void { mock.timers.tick(this.amount * 86_400_000) }
+  weeks():        void { mock.timers.tick(this.amount * 7 * 86_400_000) }
+  years():        void { mock.timers.tick(this.amount * 365 * 86_400_000) }
 }
 
 // ─── TestCase ─────────────────────────────────────────────
@@ -78,6 +94,9 @@ export class TestCase {
 
   /** Accumulated cookies applied to every subsequent request until cleared. */
   private _pendingCookies: Record<string, string> = {}
+
+  /** True while this case is holding `mock.timers` enabled (for `travelBack` on teardown). */
+  private _timersMocked = false
 
   /** Active trait instances (for teardown). */
   private _traits: TestTrait[] = []
@@ -148,6 +167,7 @@ export class TestCase {
     this._actingAs = undefined
     this._pendingHeaders = {}
     this._pendingCookies = {}
+    this.travelBack()
   }
 
   // ── Auth ────────────────────────────────────────────────
@@ -201,6 +221,77 @@ export class TestCase {
   flushCookies(): this {
     this._pendingCookies = {}
     return this
+  }
+
+  // ── Time travel ─────────────────────────────────────────
+
+  /**
+   * Advance the mocked clock by `amount` of a chosen unit. Returns a builder
+   * — pick a unit to actually advance:
+   *
+   * ```ts
+   * t.travel(5).days()
+   * t.travel(30).seconds()
+   * ```
+   *
+   * Enables `mock.timers` on first call; `teardown()` (or an explicit
+   * `travelBack()`) restores real time.
+   */
+  travel(amount: number): TravelBuilder {
+    this._enableTimers()
+    return new TravelBuilder(amount)
+  }
+
+  /**
+   * Set the mocked clock to an absolute moment in time. Like `travel`, this
+   * enables the mock; `teardown()` (or `travelBack()`) restores real time.
+   */
+  travelTo(date: Date | number): this {
+    this._enableTimers()
+    mock.timers.setTime(typeof date === 'number' ? date : +date)
+    return this
+  }
+
+  /**
+   * Restore the real clock. No-op when time was not mocked. Called automatically
+   * from `teardown()`.
+   */
+  travelBack(): this {
+    if (this._timersMocked) {
+      mock.timers.reset()
+      this._timersMocked = false
+    }
+    return this
+  }
+
+  /**
+   * Freeze time at the current moment for the duration of `fn`. If time was
+   * already mocked, leaves the existing mock in place; otherwise enables
+   * `mock.timers` for the callback and restores afterward.
+   *
+   * The clock does NOT advance automatically inside `fn` — call `travel()` /
+   * `travelTo()` to move it.
+   */
+  async freezeTime<T>(fn: () => T | Promise<T>): Promise<T> {
+    const wasMocked = this._timersMocked
+    this._enableTimers()
+    try {
+      return await fn()
+    } finally {
+      if (!wasMocked) this.travelBack()
+    }
+  }
+
+  private _enableTimers(): void {
+    if (this._timersMocked) return
+    // Start the mock at the real wall-clock so `Date.now()` stays continuous
+    // when the user goes in and out of time travel.
+    //
+    // setImmediate stays unmocked so `await new Promise(r => setImmediate(r))`
+    // still yields the event loop — important for tests that travel time
+    // between async steps.
+    mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: Date.now() })
+    this._timersMocked = true
   }
 
   // ── HTTP Request Helpers ────────────────────────────────

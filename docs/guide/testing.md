@@ -59,6 +59,27 @@ const user = await User.query().first()
 const res  = await t.actingAs(user).get('/api/profile')
 ```
 
+### Time travel
+
+For testing time-sensitive code (expirations, scheduled jobs, rate-limit windows) the case ships a Laravel-style time-travel API built on Node's `mock.timers`:
+
+```ts
+t.travel(5).seconds()                          // advance the clock 5 seconds
+t.travel(2).hours()                            // … or 2 hours
+t.travel(7).days()                             // … or 7 days
+                                               // also: milliseconds / minutes / weeks / years
+
+t.travelTo(new Date('2030-01-01T00:00:00Z'))   // set the clock to an absolute moment
+
+t.travelBack()                                 // restore real time (also auto on teardown)
+
+await t.freezeTime(async () => {               // pin Date.now() inside the callback
+  // ... code that depends on a stable "now"
+})
+```
+
+The mock starts at the real wall-clock time so `Date.now()` stays continuous when you enter and exit time travel. `setImmediate` stays unmocked, so async yields still work between travels.
+
 ### Request setup
 
 Use the fluent `with*` chain to attach headers or cookies to every subsequent request until `teardown()` (or an explicit `flush*` call):
