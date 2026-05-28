@@ -81,11 +81,16 @@ Every request returns a `TestResponse` with a fluent assertion API. Every `asser
 ```ts
 res.assertOk()              // 200
 res.assertCreated()         // 201
+res.assertAccepted()        // 202
 res.assertNoContent()       // 204
-res.assertNotFound()        // 404
-res.assertForbidden()       // 403
+res.assertBadRequest()      // 400
 res.assertUnauthorized()    // 401
+res.assertForbidden()       // 403
+res.assertNotFound()        // 404
+res.assertConflict()        // 409
+res.assertGone()            // 410
 res.assertUnprocessable()   // 422
+res.assertTooManyRequests() // 429
 res.assertSuccessful()      // any 2xx
 res.assertServerError()     // any 5xx
 res.assertStatus(204)
@@ -95,9 +100,23 @@ res.assertJsonPath('data.user.email', 'su@example.com')    // dot-path
 res.assertJsonCount(3, 'data.users')                       // array length
 res.assertJsonStructure(['data', 'meta'])                  // top-level keys present
 res.assertJsonMissing({ password: 'secret' })
+res.assertJsonFragment({ id: 2, tag: 'admin' })            // somewhere in the tree
+res.assertExactJson({ name: 'Suleiman', email: 'su@example.com' })   // exact match
+res.assertJsonMissingExact({ name: 'Bob' })
+
+res.assertContent('OK')                                    // raw body equals
+res.assertSee('Welcome, Suleiman')                         // body contains (raw HTML)
+res.assertDontSee('admin-only')
+res.assertSeeText('Welcome Suleiman')                      // strips HTML first
+res.assertDontSeeText('error')
+res.assertSeeInOrder(['Step 1', 'Step 2', 'Step 3'])       // ordered substrings
 
 res.assertHeader('content-type', 'application/json')
 res.assertHeaderMissing('x-debug')
+
+res.assertCookie('session')                                // Set-Cookie present
+res.assertCookie('session', 'abc')                         // value substring
+res.assertCookieMissing('csrf')
 
 res.assertRedirect()                  // any 3xx
 res.assertRedirect('/dashboard')      // 3xx with Location
