@@ -5,7 +5,36 @@ import path from 'node:path'
 import os from 'node:os'
 import { _internal } from './upgrade.js'
 
-const { parseVersion, compareVersions, buildTarget, collectDeps, detectPackageManager } = _internal
+const { parseVersion, compareVersions, buildTarget, collectDeps, detectPackageManager, shapeOfRange } = _internal
+
+// ── shapeOfRange ──────────────────────────────────────────────
+
+describe('upgrade — shapeOfRange', () => {
+  it('classifies caret / tilde / exact as pinned', () => {
+    assert.equal(shapeOfRange('^1.2.3'),     'pinned')
+    assert.equal(shapeOfRange('~1.2.3'),     'pinned')
+    assert.equal(shapeOfRange('1.2.3'),      'pinned')
+    assert.equal(shapeOfRange('>=1.0.0'),    'pinned')
+  })
+
+  it('classifies workspace refs as workspace (any pnpm syntax)', () => {
+    assert.equal(shapeOfRange('workspace:*'),       'workspace')
+    assert.equal(shapeOfRange('workspace:^'),       'workspace')
+    assert.equal(shapeOfRange('workspace:^1.0.0'),  'workspace')
+  })
+
+  it('classifies floating dist-tag refs (latest / next / *) as floating', () => {
+    assert.equal(shapeOfRange('latest'),  'floating')
+    assert.equal(shapeOfRange('*'),       'floating')
+    assert.equal(shapeOfRange('next'),    'floating')
+    assert.equal(shapeOfRange(''),        'floating')
+  })
+
+  it('trims whitespace before classifying', () => {
+    assert.equal(shapeOfRange('  latest  '), 'floating')
+    assert.equal(shapeOfRange(' ^1.2.3 '),   'pinned')
+  })
+})
 
 // ── parseVersion ──────────────────────────────────────────────
 

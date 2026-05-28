@@ -32,6 +32,27 @@ function pmInstall(pm: PackageManager): string[] {
 
 interface ParsedVersion { major: number; minor: number; patch: number }
 
+/**
+ * Classify what kind of range string a dep is using. The upgrade command
+ * treats each shape differently:
+ *
+ * - `workspace` — `workspace:*` / `workspace:^` etc. Monorepo refs; skipped
+ *   silently because they're resolved by pnpm at install time, not from npm.
+ * - `floating` — `latest`, `*`, `next`, empty string. The user opted into
+ *   auto-latest; we surface what `latest` currently resolves to as info but
+ *   don't rewrite the range (rewriting to a caret would change semantics —
+ *   they'd stop auto-picking-up future majors).
+ * - `pinned` — anything that parses as a real version range (`^1.2.3`,
+ *   `~1.2.3`, `1.2.3`, etc.). Bumped normally.
+ */
+function shapeOfRange(range: string): 'workspace' | 'floating' | 'pinned' {
+  const t = range.trim()
+  if (t.startsWith('workspace:')) return 'workspace'
+  if (t === 'latest' || t === '*' || t === 'next' || t === '')
+    return 'floating'
+  return 'pinned'
+}
+
 function parseVersion(v: string): ParsedVersion | null {
   // Strip caret/tilde/comparator + any pre-release / build metadata.
   // Apps occasionally pin to `1.2.3-beta.4` from a changesets prerelease —
@@ -215,11 +236,20 @@ export function upgradeCommand(program: Command): void {
         return { dep: d, latest }
       }))
 
-      const skipped: string[] = []
-      const rows:    PlanRow[] = []
+      const skipped:  string[] = []
+      const floating: Array<{ name: string; range: string; resolves: string }> = []
+      const rows:     PlanRow[] = []
       for (const { dep, latest } of fetched) {
+        const shape = shapeOfRange(dep.range)
+        if (shape === 'workspace') continue   // monorepo refs — silently skipped
         if (latest === null) {
-          skipped.push(dep.name)
+          skipped.push(`${dep.name} (registry unreachable)`)
+          continue
+        }
+        if (shape === 'floating') {
+          // The user opted into `latest` / `*` — record what it resolves to
+          // today as info; do NOT rewrite the range (would change semantics).
+          floating.push({ name: dep.name, range: dep.range, resolves: latest })
           continue
         }
         const current = parseVersion(dep.range)
@@ -241,20 +271,32 @@ export function upgradeCommand(program: Command): void {
         })
       }
 
+      if (floating.length) {
+        const nameWidth = Math.max(...floating.map(f => f.name.length))
+        console.log(dim('\n  Floating ranges (left as-is — your package.json says "use latest"):'))
+        for (const f of floating) {
+          console.log(`    ${dim(f.name.padEnd(nameWidth))}  ${dim(`"${f.range}" resolves to ${f.resolves} today`)}`)
+        }
+        console.log(dim('    Run your package manager\'s install to refresh the lockfile.'))
+      }
+
       if (skipped.length) {
         console.log(yel('\n  Could not check:'))
         for (const s of skipped) console.log(`    ${dim('•')} ${s}`)
       }
 
       if (rows.length === 0) {
-        const checked = deps.length - skipped.length
-        if (checked === 0) {
-          // Every dep was unparseable / unreachable — most commonly a
-          // monorepo using `workspace:*` refs. Avoid the misleading
-          // "everything up to date" green tick.
+        const pinnedChecked = deps.length - skipped.length - floating.length
+          - deps.filter(d => shapeOfRange(d.range) === 'workspace').length
+        if (pinnedChecked === 0 && floating.length === 0) {
+          // Every dep was workspace / unreachable — most commonly a
+          // monorepo. Avoid the misleading "everything up to date" green tick.
           console.log(dim('\n  Nothing to do — no parseable @rudderjs/* version ranges to check.'))
+        } else if (pinnedChecked === 0) {
+          // Only floating ranges — the info block above already covered it.
+          // Don't repeat with a green tick that implies bump verification.
         } else {
-          console.log(green(`\n  ✓ All ${checked} checked @rudderjs/* dependency(ies) are up to date.`))
+          console.log(green(`\n  ✓ All ${pinnedChecked} pinned @rudderjs/* dependency(ies) are up to date.`))
         }
         return
       }
@@ -302,4 +344,5 @@ export const _internal = {
   buildTarget,
   collectDeps,
   detectPackageManager,
+  shapeOfRange,
 }
