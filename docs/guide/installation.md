@@ -219,6 +219,48 @@ AUTH_SECRET=your-32-char-secret-here
 
 Never commit `.env`. Provide `.env.example` as a template.
 
+## Keeping up to date
+
+Rudder releases frequently — sometimes daily across the 33 published packages. To bump every `@rudderjs/*` dependency to the latest version published on npm in one step:
+
+```bash
+pnpm rudder upgrade
+```
+
+What it does:
+
+1. Finds every `@rudderjs/*` package in your `dependencies`, `devDependencies`, and `peerDependencies`.
+2. Queries the npm registry for each one's latest version.
+3. Rewrites `package.json` with the new caret ranges.
+4. Runs your package manager's install (detected from your lockfile — pnpm / npm / yarn / bun).
+
+### Flags
+
+| Flag | Behavior |
+|---|---|
+| `--check` | Print the upgrade plan and exit 1 if updates are available. Doesn't modify anything — CI-friendly. |
+| `--dry-run` | Show what would change. Doesn't modify `package.json`, doesn't install. |
+| `--latest` (default) | Bump to the latest version, including across majors. |
+| `--minor` | Cap each bump within the current major (no breaking changes). |
+| `--patch` | Cap each bump within the current minor (bug fixes only). |
+| `--registry <url>` | Override the npm registry URL (e.g. a private mirror). |
+
+```bash
+# Conservative — bug fixes only
+pnpm rudder upgrade --patch
+
+# Within-major — pick up new features but no breaking changes
+pnpm rudder upgrade --minor
+
+# Preview without applying
+pnpm rudder upgrade --dry-run
+
+# CI gate — fail the build when updates are available
+pnpm rudder upgrade --check
+```
+
+Major bumps are highlighted in red — review the relevant `CHANGELOG.md` before applying. The framework follows semver: a `feat:` release goes minor, a `feat!:` release goes major.
+
 ## Next steps
 
 - [Configuration](/guide/configuration) — environment variables, runtime config, framework wiring
