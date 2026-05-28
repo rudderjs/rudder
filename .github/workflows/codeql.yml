@@ -1,0 +1,58 @@
+name: CodeQL
+
+# Replaces the prior default-setup CodeQL configuration so we can run the
+# `security-and-quality` query suite (default-setup only supports
+# `default` / `extended`, neither of which includes the Code Quality rules:
+# `js/unused-local-variable`, `js/implicit-operand-conversion`,
+# `js/use-before-declaration`, `js/trivial-conditional`, and friends).
+#
+# Maintenance note: keep `github/codeql-action/*` pinned to a major version
+# tag so Dependabot can bump it; pinning to a specific SHA blocks the
+# weekly query-pack updates GitHub ships.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday — matches the prior default-setup schedule
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents:        read
+  security-events: write
+  actions:         read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirror the prior default-setup language coverage. JS + TS are
+        # bundled under `javascript-typescript` in CodeQL 2.x.
+        language:
+          - actions
+          - javascript-typescript
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # `security-and-quality` extends `security-extended` with the full
+          # maintainability + code-quality suite — the rules the team asked
+          # for (unused-local-variable, trivial-conditional, etc.) live here.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
