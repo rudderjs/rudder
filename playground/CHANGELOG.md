@@ -1,5 +1,18 @@
 # rudderjs-playground
 
+## 0.0.115
+
+### Patch Changes
+
+- Updated dependencies [c6ddef0]
+- Updated dependencies [bdfb88c]
+- Updated dependencies [46f5351]
+- Updated dependencies [e300385]
+  - @rudderjs/server-hono@1.3.3
+  - @rudderjs/console@1.2.0
+  - @rudderjs/terminal@1.1.3
+  - @rudderjs/orm@1.12.8
+
 ## 0.0.114
 
 ### Patch Changes
