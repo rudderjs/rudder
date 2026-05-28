@@ -1963,7 +1963,7 @@ describe('Model.related()', () => {
       id?: number
     }
     const u = new User()
-    assert.throws(() => u.related('posts'), /id is unset/)
+    assert.throws(() => u.related('posts'), /id is null\/undefined/)
   })
 
   it('throws on belongsTo when the local FK is unset', () => {
@@ -1976,7 +1976,7 @@ describe('Model.related()', () => {
       teamId?: number
     }
     const u = new User()
-    assert.throws(() => u.related('team'), /teamId is unset/)
+    assert.throws(() => u.related('team'), /teamId is null\/undefined/)
   })
 
   it('returned QueryBuilder is chainable to first/get/paginate', async () => {
@@ -2269,7 +2269,7 @@ describe('Model.belongsToMany — related() lazy fetch', () => {
       id?: number
     }
     const u = new User()
-    assert.throws(() => u.related('roles').get(), /id is unset/)
+    assert.throws(() => u.related('roles').get(), /id is null\/undefined/)
   })
 
   it('mutation methods on the deferred QB throw with a helpful message', async () => {
