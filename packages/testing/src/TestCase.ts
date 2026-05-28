@@ -172,9 +172,70 @@ export class TestCase {
 
   // ── Auth ────────────────────────────────────────────────
 
-  /** Set the authenticated user for subsequent requests. */
+  /**
+   * Set the authenticated user for subsequent requests. Serialized into the
+   * `x-testing-user` header — picked up by `AuthMiddleware` in test mode so
+   * `req.user`, `auth().user()`, `Auth.guard().check()`, and `RequireAuth`
+   * all see the user (even one that doesn't exist in the database).
+   */
   actingAs(user: Record<string, unknown>): this {
     this._actingAs = user
+    return this
+  }
+
+  /**
+   * Clear any acting-as user — subsequent requests run unauthenticated.
+   * Useful when a single test toggles between authenticated and guest states.
+   */
+  actingAsGuest(): this {
+    this._actingAs = undefined
+    return this
+  }
+
+  /**
+   * Assert that the test is acting as some user — i.e. `actingAs(user)` was
+   * called and has not been cleared via `actingAsGuest()` / `teardown()`.
+   *
+   * This checks the test-side intent set via `actingAs`. To verify that a
+   * specific request authenticated end-to-end (e.g. a login form), assert on
+   * the response of a follow-up request to a route that requires auth.
+   */
+  assertAuthenticated(): this {
+    assert.ok(
+      this._actingAs !== undefined,
+      'Expected a user to be authenticated via actingAs(), but none was set.',
+    )
+    return this
+  }
+
+  /**
+   * Assert that the test is NOT acting as any user — `actingAs()` either was
+   * never called, or was cleared via `actingAsGuest()` / `teardown()`.
+   */
+  assertGuest(): this {
+    if (this._actingAs !== undefined) {
+      const id = (this._actingAs as { id?: unknown }).id
+      assert.fail(
+        `Expected no actingAs() user, but one is set (id: ${String(id ?? '<no id>')}).`,
+      )
+    }
+    return this
+  }
+
+  /**
+   * Assert that the test is acting as the given user — matched by primary-key
+   * `id` (coerced to string). Throws if no acting-as user is set OR the id
+   * differs.
+   */
+  assertAuthenticatedAs(expected: { id: unknown }): this {
+    this.assertAuthenticated()
+    const actualId = String((this._actingAs as { id?: unknown }).id ?? '')
+    const expectedId = String(expected.id ?? '')
+    assert.equal(
+      actualId,
+      expectedId,
+      `Expected acting-as user id ${expectedId}, got ${actualId}.`,
+    )
     return this
   }
 

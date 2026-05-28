@@ -1,6 +1,7 @@
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
-import { AuthManager, Auth, runWithAuth, type AuthConfig } from './auth-manager.js'
+import { AuthManager, Auth, runWithAuth, runWithTestUser, type AuthConfig } from './auth-manager.js'
+import type { Authenticatable } from './contracts.js'
 import type { AuthUser } from './contracts.js'
 import type { SessionStore } from './session-guard.js'
 
@@ -19,7 +20,7 @@ import './types/vike.js'
 // ─── Re-exports ───────────────────────────────────────────
 
 export { Auth, auth } from './auth-manager.js'
-export { AuthManager, runWithAuth, currentAuth } from './auth-manager.js'
+export { AuthManager, runWithAuth, currentAuth, runWithTestUser, currentTestUser } from './auth-manager.js'
 export { SessionGuard } from './session-guard.js'
 export { EloquentUserProvider, toAuthenticatable } from './providers.js'
 export { Gate, Policy, AuthorizationError } from './gate.js'
@@ -91,6 +92,37 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
 
     const rawReq = req.raw as Record<string, unknown>
     const session = rawReq['__rjs_session'] as { get(k: string): unknown } | undefined
+
+    // Test-mode short-circuit — `@rudderjs/testing`'s `actingAs(user)` writes a
+    // JSON-serialized user into `x-testing-user`. In testing mode we honor it:
+    // populate `req.user` directly AND install the user into the request's ALS
+    // scope (via `runWithTestUser`) so `Auth.guard().user()`, `auth().user()`,
+    // and `RequireAuth` resolve to the same synthetic user — even one that
+    // doesn't exist in the database. Gated on `APP_ENV === 'testing'` so prod
+    // never sees this branch.
+    if (process.env.APP_ENV === 'testing') {
+      const testUserRaw = req.headers['x-testing-user']
+      if (typeof testUserRaw === 'string' && testUserRaw.length > 0) {
+        try {
+          const parsed = JSON.parse(testUserRaw) as Record<string, unknown>
+          // Wrap as Authenticatable — adds the `getAuthIdentifier()` contract
+          // method around the plain JSON payload from the test client.
+          const testUser: Authenticatable = {
+            ...parsed,
+            getAuthIdentifier: () => String(parsed['id'] ?? ''),
+          } as Authenticatable
+          const plain = userToPlain(testUser)
+          rawReq['__rjs_user'] = plain
+          try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
+
+          return runWithTestUser(testUser, () =>
+            runWithAuth(manager, () => next()),
+          )
+        } catch {
+          // Bad JSON in x-testing-user — fall through to the normal flow.
+        }
+      }
+    }
 
     const syncUser = async () => {
       const user = await Auth.guard(resolvedGuard).user()

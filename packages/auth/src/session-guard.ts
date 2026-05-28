@@ -1,4 +1,5 @@
 import type { Authenticatable, Guard, UserProvider } from './contracts.js'
+import { currentTestUser } from './auth-manager.js'
 
 // ─── Session Guard ────────────────────────────────────────
 // Cookie-based auth via @rudderjs/session.
@@ -34,6 +35,17 @@ export class SessionGuard implements Guard {
    */
   async user(): Promise<Authenticatable | null> {
     if (this._user !== undefined) return this._user
+
+    // Test-mode override — when `@rudderjs/testing`'s `actingAs(user)` writes
+    // an `x-testing-user` header, AuthMiddleware installs the user via
+    // `runWithTestUser(...)`; we honor that here so the rest of the auth
+    // surface (guard.check(), Auth.guard().user(), RequireAuth) sees the
+    // synthetic user without a session/DB round-trip.
+    const testUser = currentTestUser()
+    if (testUser) {
+      this._user = testUser
+      return this._user
+    }
 
     let id: string | undefined
     try {
