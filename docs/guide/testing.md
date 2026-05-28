@@ -1,6 +1,6 @@
 # Testing
 
-`@rudderjs/testing` provides a small layer over Node's built-in `node:test` runner: an application test case that boots the framework, fluent HTTP request helpers with response assertions, database assertions, and a set of fakes for queues, mail, notifications, events, and cache.
+`@rudderjs/testing` provides a small layer over Node's built-in `node:test` runner: an application test case that boots the framework, fluent HTTP request helpers with response assertions, database assertions, model factories, and a set of fakes for queues, mail, notifications, events, cache, file storage, the HTTP client, and AI.
 
 ## Setup
 
@@ -22,16 +22,16 @@ export class AppTestCase extends TestCase {
 }
 ```
 
-`create()` boots the application with your providers and config; `teardown()` releases resources.
+`AppTestCase.create()` is a static factory that boots the application with your providers and config and returns the bootstrapped instance; `teardown()` releases resources.
 
 ```ts
 import { describe, it, before, after } from 'node:test'
 import { AppTestCase } from './TestCase.js'
 
 describe('UserController', () => {
-  const t = new AppTestCase()
-  before(async () => await t.create())
-  after (async () => await t.teardown())
+  let t: AppTestCase
+  before(async () => { t = await AppTestCase.create() })
+  after (async () => { await t.teardown() })
 
   it('lists users', async () => {
     const res = await t.get('/api/users')
@@ -61,15 +61,18 @@ const res  = await t.actingAs(user).get('/api/profile')
 
 ## Response assertions
 
-Every request returns a `TestResponse` with a fluent assertion API:
+Every request returns a `TestResponse` with a fluent assertion API. Every `assert*` method returns the response, so chains compose without re-binding:
 
 ```ts
 res.assertOk()              // 200
 res.assertCreated()         // 201
+res.assertNoContent()       // 204
 res.assertNotFound()        // 404
 res.assertForbidden()       // 403
 res.assertUnauthorized()    // 401
 res.assertUnprocessable()   // 422
+res.assertSuccessful()      // any 2xx
+res.assertServerError()     // any 5xx
 res.assertStatus(204)
 
 res.assertJson({ name: 'Suleiman' })                       // subset match
@@ -85,6 +88,15 @@ res.assertRedirect()                  // any 3xx
 res.assertRedirect('/dashboard')      // 3xx with Location
 ```
 
+Chained form:
+
+```ts
+res
+  .assertCreated()
+  .assertJsonPath('data.email', 'su@example.com')
+  .assertHeader('content-type', 'application/json')
+```
+
 ## Database assertions
 
 ```ts
@@ -94,9 +106,11 @@ await t.assertDatabaseCount('users',   3)
 await t.assertDatabaseEmpty('users')
 ```
 
+These resolve through the ORM service (`app.make('orm')`), so an ORM adapter (`@rudderjs/orm-prisma` or `@rudderjs/orm-drizzle`) must be registered via the provider list returned from `providers()`. The first argument is the database table name as the adapter sees it — for Prisma, that is the delegate name (e.g. `oAuthClient`), not the SQL table (`oauth_clients`).
+
 ## Traits
 
-Traits add reusable behavior. Apply them in your `TestCase` subclass.
+Traits add reusable behavior. Set the `use` field on your `TestCase` subclass to the list of trait classes you want applied — each runs `setUp` after the application boots and `tearDown` in reverse order.
 
 `RefreshDatabase` truncates every table between tests so each starts empty:
 
@@ -104,7 +118,7 @@ Traits add reusable behavior. Apply them in your `TestCase` subclass.
 import { TestCase, RefreshDatabase, WithFaker } from '@rudderjs/testing'
 
 export class AppTestCase extends TestCase {
-  traits()    { return [RefreshDatabase, WithFaker] }
+  use = [RefreshDatabase, WithFaker]
   providers() { return providers }
   config()    { return configs }
 }
@@ -119,9 +133,70 @@ const res = await t.post('/api/users', {
 })
 ```
 
+## Factories
+
+`@rudderjs/orm` ships a Laravel-style model factory for generating test data. Subclass `ModelFactory` once per model and use the chainable verbs (`.state()`, `.with()`, `.make()`, `.create()`) wherever you need fixtures.
+
+```ts
+// app/Factories/UserFactory.ts
+import { ModelFactory, sequence } from '@rudderjs/orm'
+import { User } from '../Models/User.js'
+
+export class UserFactory extends ModelFactory<{ name: string; email: string; role: string }> {
+  protected modelClass = User
+
+  definition() {
+    return {
+      name:  'Alice',
+      email: sequence(i => `alice${i}@example.com`)(),
+      role:  'user',
+    }
+  }
+
+  protected states() {
+    return {
+      admin:     ()      => ({ role: 'admin' }),
+      withEmail: (email) => ({ email }),
+    }
+  }
+}
+```
+
+Use it inside a test:
+
+```ts
+// One persisted user
+const user  = await UserFactory.new().create()
+
+// One transient (not persisted) — for unit tests that don't touch the DB
+const draft = await UserFactory.new().make()
+
+// Three persisted users
+const users = await UserFactory.new().create(3)
+
+// Apply a named state
+const admin = await UserFactory.new().state('admin').create()
+
+// Override attributes inline via .with()
+const named = await UserFactory.new().with(() => ({ name: 'Bob' })).create()
+```
+
+`sequence(values)` cycles through a list or takes a function of the row index — useful when a column has a `UNIQUE` constraint:
+
+```ts
+definition() {
+  return {
+    email: sequence(i => `user${i}@example.com`)(),
+    role:  sequence(['user', 'admin', 'editor']),
+  }
+}
+```
+
+Generate a factory file with `pnpm rudder make:factory User`.
+
 ## Fakes
 
-Every package that produces side effects (queues, mail, notifications, events, cache, storage, HTTP client) ships a `.fake()` that swaps the real driver with an in-memory test double. Always call `.restore()` when done.
+Every package that produces side effects (queues, mail, notifications, events, cache, storage, HTTP client, AI) ships a `.fake()` that swaps the real driver with an in-memory test double. Always call `.restore()` when done.
 
 ```ts
 import { Queue } from '@rudderjs/queue'
@@ -143,6 +218,22 @@ it('queues a welcome job and sends a welcome mail', async () => {
 
 Each fake exposes the assertions that match its API surface — see the per-feature pages: [Queues](/guide/queues), [Mail](/guide/mail), [Notifications](/guide/notifications), [Events](/guide/events), [Cache](/guide/cache), [File Storage](/guide/storage), [HTTP Client](/guide/http-client).
 
+`Storage.fake()` follows a slightly different shape because file storage is per-disk. Pass a disk name to swap a specific one, and call the class-level `Storage.restoreFakes()` to reverse every swap:
+
+```ts
+import { Storage } from '@rudderjs/storage'
+
+const disk = Storage.fake()              // swap the default disk
+const s3   = Storage.fake('s3')          // swap a named disk
+
+// ...run the code under test...
+
+disk.assertExists('avatars/user-1.jpg')
+s3  .assertCount('uploads/', 3)
+
+Storage.restoreFakes()                   // afterEach — reverse every swap
+```
+
 ## Testing AI agents
 
 For agent-level testing, `@rudderjs/ai/eval` ships a dedicated eval framework with built-in metrics (`exactMatch`, `regex`, `llmJudge`, `jsonShape`, `semanticMatch`, `tokenCost`), `compose(...)`, `--record` / `--replay` for fixture-driven runs (zero API calls), HTML report output, and the `pnpm rudder ai:eval` CLI. See [AI / Evals](/guide/ai#evals-against-real-models) for the full surface.
@@ -157,7 +248,47 @@ fake.respondWith('Mocked response')
 
 const response = await AI.prompt('Hello')
 assert.strictEqual(response.text, 'Mocked response')
+
+fake.assertPrompted(input => input.includes('Hello'))
 fake.restore()
+```
+
+For multi-step agent runs (tool-call loops, retries), script the provider response sequence so step `N` returns `steps[N]`:
+
+```ts
+const fake = AiFake.fake()
+fake.respondWithSequence([
+  { toolCalls: [{ id: 't1', name: 'lookup', arguments: { q: 'rudderjs' } }] },
+  { text: 'Found it.' },
+])
+```
+
+`AiFake` also covers image / TTS / STT / embedding / rerank / file-upload paths:
+
+```ts
+fake.respondWithImage('iVBORw0KGgo…')         // base64
+fake.respondWithAudio(Buffer.from('…'))       // TTS bytes
+fake.respondWithTranscription('hello world')  // STT text
+fake.respondWithEmbedding([[0.1, 0.2, 0.3]])
+fake.respondWithRanking([{ index: 0, score: 0.99 }])
+
+fake.assertGeneratedImage()
+fake.assertGeneratedAudio()
+fake.assertTranscribed()
+```
+
+To force a failure mid-sequence (test `onError` middleware, retry policies) use `failOnStep`:
+
+```ts
+fake.failOnStep(0, new Error('Rate limited'))   // first provider call throws
+```
+
+For strict tests that must script every prompt, opt into stray-prompt rejection:
+
+```ts
+const fake = AiFake.fake().preventStrayPrompts()
+fake.respondWithSequence([{ text: 'expected reply' }])
+// any unscripted prompt now throws instead of falling back to the ambient default
 ```
 
 ## Full example
@@ -172,9 +303,9 @@ import { WelcomeMail }       from '../../app/Mail/WelcomeMail.js'
 import { AppTestCase }       from '../TestCase.js'
 
 describe('UserController', () => {
-  const t = new AppTestCase()
-  before(async () => await t.create())
-  after (async () => await t.teardown())
+  let t: AppTestCase
+  before(async () => { t = await AppTestCase.create() })
+  after (async () => { await t.teardown() })
 
   it('creates a user and dispatches side effects', async () => {
     const queue = Queue.fake()
@@ -211,5 +342,6 @@ Run with `npx tsx --test tests/**/*.test.ts`, or add a script:
 ## Pitfalls
 
 - **Forgetting `.restore()` on a fake.** The fake stays installed for subsequent tests in the same process, leaking expectations across files. Restore in an `afterEach` for safety.
-- **`actingAs(user)` returning a chainable.** Each call returns a new request builder that's authenticated for the next request only. Don't share between tests.
-- **Database assertions before `RefreshDatabase`.** Without the trait, rows from previous tests persist. Apply `RefreshDatabase` or use `t.assertDatabaseHas` carefully with seeded fixtures.
+- **`actingAs(user)` sticks until teardown.** It sets the authenticated user on the test case itself, so every subsequent request in the same test uses it. `teardown()` clears it; call `actingAs(otherUser)` to switch, or skip the helper to test as a guest.
+- **Database assertions before `RefreshDatabase`.** Without the trait, rows from previous tests persist. Add `RefreshDatabase` to your `use` array or use `assertDatabaseHas` carefully with seeded fixtures.
+- **`assertDatabaseHas('users', …)` throws "Cannot query table".** The first argument is the name the ORM adapter binds, not the SQL table — for Prisma, that's the delegate name (`oAuthClient`), not `@@map`'d SQL (`oauth_clients`). The error is the framework's; check `static table` on the corresponding Model.
