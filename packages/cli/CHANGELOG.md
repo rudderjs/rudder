@@ -1,5 +1,98 @@
 # @rudderjs/cli
 
+## 4.8.0
+
+### Minor Changes
+
+- 42619cb: `rudder key:generate` — Laravel-parity command for generating a 32-byte `APP_KEY` and writing it to `.env`.
+
+  ```bash
+  pnpm rudder key:generate            # generate + write to .env
+  pnpm rudder key:generate --show     # print to stdout, leave .env alone
+  pnpm rudder key:generate --force    # overwrite an existing non-empty APP_KEY
+  pnpm rudder key:generate --path .env.local   # target a different .env file
+  ```
+
+  Idempotent behavior:
+
+  - `.env` doesn't exist → created with `APP_KEY=base64:...`
+  - `.env` exists but has no `APP_KEY` line → appended
+  - `.env` has an **empty** `APP_KEY=` (the fresh-scaffold shape) → replaced silently
+  - `.env` has a **non-empty** `APP_KEY=…` → refused with exit 1, unless `--force` is passed (protects production secrets from accidental overwrite)
+
+  Commented-out lines (`# APP_KEY=...`) and similar-prefixed names (`APP_KEYS=...`) are not touched. Preserves all other lines, comments, and ordering in `.env`.
+
+  Also updates every place in the framework that previously emitted the verbose `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` recipe:
+
+  - **doctor → APP_KEY unset** now says `Run \`pnpm rudder key:generate\` to generate a 32-byte APP_KEY and write it to .env`
+  - **doctor → APP_KEY too short** now says `Run \`pnpm rudder key:generate --force\` to replace it with a 32-byte key`
+  - **`create-rudder` scaffolder** — `.env.example`'s `# Generate with:` hint now points at `pnpm rudder key:generate` instead of the inline `node -e` recipe.
+
+  The scaffolder still generates `APP_KEY` automatically at scaffold time (it always did) — the change only affects the `.env.example` documentation hint, so users cloning a fresh project know which command to run when they need to rotate or regenerate.
+
+- 14363de: `rudder about` — Laravel-parity snapshot of the app.
+
+  ```bash
+  pnpm rudder about           # human-readable
+  pnpm rudder about --json    # machine-readable (bug reports, LLM context)
+  ```
+
+  Output covers:
+
+  - **Application** — name from `package.json`, plus `APP_ENV` / `APP_DEBUG` / `APP_URL` from `.env`
+  - **Runtime** — Node version, OS + arch, detected package manager
+  - **Rudder** — installed `@rudderjs/core` and `@rudderjs/cli` versions
+  - **Installed packages** — every `@rudderjs/*` present in `node_modules`, sorted, with versions
+
+  Skip-boot (~50ms typical) — no app machinery runs, so the command works even when the app can't boot. `.env` is loaded directly so the snapshot reflects what the app would actually see at runtime.
+
+  Use cases:
+
+  - **Bug reports** — `pnpm rudder about --json` is the one-line attachment maintainers ask for first
+  - **LLM context** — the JSON output gives an AI agent helping you debug everything it needs about your project's stack in one read
+  - **Sanity check** — confirm what's actually installed after a deploy / `pnpm install` / framework upgrade
+
+- 425c7f1: `rudder upgrade` — CHANGELOG snippets inline.
+
+  For every package being bumped, the command now fetches the `CHANGELOG.md` from the framework's public GitHub repo (npm tarballs intentionally omit it via `files: ["dist"]`), parses every `## X.Y.Z` section in the window between current and target, and prints a one-line headline per intermediate version:
+
+  ```
+    @rudderjs/cli  4.6.5 → 4.7.1  (devDependencies)
+        4.7.1  rudder upgrade — handle floating dist-tag ranges
+        4.7.0  rudder upgrade — one-step bump of every @rudderjs/* dep to latest
+        4.6.9  stripInternal: true is now set in tsconfig.base.json
+        ...
+  ```
+
+  Headlines come from the first non-trivial bullet of each version's changeset entry; the cite-prefix (`abc1234:`) is stripped and `Updated dependencies [...]` lines are skipped.
+
+  New flags:
+
+  - `--no-changelog` — skip the fetch entirely (faster, quieter; useful for CI).
+  - `--changelog-base <url>` — override the GitHub raw base URL (forks, mirrors). Default: `https://raw.githubusercontent.com/rudderjs/rudder/main`.
+
+  Fetch failures degrade gracefully — a row whose CHANGELOG can't be fetched renders without the indented detail block.
+
+  `parseChangelog()` + `collectChangelogs()` are exported with a pluggable fetcher so unit tests drive them with synthetic markdown, zero network in CI.
+
+- 6aa9ab2: `rudder upgrade` — detect peer-dependency mismatches.
+
+  After building the bump plan, the command now fetches each upgraded `@rudderjs/*` package's `peerDependencies` at the target version and diffs them against the peers declared in the consumer's `package.json`. When a framework package has bumped a peer major past what the consumer carries, a loud warning surfaces with the exact ranges and suggested fix:
+
+  ```
+    ⚠ Peer-dependency mismatches:
+      vite  — required by @rudderjs/vite@3.0.0
+        your package.json: devDependencies.vite = "^7.1.0"
+        framework needs:    "^8.0.0"
+        reason:             consumer accepts major 7, framework needs major 8
+  ```
+
+  `--check` mode treats peer mismatches as part of the exit-1 condition, so CI gates catch them.
+
+  Closes the gap discovered on `rudderjs.com` (2026-05-29): `pnpm update --latest "@rudderjs/*"` happily bumps `@rudderjs/*` packages but doesn't notice when the framework has bumped a peer-dep major (`vite 7→8`, `react 18→19`, etc.). Apps stay on the old peer and miss the actual upgrade signal.
+
+  Internal: `acceptedMajors(range)` reduces a semver range to its accepted-major set (or `'any'`); `diffPeerRange(consumer, required)` intersects two ranges and surfaces a reason on no-overlap. Both fail open on unparseable input so they never block a working upgrade.
+
 ## 4.7.1
 
 ### Patch Changes
