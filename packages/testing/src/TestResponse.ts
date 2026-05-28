@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { AssertableJson } from './AssertableJson.js'
 
 /**
  * Wraps an HTTP response with fluent assertion methods.
@@ -109,10 +110,35 @@ export class TestResponse {
 
   // ─── JSON assertions ───────────────────────────────────
 
-  /** Assert response JSON contains the given key-value pairs (partial match). */
-  assertJson(expected: Record<string, unknown>): this {
+  /**
+   * Assert on response JSON. Two forms:
+   *
+   * - **Subset match** — pass a partial object; every entry is checked
+   *   against the corresponding top-level key (deep equal). Extra keys in
+   *   the response are ignored.
+   * - **Fluent** — pass a callback `(json: AssertableJson) => void` and use
+   *   the Laravel-parity DSL (`has` / `where` / `whereType` / `missing` /
+   *   `count` / `first` / `each` / `etc`). Strict-by-default: every key not
+   *   touched by an assertion fails the test unless `etc()` is called.
+   *
+   * @example
+   * res.assertJson({ name: 'Alice' })                   // subset match
+   *
+   * res.assertJson(json =>
+   *   json.has('user').where('user.name', 'Alice').etc()
+   * )                                                    // fluent
+   */
+  assertJson(expected: Record<string, unknown>): this
+  assertJson(callback: (json: AssertableJson) => void): this
+  assertJson(arg: Record<string, unknown> | ((json: AssertableJson) => void)): this {
+    if (typeof arg === 'function') {
+      const j = new AssertableJson(this.body)
+      arg(j)
+      ;(j as unknown as { _verifyInteracted(): void })._verifyInteracted()
+      return this
+    }
     const body = this.body as Record<string, unknown>
-    for (const [key, value] of Object.entries(expected)) {
+    for (const [key, value] of Object.entries(arg)) {
       assert.deepStrictEqual(body[key], value, `JSON key "${key}" does not match`)
     }
     return this

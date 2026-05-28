@@ -155,6 +155,40 @@ res.assertRedirect()                  // any 3xx
 res.assertRedirect('/dashboard')      // 3xx with Location
 ```
 
+### Fluent JSON assertions (`AssertableJson`)
+
+For larger response bodies, `assertJson` also accepts a callback exposing the Laravel-parity `AssertableJson` DSL. It's **strict-by-default** — any key you don't touch with `has` / `where` / `missing` fails the assertion (a regression-catcher for accidental field leaks). Opt out per-scope with `etc()`:
+
+```ts
+res.assertJson(json =>
+  json
+    .has('user')
+    .where('user.name', 'Suleiman')
+    .whereType('user.email', 'string')
+    .has('items', 3, item =>
+      item.where('id', 1).where('name', 'first').etc()
+    )
+    .missing('user.password')
+    .etc()                       // ignore any extra top-level keys
+)
+```
+
+| Method | Purpose |
+|---|---|
+| `has(key)` | Key exists. |
+| `has(key, n)` | Key is an array of length `n`. |
+| `has(key, fn)` | Open a scoped check on the value. |
+| `has(key, n, fn)` | Array of length `n`; `fn` runs on the FIRST item. |
+| `missing(key)` / `missingAll(keys)` | Assert absent. |
+| `where(key, value)` / `whereNot(key, value)` | Deep-equal check. |
+| `whereType(key, type)` | `'string'`, `'number'`, `'boolean'`, `'array'`, `'object'`, `'null'`, `'undefined'`. |
+| `whereContains(key, value)` | Array contains value OR string contains substring. |
+| `count(key, n)` | Array length without opening a scope. |
+| `first(fn)` / `each(fn)` | Iterate when the current scope IS an array. |
+| `etc()` | Opt this scope out of the strict-key check. |
+
+Paths use dot-notation (`user.profile.name`, `items.0.id`).
+
 Chained form:
 
 ```ts
