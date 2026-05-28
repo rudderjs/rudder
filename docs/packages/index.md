@@ -2,7 +2,7 @@
 
 Rudder is built as a set of small, opt-in packages. The framework core is intentionally lean — every other capability ships as its own package you install only when you need it.
 
-Pick the packages that match what you're building. Packages don't depend on each other unless they have to, and each one auto-registers its service provider when installed via `pnpm rudder module:install`.
+Pick the packages that match what you're building. Packages don't depend on each other unless they have to, and each one auto-registers its service provider when installed via `pnpm rudder add <package>`.
 
 ## First-party packages
 

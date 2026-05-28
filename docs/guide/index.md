@@ -45,7 +45,7 @@ Rudder refuses the tradeoff. It's batteries-included, modular, UI-agnostic, and 
 | **DI container** | None | Class-based IoC | IoC | Service Providers + ALS request scope |
 | **AI-native** | ✗ | ✗ | ✗ | ✓ 15 providers, agents, streaming, MCP |
 | **Real-time collab** | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
-| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 47 opt-in packages |
+| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 48 opt-in packages |
 
 The shape: one DI container, one CLI, one mental model. Routes return `view()`. Models query the database. Jobs queue work. Agents call tools. The same TypeScript ergonomics from the HTTP edge to the database row.
 
