@@ -306,39 +306,47 @@ describe('TestCase — time travel', () => {
   // Always restore real time, even when an assertion fails mid-test.
   function restore(tc: TestCase): void { tc.travelBack() }
 
+  // Anchor the mock at a fixed timestamp so `Date.now()` comparisons are
+  // deterministic across platforms. Without this, Windows + Node 20 has
+  // ~15ms wall-clock granularity — the test's `start = Date.now()` capture
+  // can race ahead of the mock's internal `now: Date.now()` and break
+  // strict-equality assertions.
+  const ANCHOR = Date.UTC(2026, 0, 1)
+  function anchor(tc: TestCase): void { tc.travelTo(ANCHOR) }
+
   it('travel(N).seconds advances Date.now by N * 1000', () => {
     const tc = bareCase()
     try {
-      const start = Date.now()
+      anchor(tc)
       tc.travel(5).seconds()
-      assert.equal(Date.now(), start + 5_000)
+      assert.equal(Date.now(), ANCHOR + 5_000)
     } finally { restore(tc) }
   })
 
   it('travel(N).minutes advances by N * 60_000', () => {
     const tc = bareCase()
     try {
-      const start = Date.now()
+      anchor(tc)
       tc.travel(2).minutes()
-      assert.equal(Date.now(), start + 120_000)
+      assert.equal(Date.now(), ANCHOR + 120_000)
     } finally { restore(tc) }
   })
 
   it('travel(N).hours advances by N * 3_600_000', () => {
     const tc = bareCase()
     try {
-      const start = Date.now()
+      anchor(tc)
       tc.travel(3).hours()
-      assert.equal(Date.now(), start + 10_800_000)
+      assert.equal(Date.now(), ANCHOR + 10_800_000)
     } finally { restore(tc) }
   })
 
   it('travel(N).days advances by N * 86_400_000', () => {
     const tc = bareCase()
     try {
-      const start = Date.now()
+      anchor(tc)
       tc.travel(7).days()
-      assert.equal(Date.now(), start + 7 * 86_400_000)
+      assert.equal(Date.now(), ANCHOR + 7 * 86_400_000)
     } finally { restore(tc) }
   })
 
@@ -378,7 +386,7 @@ describe('TestCase — time travel', () => {
   it('freezeTime pins Date.now across multiple reads', async () => {
     const tc = bareCase()
     try {
-      let captured: number[] = []
+      const captured: number[] = []
       await tc.freezeTime(async () => {
         captured.push(Date.now())
         await new Promise((r) => setImmediate(r))
