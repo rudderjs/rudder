@@ -73,7 +73,7 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
   }
 
   return class VectorCast implements CastUsing {
-    get(_key: string, value: unknown): unknown {
+    get(key: string, value: unknown): unknown {
       if (value === null || value === undefined) return value
       // Already an array (e.g. roundtrip from cache) — passthrough.
       if (Array.isArray(value)) return value
@@ -89,7 +89,9 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           throw new Error(
-            `[RudderJS ORM] Vector cast failed to parse value (${msg}): ${value.slice(0, 80)}`,
+            `[RudderJS ORM] Vector cast on column "${key}" failed to parse stored value (${msg}). ` +
+            `The DB returned "${value.slice(0, 80)}…" which isn't pgvector text format ([1,2,3]). ` +
+            `Verify the column type is \`vector(N)\` in your schema.`,
             { cause: err },
           )
         }
@@ -100,7 +102,11 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
     set(key: string, value: unknown): unknown {
       if (value === null || value === undefined) return value
       if (!Array.isArray(value)) {
-        throw new Error(`[RudderJS ORM] Vector column "${key}" expected number[], got ${typeof value}`)
+        throw new Error(
+          `[RudderJS ORM] Vector column "${key}" expected number[], got ${typeof value}. ` +
+          `If you have a pgvector text string from a raw query, parse it via JSON.parse() before assignment; ` +
+          `otherwise check the cast declaration (\`static casts = { ${key}: vector({ dimensions: N }) }\`).`,
+        )
       }
       if (value.length !== dimensions) {
         throw new VectorDimensionMismatchError(key, dimensions, value.length)
@@ -189,7 +195,10 @@ function _parseJson(key: string, value: string): unknown {
   try {
     return JSON.parse(value) as unknown
   } catch {
-    throw new Error(`[RudderJS ORM] Invalid JSON in "${key}" cast: ${value.slice(0, 80)}`)
+    throw new Error(
+      `[RudderJS ORM] Invalid JSON in cast column "${key}": ${value.slice(0, 80)}… ` +
+      `Verify the column stores serialized JSON; if it stores raw strings, change the cast to "string" or remove it.`,
+    )
   }
 }
 
