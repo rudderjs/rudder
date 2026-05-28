@@ -186,13 +186,21 @@ export class ConfigRepository {
 
 let _repo: ConfigRepository | null = null
 
-/** @internal — called by @rudderjs/core Application */
+/**
+ * Bind the process-wide `ConfigRepository`. Called by `@rudderjs/core`'s
+ * `Application` during bootstrap — public because that's a cross-package
+ * wiring point, not an internal hook.
+ */
 export function setConfigRepository(repo: ConfigRepository): void {
   _repo = repo
   ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = repo
 }
 
-/** @internal — used by @rudderjs/testing for snapshot/restore */
+/**
+ * Read the process-wide `ConfigRepository` (set by Application bootstrap),
+ * or `null` if no Application has booted. Public because `@rudderjs/testing`
+ * uses it for snapshot/restore in cross-package tests.
+ */
 export function getConfigRepository(): ConfigRepository | null {
   return _repo
     ?? ((globalThis as Record<string, unknown>)['__rudderjs_config__'] as ConfigRepository | undefined)

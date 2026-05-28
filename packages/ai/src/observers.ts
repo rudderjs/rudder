@@ -128,7 +128,7 @@ export class AiObserverRegistry {
     }
   }
 
-  /** @internal — used in tests */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   reset(): void { this.observers = [] }
 }
 

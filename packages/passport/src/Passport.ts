@@ -350,7 +350,7 @@ export class Passport {
 
   // ── Reset (testing) ─────────────────────────────────────
 
-  /** @internal */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.scopes.clear()
     _store.tokenLifetime         = 15 * 24 * 60 * 60 * 1000

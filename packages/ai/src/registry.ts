@@ -74,7 +74,7 @@ if (!_g['__rudderjs_ai_reset_listeners__']) {
 }
 const _resetListeners = _g['__rudderjs_ai_reset_listeners__'] as Set<() => void>
 
-/** @internal — subscribe to `AiRegistry.reset()` to clear adjacent caches. */
+/** Test-cleanup hook (@internal — subscribe to `AiRegistry.reset()` to clear adjacent caches. ). Kept public — other packages reset across the boundary. */
 export function _onAiRegistryReset(fn: () => void): void { _resetListeners.add(fn) }
 
 export class AiRegistry {
@@ -163,7 +163,7 @@ export class AiRegistry {
     return _store.models
   }
 
-  /** @internal — reset for testing */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.factories.clear()
     _store.default = null

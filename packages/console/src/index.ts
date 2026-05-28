@@ -182,7 +182,11 @@ export abstract class Command {
   private _args: Record<string, unknown> = {}
   private _opts: Record<string, unknown> = {}
 
-  /** @internal — called by the CLI runner before handle() */
+  /**
+   * Inject parsed args / opts before `handle()` runs. Called by the CLI
+   * runner in `@rudderjs/cli` — public for that cross-package contract; the
+   * underscore-prefix signals "not for app code."
+   */
   _setContext(args: Record<string, unknown>, opts: Record<string, unknown>): void {
     this._args = args
     this._opts = opts
@@ -340,7 +344,7 @@ export class CommandObserverRegistry {
     }
   }
 
-  /** @internal — used in tests */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   reset(): void { this.observers = [] }
 }
 

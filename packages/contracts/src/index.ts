@@ -315,7 +315,9 @@ export interface QueryBuilder<T> {
    * sets) — adapters coerce numeric `null` to `0` for `count` to match
    * SQL semantics. `exists` returns a boolean.
    *
-   * @internal
+   * The underscore-prefix signals "not for app code" — the contract is on
+   * the public interface because ORM adapters are public implementers and
+   * must satisfy this member.
    */
   _aggregate(fn: AggregateFn, column?: string): Promise<unknown>
 }

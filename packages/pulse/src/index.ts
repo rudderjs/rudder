@@ -34,7 +34,7 @@ export class PulseRegistry {
 
   static set(storage: PulseStorage): void { this.storage = storage }
   static get(): PulseStorage | null        { return this.storage }
-  /** @internal — clears the registered storage. Used for testing. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void                     { this.storage = null }
 }
 

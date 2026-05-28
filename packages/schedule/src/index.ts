@@ -178,7 +178,7 @@ class Scheduler {
 
   getTasks(): ScheduledTask[] { return [...this._tasks] }
 
-  /** @internal — used for testing and hot-reload */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   reset(): void { this._tasks.length = 0 }
 }
 

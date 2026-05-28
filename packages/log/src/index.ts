@@ -346,7 +346,7 @@ export class LogRegistry {
     return [..._store.channels.keys()]
   }
 
-  /** @internal */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.channels.clear()
     _store.defaultName = 'console'

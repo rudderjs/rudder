@@ -42,7 +42,7 @@ const _store = _g['__rudderjs_hash_registry__'] as HashRegistryStore
 export class HashRegistry {
   static set(driver: HashDriver): void   { _store.driver = driver }
   static get(): HashDriver | null        { return _store.driver }
-  /** @internal */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void                   { _store.driver = null }
 }
 

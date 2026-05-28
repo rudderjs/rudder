@@ -45,7 +45,11 @@ export class GateObserverRegistry {
     }
   }
 
-  /** @internal — used in tests */
+  /**
+   * Drop every observer subscription. Test-cleanup hook — kept on the
+   * public API because `@rudderjs/telescope`'s test suite imports
+   * `gateObservers` across the package boundary to reset between cases.
+   */
   reset(): void { this.observers = [] }
 }
 

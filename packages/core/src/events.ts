@@ -74,7 +74,7 @@ export class EventDispatcher {
     return result
   }
 
-  /** @internal — clears all listeners. Used for testing and hot-reload. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   reset(): void {
     this.map.clear()
   }
