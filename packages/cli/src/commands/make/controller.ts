@@ -6,12 +6,12 @@ export type ControllerKind = 'plain' | 'resource' | 'api' | 'singleton'
 /** Default decorator-driven controller — single `@Get('/')` handler. */
 export function stub(className: string, prefix: string): string {
   return `import { Controller, Get } from '@rudderjs/router'
-import type { Context } from '@rudderjs/core'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 @Controller('${prefix}')
 export class ${className} {
   @Get('/')
-  async index(_ctx: Context) {
+  async index(req: AppRequest, res: AppResponse) {
     return []
   }
 }
@@ -25,45 +25,45 @@ export class ${className} {
  * `router.resource()`, so trim freely if a verb doesn't apply.
  */
 export function resourceStub(className: string): string {
-  return `import type { Context } from '@rudderjs/core'
+  return `import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // Wire via: router.resource('${derivePluralResourceName(className)}', ${className})
 export class ${className} {
-  async index   (_ctx: Context) { return [] }
-  async create  (_ctx: Context) { /* render create form */ }
-  async store   (_ctx: Context) { /* persist new record */ }
-  async show    (_ctx: Context) { /* render one record */ }
-  async edit    (_ctx: Context) { /* render edit form */ }
-  async update  (_ctx: Context) { /* persist update */ }
-  async destroy (_ctx: Context) { /* delete record */ }
+  async index   (req: AppRequest, res: AppResponse) { return [] }
+  async create  (req: AppRequest, res: AppResponse) { /* render create form */ }
+  async store   (req: AppRequest, res: AppResponse) { /* persist new record */ }
+  async show    (req: AppRequest, res: AppResponse) { /* render one record */ }
+  async edit    (req: AppRequest, res: AppResponse) { /* render edit form */ }
+  async update  (req: AppRequest, res: AppResponse) { /* persist update */ }
+  async destroy (req: AppRequest, res: AppResponse) { /* delete record */ }
 }
 `
 }
 
 /** API-only resource stub — drops `create` + `edit` (HTML form pages). */
 export function apiResourceStub(className: string): string {
-  return `import type { Context } from '@rudderjs/core'
+  return `import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // Wire via: router.apiResource('${derivePluralResourceName(className)}', ${className})
 export class ${className} {
-  async index   (_ctx: Context) { return [] }
-  async store   (_ctx: Context) { /* persist new record */ }
-  async show    (_ctx: Context) { /* render one record */ }
-  async update  (_ctx: Context) { /* persist update */ }
-  async destroy (_ctx: Context) { /* delete record */ }
+  async index   (req: AppRequest, res: AppResponse) { return [] }
+  async store   (req: AppRequest, res: AppResponse) { /* persist new record */ }
+  async show    (req: AppRequest, res: AppResponse) { /* render one record */ }
+  async update  (req: AppRequest, res: AppResponse) { /* persist update */ }
+  async destroy (req: AppRequest, res: AppResponse) { /* delete record */ }
 }
 `
 }
 
 /** Singleton stub — `show` / `edit` / `update` only. */
 export function singletonStub(className: string): string {
-  return `import type { Context } from '@rudderjs/core'
+  return `import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // Wire via: router.singleton('${deriveSingularResourceName(className)}', ${className})
 export class ${className} {
-  async show   (_ctx: Context) { /* render the resource */ }
-  async edit   (_ctx: Context) { /* render edit form */ }
-  async update (_ctx: Context) { /* persist update */ }
+  async show   (req: AppRequest, res: AppResponse) { /* render the resource */ }
+  async edit   (req: AppRequest, res: AppResponse) { /* render edit form */ }
+  async update (req: AppRequest, res: AppResponse) { /* persist update */ }
 }
 `
 }
