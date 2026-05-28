@@ -108,6 +108,20 @@ await t.assertDatabaseEmpty('users')
 
 These resolve through the ORM service (`app.make('orm')`), so an ORM adapter (`@rudderjs/orm-prisma` or `@rudderjs/orm-drizzle`) must be registered via the provider list returned from `providers()`. The first argument is the database table name as the adapter sees it — for Prisma, that is the delegate name (e.g. `oAuthClient`), not the SQL table (`oauth_clients`).
 
+### Model-instance assertions
+
+When you already have a Model instance, the model-aware helpers read `static table` / `static primaryKey` directly — no string table lookup required:
+
+```ts
+await t.assertModelExists(user)        // row with user.id exists (any state)
+await t.assertModelMissing(user)       // no row with user.id
+
+await t.assertSoftDeleted(user)        // row exists AND deletedAt is set
+await t.assertNotSoftDeleted(user)     // row exists AND deletedAt is null
+```
+
+The soft-delete assertions require `static softDeletes = true` on the model (and a `deletedAt` column). They query the raw table — soft-deleted rows are visible even though the model's default scope would normally hide them.
+
 ## Traits
 
 Traits add reusable behavior. Set the `use` field on your `TestCase` subclass to the list of trait classes you want applied — each runs `setUp` after the application boots and `tearDown` in reverse order.

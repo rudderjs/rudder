@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { TestResponse } from './TestResponse.js'
+import { TestCase } from './TestCase.js'
 
 // ─── TestResponse: Status assertions ──────────────────────
 
@@ -176,6 +177,119 @@ describe('TestResponse — chaining', () => {
       .assertJsonStructure(['ok'])
 
     assert.strictEqual(result, res)
+  })
+})
+
+// ─── TestCase: Model assertions ───────────────────────────
+
+describe('TestCase — model assertions', () => {
+  // Build a TestCase pre-wired to a stubbed orm with a fixed row set.
+  function caseWithRows(rows: Array<Record<string, unknown>>): TestCase {
+    const tc = Object.create(TestCase.prototype) as TestCase
+    let lastFiltered: Array<Record<string, unknown>> = rows
+    const orm = {
+      query(_table: string) {
+        let filtered = rows
+        const qb = {
+          where(col: string, val: unknown) {
+            filtered = filtered.filter((r) => r[col] === val)
+            lastFiltered = filtered
+            return qb
+          },
+          first() { return Promise.resolve(filtered[0] ?? null) },
+          get() { return Promise.resolve(lastFiltered) },
+        }
+        return qb
+      },
+    }
+    ;(tc as unknown as { app: { make: (key: string) => unknown } }).app = {
+      make: (key: string) => key === 'orm' ? orm : null,
+    }
+    return tc
+  }
+
+  class User {
+    static table = 'user'
+    static primaryKey = 'id'
+    constructor(public id: number, public deletedAt: Date | null = null) {}
+  }
+
+  it('assertModelExists passes when the row is found', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: null }])
+    await tc.assertModelExists(new User(42))
+  })
+
+  it('assertModelExists throws when the row is missing', async () => {
+    const tc = caseWithRows([])
+    await assert.rejects(
+      () => tc.assertModelExists(new User(42)),
+      /Expected User#42 to exist/,
+    )
+  })
+
+  it('assertModelMissing passes when no row is found', async () => {
+    const tc = caseWithRows([])
+    await tc.assertModelMissing(new User(42))
+  })
+
+  it('assertModelMissing throws when a row exists', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: null }])
+    await assert.rejects(
+      () => tc.assertModelMissing(new User(42)),
+      /Expected User#42 to be missing/,
+    )
+  })
+
+  it('assertSoftDeleted passes when row exists with deletedAt set', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: new Date() }])
+    await tc.assertSoftDeleted(new User(42))
+  })
+
+  it('assertSoftDeleted throws when row exists but deletedAt is null', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: null }])
+    await assert.rejects(
+      () => tc.assertSoftDeleted(new User(42)),
+      /deletedAt is null/,
+    )
+  })
+
+  it('assertSoftDeleted throws when no row exists', async () => {
+    const tc = caseWithRows([])
+    await assert.rejects(
+      () => tc.assertSoftDeleted(new User(42)),
+      /no row exists/,
+    )
+  })
+
+  it('assertNotSoftDeleted passes when row exists with deletedAt null', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: null }])
+    await tc.assertNotSoftDeleted(new User(42))
+  })
+
+  it('assertNotSoftDeleted throws when row exists with deletedAt set', async () => {
+    const tc = caseWithRows([{ id: 42, deletedAt: new Date() }])
+    await assert.rejects(
+      () => tc.assertNotSoftDeleted(new User(42)),
+      /to NOT be soft-deleted/,
+    )
+  })
+
+  it('throws a clear error when the model has no static table', async () => {
+    class Anon { id = 1 }
+    const tc = caseWithRows([])
+    await assert.rejects(
+      () => tc.assertModelExists(new Anon() as never),
+      /Model has no static `table`/,
+    )
+  })
+
+  it('throws a clear error when the model has no primary-key value', async () => {
+    const tc = caseWithRows([])
+    const unsaved = new User(undefined as unknown as number)
+    await assert.rejects(
+      () => tc.assertModelExists(unsaved),
+      /Model has no value for primary key/,
+    )
   })
 })
 

@@ -17,6 +17,16 @@ export type TestTraitClass = new () => TestTrait
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ProviderClass = new (app: Application) => ServiceProvider
 
+/**
+ * Shape of a model instance accepted by the `assertModel*` / `assertSoftDeleted`
+ * helpers. The constructor must carry `static table` (and ideally `static
+ * primaryKey`, defaulting to `'id'`); the instance must have a populated
+ * primary-key value (i.e. it must have been persisted).
+ */
+export interface TestModelLike {
+  constructor: { table?: string, primaryKey?: string, name?: string }
+}
+
 // ─── TestCase ─────────────────────────────────────────────
 
 /**
@@ -227,6 +237,76 @@ export class TestCase {
   /** Assert a table is empty. */
   async assertDatabaseEmpty(table: string): Promise<void> {
     await this.assertDatabaseCount(table, 0)
+  }
+
+  /**
+   * Assert that the given model instance has a corresponding row in the database
+   * (regardless of soft-delete state — finds soft-deleted rows too).
+   */
+  async assertModelExists(model: TestModelLike): Promise<void> {
+    const { table, pk, pkValue, label } = this._modelMeta(model)
+    const record = await this._findRecord(table, { [pk]: pkValue })
+    assert.ok(record, `Expected ${label} to exist in the database.`)
+  }
+
+  /**
+   * Assert that the given model instance has no corresponding row in the database.
+   */
+  async assertModelMissing(model: TestModelLike): Promise<void> {
+    const { table, pk, pkValue, label } = this._modelMeta(model)
+    const record = await this._findRecord(table, { [pk]: pkValue })
+    assert.ok(!record, `Expected ${label} to be missing from the database, but it exists.`)
+  }
+
+  /**
+   * Assert that the given model instance is soft-deleted — its row exists and
+   * `deletedAt` is set. Requires `static softDeletes = true` on the model and
+   * a `deletedAt` column.
+   */
+  async assertSoftDeleted(model: TestModelLike): Promise<void> {
+    const { table, pk, pkValue, label } = this._modelMeta(model)
+    const record = await this._findRecord(table, { [pk]: pkValue })
+    assert.ok(record, `Expected ${label} to be soft-deleted, but no row exists.`)
+    const deletedAt = (record as { deletedAt?: unknown }).deletedAt
+    assert.ok(
+      deletedAt != null,
+      `Expected ${label} to be soft-deleted (deletedAt set), but deletedAt is null.`,
+    )
+  }
+
+  /**
+   * Assert that the given model instance is NOT soft-deleted — its row exists
+   * and `deletedAt` is null.
+   */
+  async assertNotSoftDeleted(model: TestModelLike): Promise<void> {
+    const { table, pk, pkValue, label } = this._modelMeta(model)
+    const record = await this._findRecord(table, { [pk]: pkValue })
+    assert.ok(record, `Expected ${label} to exist (not soft-deleted), but no row found.`)
+    const deletedAt = (record as { deletedAt?: unknown }).deletedAt
+    assert.ok(
+      deletedAt == null,
+      `Expected ${label} to NOT be soft-deleted, but deletedAt is ${String(deletedAt)}.`,
+    )
+  }
+
+  private _modelMeta(model: TestModelLike): { table: string, pk: string, pkValue: unknown, label: string } {
+    const ctor = model.constructor as { table?: string, primaryKey?: string, name?: string }
+    const table = ctor.table
+    if (!table) {
+      throw new Error(
+        '[RudderJS Testing] Model has no static `table` — pass a Model instance, ' +
+        'or use assertDatabaseHas(table, …) for raw-table assertions.',
+      )
+    }
+    const pk = ctor.primaryKey ?? 'id'
+    const pkValue = (model as Record<string, unknown>)[pk]
+    if (pkValue == null) {
+      throw new Error(
+        `[RudderJS Testing] Model has no value for primary key "${pk}" — has it been saved?`,
+      )
+    }
+    const label = `${ctor.name ?? table}#${String(pkValue)}`
+    return { table, pk, pkValue, label }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
