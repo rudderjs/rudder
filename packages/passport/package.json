@@ -34,6 +34,10 @@
     "./routes": {
       "import": "./dist/routes.js",
       "types": "./dist/routes.d.ts"
+    },
+    "./commands/make-passport-client": {
+      "import": "./dist/commands/make-passport-client.js",
+      "types": "./dist/commands/make-passport-client.d.ts"
     }
   },
   "scripts": {

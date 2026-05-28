@@ -239,6 +239,11 @@ async function loadPackageCommands(): Promise<void> {
       const mod = await tryImport('@rudderjs/terminal', 'commands/make-terminal')
       registerMakeSpecs(mod['makeTerminalSpec'] as import('@rudderjs/console').MakeSpec)
     },
+    // @rudderjs/passport → make:passport-client
+    async () => {
+      const mod = await tryImport('@rudderjs/passport', 'commands/make-passport-client')
+      registerMakeSpecs(mod['makePassportClientSpec'] as import('@rudderjs/console').MakeSpec)
+    },
     // @rudderjs/vite → view:sync
     async () => {
       const mod = await tryImport('@rudderjs/vite', 'commands/view-sync')

@@ -237,26 +237,9 @@ export class PassportProvider extends ServiceProvider {
       console.log(`    Device codes:   ${counts.deviceCodes}`)
     }).description('Remove expired tokens and auth codes')
 
-    // Register make:* scaffolder for passport
-    const { registerMakeSpecs } = await import('@rudderjs/console')
-    registerMakeSpecs({
-      command:     'make:passport-client',
-      description: 'Create a new OAuth client seeder',
-      label:       'Passport client seeder created',
-      directory:   'app/Seeders',
-      stub: (className) => `import { createClient } from '@rudderjs/passport'
-
-export async function ${className.replace(/Seeder$/, '').toLowerCase()}Clients(): Promise<void> {
-  // Create a confidential client (server-side apps)
-  const { client, secret } = await createClient({
-    name: 'My Application',
-    redirectUri: 'http://localhost:3000/callback',
-    grantTypes: ['authorization_code', 'refresh_token'],
-  })
-  console.log('Client ID:', client.id)
-  console.log('Secret:', secret)
-}
-`,
-    })
+    // `make:passport-client` is NOT registered here — `make:*` argv skips
+    // `bootApp()`, so a spec wired through `boot()` is never reachable.
+    // The spec lives at `@rudderjs/passport/commands/make-passport-client`
+    // and is loaded by the CLI's `loadPackageCommands()`.
   }
 }
