@@ -40,7 +40,7 @@ export class StorageRegistry {
     return a
   }
 
-  /** @internal — clears all registered disks. Used for testing. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.adapters.clear()
     _store.defaultDisk = 'local'

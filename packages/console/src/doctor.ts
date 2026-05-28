@@ -64,7 +64,7 @@ export class DoctorRegistry {
     return [...this._checks.values()]
   }
 
-  /** @internal — used in tests */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   reset(): void {
     this._checks.clear()
   }

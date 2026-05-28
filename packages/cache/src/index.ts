@@ -75,7 +75,11 @@ export class CacheRegistry {
   static get(): CacheAdapter | null          { return _store.adapter }
   static setDefaultName(name: string): void  { _store.defaultName = name }
   static getDefaultName(): string | null     { return _store.defaultName }
-  /** @internal — clears the registered adapter. Used for testing. */
+  /**
+   * Drop the registered cache adapter. Test-cleanup hook — kept on the
+   * public API because other packages' test suites (`@rudderjs/auth` is one)
+   * reset the registry across the package boundary.
+   */
   static reset(): void {
     _store.adapter = null
     _store.defaultName = null

@@ -61,7 +61,7 @@ export class MailRegistry {
   static setFrom(from: { address: string; name?: string }): void { _store.from = { ...from } }
   static getFrom(): { address: string; name?: string }           { return { ..._store.from } }
 
-  /** @internal — clears the registered adapter and resets from. Used for testing. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.adapter = null
     _store.from    = { ...DEFAULT_FROM }

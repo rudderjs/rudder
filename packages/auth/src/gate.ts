@@ -249,7 +249,7 @@ export class Gate {
     })
   }
 
-  /** @internal — reset all definitions. Used for testing. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.abilities.clear()
     _store.policies.clear()

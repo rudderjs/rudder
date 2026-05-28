@@ -66,7 +66,7 @@ export class Socialite {
     this._instances.clear()
   }
 
-  /** @internal — reset for testing. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     this._config = {}
     this._custom.clear()

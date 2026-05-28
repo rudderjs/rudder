@@ -173,7 +173,7 @@ export class Cashier {
 
   // ── Reset (testing) ────────────────────────────────────
 
-  /** @internal */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     this._apiKey          = null
     this._clientSideToken = null

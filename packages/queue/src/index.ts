@@ -106,7 +106,12 @@ export class DispatchBuilder<T extends Job> {
 export interface DispatchOptions {
   delay?: number
   queue?: string
-  /** @internal — serialized context from @rudderjs/context */
+  /**
+   * Serialized request-context payload (from `@rudderjs/context`). Public on
+   * the contract because queue adapters (`@rudderjs/queue-bullmq` etc.) read
+   * and forward it to job execution. The double-underscore signals "framework
+   * wiring; not for app code."
+   */
   __context?: Record<string, unknown>
 }
 
@@ -230,7 +235,11 @@ export class QueueRegistry {
     return _store.adapter
   }
 
-  /** @internal — clears the registered adapter. Used for testing. */
+  /**
+   * Drop the registered queue adapter. Test-cleanup hook — kept on the
+   * public API because other packages' test suites (`@rudderjs/mail` is
+   * one) reset the registry across the package boundary.
+   */
   static reset(): void {
     _store.adapter = null
   }

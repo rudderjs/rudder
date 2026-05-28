@@ -177,7 +177,7 @@ export class ChannelRegistry {
     return _store.channels.has(name)
   }
 
-  /** @internal — clears all registered channels. Test-only; do NOT call from production code. */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     _store.channels.clear()
   }

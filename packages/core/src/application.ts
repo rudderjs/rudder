@@ -336,7 +336,11 @@ export class Application {
     return new AppBuilder(options)
   }
 
-  /** @internal — testing only */
+  /**
+   * Clear the process-wide `Application` singleton. Test-only escape hatch —
+   * kept on the public API because `@rudderjs/pennant` (and other packages)
+   * call it from their own test suites across the package boundary.
+   */
   static resetForTesting(): void {
     Application.instance = undefined
     ;(globalThis as Record<string, unknown>)['__rudderjs_app__'] = undefined

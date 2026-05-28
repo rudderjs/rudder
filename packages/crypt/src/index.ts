@@ -19,7 +19,7 @@ export class CryptRegistry {
 
   static getPreviousKeys(): Buffer[] { return this.previousKeys }
 
-  /** @internal */
+  /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
     this.key = null
     this.previousKeys = []

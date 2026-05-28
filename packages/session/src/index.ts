@@ -268,11 +268,12 @@ export class Session {
 
 /**
  * Test-only — run `fn` inside a session ALS context populated by `session`.
- * Lets unit tests in other packages exercise code paths that go through the
- * `Session` static facade (e.g. CSRF helpers, OAuth state) without standing
- * up the full request middleware. NOT for production code.
- *
- * @internal
+ * Lets unit tests in other packages (e.g. `@rudderjs/socialite`) exercise
+ * code paths that go through the `Session` static facade (CSRF helpers,
+ * OAuth state) without standing up the full request middleware. The
+ * underscore-prefix is the "don't use this in app code" signal — kept in
+ * the public types because consuming packages' test suites depend on it.
+ * NOT for production code.
  */
 export function _runWithSession<T>(session: SessionInstance, fn: () => T): T {
   return _als.run(session, fn)
