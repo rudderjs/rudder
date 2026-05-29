@@ -497,7 +497,27 @@ describe('UserController', () => {
 })
 ```
 
-Run with `npx tsx --test tests/**/*.test.ts`, or add a script:
+### Running the tests
+
+The simplest path is the bundled wrapper:
+
+```bash
+pnpm rudder test                           # run every test under tests/
+pnpm rudder test User                      # filter by name pattern (matches describe/it labels)
+pnpm rudder test tests/UserController.test.ts   # run one specific file
+pnpm rudder test --watch                   # re-run on changes
+pnpm rudder test --coverage                # collect coverage via Node's --experimental-test-coverage
+pnpm rudder test --bail                    # stop on first failure
+pnpm rudder test --reporter=spec           # spec / dot / tap / junit
+```
+
+Under the hood it spawns `tsx --test` against your `tests/` directory. If you prefer to invoke it directly:
+
+```bash
+npx tsx --test tests/**/*.test.ts
+```
+
+Or add a script:
 
 ```json
 { "scripts": { "test": "tsx --test tests/**/*.test.ts" } }
