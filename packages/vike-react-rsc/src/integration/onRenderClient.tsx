@@ -1,10 +1,10 @@
 import { tinyassert } from "@hiogawa/utils";
-tinyassert(envName === "client", "Invalid environment");
-
 import { useEffect, useState } from "react";
 import ReactDOMClient from "react-dom/client";
 import type { OnRenderClientAsync, PageContextClient } from "vike/types";
 import envName from "virtual:enviroment-name";
+
+tinyassert(envName === "client", "Invalid environment");
 import { PageContextProvider } from "../hooks/pageContext/pageContext-client";
 import { parseRscStream } from "../runtime/client";
 import type { RscPayload } from "../types";
