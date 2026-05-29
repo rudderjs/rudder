@@ -16,6 +16,11 @@ export interface CheckOutcome {
 export interface RunOptions {
   /** If true, include checks marked `needsBoot: true`. */
   deep?:    boolean
+  /**
+   * If true, include checks marked `productionOnly: true` (prod-readiness
+   * invariants that would false-fire in dev). The `--production` flag.
+   */
+  production?: boolean
   /** Filter checks by id substring (used by `--only` flag in future). */
   filter?:  string
 }
@@ -63,6 +68,9 @@ export async function runChecks(opts: RunOptions = {}): Promise<RunResult> {
 
   const all = getRegisteredChecks().filter(c => {
     if (!opts.deep && c.needsBoot) return false
+    // productionOnly checks only run under --production — they'd false-fire
+    // in dev (e.g. APP_DEBUG must be false would block local development).
+    if (!opts.production && c.productionOnly) return false
     // --only <substring> matches EITHER id OR category — `--only orm`
     // catches `orm-prisma:db-connect` AND `orm-drizzle:schema`; `--only runtime`
     // catches every `category: 'runtime'` check regardless of its package prefix.

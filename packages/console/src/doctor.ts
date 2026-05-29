@@ -40,6 +40,12 @@ export interface DoctorCheck {
    * Fast-path checks (the default) must work without booting the app.
    */
   needsBoot?: boolean
+  /**
+   * If true, the check is only executed under `rudder doctor --production`.
+   * Use for prod-only invariants that would false-fire in dev — `APP_DEBUG`
+   * must be `false`, `DATABASE_URL` must not be SQLite/localhost, etc.
+   */
+  productionOnly?: boolean
   run():      DoctorResult | Promise<DoctorResult>
   /**
    * Optional idempotent recovery — invoked under `rudder doctor --fix`.

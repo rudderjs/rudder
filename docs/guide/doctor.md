@@ -59,6 +59,27 @@ The default fast path runs everything that can be answered from the filesystem a
 
 Boot is expensive (~1–2s). Save `--deep` for "the app won't start" — the fast path catches most setup failures without it.
 
+## `--production` — pre-deploy readiness
+
+```bash
+pnpm rudder doctor --production
+```
+
+Adds a `production` category of strict invariants that would false-fire in local dev — meant to run on a production-shaped environment (the deploy server, or a CI step right before deploy). Each check has a clear fix hint with the exact env-var change required.
+
+| Check | What it enforces |
+|---|---|
+| `production:app-debug` | `APP_DEBUG` must NOT be `true`/`1` — debug mode leaks stack traces + `dump()` output to clients |
+| `production:app-env` | `APP_ENV` should equal `production` |
+| `production:app-url` | `APP_URL` must start with `https://` — auth cookies + CSP rely on it |
+| `production:database-url` | `DATABASE_URL` must NOT be SQLite (`file:...`) or point at `localhost`/`127.0.0.1`/`0.0.0.0`. Credentials are redacted in the report. |
+| `production:rudder-pinning` | No `@rudderjs/*` deps on floating ranges (`latest`, `*`, `next`) — deploys shouldn't ride dist-tag movement |
+| `production:workspace-refs` | No `workspace:*` refs in `package.json` — only resolvable inside the monorepo |
+| `production:dist-exists` | `dist/` (the build output) must exist |
+| `production:providers-manifest` | `bootstrap/cache/providers.json` must exist — auto-discovery's source of truth |
+
+Combine with `--deep` for the full pre-deploy gate: `pnpm rudder doctor --deep --production`.
+
 ## `--fix` — conservative auto-fix
 
 `--fix` runs the fast-path checks first, then for every failing check whose definition declares a `fixer()` it prompts:
