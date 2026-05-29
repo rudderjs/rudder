@@ -32,8 +32,8 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/editor-launch.test.js"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.14",
     "@rudderjs/contracts": "workspace:^",
-    "@hono/node-server": "^1.19.10",
     "@vikejs/hono": "^0.2.0",
     "hono": "^4.12.4"
   },
