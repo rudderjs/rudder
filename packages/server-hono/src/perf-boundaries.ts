@@ -2,13 +2,16 @@
 // RUDDER_PERF_BOUNDARIES=1 — when unset, every public function is a no-op so
 // there's zero overhead in production.
 //
-// Output is dumped to $RUDDER_PERF_OUT (default /tmp/rudder-perf.txt) on
-// SIGTERM / SIGINT / beforeExit, as a per-phase percentile table.
+// Output is dumped to $RUDDER_PERF_OUT (default: a private mkdtemp dir, path
+// logged on write) on SIGTERM / SIGINT / beforeExit, as a per-phase
+// percentile table.
 //
 // This file is dev-only instrumentation — do not export it from the package
 // barrel and do not call it without the env flag set.
 
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 const ENABLED = process.env['RUDDER_PERF_BOUNDARIES'] === '1'
@@ -145,7 +148,12 @@ function dump(): void {
   }
 
   const text = lines.join('\n') + '\n'
-  const outPath = process.env['RUDDER_PERF_OUT'] ?? '/tmp/rudder-perf.txt'
+  // Honor an explicit operator path; otherwise write into a private, randomly
+  // named temp dir (mkdtemp → 0700, unguessable suffix) instead of a predictable
+  // /tmp/rudder-perf.txt that a local user could pre-plant or symlink. The
+  // resolved path is logged below so the dev still finds the dump.
+  const outPath = process.env['RUDDER_PERF_OUT']
+    ?? join(mkdtempSync(join(tmpdir(), 'rudder-perf-')), 'rudder-perf.txt')
   try {
     writeFileSync(outPath, text)
     console.log(`\n[rudder-perf] wrote ${samples.length} samples to ${outPath}`)

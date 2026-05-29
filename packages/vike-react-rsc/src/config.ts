@@ -1,5 +1,3 @@
-export { config as default };
-
 import type { Config } from "vike/types";
 import vikeRscPlugin from "./plugin";
 
@@ -71,5 +69,7 @@ const config: Config = {
     plugins: [vikeRscPlugin()],
   },
 } satisfies Config;
+
+export { config as default };
 
 import "./types/Config.js";
