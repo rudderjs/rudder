@@ -122,10 +122,39 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-node${{ matrix.node-version }}-
 
+      # Windows-only: exclude the workspace from Defender real-time scanning.
+      # The recurring "Build exits 1 with no diagnostic" flake (windows-latest
+      # only, never Linux/macOS, clears on re-run — see CLAUDE.md / memory) is a
+      # file-lock race: Defender opens each freshly-written dist/*.js|.d.ts to
+      # scan it, and a concurrent `tsc` write to the same file hits a transient
+      # EPERM/EBUSY that POSIX tolerates but Windows doesn't. Excluding the
+      # checkout removes that window. Best-effort: never fail CI if the cmdlet
+      # is unavailable.
+      - name: Exclude workspace from Windows Defender
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction Stop
+            Write-Host "Defender exclusion added for ${{ github.workspace }}"
+          } catch {
+            Write-Host "::warning::Could not add Defender exclusion (continuing): $_"
+          }
+
+      # Windows-only: stream per-task logs instead of turbo's default grouped
+      # output. Grouped mode buffers a failing task's stderr and can drop it on
+      # a non-zero exit, which is exactly why this flake showed up as a
+      # diagnostic-less exit 1. Streaming prefixes every line with the package
+      # name so a real `error TS…` is always attributable. Linux keeps grouped
+      # output (clean green logs); the flake has never reproduced there.
       - name: Build
+        env:
+          TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
       - name: Test
+        env:
+          TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
   client-bundle:
