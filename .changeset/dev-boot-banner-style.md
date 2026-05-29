@@ -1,0 +1,15 @@
+---
+"@rudderjs/core": minor
+"@rudderjs/vite": minor
+---
+
+Harmonize the dev startup output with Vike's banner.
+
+- `@rudderjs/vite` now splices `· Rudder vX.Y.Z` into Vike's startup line
+  (`Vike v… · Vite v… · Rudder v1.5.1 · ready in N ms`), reading the installed
+  `@rudderjs/core` version. Falls back to printing its own line if Vike's banner
+  format changes, so the version is never lost. Dev-only.
+- `@rudderjs/core`'s dev boot log is rendered as Vite-style `➜` lines that sit
+  with `➜ Local`/`➜ Network` instead of the `├─└─` tree — `➜ N providers booted`,
+  one aligned `➜ <stage>: …` line per stage, and `➜ App is ready`. Production
+  keeps the parseable `[RudderJS] ready` prefix.

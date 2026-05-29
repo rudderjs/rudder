@@ -24,6 +24,53 @@ export interface RudderjsOptions {
   watch?: string[]
 }
 
+// ─── Startup banner ────────────────────────────────────────
+
+/**
+ * Resolve the framework version to show on the dev banner — `@rudderjs/core`'s
+ * installed version (the canonical number `rudder about` reports), resolved
+ * from the app's `node_modules`. Falls back to this package's own version, then
+ * `null` (banner segment is skipped). Best-effort; never throws.
+ */
+function resolveRudderVersion(): string | null {
+  const req = createRequire(path.join(process.cwd(), 'package.json'))
+  for (const name of ['@rudderjs/core', '@rudderjs/vite']) {
+    try {
+      const meta = req(`${name}/package.json`) as { version?: string }
+      if (typeof meta.version === 'string') return meta.version
+    } catch { /* try next */ }
+  }
+  return null
+}
+
+/**
+ * Splice `· Rudder vX.Y.Z` into Vike's startup banner
+ * (`Vike vA · Vite vB · ready in N ms`), inserting it before the `· ready in`
+ * segment and reusing Vike's dim `·` separator. Returns `null` when the line
+ * isn't the banner (so the caller leaves it untouched). Vike composes the
+ * banner in a pure function and prints it via `console.log` with no hook to
+ * extend it (vikejs/vike#1438 is unshipped), so string-rewriting the line is
+ * the only seam — matched defensively, with a standalone-line fallback at the
+ * call site if Vike ever changes the format.
+ */
+export function spliceRudderVersion(line: string, version: string): string | null {
+  // Build ANSI patterns via new RegExp from a runtime ESC const so the source
+  // stays ASCII (no literal ESC byte to mangle on Windows) and eslint's
+  // no-control-regex rule has no static control char to flag.
+  const ESC  = '\x1b'
+  const SGR  = `(?:${ESC}\\[[0-9;]*m)*` // any run of SGR color codes
+  const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, 'g')
+  if (!/Vike v.*·.*Vite v.*·.*ready in/.test(line.replace(ANSI, ''))) return null
+  // Match the styled `·` separator + space that precedes the styled `ready in`,
+  // tolerating any surrounding color codes. Insert our colored segment + a fresh
+  // dim separator after it.
+  const tail = new RegExp(`(${SGR}·${SGR}\\s+)(${SGR}ready in)`)
+  if (!tail.test(line)) return null
+  const rudder = `${ESC}[33mRudder ${ESC}[1mv${version}${ESC}[22m${ESC}[39m`
+  const sep    = `${ESC}[2m·${ESC}[22m`
+  return line.replace(tail, `$1${rudder} ${sep} $2`)
+}
+
 // ─── SSR / build externals ─────────────────────────────────
 
 const SSR_EXTERNALS = [
@@ -259,6 +306,43 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
   return [
     viewsScannerPlugin(),
     routesScannerPlugin(),
+    {
+      // Append `· Rudder vX.Y.Z` to Vike's `Vike v… · Vite v… · ready in N ms`
+      // startup banner so the framework version shows alongside Vike's and
+      // Vite's. Vike prints the banner via console.log just after `listen()`
+      // with no hook to extend it, so we wrap console.log here (installed in
+      // configureServer, before the banner prints), rewrite the one banner
+      // line, then restore. Fallback: if the banner never matches (Vike changed
+      // its format), print our own line so the version is never silently lost.
+      name: 'rudderjs:banner',
+      apply: 'serve',
+      configureServer() {
+        const version = resolveRudderVersion()
+        if (!version) return
+        const original = console.log
+        let done = false
+        const finish = (): void => { if (!done) { done = true; console.log = original } }
+        console.log = (...args: unknown[]): void => {
+          if (!done && typeof args[0] === 'string') {
+            const spliced = spliceRudderVersion(args[0], version)
+            if (spliced !== null) {
+              finish()
+              original(spliced, ...args.slice(1))
+              return
+            }
+          }
+          original(...(args as []))
+        }
+        // Fallback: the banner prints synchronously right after `listen()`, so
+        // if we still haven't matched it on a later macrotask, Vike's format
+        // changed — restore and print our own line.
+        setTimeout(() => {
+          if (done) return
+          finish()
+          original(`  \x1b[32m➜\x1b[39m  \x1b[33mRudder \x1b[1mv${version}\x1b[22m\x1b[39m`)
+        }, 2_000).unref?.()
+      },
+    },
     {
       // Inject x-real-ip header from the Node socket so downstream Hono
       // middleware can read the client IP. Vike's universal-middleware
