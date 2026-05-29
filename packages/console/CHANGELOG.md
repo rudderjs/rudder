@@ -1,5 +1,61 @@
 # @rudderjs/console
 
+## 1.3.0
+
+### Minor Changes
+
+- c757914: `rudder doctor --production` — pre-deploy readiness mode.
+
+  ```bash
+  pnpm rudder doctor --production           # strict prod-readiness check
+  pnpm rudder doctor --production --deep    # ...with app-boot runtime checks too
+  ```
+
+  Adds a new `production` category of strict invariants gated behind `--production` (so they don't false-fire in dev). Each maps to a real "I almost shipped a security bug" class:
+
+  | Check                           | Enforces                                                                                         |
+  | ------------------------------- | ------------------------------------------------------------------------------------------------ |
+  | `production:app-debug`          | `APP_DEBUG` is NOT `true`/`1` (would leak stack traces + `dump()` output)                        |
+  | `production:app-env`            | `APP_ENV` is `production`                                                                        |
+  | `production:app-url`            | `APP_URL` starts with `https://`                                                                 |
+  | `production:database-url`       | `DATABASE_URL` is NOT SQLite or `localhost`/`127.0.0.1`/`0.0.0.0` (creds redacted in the report) |
+  | `production:rudder-pinning`     | No `@rudderjs/*` deps on floating ranges (`latest`/`*`/`next`)                                   |
+  | `production:workspace-refs`     | No `workspace:*` refs in `package.json`                                                          |
+  | `production:dist-exists`        | `dist/` build output exists                                                                      |
+  | `production:providers-manifest` | `bootstrap/cache/providers.json` is present                                                      |
+
+  Designed for the deploy pipeline:
+
+  ```yaml
+  - name: Pre-deploy doctor
+    run: pnpm rudder doctor --production
+  ```
+
+  Non-zero exit on any non-green outcome — catches the bug before the deploy lands.
+
+  **Internal:** `DoctorCheck.productionOnly?: boolean` is the new flag on the registry interface (`@rudderjs/console` minor bump). Both the `--production` gate AND the existing `--deep` gate are applied in the orchestrator's filter; `--deep --production` runs everything.
+
+### Patch Changes
+
+- eafdc7a: fix: close file check-then-write races (TOCTOU) in CLI scaffolders, the view/route scanners, and OAuth key generation
+
+  Replaced `existsSync(path)` → later `write` patterns with a single atomic
+  operation, so a concurrent process can't slip a file (or symlink) in between
+  the check and the write:
+
+  - **Scaffolders** (`make:*`, `make:module`, `rudder add`) now write with the
+    exclusive `wx` flag and surface the same "already exists — use `--force`"
+    message via an `EEXIST` catch. `--force` opts into truncation as before.
+  - **`passport:keys`** writes the freshly generated keypair with `wx` (private
+    key still `0o600`), so the write fails rather than following a pre-planted
+    file/symlink at the key path. The non-`--force` guard now rejects when
+    _either_ key already exists (previously only the private key), treating the
+    pair atomically.
+  - **`@rudderjs/vite` scanners** read-with-`ENOENT`-catch instead of
+    `existsSync`-then-read for their idempotent codegen writes.
+
+  No behavioral change for normal use; `--force` semantics are unchanged.
+
 ## 1.2.1
 
 ### Patch Changes
