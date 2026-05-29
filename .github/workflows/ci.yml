@@ -122,14 +122,25 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-node${{ matrix.node-version }}-
 
-      # Windows-only: exclude the workspace from Defender real-time scanning.
-      # The recurring "Build exits 1 with no diagnostic" flake (windows-latest
-      # only, never Linux/macOS, clears on re-run — see CLAUDE.md / memory) is a
-      # file-lock race: Defender opens each freshly-written dist/*.js|.d.ts to
-      # scan it, and a concurrent `tsc` write to the same file hits a transient
-      # EPERM/EBUSY that POSIX tolerates but Windows doesn't. Excluding the
-      # checkout removes that window. Best-effort: never fail CI if the cmdlet
-      # is unavailable.
+      # ── Windows-only build-flake mitigation ──────────────────────────────
+      # The `Build & Test (windows-latest)` job intermittently failed the Build
+      # step (never Linux/macOS, cleared on re-run). #783 added streaming logs,
+      # which caught the real cause on PR #782:
+      #   Failed: @rudderjs/crypt#build
+      #   ERROR  run failed: command exited (-1073741502)
+      # -1073741502 == 0xC0000142 == STATUS_DLL_INIT_FAILED: a spawned `tsc`
+      # process died during DLL initialisation, before emitting any output —
+      # which is why earlier failures looked diagnostic-less. This is the
+      # classic Windows desktop-heap / DLL-init exhaustion that hits when many
+      # processes spawn at once, so the fix is to stop spawning so many:
+      #
+      #   1. TURBO_CONCURRENCY=1 on Windows — serialise the build so only one
+      #      `tsc` process starts at a time. Default (10) stays on Linux. Build
+      #      is well under the 20-min timeout even serialised.
+      #   2. Add-MpPreference exclusion — Defender scanning a DLL mid-load can
+      #      aggravate the same init failure. Best-effort; never fails CI.
+      #   3. TURBO_LOG_ORDER=stream — keep streaming so any future Windows
+      #      failure is attributable instead of swallowed by grouped output.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -141,15 +152,10 @@ jobs:
             Write-Host "::warning::Could not add Defender exclusion (continuing): $_"
           }
 
-      # Windows-only: stream per-task logs instead of turbo's default grouped
-      # output. Grouped mode buffers a failing task's stderr and can drop it on
-      # a non-zero exit, which is exactly why this flake showed up as a
-      # diagnostic-less exit 1. Streaming prefixes every line with the package
-      # name so a real `error TS…` is always attributable. Linux keeps grouped
-      # output (clean green logs); the flake has never reproduced there.
       - name: Build
         env:
           TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
+          TURBO_CONCURRENCY: ${{ matrix.os == 'windows-latest' && '1' || '10' }}
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
       - name: Test
