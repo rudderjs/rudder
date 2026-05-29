@@ -433,11 +433,11 @@ export class RudderJS {
   }
 
   /**
-   * Dev-only — print the auto-discovered providers grouped by stage so a missing
-   * package is visible at every boot instead of failing silently when first used.
-   * Rendered as Vite-style `➜` lines so the block sits with Vike's
-   * `➜ Local`/`➜ Network` startup banner. Long stage lists wrap, aligned under
-   * the value column, so the output stays readable in narrow terminals.
+   * Dev-only — print the auto-discovered provider count as a Vite-style `➜` line
+   * so the block sits with Vike's `➜ Local`/`➜ Network` startup banner. With
+   * `RUDDER_BOOT_VERBOSE=1`, also print the providers grouped by stage so a
+   * missing package is visible at boot instead of failing silently when first
+   * used; long stage lists wrap, aligned under the value column.
    */
   private _printDevBootLog(): void {
     const entries = getLastLoadedProviderEntries()
@@ -473,6 +473,12 @@ export class RudderJS {
     const arrowLen = 5
 
     console.log(`${arrow}Auto-discovered ${entries.length} provider${entries.length === 1 ? '' : 's'}`)
+
+    // The per-stage breakdown (which packages booted in each stage) is hidden by
+    // default to keep the boot block compact — the count above covers the common
+    // case. Set RUDDER_BOOT_VERBOSE=1 to restore it when auditing what loaded
+    // (e.g. a package silently missing from the manifest).
+    if (process.env['RUDDER_BOOT_VERBOSE'] !== '1') return
 
     // Align stage-label colons (Vike aligns `Local:`/`Network:` the same way).
     const labelColonWidth = Math.max(...activeStages.map(s => s.length)) + 1 // +1 for ':'

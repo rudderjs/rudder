@@ -12,8 +12,9 @@ Harmonize the dev startup output with Vike's banner.
   Dev-only.
 - `@rudderjs/core`'s dev boot log is rendered as Vite-style `➜` lines that sit
   with `➜ Local`/`➜ Network` instead of the `├─└─` tree — `➜ Auto-discovered N
-  providers`, one aligned `➜ <stage>: …` line per stage, and `➜ App is ready`.
-  Production keeps the parseable `[RudderJS] ready` prefix.
+  providers` and `➜ App is ready`. The per-stage provider breakdown is hidden by
+  default and restored with `RUDDER_BOOT_VERBOSE=1`. Production keeps the
+  parseable `[RudderJS] ready` prefix.
 - New `bootLine(message)` export from `@rudderjs/core` — print a `➜`-styled line
   from a provider's `boot()` so app/provider startup logs match the framework's
   banner. Plain (no arrow/ANSI) in production.
