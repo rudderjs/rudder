@@ -161,6 +161,10 @@ jobs:
       - name: Test
         env:
           TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
+          # Same STATUS_DLL_INIT_FAILED (0xC0000142) flake as the Build step
+          # (#784): the test run spawns many `node --test` processes at once and
+          # one dies during DLL init. Serialise on Windows; default (10) on Linux.
+          TURBO_CONCURRENCY: ${{ matrix.os == 'windows-latest' && '1' || '10' }}
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
   client-bundle:
