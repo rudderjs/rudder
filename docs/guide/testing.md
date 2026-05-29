@@ -40,6 +40,17 @@ describe('UserController', () => {
 })
 ```
 
+### Scaffolding tests with `make:test`
+
+`rudder make:test <Name>` writes the test file for you so you don't have to remember the boilerplate:
+
+```bash
+pnpm rudder make:test User             # tests/User.test.ts — feature test (boots the app)
+pnpm rudder make:test Math --unit      # tests/Math.test.ts — bare node:test, no app boot
+```
+
+The filename uses the `.test.ts` suffix to match the documented `tsx --test tests/**/*.test.ts` glob. The default feature stub assumes `tests/TestCase.ts` exists (the snippet above); when it doesn't, the command prints a hint pointing back here.
+
 ## HTTP requests
 
 The case dispatches requests through the framework without starting a real server:
