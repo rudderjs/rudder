@@ -425,29 +425,35 @@ export class RudderJS {
       console.log(`[hmr] reboot→ready ${(performance.now() - tStart).toFixed(1)}ms`)
       delete g['__rudderjs_hmr_t0__']
     }
-    console.log('[RudderJS] ready')
+    // Dev: a Vite-style arrow line that sits with Vike's `➜ Local`/`Network`
+    // banner. Prod (no Vike banner, logs go to files/aggregators): keep the
+    // parseable bracket prefix.
+    if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  App is ready`)
+    else console.log('[RudderJS] ready')
   }
 
   /**
    * Dev-only — print the auto-discovered providers grouped by stage so a missing
    * package is visible at every boot instead of failing silently when first used.
-   * Wraps long stage lines so the output stays readable in narrow terminals.
+   * Rendered as Vite-style `➜` lines so the block sits with Vike's
+   * `➜ Local`/`➜ Network` startup banner. Long stage lists wrap, aligned under
+   * the value column, so the output stays readable in narrow terminals.
    */
   private _printDevBootLog(): void {
     const entries = getLastLoadedProviderEntries()
     if (entries.length === 0) return
 
     const C = {
-      dim:     (s: string) => `\x1b[2m${s}\x1b[0m`,
-      magenta: (s: string) => `\x1b[35m${s}\x1b[0m`,
-      cyan:    (s: string) => `\x1b[36m${s}\x1b[0m`,
-      green:   (s: string) => `\x1b[32m${s}\x1b[0m`,
-      yellow:  (s: string) => `\x1b[33m${s}\x1b[0m`,
+      green:   (s: string) => `\x1b[32m${s}\x1b[39m`,
+      magenta: (s: string) => `\x1b[35m${s}\x1b[39m`,
+      cyan:    (s: string) => `\x1b[36m${s}\x1b[39m`,
+      greenL:  (s: string) => `\x1b[32m${s}\x1b[39m`,
+      yellow:  (s: string) => `\x1b[33m${s}\x1b[39m`,
     }
     const STAGE_COLORS = {
       foundation:     C.magenta,
       infrastructure: C.cyan,
-      feature:        C.green,
+      feature:        C.greenL,
       monitoring:     C.yellow,
     } as const
     const STAGE_ORDER = ['foundation', 'infrastructure', 'feature', 'monitoring'] as const
@@ -460,30 +466,29 @@ export class RudderJS {
       list.push(shortName(e.package))
       grouped.set(e.stage, list)
     }
-
-    console.log(`[RudderJS] ${entries.length} provider${entries.length === 1 ? '' : 's'} booted`)
-
-    // Find which stages have entries — needed to know which one is the last
-    // (gets `└─` instead of `├─`).
     const activeStages = STAGE_ORDER.filter(s => (grouped.get(s)?.length ?? 0) > 0)
 
-    const labelWidth = 16
-    const indent     = '  '
-    const connector  = '── '   // 3 visible chars after the corner
-    const cornerLen  = 2 + connector.length // ├─ + space-after width
-    // Wrap at min(terminal width, 80) so the layout is consistent across
-    // narrow and wide terminals — wide terminals would otherwise stretch a
-    // long feature list to one unreadable line.
-    const termCols   = Math.min(process.stdout.columns ?? 80, 80)
-    const wrapWidth  = termCols - indent.length - cornerLen - labelWidth - 2
+    // Vite-style arrow prefix: 2 spaces, green ➜, 2 spaces (5 visible columns).
+    const arrow    = `  ${C.green('➜')}  `
+    const arrowLen = 5
 
-    activeStages.forEach((stage, idx) => {
-      const list   = grouped.get(stage)!
-      const isLast = idx === activeStages.length - 1
-      const corner = isLast ? '└─ ' : '├─ '
+    console.log(`${arrow}${entries.length} provider${entries.length === 1 ? '' : 's'} booted`)
 
+    // Align stage-label colons (Vike aligns `Local:`/`Network:` the same way).
+    const labelColonWidth = Math.max(...activeStages.map(s => s.length)) + 1 // +1 for ':'
+    const valueCol        = arrowLen + labelColonWidth + 1                   // +1 trailing space
+    const continuation    = ' '.repeat(valueCol)
+    // Wrap at min(terminal width, 80) so the layout is consistent across narrow
+    // and wide terminals — wide terminals would otherwise stretch a long feature
+    // list to one unreadable line.
+    const termCols  = Math.min(process.stdout.columns ?? 80, 80)
+    const wrapWidth = Math.max(20, termCols - valueCol)
+
+    for (const stage of activeStages) {
+      const list     = grouped.get(stage)!
       const colorize = STAGE_COLORS[stage]
-      const label    = colorize(stage.padEnd(labelWidth))
+      // Color the stage word only; pad on visible length so colons align.
+      const label    = colorize(stage) + ':' + ' '.repeat(labelColonWidth - (stage.length + 1))
 
       // Greedy line-wrap: pack as many comma-joined names as fit per line.
       const lines: string[][] = [[]]
@@ -499,19 +504,13 @@ export class RudderJS {
         }
       }
 
-      // Continuation lines use `│` to maintain the tree visual when there are
-      // more stages below; the last stage uses spaces instead.
-      const continuation = isLast
-        ? ' '.repeat(corner.length + labelWidth)
-        : C.dim('│  ') + ' '.repeat(labelWidth)
-
       lines.forEach((parts, i) => {
-        const prefix = i === 0
-          ? `${indent}${C.dim(corner)}${label}`
-          : `${indent}${continuation}`
-        console.log(`${prefix}${parts.join(', ')}`)
+        // Trailing comma on a wrapped line so it reads as one continued list.
+        const tail   = i < lines.length - 1 ? ',' : ''
+        const prefix = i === 0 ? `${arrow}${label} ` : continuation
+        console.log(`${prefix}${parts.join(', ')}${tail}`)
       })
-    })
+    }
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */

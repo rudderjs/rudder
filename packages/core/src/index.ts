@@ -32,6 +32,7 @@ export type { ProviderEntry, ProviderManifest, ProviderStage } from './provider-
 export { sortByStageAndDepends } from './provider-sort.js'
 export { bootNotice, drainBootNotices } from './boot-notices.js'
 export type { BootNotice } from './boot-notices.js'
+export { bootLine } from './boot-line.js'
 
 // ─── Events ────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@rudderjs/core'
+import { ServiceProvider, bootLine } from '@rudderjs/core'
 import { Mcp } from '@rudderjs/mcp'
 import { UserService } from 'App/Services/UserService.js'
 import { GreetingService } from 'App/Services/GreetingService.js'
@@ -26,6 +26,6 @@ export class AppServiceProvider extends ServiceProvider {
 
     await this.app.register(TodoServiceProvider)
 
-    console.log(`[AppServiceProvider] booted — app: ${this.app.name}`)
+    bootLine(`[AppServiceProvider] booted — app: ${this.app.name}`)
   }
 }

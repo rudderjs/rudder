@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 
-import { rudderjs, invalidateBackendSubtree, performReboot, resolveWatchDir } from './index.js'
+import { rudderjs, invalidateBackendSubtree, performReboot, resolveWatchDir, spliceRudderVersion } from './index.js'
 
 /** Walk up from the test cwd (dist-test/) to the pnpm workspace root. */
 function repoRootDir(): string {
@@ -544,5 +544,29 @@ describe('rudderjs({ watch }) → ssr.noExternal', () => {
   it('does not add absolute-dir watch entries to ssr.noExternal', async () => {
     const plugins = await rudderjs({ watch: [path.resolve('/some/abs/dir')] })
     assert.ok(!callConfig(plugins, 'serve').ssr.noExternal.includes(path.resolve('/some/abs/dir')))
+  })
+})
+
+describe('spliceRudderVersion', () => {
+  // picocolors-styled separator + dim "ready in", as Vike composes the banner.
+  const sep   = '\x1b[2m·\x1b[22m'
+  const banner = `\n  \x1b[35mVike\x1b[39m \x1b[33mv0.4.257\x1b[39m ${sep} \x1b[36mVite\x1b[39m \x1b[36mv8.0.14\x1b[39m ${sep} \x1b[2mready in \x1b[22m\x1b[1m400\x1b[22m\x1b[2m ms\x1b[22m\n`
+
+  const strip = (s: string): string => s.replace(new RegExp(`${'\x1b'}\\[[0-9;]*m`, 'g'), '')
+
+  it('inserts "Rudder vX" before the "ready in" segment', () => {
+    const out = spliceRudderVersion(banner, '1.5.1')
+    assert.ok(out !== null, 'banner should match')
+    assert.match(strip(out!), /Vike v0\.4\.257 · Vite v8\.0\.14 · Rudder v1\.5\.1 · ready in 400 ms/)
+  })
+
+  it('keeps Vike and Vite versions intact', () => {
+    const out = strip(spliceRudderVersion(banner, '2.0.0')!)
+    assert.ok(out.includes('v0.4.257') && out.includes('v8.0.14') && out.includes('Rudder v2.0.0'))
+  })
+
+  it('returns null for a non-banner line (so the caller leaves it untouched)', () => {
+    assert.equal(spliceRudderVersion('  ➜  Local:   http://localhost:3000', '1.5.1'), null)
+    assert.equal(spliceRudderVersion('[AppServiceProvider] booted', '1.5.1'), null)
   })
 })

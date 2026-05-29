@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@rudderjs/core'
+import { ServiceProvider, bootLine } from '@rudderjs/core'
 import { Mcp } from '@rudderjs/mcp'
 import { Feature, Lottery } from '@rudderjs/pennant'
 import { UserService } from 'App/Services/UserService.js'
@@ -32,6 +32,6 @@ export class AppServiceProvider extends ServiceProvider {
     Feature.define('beta-dashboard', (scope) => typeof scope === 'object' && scope !== null)
     Feature.define('new-checkout',   () => Lottery.odds(1, 4))
 
-    console.log(`[AppServiceProvider] booted — app: ${this.app.name}`)
+    bootLine(`[AppServiceProvider] booted — app: ${this.app.name}`)
   }
 }
