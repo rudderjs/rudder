@@ -1,4 +1,4 @@
-import { ServiceProvider, config } from '@rudderjs/core'
+import { ServiceProvider, config, bootNotice } from '@rudderjs/core'
 
 // ─── Re-exports ───────────────────────────────────────────
 
@@ -116,8 +116,9 @@ export class PassportProvider extends ServiceProvider {
     // the first `/oauth/*` request fails deep inside `Passport.keys()` with
     // a generic ENOENT that doesn't point at the missing-bootstrap-step.
     if (!(await Passport.keysAvailable())) {
-      console.warn(
-        `[@rudderjs/passport] No RSA keypair found at "${Passport.keyPath()}/oauth-{private,public}.key" ` +
+      bootNotice(
+        'passport',
+        `no RSA keypair found at "${Passport.keyPath()}/oauth-{private,public}.key" ` +
         `and no PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY env vars set. ` +
         `Run \`rudder passport:keys\` to generate one — token issuance and verification will fail until keys are present.`
       )
