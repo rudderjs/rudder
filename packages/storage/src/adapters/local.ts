@@ -33,19 +33,22 @@ export class LocalAdapter extends BaseAdapter {
 
   override get driverName(): string { return 'local' }
 
-  // Resolve `filePath` against `base` and reject anything that escapes it.
-  // `path.resolve` collapses `..` segments and lets an absolute `filePath`
-  // override `base` entirely — both of which would leak outside the disk
-  // root — so the containment check below is what actually enforces the
-  // boundary, not the join. Every filesystem-touching method routes through
-  // abs()/sidecarAbs(), so this is the single choke point for traversal.
+  // Join `filePath` onto `base` and reject anything that escapes it.
+  // `path.join` (not `path.resolve`) is deliberate: it collapses `..`
+  // segments AND neutralizes an absolute `filePath` by treating it as
+  // relative (`join('/root', '/etc/x')` → '/root/etc/x'), so it stays
+  // anchored to the disk root — including against a Windows drive/UNC
+  // override that `resolve` would honour. The `startsWith` check then
+  // rejects any `..` sequence that still climbs above the root. Every
+  // filesystem-touching method routes through abs()/sidecarAbs(), so this
+  // is the single choke point for traversal.
   private contain(base: string, filePath: string): string {
-    const resolved = nodePath.resolve(base, filePath)
+    const joined = nodePath.join(base, filePath)
     const baseWithSep = base.endsWith(nodePath.sep) ? base : base + nodePath.sep
-    if (resolved !== base && !resolved.startsWith(baseWithSep)) {
+    if (joined !== base && !joined.startsWith(baseWithSep)) {
       throw new StoragePathTraversalError(filePath)
     }
-    return resolved
+    return joined
   }
 
   private abs(filePath: string): string {

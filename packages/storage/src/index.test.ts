@@ -88,9 +88,13 @@ describe('LocalAdapter', () => {
     assert.strictEqual(await fs.access(nodePath.join(root, '..', 'escaped.txt')).then(() => true, () => false), false)
   })
 
-  it('put() rejects an absolute path outside the root', async () => {
+  it('put() contains an absolute path inside the root instead of escaping', async () => {
+    // join() neutralizes the leading separator, so an absolute path is written
+    // *inside* the disk root, never at its real absolute location.
     const outside = nodePath.join(os.tmpdir(), `rudder-escape-${Date.now()}.txt`)
-    await assert.rejects(() => adapter.put(outside, 'nope'), StoragePathTraversalError)
+    await adapter.put(outside, 'ok')
+    assert.strictEqual(await adapter.text(outside), 'ok')                                  // same key round-trips
+    assert.strictEqual(await fs.access(outside).then(() => true, () => false), false)      // not at the real tmp path
   })
 
   it('get()/delete()/exists() reject traversal too', async () => {
