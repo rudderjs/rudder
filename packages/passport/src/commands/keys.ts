@@ -81,7 +81,7 @@ export async function generateKeys(opts: { force?: boolean } = {}): Promise<Gene
     await writeFile(publicPath, publicKey, { mode: 0o644, flag: 'wx' })
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new Error(`Keys already exist in ${keyDir}. Use --force to overwrite.`)
+      throw new Error(`Keys already exist in ${keyDir}. Use --force to overwrite.`, { cause: err })
     }
     throw err
   }
