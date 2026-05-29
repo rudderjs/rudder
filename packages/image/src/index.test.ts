@@ -1,19 +1,13 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
-import { writeFile, unlink, readFile, mkdtemp, rm } from 'node:fs/promises'
+import { writeFile, readFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { image, ImageProcessor } from './index.js'
 
 // ── Helpers ──────────────────────────────────────────────────
-
-/** Create a test image buffer of the given dimensions. */
-function createTestImage(width: number, height: number, channels: 3 | 4 = 3): Buffer {
-  const pixels = Buffer.alloc(width * height * channels, channels === 4 ? 0x80 : 0xff)
-  return pixels
-}
 
 async function createTestPng(width: number, height: number): Promise<Buffer> {
   return sharp({

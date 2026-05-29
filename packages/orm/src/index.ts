@@ -13,7 +13,7 @@ import {
   type AggregateConstraint,
   type AggregateSumSpec,
 } from './aggregate.js'
-import { camelHead, attrEqual, readField, writeField, deleteField } from './utils.js'
+import { attrEqual, readField, writeField, deleteField } from './utils.js'
 import {
   resolveBelongsToManyMeta,
   resolveMorphToManyMeta,

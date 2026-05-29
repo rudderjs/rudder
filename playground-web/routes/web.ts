@@ -115,11 +115,11 @@ Route.get('/test/queries', async (_req, res) => {
   const { User } = await import('App/Models/User.js')
   const { Todo } = await import('App/Models/Todo.js')
 
-  const users     = await User.all()
+  await User.all()
   const firstUser = await User.first()
   const userCount = await User.count()
 
-  const todos      = await Todo.all()
+  await Todo.all()
   const firstTodo  = await Todo.first()
   const todoCount  = await Todo.count()
   const todosPage  = await Todo.paginate(1, 5)

@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  Log, LogRegistry, LogFake, LogChannel,
-  ConsoleAdapter, FileAdapter, DailyAdapter, StackAdapter, NullAdapter,
+  Log, LogRegistry, LogFake,
+  StackAdapter, NullAdapter,
   LineFormatter, JsonFormatter,
   type LogEntry, type LogLevel, type LogAdapter,
   logger, extendLog,

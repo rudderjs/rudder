@@ -28,10 +28,6 @@ class FixtureAgent extends Agent {
   tools() { return [greetTool, addTool] }
 }
 
-class EmptyAgent extends Agent {
-  instructions() { return 'No tools.' }
-}
-
 // ─── Loopback helper ──────────────────────────────────────
 
 async function connectClient(server: unknown): Promise<{ client: Client; cleanup: () => Promise<void> }> {

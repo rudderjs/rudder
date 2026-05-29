@@ -4,6 +4,7 @@ dist-test/
 .turbo/
 *.tsbuildinfo
 *.log
+.DS_Store
 .env
 .env.*
 !.env.example
