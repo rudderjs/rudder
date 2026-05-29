@@ -21,7 +21,7 @@ export { LocalAdapter, type LocalDiskConfig } from './adapters/local.js'
 export { S3Adapter, type S3DiskConfig } from './adapters/s3.js'
 export { FakeAdapter } from './adapters/fake.js'
 export { StorageRegistry } from './registry.js'
-export { StorageNotSupportedError } from './errors.js'
+export { StorageNotSupportedError, StoragePathTraversalError } from './errors.js'
 export { serveTemporaryUrls, type ServeTemporaryUrlsOptions } from './serveTemporaryUrls.js'
 export type {
   StorageAdapter,

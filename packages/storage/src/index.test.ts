@@ -13,6 +13,7 @@ import {
   StorageRegistry,
   StorageProvider,
   StorageNotSupportedError,
+  StoragePathTraversalError,
   serveTemporaryUrls,
   type StorageConfig,
   type Visibility,
@@ -72,6 +73,53 @@ describe('LocalAdapter', () => {
     await adapter.put('a/b/c/file.txt', 'deep')
     const result = await adapter.text('a/b/c/file.txt')
     assert.strictEqual(result, 'deep')
+  })
+
+  // ─── Path traversal containment ───
+  // Every fs-touching method routes through abs()/sidecarAbs(), which reject
+  // any path that resolves outside the disk root.
+
+  it('put() rejects a relative traversal that escapes the root', async () => {
+    await assert.rejects(
+      () => adapter.put('../escaped.txt', 'nope'),
+      StoragePathTraversalError,
+    )
+    // The file must NOT have been written outside the root.
+    assert.strictEqual(await fs.access(nodePath.join(root, '..', 'escaped.txt')).then(() => true, () => false), false)
+  })
+
+  it('put() never writes an absolute path to its real location', async () => {
+    // join() neutralizes the leading separator so an absolute key is anchored
+    // under the disk root. On POSIX that's a clean contained write; on Windows
+    // the drive-letter form may be rejected by the OS — either way the security
+    // invariant is the same: it must NOT land at its real absolute location.
+    const outside = nodePath.join(os.tmpdir(), `rudder-escape-${Date.now()}.txt`)
+    await adapter.put(outside, 'ok').catch(() => { /* Windows may reject the drive-letter path */ })
+    assert.strictEqual(await fs.access(outside).then(() => true, () => false), false)
+  })
+
+  it('get()/delete()/exists() reject traversal too', async () => {
+    await assert.rejects(() => adapter.get('../../etc/passwd'), StoragePathTraversalError)
+    await assert.rejects(() => adapter.delete('../../etc/passwd'), StoragePathTraversalError)
+    await assert.rejects(() => adapter.exists('../secret'), StoragePathTraversalError)
+  })
+
+  it('copy()/move() reject traversal in either argument', async () => {
+    await adapter.put('src.txt', 'data')
+    await assert.rejects(() => adapter.copy('src.txt', '../leak.txt'), StoragePathTraversalError)
+    await assert.rejects(() => adapter.move('../../x', 'dst.txt'), StoragePathTraversalError)
+  })
+
+  it('allows a path that uses .. but stays within the root', async () => {
+    // a/b/../c.txt normalizes to a/c.txt — inside the root, so it's fine.
+    await adapter.put('a/b/../c.txt', 'ok')
+    assert.strictEqual(await adapter.text('a/c.txt'), 'ok')
+  })
+
+  it('list("") still resolves to the root itself', async () => {
+    await adapter.put('top.txt', 'x')
+    const files = await adapter.list('')
+    assert.ok(files.includes('top.txt'))
   })
 
   it('get() returns null for a missing file', async () => {

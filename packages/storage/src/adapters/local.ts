@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import type { Readable } from 'node:stream'
 import { resolveOptionalPeer } from '@rudderjs/core'
 import { BaseAdapter } from '../base.js'
-import { StorageNotSupportedError } from '../errors.js'
+import { StorageNotSupportedError, StoragePathTraversalError } from '../errors.js'
 import type { TemporaryUrlOptions, TemporaryUploadUrl, Visibility } from '../contracts.js'
 
 export interface LocalDiskConfig {
@@ -33,12 +33,30 @@ export class LocalAdapter extends BaseAdapter {
 
   override get driverName(): string { return 'local' }
 
+  // Join `filePath` onto `base` and reject anything that escapes it.
+  // `path.join` (not `path.resolve`) is deliberate: it collapses `..`
+  // segments AND neutralizes an absolute `filePath` by treating it as
+  // relative (`join('/root', '/etc/x')` → '/root/etc/x'), so it stays
+  // anchored to the disk root — including against a Windows drive/UNC
+  // override that `resolve` would honour. The `startsWith` check then
+  // rejects any `..` sequence that still climbs above the root. Every
+  // filesystem-touching method routes through abs()/sidecarAbs(), so this
+  // is the single choke point for traversal.
+  private contain(base: string, filePath: string): string {
+    const joined = nodePath.join(base, filePath)
+    const baseWithSep = base.endsWith(nodePath.sep) ? base : base + nodePath.sep
+    if (joined !== base && !joined.startsWith(baseWithSep)) {
+      throw new StoragePathTraversalError(filePath)
+    }
+    return joined
+  }
+
   private abs(filePath: string): string {
-    return nodePath.join(this.root, filePath)
+    return this.contain(this.root, filePath)
   }
 
   private sidecarAbs(filePath: string): string {
-    return nodePath.join(this.root, VISIBILITY_DIR, filePath)
+    return this.contain(nodePath.join(this.root, VISIBILITY_DIR), filePath)
   }
 
   // ─── Existing surface ───
@@ -50,22 +68,29 @@ export class LocalAdapter extends BaseAdapter {
   }
 
   async get(filePath: string): Promise<Buffer | null> {
-    try   { return await fs.readFile(this.abs(filePath)) }
+    // Resolve (and traversal-check) before the try so an escaping path throws
+    // loudly rather than being swallowed into a `null` "not found".
+    const abs = this.abs(filePath)
+    try   { return await fs.readFile(abs) }
     catch { return null }
   }
 
   async delete(filePath: string): Promise<void> {
-    try { await fs.unlink(this.abs(filePath)) } catch { /* no-op */ }
-    try { await fs.unlink(this.sidecarAbs(filePath)) } catch { /* no-op */ }
+    const abs     = this.abs(filePath)
+    const sidecar = this.sidecarAbs(filePath)
+    try { await fs.unlink(abs) } catch { /* no-op */ }
+    try { await fs.unlink(sidecar) } catch { /* no-op */ }
   }
 
   async exists(filePath: string): Promise<boolean> {
-    try { await fs.access(this.abs(filePath)); return true } catch { return false }
+    const abs = this.abs(filePath)
+    try { await fs.access(abs); return true } catch { return false }
   }
 
   async list(directory = ''): Promise<string[]> {
+    const abs = this.abs(directory)
     try {
-      const entries = await fs.readdir(this.abs(directory), { withFileTypes: true })
+      const entries = await fs.readdir(abs, { withFileTypes: true })
       return entries
         .filter(e => e.isFile())
         .map(e => nodePath.join(directory, e.name).replace(/\\/g, '/'))
@@ -87,14 +112,16 @@ export class LocalAdapter extends BaseAdapter {
   }
 
   async getVisibility(filePath: string): Promise<Visibility> {
+    const sidecarPath = this.sidecarAbs(filePath)
+    const absPath     = this.abs(filePath)
     try {
-      const sidecar = await fs.readFile(this.sidecarAbs(filePath), 'utf8')
+      const sidecar = await fs.readFile(sidecarPath, 'utf8')
       const trimmed = sidecar.trim()
       if (trimmed === 'public' || trimmed === 'private') return trimmed
     } catch { /* fall through to mode bits */ }
 
     try {
-      const stat = await fs.stat(this.abs(filePath))
+      const stat = await fs.stat(absPath)
       // Owner-write bit alone (e.g. 0o600) → private; world-readable → public.
       return (stat.mode & 0o004) ? 'public' : 'private'
     } catch {
