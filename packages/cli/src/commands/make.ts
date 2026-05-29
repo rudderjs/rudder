@@ -11,6 +11,7 @@ import { makeCommandCmd } from './make/command.js'
 import { makeEvent } from './make/event.js'
 import { makeListener } from './make/listener.js'
 import { makeMail } from './make/mail.js'
+import { makeTest } from './make/test.js'
 
 export function makeCommand(program: Command): void {
   // CLI-owned generic scaffolders
@@ -24,6 +25,7 @@ export function makeCommand(program: Command): void {
   makeEvent(program)
   makeListener(program)
   makeMail(program)
+  makeTest(program)
 
   // Package-contributed scaffolders (registered via registerMakeSpecs)
   for (const spec of getMakeSpecs()) {
