@@ -32,39 +32,37 @@ export interface GenerateKeysResult {
 export async function generateKeys(opts: { force?: boolean } = {}): Promise<GenerateKeysResult> {
   const { generateKeyPairSync } = await import('node:crypto')
   const { writeFile, mkdir, rename, copyFile } = await import('node:fs/promises')
-  const { existsSync } = await import('node:fs')
   const { join } = await import('node:path')
+
+  const isENOENT = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === 'ENOENT'
 
   const keyDir = join(process.cwd(), Passport.keyPath())
   const privatePath = join(keyDir, 'oauth-private.key')
   const publicPath  = join(keyDir, 'oauth-public.key')
   const previousPublicPath = join(keyDir, 'oauth-previous-public.key')
 
-  const privateExists = existsSync(privatePath)
-  const publicExists  = existsSync(publicPath)
-
-  if (!opts.force && (privateExists || publicExists)) {
-    throw new Error(`Keys already exist in ${keyDir}. Use --force to overwrite.`)
-  }
-
   await mkdir(keyDir, { recursive: true })
 
   let backup: GenerateKeysResult['backup'] = null
   let previousPublicWritten: string | null = null
-  if (opts.force && (privateExists || publicExists)) {
+  if (opts.force) {
+    // Rotate any existing keys out of the way. We don't pre-check existence
+    // (a check-then-write race) — instead we attempt the copy/rename and treat
+    // ENOENT as "nothing there to rotate" (first generation under --force).
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const privateBackup = `${privatePath}.bak.${stamp}`
     const publicBackup  = `${publicPath}.bak.${stamp}`
     // Copy the public key to the rolling "previous" slot BEFORE renaming —
     // the verifier loads from `oauth-previous-public.key` so JWTs signed by
     // the about-to-rotate key keep verifying during their natural lifetime.
-    if (publicExists) {
+    try {
       await copyFile(publicPath, previousPublicPath)
       previousPublicWritten = previousPublicPath
-    }
-    if (privateExists) await rename(privatePath, privateBackup)
-    if (publicExists)  await rename(publicPath,  publicBackup)
-    backup = { privatePath: privateBackup, publicPath: publicBackup }
+    } catch (err) { if (!isENOENT(err)) throw err }
+    let rotated = false
+    try { await rename(privatePath, privateBackup); rotated = true } catch (err) { if (!isENOENT(err)) throw err }
+    try { await rename(publicPath,  publicBackup);  rotated = true } catch (err) { if (!isENOENT(err)) throw err }
+    if (rotated) backup = { privatePath: privateBackup, publicPath: publicBackup }
   }
 
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -73,12 +71,20 @@ export async function generateKeys(opts: { force?: boolean } = {}): Promise<Gene
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   })
 
-  // `wx` = create exclusively: the write fails rather than following a
-  // pre-planted file/symlink at the key path. By here both paths are free —
-  // the guard above rejects a non-forced run when either key exists, and the
-  // forced path renamed any existing keys to timestamped backups first.
-  await writeFile(privatePath, privateKey, { mode: 0o600, flag: 'wx' })
-  await writeFile(publicPath, publicKey, { mode: 0o644, flag: 'wx' })
+  // `wx` = create exclusively. This is both the security boundary (the write
+  // fails rather than following a pre-planted file/symlink at the key path)
+  // AND the existence guard: without --force, an existing key makes the write
+  // fail with EEXIST, which we surface as the "use --force" message. No
+  // separate existsSync check — so there's no check-then-write window at all.
+  try {
+    await writeFile(privatePath, privateKey, { mode: 0o600, flag: 'wx' })
+    await writeFile(publicPath, publicKey, { mode: 0o644, flag: 'wx' })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error(`Keys already exist in ${keyDir}. Use --force to overwrite.`)
+    }
+    throw err
+  }
 
   return { privatePath, publicPath, backup, previousPublicPath: previousPublicWritten }
 }
