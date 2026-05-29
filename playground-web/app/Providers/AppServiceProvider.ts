@@ -26,6 +26,6 @@ export class AppServiceProvider extends ServiceProvider {
 
     await this.app.register(TodoServiceProvider)
 
-    bootLine(`[AppServiceProvider] booted — app: ${this.app.name}`)
+    bootLine(`${this.app.name} services wired`)
   }
 }

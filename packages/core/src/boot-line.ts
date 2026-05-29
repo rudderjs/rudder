@@ -12,6 +12,10 @@ import { app } from './application.js'
  * }
  * ```
  *
+ * Rendered "muted" — a dim green arrow + dim text with the leading word bold as
+ * a label — matching Vike's secondary banner lines (`➜ Network`, `➜ press h`),
+ * since a provider boot notice is secondary to the URLs above it.
+ *
  * Dev only: in production there's no Vike banner and logs go to files /
  * aggregators, so the message is printed plain (no arrow, no ANSI) to stay
  * parseable — mirroring how the framework prints `[RudderJS] ready` in prod.
@@ -20,7 +24,12 @@ import { app } from './application.js'
 export function bootLine(message: string): void {
   let dev = false
   try { dev = app().isDevelopment() } catch { /* app not constructed yet — treat as prod */ }
-  // Match the arrow the dev boot log uses: 2 spaces, green ➜, 2 spaces.
-  if (dev) console.log(`  \x1b[32m➜\x1b[39m  ${message}`)
-  else console.log(message)
+  if (!dev) { console.log(message); return }
+  // Bold the leading word as a label; dim the rest. `\x1b[22m` clears bold+dim
+  // together, so re-open dim (`\x1b[2m`) for the remainder.
+  const sp    = message.indexOf(' ')
+  const label = sp === -1 ? message : message.slice(0, sp)
+  const rest  = sp === -1 ? '' : message.slice(sp)
+  // Dim green arrow (dim stays on), bold+dim label, dim rest.
+  console.log(`  \x1b[2m\x1b[32m➜\x1b[39m  \x1b[1m${label}\x1b[22m\x1b[2m${rest}\x1b[0m`)
 }

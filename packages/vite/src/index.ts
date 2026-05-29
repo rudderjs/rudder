@@ -67,8 +67,9 @@ export function spliceRudderVersion(line: string, version: string): string | nul
   const tail = new RegExp(`(${SGR}·${SGR}\\s+)(${SGR}ready in)`)
   if (!tail.test(line)) return null
   // 256-color orange (208) — Rudder's brand color, distinct from Vike's and
-  // Vite's banner colors (and from Vike's yellow version number).
-  const rudder = `${ESC}[38;5;208mRudder ${ESC}[1mv${version}${ESC}[22m${ESC}[39m`
+  // Vite's banner colors (and from Vike's yellow version number). Name bold,
+  // version normal weight — matches how Vike/Vite render `Vike v…`/`Vite v…`.
+  const rudder = `${ESC}[38;5;208m${ESC}[1mRudder${ESC}[22m v${version}${ESC}[39m`
   const sep    = `${ESC}[2m·${ESC}[22m`
   return line.replace(tail, `$1${rudder} ${sep} $2`)
 }
@@ -341,7 +342,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
         setTimeout(() => {
           if (done) return
           finish()
-          original(`  \x1b[32m➜\x1b[39m  \x1b[38;5;208mRudder \x1b[1mv${version}\x1b[22m\x1b[39m`)
+          original(`  \x1b[32m➜\x1b[39m  \x1b[38;5;208m\x1b[1mRudder\x1b[22m v${version}\x1b[39m`)
         }, 2_000).unref?.()
       },
     },

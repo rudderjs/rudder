@@ -428,16 +428,17 @@ export class RudderJS {
     // Dev: a Vite-style arrow line that sits with Vike's `➜ Local`/`Network`
     // banner. Prod (no Vike banner, logs go to files/aggregators): keep the
     // parseable bracket prefix.
-    if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  App is ready`)
+    // Active line (like Vike's `➜ Local`): bright green arrow, bold "App".
+    if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  \x1b[1mApp\x1b[22m is ready`)
     else console.log('[RudderJS] ready')
   }
 
   /**
-   * Dev-only — print the auto-discovered providers grouped by stage so a missing
-   * package is visible at every boot instead of failing silently when first used.
-   * Rendered as Vite-style `➜` lines so the block sits with Vike's
-   * `➜ Local`/`➜ Network` startup banner. Long stage lists wrap, aligned under
-   * the value column, so the output stays readable in narrow terminals.
+   * Dev-only — print the auto-discovered provider count as a Vite-style `➜` line
+   * so the block sits with Vike's `➜ Local`/`➜ Network` startup banner. With
+   * `RUDDER_BOOT_VERBOSE=1`, also print the providers grouped by stage so a
+   * missing package is visible at boot instead of failing silently when first
+   * used; long stage lists wrap, aligned under the value column.
    */
   private _printDevBootLog(): void {
     const entries = getLastLoadedProviderEntries()
@@ -472,7 +473,17 @@ export class RudderJS {
     const arrow    = `  ${C.green('➜')}  `
     const arrowLen = 5
 
-    console.log(`${arrow}${entries.length} provider${entries.length === 1 ? '' : 's'} booted`)
+    // Muted line (like Vike's `➜ Network`): dim green arrow + dim
+    // "Auto-discovered", with the count itself bright + bold.
+    const dimArrow = `  \x1b[2m\x1b[32m➜\x1b[39m  ` // dim green ➜; dim stays on after
+    const count    = `${entries.length} provider${entries.length === 1 ? '' : 's'}`
+    console.log(`${dimArrow}Auto-discovered \x1b[22m\x1b[1m${count}\x1b[0m`)
+
+    // The per-stage breakdown (which packages booted in each stage) is hidden by
+    // default to keep the boot block compact — the count above covers the common
+    // case. Set RUDDER_BOOT_VERBOSE=1 to restore it when auditing what loaded
+    // (e.g. a package silently missing from the manifest).
+    if (process.env['RUDDER_BOOT_VERBOSE'] !== '1') return
 
     // Align stage-label colons (Vike aligns `Local:`/`Network:` the same way).
     const labelColonWidth = Math.max(...activeStages.map(s => s.length)) + 1 // +1 for ':'
