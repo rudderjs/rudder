@@ -533,7 +533,14 @@ async function main(): Promise<void> {
       process.exit(1)
     }
 
-    const logFile = path.join(os.tmpdir(), `create-rudder-${Date.now()}.log`)
+    // Create a private, randomly-named temp dir (mkdtemp → 0700, unguessable
+    // suffix) and write the log inside it, rather than a predictable
+    // `create-rudder-<timestamp>.log` directly in the shared temp dir. The old
+    // name was guessable, so a local attacker could pre-plant a file/symlink at
+    // that path before we wrote (TOCTOU). The OS reaps the temp dir; it's
+    // single-use per run.
+    const logDir  = await fs.mkdtemp(path.join(os.tmpdir(), 'create-rudder-'))
+    const logFile = path.join(logDir, 'scaffold.log')
     await fs.writeFile(logFile, '')
 
     try {
