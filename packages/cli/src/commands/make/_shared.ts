@@ -1,5 +1,4 @@
 import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
@@ -47,14 +46,19 @@ export function registerMake(program: Command, spec: MakeSpec): void {
       const relPath = `${spec.directory}/${className}.ts`
       const outPath = resolve(process.cwd(), relPath)
 
-      if (existsSync(outPath) && !opts['force']) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
       await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, spec.stub(className, opts))
+      try {
+        // Atomic create-or-overwrite: `wx` fails if the file already exists,
+        // closing the check-then-write race; `--force` opts into truncating.
+        await writeFile(outPath, spec.stub(className, opts), { flag: opts['force'] ? 'w' : 'wx' })
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+          console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
+          console.error(chalk.dim('    Use --force to overwrite.'))
+          return
+        }
+        throw err
+      }
 
       console.log(chalk.green(`  ✔ ${spec.label}:`), chalk.cyan(relPath))
       await spec.afterCreate?.(className, relPath, opts)

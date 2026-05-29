@@ -240,10 +240,13 @@ export function addCommand(program: Command): void {
         const configDir = path.join(cwd, 'config')
         mkdirSync(configDir, { recursive: true })
         const configFile = path.join(configDir, `${spec.config.key}.ts`)
-        if (!existsSync(configFile)) {
-          const body = spec.config.template({ orm })
-          writeFileSync(configFile, body)
+        try {
+          // `wx` writes the config only if absent, atomically — preserves a
+          // user-edited config on re-run without a separate existence check.
+          writeFileSync(configFile, spec.config.template({ orm }), { flag: 'wx' })
           console.log(`  Generated config/${spec.config.key}.ts`)
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
         }
 
         // 3. Wire into config/index.ts

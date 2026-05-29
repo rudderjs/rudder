@@ -63,7 +63,6 @@ export async function executeMakeSpec(
 ): Promise<MakeResult> {
   // Lazy-load node: built-ins — top-level imports crash Vite's browser bundle
   const { writeFile, mkdir } = await import('node:fs/promises')
-  const { existsSync } = await import('node:fs')
   const { resolve, dirname } = await import('node:path')
 
   const className = spec.suffix && !name.endsWith(spec.suffix)
@@ -72,12 +71,17 @@ export async function executeMakeSpec(
   const relPath = `${spec.directory}/${className}.${spec.extension ?? 'ts'}`
   const outPath = resolve(process.cwd(), relPath)
 
-  if (existsSync(outPath) && !opts.force) {
-    return { created: false, relPath, className }
-  }
-
   await mkdir(dirname(outPath), { recursive: true })
-  await writeFile(outPath, spec.stub(className))
+  try {
+    // Atomic create-or-overwrite: `wx` fails if the file exists, closing the
+    // check-then-write race; `force` opts into truncating an existing file.
+    await writeFile(outPath, spec.stub(className), { flag: opts.force ? 'w' : 'wx' })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      return { created: false, relPath, className }
+    }
+    throw err
+  }
   spec.afterCreate?.(className, relPath)
 
   return { created: true, relPath, className }

@@ -214,9 +214,15 @@ export {}
 
 function writeIfChanged(file: string, contents: string): boolean {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  if (fs.existsSync(file)) {
-    if (fs.readFileSync(file, 'utf8') === contents) return false
+  // Read directly and treat a missing file as "no prior content" — avoids the
+  // existsSync-then-read race; the write below is an intentional overwrite.
+  let existing: string | null = null
+  try {
+    existing = fs.readFileSync(file, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
   }
+  if (existing === contents) return false
   fs.writeFileSync(file, contents)
   return true
 }
