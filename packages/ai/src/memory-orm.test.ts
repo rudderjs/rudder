@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Model, ModelRegistry, type OrmAdapter, type QueryBuilder, type WhereClause, type OrderClause } from '@rudderjs/orm'
+import { ModelRegistry, type OrmAdapter, type QueryBuilder, type WhereClause, type OrderClause } from '@rudderjs/orm'
 
 import { OrmUserMemory, UserMemoryRecord, userMemoryPrismaSchema } from './memory-orm/index.js'
 import type { MemoryEntry } from './types.js'

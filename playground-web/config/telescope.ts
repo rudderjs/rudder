@@ -1,4 +1,3 @@
-import { Env } from '@rudderjs/core'
 import type { TelescopeConfig } from '@rudderjs/telescope'
 
 export default {

@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Process, PendingProcess, FakeProcess, ProcessFailedException } from './index.js'
+import { Process, ProcessFailedException } from './index.js'
 
 const posixOnly = { skip: process.platform === 'win32' ? 'POSIX shell required' : false }
 

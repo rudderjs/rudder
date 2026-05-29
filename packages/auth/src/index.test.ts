@@ -2,7 +2,6 @@ import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  auth,
   AuthProvider,
   Auth,
   AuthManager,

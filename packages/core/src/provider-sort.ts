@@ -1,12 +1,5 @@
 import type { ProviderEntry, ProviderStage } from './provider-registry.js'
 
-const STAGE_ORDER: Record<ProviderStage, number> = {
-  foundation:     0,
-  infrastructure: 1,
-  feature:        2,
-  monitoring:     3,
-}
-
 /**
  * Sort provider entries by stage, then topologically by `depends`.
  *

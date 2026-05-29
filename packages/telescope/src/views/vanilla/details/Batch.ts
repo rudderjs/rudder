@@ -1,5 +1,5 @@
 import { Layout } from '../Layout.js'
-import { html, raw } from '../_html.js'
+import { html } from '../_html.js'
 import { Card, Badge } from './sections.js'
 import type { TelescopeEntry } from '../../../types.js'
 

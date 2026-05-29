@@ -26,11 +26,6 @@ class StubAgent extends Agent {
   instructions() { return 'You are a stub agent.' }
 }
 
-class TypedModelAgent extends Agent {
-  instructions() { return 'priced.' }
-  model() { return 'anthropic/claude-haiku-4-5' }
-}
-
 // ─── evalSuite() ─────────────────────────────────────────
 
 describe('evalSuite()', () => {

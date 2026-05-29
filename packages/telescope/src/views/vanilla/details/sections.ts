@@ -130,7 +130,6 @@ export function Tabs(tabs: { label: string; content: SafeString | string }[]): S
   })
   if (visible.length === 0) return html``
 
-  const id = `tabs_${Math.random().toString(36).slice(2, 8)}`
   return html`
     <div x-data="{ tab: '${visible[0]!.label}' }" class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm mb-4">
       <div class="flex border-b border-gray-200 dark:border-gray-800">

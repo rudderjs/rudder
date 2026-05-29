@@ -6,7 +6,6 @@ import {
   Feature,
   Lottery,
   MemoryDriver,
-  FakePennant,
   FeatureMiddleware,
   PennantProvider,
 } from './index.js'

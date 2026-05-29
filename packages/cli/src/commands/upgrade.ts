@@ -422,21 +422,11 @@ function colorBump(current: ParsedVersion, target: ParsedVersion): (s: string) =
   return dim
 }
 
-function renderPlan(rows: PlanRow[]): void {
-  const nameWidth = Math.max(...rows.map(r => r.name.length))
-  for (const row of rows) {
-    const color = colorBump(row.current, row.latest)
-    const left  = row.name.padEnd(nameWidth)
-    const arrow = dim('→')
-    console.log(`  ${left}  ${dim(fmt(row.current))} ${arrow} ${color(fmt(row.target))}  ${dim('(' + row.section + ')')}`)
-  }
-}
-
 /**
- * Same as `renderPlan` but follows each row with an indented block of
- * `version  headline` lines from the package's CHANGELOG (one per version in
- * the bump range). Rows whose CHANGELOG fetch returned nothing render as a
- * plain row — graceful degradation.
+ * Render the upgrade plan: one row per package, each followed by an indented
+ * block of `version  headline` lines from the package's CHANGELOG (one per
+ * version in the bump range). Rows whose CHANGELOG fetch returned nothing
+ * render as a plain row — graceful degradation.
  */
 function renderPlanWithChangelogs(rows: PlanRow[], changelogs: Map<string, ChangelogEntry[]>): void {
   const nameWidth = Math.max(...rows.map(r => r.name.length))

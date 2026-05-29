@@ -1,4 +1,4 @@
-import { pmRun, type PackageManager } from './package-managers.js'
+import { type PackageManager } from './package-managers.js'
 import { type TemplateContext } from '../templates.js'
 
 export function packageJson(ctx: TemplateContext): string {

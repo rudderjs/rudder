@@ -1,6 +1,6 @@
 import { Layout as BaseLayout } from '../Layout.js'
 import { html, raw, type SafeString } from '../_html.js'
-import { Card, Badge, Tabs, KeyValueTable } from './sections.js'
+import { Card, Tabs, KeyValueTable } from './sections.js'
 import type { TelescopeEntry } from '../../../types.js'
 
 export interface DetailLayoutProps {

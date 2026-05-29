@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { AiRegistry } from './registry.js'
-import { isPauseForApprovalChunk, isPauseForClientToolsChunk, pauseForApproval, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
+import { pauseForApproval, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
 import type { PauseForApprovalChunk, PauseForClientToolsChunk, ServerToolBuilder } from './tool.js'
-import { isHandoffTool } from './handoff.js'
 import type { HandoffSpec } from './handoff.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
@@ -18,21 +17,12 @@ import type { SubAgentPauseKind, SubAgentRunSnapshot, SubAgentRunStore } from '.
 import {
   runOnConfig,
   runOnChunk,
-  runOnBeforeToolCall,
-  runOnAfterToolCall,
   runSequential,
   runOnUsage,
   runOnAbort,
   runOnError,
 } from './middleware.js'
 import type { AiObserverRegistry, AiEvent, AiObserverStep } from './observers.js'
-import {
-  applyToModelOutput,
-  defaultStringify,
-  evaluateApproval,
-  executeMaybeStreaming,
-  validateToolArgs,
-} from './tool-helpers.js'
 import type { InvalidToolArgumentsError } from './tool-helpers.js'
 import { executeToolPhase } from './tool-execution.js'
 import { resumePendingToolCalls } from './resume-approval.js'
