@@ -428,7 +428,8 @@ export class RudderJS {
     // Dev: a Vite-style arrow line that sits with Vike's `➜ Local`/`Network`
     // banner. Prod (no Vike banner, logs go to files/aggregators): keep the
     // parseable bracket prefix.
-    if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  App is ready`)
+    // Active line (like Vike's `➜ Local`): bright green arrow, bold "App".
+    if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  \x1b[1mApp\x1b[22m is ready`)
     else console.log('[RudderJS] ready')
   }
 
@@ -472,7 +473,11 @@ export class RudderJS {
     const arrow    = `  ${C.green('➜')}  `
     const arrowLen = 5
 
-    console.log(`${arrow}Auto-discovered ${entries.length} provider${entries.length === 1 ? '' : 's'}`)
+    // Muted line (like Vike's `➜ Network`): dim green arrow + dim
+    // "Auto-discovered", with the count itself bright + bold.
+    const dimArrow = `  \x1b[2m\x1b[32m➜\x1b[39m  ` // dim green ➜; dim stays on after
+    const count    = `${entries.length} provider${entries.length === 1 ? '' : 's'}`
+    console.log(`${dimArrow}Auto-discovered \x1b[22m\x1b[1m${count}\x1b[0m`)
 
     // The per-stage breakdown (which packages booted in each stage) is hidden by
     // default to keep the boot block compact — the count above covers the common
