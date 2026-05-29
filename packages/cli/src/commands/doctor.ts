@@ -21,14 +21,15 @@ export function doctorCommand(program: CommanderCommand, deps: DoctorCommandDeps
   program
     .command('doctor')
     .description('Diagnose common setup issues in a RudderJS app')
-    .option('--deep',    'Also run checks that require booting the app (DB connect, port, …)')
-    .option('--fix',     'Auto-apply safe fixes for any failures that declare a fixer')
-    .option('--yes',     'Skip fix-mode prompts and apply every fixable failure')
-    .option('--verbose', 'Show detail block under each check (not just failures)')
-    .option('--json',    'Reserved for a future machine-readable output mode')
+    .option('--deep',       'Also run checks that require booting the app (DB connect, port, …)')
+    .option('--production', 'Also run prod-readiness checks (APP_DEBUG=false, DATABASE_URL not localhost, …)')
+    .option('--fix',        'Auto-apply safe fixes for any failures that declare a fixer')
+    .option('--yes',        'Skip fix-mode prompts and apply every fixable failure')
+    .option('--verbose',    'Show detail block under each check (not just failures)')
+    .option('--json',       'Reserved for a future machine-readable output mode')
     .option('--only <substring>', 'Only run checks whose id contains <substring>')
     .action(async (opts: {
-      deep?: boolean; fix?: boolean; yes?: boolean
+      deep?: boolean; production?: boolean; fix?: boolean; yes?: boolean
       verbose?: boolean; json?: boolean; only?: string
     }) => {
       if (opts.json) {
@@ -69,9 +70,10 @@ export function doctorCommand(program: CommanderCommand, deps: DoctorCommandDeps
         }
       }
 
-      const runOpts: { deep?: boolean; filter?: string } = {}
-      if (opts.deep)               runOpts.deep   = true
-      if (opts.only !== undefined) runOpts.filter = opts.only
+      const runOpts: { deep?: boolean; production?: boolean; filter?: string } = {}
+      if (opts.deep)               runOpts.deep       = true
+      if (opts.production)         runOpts.production = true
+      if (opts.only !== undefined) runOpts.filter     = opts.only
 
       const reportOpts: { verbose?: boolean } = {}
       if (opts.verbose) reportOpts.verbose = true
