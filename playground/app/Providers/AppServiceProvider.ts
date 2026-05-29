@@ -32,6 +32,6 @@ export class AppServiceProvider extends ServiceProvider {
     Feature.define('beta-dashboard', (scope) => typeof scope === 'object' && scope !== null)
     Feature.define('new-checkout',   () => Lottery.odds(1, 4))
 
-    bootLine(`[AppServiceProvider] booted — app: ${this.app.name}`)
+    bootLine(`${this.app.name} services wired`)
   }
 }

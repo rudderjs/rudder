@@ -472,7 +472,7 @@ export class RudderJS {
     const arrow    = `  ${C.green('➜')}  `
     const arrowLen = 5
 
-    console.log(`${arrow}${entries.length} provider${entries.length === 1 ? '' : 's'} booted`)
+    console.log(`${arrow}Auto-discovered ${entries.length} provider${entries.length === 1 ? '' : 's'}`)
 
     // Align stage-label colons (Vike aligns `Local:`/`Network:` the same way).
     const labelColonWidth = Math.max(...activeStages.map(s => s.length)) + 1 // +1 for ':'
