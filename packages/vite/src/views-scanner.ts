@@ -657,9 +657,13 @@ function generateFrameworkHooks(pagesRoot: string): void {
   for (const stub of FRAMEWORK_HOOK_STUBS) {
     const target = path.join(pagesRoot, stub.filename)
     // Only create on first run — preserve user customizations on subsequent
-    // syncs. Users who want to override the hook just edit the file in place.
-    if (fs.existsSync(target)) continue
-    fs.writeFileSync(target, stub.contents)
+    // syncs. The exclusive `wx` flag makes "create if absent" atomic: an
+    // existing (possibly user-edited) file is left untouched, race-free.
+    try {
+      fs.writeFileSync(target, stub.contents, { flag: 'wx' })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
   }
 }
 
@@ -696,10 +700,15 @@ const ALL_PAGE_FILENAMES = ['+Page.tsx', '+Page.jsx', '+Page.vue', '+Page.ts', '
  */
 function writeIfChanged(file: string, contents: string): boolean {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  if (fs.existsSync(file)) {
-    const existing = fs.readFileSync(file, 'utf8')
-    if (existing === contents) return false
+  // Read directly and treat a missing file as "no prior content" — avoids the
+  // existsSync-then-read race; the write below is an intentional overwrite.
+  let existing: string | null = null
+  try {
+    existing = fs.readFileSync(file, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
   }
+  if (existing === contents) return false
   fs.writeFileSync(file, contents)
   return true
 }

@@ -43,8 +43,8 @@ export async function generateKeys(opts: { force?: boolean } = {}): Promise<Gene
   const privateExists = existsSync(privatePath)
   const publicExists  = existsSync(publicPath)
 
-  if (!opts.force && privateExists) {
-    throw new Error(`Keys already exist at ${privatePath}. Use --force to overwrite.`)
+  if (!opts.force && (privateExists || publicExists)) {
+    throw new Error(`Keys already exist in ${keyDir}. Use --force to overwrite.`)
   }
 
   await mkdir(keyDir, { recursive: true })
@@ -73,8 +73,12 @@ export async function generateKeys(opts: { force?: boolean } = {}): Promise<Gene
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   })
 
-  await writeFile(privatePath, privateKey, { mode: 0o600 })
-  await writeFile(publicPath, publicKey, { mode: 0o644 })
+  // `wx` = create exclusively: the write fails rather than following a
+  // pre-planted file/symlink at the key path. By here both paths are free —
+  // the guard above rejects a non-forced run when either key exists, and the
+  // forced path renamed any existing keys to timestamped backups first.
+  await writeFile(privatePath, privateKey, { mode: 0o600, flag: 'wx' })
+  await writeFile(publicPath, publicKey, { mode: 0o644, flag: 'wx' })
 
   return { privatePath, publicPath, backup, previousPublicPath: previousPublicWritten }
 }

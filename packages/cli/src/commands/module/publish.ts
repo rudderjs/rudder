@@ -88,13 +88,16 @@ export function publishModule(program: Command): void {
       const mergedBlock = buildMergedBlock(shards)
 
       let schema: string
-      if (existsSync(schemaPath)) {
-        schema = await readFile(schemaPath, 'utf8')
-        if (MARKERS_RE.test(schema)) {
-          schema = schema.replace(MARKERS_RE, mergedBlock)
-        } else {
-          schema = schema.trimEnd() + '\n\n' + mergedBlock + '\n'
-        }
+      let existing: string | null = null
+      try {
+        existing = await readFile(schemaPath, 'utf8')
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      }
+      if (existing !== null) {
+        schema = MARKERS_RE.test(existing)
+          ? existing.replace(MARKERS_RE, mergedBlock)
+          : existing.trimEnd() + '\n\n' + mergedBlock + '\n'
       } else {
         schema = mergedBlock + '\n'
       }

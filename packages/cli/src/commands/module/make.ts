@@ -1,5 +1,4 @@
 import { writeFile, mkdir, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import { intro, outro, spinner, log } from '@clack/prompts'
@@ -129,11 +128,12 @@ import type { Application } from '@rudderjs/core'
 export const providers: (new (app: Application) => ServiceProvider)[] = []\n`
 
   let content: string
-  if (!existsSync(bootstrapPath)) {
+  try {
+    content = await readFile(bootstrapPath, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
     await mkdir(dirname(bootstrapPath), { recursive: true })
     content = template
-  } else {
-    content = await readFile(bootstrapPath, 'utf8')
   }
 
   // Skip if already registered
@@ -187,12 +187,17 @@ export function makeModule(program: Command): void {
       await mkdir(moduleDir, { recursive: true })
 
       for (const file of files) {
-        if (existsSync(file.path) && !opts.force) {
-          s.stop('Aborted')
-          log.error(`File already exists: ${file.path}\nUse --force to overwrite.`)
-          return
+        try {
+          // `wx` makes "create unless exists" atomic; `--force` truncates.
+          await writeFile(file.path, file.content, { flag: opts.force ? 'w' : 'wx' })
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+            s.stop('Aborted')
+            log.error(`File already exists: ${file.path}\nUse --force to overwrite.`)
+            return
+          }
+          throw err
         }
-        await writeFile(file.path, file.content)
         log.success(`Created ${file.path.replace(process.cwd() + '/', '')}`)
       }
 
