@@ -44,7 +44,7 @@
     "@rudderjs/core": "workspace:^"
   },
   "optionalDependencies": {
-    "nodemailer": "^7.0.11 || ^8.0.0"
+    "nodemailer": "^8.0.5"
   },
   "devDependencies": {
     "@rudderjs/queue": "workspace:*",
