@@ -122,25 +122,24 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-node${{ matrix.node-version }}-
 
-      # ── Windows-only build-flake mitigation ──────────────────────────────
-      # The `Build & Test (windows-latest)` job intermittently failed the Build
-      # step (never Linux/macOS, cleared on re-run). #783 added streaming logs,
-      # which caught the real cause on PR #782:
-      #   Failed: @rudderjs/crypt#build
-      #   ERROR  run failed: command exited (-1073741502)
-      # -1073741502 == 0xC0000142 == STATUS_DLL_INIT_FAILED: a spawned `tsc`
-      # process died during DLL initialisation, before emitting any output —
-      # which is why earlier failures looked diagnostic-less. This is the
-      # classic Windows desktop-heap / DLL-init exhaustion that hits when many
-      # processes spawn at once, so the fix is to stop spawning so many:
-      #
-      #   1. TURBO_CONCURRENCY=1 on Windows — serialise the build so only one
-      #      `tsc` process starts at a time. Default (10) stays on Linux. Build
-      #      is well under the 20-min timeout even serialised.
-      #   2. Add-MpPreference exclusion — Defender scanning a DLL mid-load can
-      #      aggravate the same init failure. Best-effort; never fails CI.
-      #   3. TURBO_LOG_ORDER=stream — keep streaming so any future Windows
-      #      failure is attributable instead of swallowed by grouped output.
+      # ── Windows-only build-flake mitigation (layered) ────────────────────
+      # `Build & Test (windows-latest)` intermittently dies with exit
+      # -1073741502 == 0xC0000142 == STATUS_DLL_INIT_FAILED: a spawned `tsc` /
+      # `node --test` process dies during DLL init before emitting output — the
+      # classic Windows desktop-heap / DLL-init exhaustion under many process
+      # spawns. Never reproduces on Linux/macOS; always clears on re-run.
+      # Defences, weakest-to-strongest:
+      #   1. Add-MpPreference exclusion — Defender scanning a DLL mid-load can
+      #      aggravate the init failure. Best-effort; never fails CI.
+      #   2. TURBO_CONCURRENCY=1 — serialise so only one process spawns at a time
+      #      (#784). Default on Linux. Cut the rate, but not to zero.
+      #   3. TURBO_LOG_ORDER=stream — keep failures attributable, not swallowed.
+      #   4. Bounded retry (this PR) — #784's serialisation still flaked three
+      #      PRs in a row (#788/#790/#791), each needing a manual re-run, so the
+      #      Windows Build/Test steps now retry up to 3x in-process. Turbo caches
+      #      successful tasks, so a retry re-runs only the crashed package —
+      #      cheap. A REAL failure is deterministic: it fails all 3 attempts and
+      #      still goes red (just slower), so the retry can't mask a true break.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -152,20 +151,46 @@ jobs:
             Write-Host "::warning::Could not add Defender exclusion (continuing): $_"
           }
 
+      # Linux/macOS: plain steps, no retry — the flake never reproduces here.
       - name: Build
-        env:
-          TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
-          TURBO_CONCURRENCY: ${{ matrix.os == 'windows-latest' && '1' || '10' }}
+        if: matrix.os != 'windows-latest'
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
       - name: Test
-        env:
-          TURBO_LOG_ORDER: ${{ matrix.os == 'windows-latest' && 'stream' || 'auto' }}
-          # Same STATUS_DLL_INIT_FAILED (0xC0000142) flake as the Build step
-          # (#784): the test run spawns many `node --test` processes at once and
-          # one dies during DLL init. Serialise on Windows; default (10) on Linux.
-          TURBO_CONCURRENCY: ${{ matrix.os == 'windows-latest' && '1' || '10' }}
+        if: matrix.os != 'windows-latest'
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
+
+      # Windows: serialise + stream + retry up to 3x on the DLL-init flake.
+      # pwsh doesn't throw on a native non-zero exit, so the loop reads
+      # $LASTEXITCODE and retries; turbo's cache makes each retry near-instant
+      # for the packages that already succeeded.
+      - name: Build (windows — retried for the STATUS_DLL_INIT_FAILED flake)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          TURBO_LOG_ORDER: stream
+          TURBO_CONCURRENCY: '1'
+        run: |
+          foreach ($i in 1..3) {
+            pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "::warning::Build attempt $i/3 failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED Windows flake) — retrying"
+          }
+          exit 1
+
+      - name: Test (windows — retried for the STATUS_DLL_INIT_FAILED flake)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          TURBO_LOG_ORDER: stream
+          TURBO_CONCURRENCY: '1'
+        run: |
+          foreach ($i in 1..3) {
+            pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "::warning::Test attempt $i/3 failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED Windows flake) — retrying"
+          }
+          exit 1
 
   client-bundle:
     # Client-bundle smoke gate: some @rudderjs/* packages are legitimately
