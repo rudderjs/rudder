@@ -372,10 +372,11 @@ describe('getTemplates() — package.json deps', () => {
     assert.strictEqual(pkg.name, 'cool-app')
   })
 
-  it('includes better-sqlite3 in pnpm.onlyBuiltDependencies for sqlite + pnpm', () => {
+  it('emits no package.json#pnpm field for pnpm (ignored + warned by pnpm 11; build approval lives in pnpm-workspace.yaml)', () => {
     const files = getTemplates(ctx({ db: 'sqlite', pm: 'pnpm' }))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(pkg.pnpm.onlyBuiltDependencies.includes('better-sqlite3'))
+    assert.ok(!pkg.pnpm)
+    assert.ok(!pkg.trustedDependencies)
   })
 
   it('uses trustedDependencies for bun', () => {
@@ -409,6 +410,12 @@ describe('getTemplates() — pnpm-workspace.yaml', () => {
     assert.ok(!('pnpm-workspace.yaml' in getTemplates(ctx({ pm: 'npm' }))))
     assert.ok(!('pnpm-workspace.yaml' in getTemplates(ctx({ pm: 'yarn' }))))
     assert.ok(!('pnpm-workspace.yaml' in getTemplates(ctx({ pm: 'bun' }))))
+  })
+
+  it('allows dependency build scripts (works on pnpm 10 + 11) and stays a standalone workspace', () => {
+    const ws = getTemplates(ctx({ pm: 'pnpm', db: 'sqlite', orm: 'prisma' }))['pnpm-workspace.yaml']!
+    assert.match(ws, /^dangerouslyAllowAllBuilds: true$/m)
+    assert.match(ws, /^packages: \[\]/m) // still a standalone (non-merging) workspace
   })
 })
 

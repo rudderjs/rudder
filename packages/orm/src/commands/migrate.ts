@@ -35,8 +35,17 @@ export function detectORM(cwd: string = process.cwd()): ORM | null {
  * Every other arg in this file is a hardcoded literal.
  */
 function run(cmd: string, args: string[], cwd: string): Promise<number> {
+  // pnpm 11's `verify-deps-before-run` runs a deps-status check before `pnpm
+  // exec`, and it fatally exits (ERR_PNPM_IGNORED_BUILDS) when ANY dependency
+  // has an un-approved build script — e.g. a transitive `msw` postinstall, or
+  // an optional `argon2` — aborting `prisma generate`/`db push` before the tool
+  // even runs. Disable that pre-flight check for our tool invocations; the deps
+  // were already installed (at scaffold time or via `pnpm install`).
+  const finalArgs = cmd === 'pnpm'
+    ? ['--config.verify-deps-before-run=false', ...args]
+    : args
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { cwd, stdio: 'inherit', shell: true })
+    const proc = spawn(cmd, finalArgs, { cwd, stdio: 'inherit', shell: true })
     proc.on('close', code => resolve(code ?? 1))
     proc.on('error', reject)
   })

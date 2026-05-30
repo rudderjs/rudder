@@ -120,5 +120,22 @@ bootstrap/cache/
 }
 
 export function pnpmWorkspace(): string {
-  return `# Standalone project — prevents pnpm from merging with a parent workspace\npackages: []\n`
+  // pnpm 10+ blocks dependency build/postinstall scripts by default. Without
+  // this, the SQLite native binding (better-sqlite3), the Prisma engine and
+  // esbuild never build, so `db:generate`/`db:push`/`dev` fail with
+  // ERR_PNPM_IGNORED_BUILDS. A scaffolded app's dependencies are all
+  // framework-curated, and npm/yarn run every postinstall by default anyway, so
+  // we opt in to running them here. (pnpm 11 no longer honors an
+  // `onlyBuiltDependencies` allowlist for a standalone, non-workspace app, and
+  // ignores `package.json#pnpm` entirely — `dangerouslyAllowAllBuilds` is the
+  // setting that works on both pnpm 10 and 11. Tighten it if you prefer to vet
+  // each dependency with `pnpm approve-builds`.)
+  return [
+    '# Standalone project — prevents pnpm from merging with a parent workspace',
+    'packages: []',
+    '',
+    '# Run dependency build scripts (pnpm blocks them by default; see note above)',
+    'dangerouslyAllowAllBuilds: true',
+    '',
+  ].join('\n')
 }
