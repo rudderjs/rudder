@@ -105,6 +105,13 @@ export class NativeAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
+    // Evict the cached client BEFORE closing so a later make() with the same
+    // driver::url signature opens a fresh driver instead of reusing this closed
+    // one. The cache only holds a self-opened driver (driverInstance bypasses
+    // caching), so a stale entry here is always the one we're about to close.
+    const g = globalThis as Record<string, unknown>
+    const cached = g[NATIVE_CLIENT_CACHE_KEY] as NativeClientCacheEntry | undefined
+    if (cached?.driver === this.driver) delete g[NATIVE_CLIENT_CACHE_KEY]
     await this.driver.close()
   }
 }

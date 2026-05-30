@@ -8,7 +8,7 @@
 // better-sqlite3 is synchronous; we wrap its calls in resolved promises to
 // satisfy the async {@link Driver} contract shared with RN/WASM drivers.
 
-import type { Driver, Row } from '../driver.js'
+import type { Driver, Executor, Row } from '../driver.js'
 import { NativeDriverError } from '../errors.js'
 
 // Minimal structural types for the slice of better-sqlite3 we use — avoids a
@@ -20,6 +20,7 @@ interface Bs3Statement {
 }
 interface Bs3Database {
   prepare(sql: string): Bs3Statement
+  exec(sql: string): unknown
   close(): void
 }
 interface Bs3Constructor {
@@ -81,14 +82,40 @@ export class BetterSqlite3Driver implements Driver {
 
   async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
     const stmt = this.db.prepare(sql)
-    // `.all()` is only valid on statements that return rows. For the read path
-    // every statement is a SELECT (a reader); guard so a non-reader statement
-    // (Phase 2 writes) routes through `.run()` and yields no rows.
+    // `.all()` is only valid on statements that return rows. A SELECT — or any
+    // write with a `RETURNING` clause — is a reader; a plain INSERT/UPDATE/DELETE
+    // is not and routes through `.run()`, yielding no rows.
     if (stmt.reader) {
       return stmt.all(...bindings) as Row[]
     }
     stmt.run(...bindings)
     return []
+  }
+
+  /**
+   * BEGIN/COMMIT/ROLLBACK around `fn`. better-sqlite3 is synchronous and
+   * single-connection, so the transaction-scoped {@link Executor} is the driver
+   * itself — every `execute` between BEGIN and COMMIT runs on the one open
+   * transaction. (We don't use better-sqlite3's own `db.transaction()` wrapper
+   * because it only accepts a *synchronous* function, and our `fn` is async.)
+   *
+   * Phase 2 keeps this single-level; Phase 4 adds SAVEPOINT-based nesting.
+   */
+  async transaction<T>(fn: (tx: Executor) => Promise<T>): Promise<T> {
+    this.db.exec('BEGIN')
+    try {
+      const result = await fn(this)
+      this.db.exec('COMMIT')
+      return result
+    } catch (err) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {
+        // A failed ROLLBACK (e.g. the transaction already aborted) must not mask
+        // the original error — swallow it and re-throw the cause below.
+      }
+      throw err
+    }
   }
 
   async close(): Promise<void> {
