@@ -134,12 +134,16 @@ jobs:
       #   2. TURBO_CONCURRENCY=1 — serialise so only one process spawns at a time
       #      (#784). Default on Linux. Cut the rate, but not to zero.
       #   3. TURBO_LOG_ORDER=stream — keep failures attributable, not swallowed.
-      #   4. Bounded retry (this PR) — #784's serialisation still flaked three
-      #      PRs in a row (#788/#790/#791), each needing a manual re-run, so the
-      #      Windows Build/Test steps now retry up to 3x in-process. Turbo caches
-      #      successful tasks, so a retry re-runs only the crashed package —
-      #      cheap. A REAL failure is deterministic: it fails all 3 attempts and
-      #      still goes red (just slower), so the retry can't mask a true break.
+      #   4. Bounded retry WITH BACKOFF (#792 + #797) — #784's serialisation still
+      #      flaked, so the Windows Build/Test steps retry up to 3x in-process.
+      #      The backoff is load-bearing: a retry replays turbo's cache and
+      #      re-spawns only the crashed package in ~ms, hitting the still-
+      #      exhausted desktop heap — so an INSTANT retry fails all 3x in ~70ms
+      #      (observed on the #794-merge run). Sleeping 30s/60s between attempts
+      #      lets the OS reclaim the crashed processes' handles first. Turbo
+      #      caches successful tasks so retries are cheap; a REAL failure is
+      #      deterministic (fails all 3 attempts) and still goes red, so the
+      #      retry can't mask a true break.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -171,11 +175,23 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          foreach ($i in 1..3) {
+          # Backoff between attempts is load-bearing: a retry replays turbo's
+          # cache and re-spawns only the crashed package in milliseconds, hitting
+          # the still-exhausted desktop heap — so an INSTANT retry fails 3x in
+          # ~70ms. The DLL-init / desktop-heap exhaustion clears once the crashed
+          # processes' handles are reclaimed, which needs a few seconds. Sleep
+          # 30s, then 60s, before retrying so the runner recovers.
+          $max = 3
+          foreach ($i in 1..$max) {
             pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
             if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Host "::warning::Build attempt $i/3 failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED Windows flake) — retrying"
+            if ($i -lt $max) {
+              $delay = 30 * $i
+              Write-Host "::warning::Build attempt $i/$max failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED) — waiting ${delay}s for desktop-heap recovery, then retrying"
+              Start-Sleep -Seconds $delay
+            }
           }
+          Write-Host "::error::Build failed after $max attempts"
           exit 1
 
       - name: Test (windows — retried for the STATUS_DLL_INIT_FAILED flake)
@@ -185,11 +201,19 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          foreach ($i in 1..3) {
+          # Backoff between attempts — see the Build step's note: an instant
+          # retry hits the still-exhausted desktop heap and fails immediately.
+          $max = 3
+          foreach ($i in 1..$max) {
             pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
             if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Host "::warning::Test attempt $i/3 failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED Windows flake) — retrying"
+            if ($i -lt $max) {
+              $delay = 30 * $i
+              Write-Host "::warning::Test attempt $i/$max failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED) — waiting ${delay}s for desktop-heap recovery, then retrying"
+              Start-Sleep -Seconds $delay
+            }
           }
+          Write-Host "::error::Test failed after $max attempts"
           exit 1
 
   client-bundle:
