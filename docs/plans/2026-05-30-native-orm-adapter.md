@@ -1,9 +1,15 @@
-# Native ORM Adapter (`@rudderjs/orm-native`) — Implementation Plan
+# Native ORM Engine (built into `@rudderjs/orm`) — Implementation Plan
 
-> Build a first-party database adapter that talks **directly** to `better-sqlite3` /
-> `pg` / `mysql2` / `@libsql/client`, sitting under the existing dialect-agnostic
-> `@rudderjs/orm` Model layer — alongside (not replacing) `orm-prisma` and
-> `orm-drizzle`.
+> Build a first-party database engine that talks **directly** to `better-sqlite3` /
+> `pg` / `mysql2` / `@libsql/client`, shipped **inside `@rudderjs/orm`** as the
+> built-in default adapter — alongside (not replacing) the optional `orm-prisma`
+> and `orm-drizzle` packages.
+>
+> **No new package, no new name.** The engine lives at a node-only **subpath**
+> (`@rudderjs/orm/native`); `@rudderjs/orm`'s main entry stays the pure, client-safe
+> Model layer. Users opt in with a config value (`driver: 'sqlite' | 'pg' | 'mysql'`),
+> not a package install — so `@rudderjs/orm` becomes batteries-included: install it,
+> get a working database out of the box.
 
 ---
 
@@ -24,6 +30,33 @@ into SQL and execute it.
 So this is **not "rebuild the ORM."** It's "write a query compiler + driver-execution
 layer under a surface we already own." `orm-drizzle` (~1300 lines) is the closest
 reference — same job, minus `drizzle-orm` (we hand-build SQL + bindings instead).
+
+### Why built-in (subpath), not a separate package
+
+`@rudderjs/orm` is **client-bundle-reachable** — a `Model` can be imported from
+client code, and the `Client Bundle Smoke` CI gate (`scripts/client-bundle-smoke.mjs`)
+evaluates the package's main entry in a browser-like VM with no `process` / `node:`.
+The Prisma/Drizzle adapters `import 'better-sqlite3'` freely *only because they are
+separate, server-only packages* never in the client graph.
+
+Folding the native engine in therefore requires **strict subpath isolation**:
+
+- **`@rudderjs/orm` (main entry)** — unchanged: pure, client-safe Model / relations /
+  contract / casts / factories. **No driver imports, no `node:` at eval time.**
+- **`@rudderjs/orm/native` (subpath)** — node-only SQL compiler + driver execution.
+  Drivers (`better-sqlite3` / `pg` / `mysql2` / `@libsql/client`) are **optional peers**,
+  lazy-loaded. This subpath is **never imported from client code**, so the client gate
+  stays green *by construction*.
+- The built-in **provider loads from the subpath** via the existing
+  `rudderjs.providerSubpath` mechanism (the same trick `@rudderjs/ai` uses to keep its
+  runtime-agnostic main entry clean).
+
+> **Merge-policy note (CLAUDE.md):** the package-merge checklist says adapters are a
+> boundary that should stay *separate* — but that rule targets *third-party*
+> integrations (Prisma/Drizzle) with independent release cadence. The native engine is
+> co-developed with `@rudderjs/orm` and is the *default*; the subpath preserves the
+> isolation the policy actually cares about while keeping one package, one version, no
+> name.
 
 **The value and the cost live in two different boxes:**
 
@@ -47,7 +80,7 @@ contract is proven.
 ## Status & Checkpoints
 
 - [ ] Phase 0 — Plan-doc PR landed
-- [ ] Phase 1 — Package scaffold + SQLite **read** path (conformance harness green)
+- [ ] Phase 1 — Subpath scaffold + SQLite **read** path (conformance harness green)
 - [ ] **GATE A** — contract sufficiency review (does the spike reveal missing contract surface?)
 - [ ] Phase 2 — SQLite **write** path (create/update/delete/increment/bulk/soft-delete)
 - [ ] Phase 3 — Relations (whereHas/whereDoesntHave, withAggregate, eager `with()`)
@@ -77,7 +110,13 @@ Each phase = one or more PRs. Stop at any gate.
 4. **Mirror `orm-drizzle`'s shape** (dialect branching, HMR client caching on
    `globalThis` keyed by `driver::url`, connection disposal on signature change) so
    the boot-leak guarantees from the provider-boot-leak audit hold by construction.
-5. **`fix:`/`feat:` changeset** on any PR touching a published package.
+5. **Client-bundle discipline (the governing rule).** All native-engine code lives at
+   the `@rudderjs/orm/native` subpath. `@rudderjs/orm`'s **main entry must never**
+   statically import the native subpath, a driver, or `node:*` at eval time. Every PR
+   in this plan runs `pnpm test:client-bundle` (the smoke gate) — green is mandatory.
+   Driver loads are lazy `await import()` inside functions only.
+6. **`fix:`/`feat:` changeset** for `@rudderjs/orm` (the engine ships inside it). Each
+   driver-enabling phase is a **minor** bump.
 
 ---
 
@@ -89,17 +128,23 @@ keep-all-three-adapters positioning, and the Phase-7 separation before any code.
 
 ---
 
-## Phase 1 — Package scaffold + SQLite read path
+## Phase 1 — Subpath scaffold + SQLite read path
 
 Goal: prove the contract is sufficient for reads against a real driver, fast.
 
-### Task 1.1 — Scaffold `packages/orm-native`
-- `package.json` (`@rudderjs/orm-native`), tsconfig, `rudderjs` provider field,
-  `better-sqlite3` as the first driver (optional peer).
+### Task 1.1 — Add the `@rudderjs/orm/native` subpath
+- New source tree under `packages/orm/src/native/` exported via a `./native` entry in
+  `@rudderjs/orm`'s `package.json#exports` (node-only condition; `default` →
+  `./dist/native/index.js`). **Do not** re-export it from the main `src/index.ts`.
+- `better-sqlite3` added as the first **optional peer** of `@rudderjs/orm`.
 - `NativeAdapter implements OrmAdapter`; `NativeQueryBuilder<T>` skeleton throwing
   `NotImplemented` on every terminal.
 - A `Dialect` abstraction: `{ quoteId, placeholder(i), supportsReturning, ... }` with
   a `SqliteDialect` first impl. This is the seam that pg/mysql plug into later.
+- **Client gate first:** before any logic, add `@rudderjs/orm` to the smoke-gate
+  TARGETS (if not already) and confirm `pnpm test:client-bundle` is green with the new
+  subpath present but unreferenced from the main entry. This locks the constraint in
+  on day one.
 
 ### Task 1.2 — SQL compiler core (read)
 - Compile `QueryState` (`wheres`/`orders`/`limitN`/`offsetN`) → `SELECT … FROM …
@@ -158,7 +203,7 @@ contract changes before writing the write path.
 At this point native is a complete, conformance-passing **SQLite** query adapter
 with full Model parity + transactions. Decide: is multi-dialect + migrations worth
 the perpetual cost, given the motivation? If only SQLite + "bring-your-own-migrations"
-is wanted, we can ship a 1.0 here.
+is wanted, we can ship it here as the built-in default (`@rudderjs/orm` minor) and stop.
 
 ---
 
@@ -196,18 +241,24 @@ up/down-only first — it's more Laravel-like and an order of magnitude less sur
 ---
 
 ## Phase 8 — Wiring, scaffolder, docs, release
-- `NativeDatabaseProvider` + `config/database.ts` driver option (`'native'`).
-- Auto-discovery (`rudderjs.provider`), doctor checks (mirror orm-prisma's `./doctor`).
-- `create-rudder` profile option: native as the **zero-external-ORM default** for
-  new SQLite apps.
-- Docs: ORM guide adapter-comparison row; `@rudderjs/orm-native` README; migration
-  guide (Phase 7).
-- Release: `@rudderjs/orm-native` 1.0 + any contract bump from Phase 4.
+- `NativeDatabaseProvider` (loaded from `@rudderjs/orm/native` via
+  `rudderjs.providerSubpath`) + `config/database.ts` driver values
+  (`'sqlite' | 'pg' | 'mysql'`) selecting the built-in engine.
+- Doctor checks for the native engine (mirror orm-prisma's `./doctor`); the smoke-gate
+  TARGETS entry from Task 1.1.
+- `create-rudder`: native as the **zero-external-ORM default** for new SQLite apps
+  (no `orm-prisma`/`orm-drizzle` install needed).
+- Docs: ORM guide — native as the default + adapter-comparison row; document the
+  `@rudderjs/orm/native` subpath and the client-safety contract; migration guide (Phase 7).
+- Release: `@rudderjs/orm` minor bumps per driver phase + any contract bump from Phase 4.
 
 ---
 
 ## Explicitly NOT in this plan (yet)
-- Replacing prisma/drizzle — **all three stay**. Native = batteries-included default.
+- Replacing prisma/drizzle — both **stay** as optional packages. Native = the
+  batteries-included default that ships inside `@rudderjs/orm`.
+- A separate `@rudderjs/orm-native` package — rejected; the engine lives at the
+  `@rudderjs/orm/native` subpath (one package, one version, no name).
 - A schema-diff engine (Phase 7 leans up/down-only).
 - Query-result streaming, read-replicas, multi-tenant connection switching.
 - ORM-level caching beyond what `@rudderjs/cache` already offers.
