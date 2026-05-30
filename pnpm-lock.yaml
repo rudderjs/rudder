@@ -655,9 +655,15 @@ importers:
         specifier: workspace:^
         version: link:../contracts
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.0.0
+        version: 7.6.13
       '@types/node':
         specifier: 20.19.35
         version: 20.19.35
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.6.2
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
