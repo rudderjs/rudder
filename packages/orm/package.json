@@ -22,6 +22,12 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./native": {
+      "node": "./dist/native/index.js",
+      "import": "./dist/native/index.js",
+      "default": "./dist/native/index.js",
+      "types": "./dist/native/index.d.ts"
+    },
     "./commands/migrate": {
       "import": "./dist/commands/migrate.js",
       "types": "./dist/commands/migrate.d.ts"
@@ -44,15 +50,25 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/dirty.test.js dist-test/morph.test.js dist-test/morph-many-to-many.test.js dist-test/polymorphic-eager-load.test.js dist-test/belongs-to-many-pivot.test.js dist-test/pivot-deferred.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/seeder.test.js dist-test/prune.test.js dist-test/vector-cast.test.js dist-test/non-id-primary-key.test.js dist-test/model-registry-reregister.test.js dist-test/commands/migrate.test.js dist-test/commands/prune.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/dirty.test.js dist-test/morph.test.js dist-test/morph-many-to-many.test.js dist-test/polymorphic-eager-load.test.js dist-test/belongs-to-many-pivot.test.js dist-test/pivot-deferred.test.js dist-test/whereHas.test.js dist-test/where-group.test.js dist-test/aggregate.test.js dist-test/seeder.test.js dist-test/prune.test.js dist-test/vector-cast.test.js dist-test/non-id-primary-key.test.js dist-test/model-registry-reregister.test.js dist-test/commands/migrate.test.js dist-test/commands/prune.test.js dist-test/native/compiler.test.js dist-test/native/native-read.test.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@rudderjs/contracts": "workspace:^",
     "@rudderjs/console": "workspace:^"
   },
+  "peerDependencies": {
+    "better-sqlite3": "^12.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
+    "better-sqlite3": "^12.0.0",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"
