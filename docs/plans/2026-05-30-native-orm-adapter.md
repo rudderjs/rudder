@@ -58,6 +58,41 @@ Folding the native engine in therefore requires **strict subpath isolation**:
 > isolation the policy actually cares about while keeping one package, one version, no
 > name.
 
+### Runtime-agnostic by design (Node, React Native, browser)
+
+A secondary goal — same shape as the runtime-agnostic split of `@rudderjs/ai`: the
+ORM must be usable **outside Rudder**, in plain Node projects **and React Native**.
+We're most of the way there already:
+
+- `@rudderjs/orm`'s main entry has **no node-native deps** (only `@rudderjs/contracts`
+  + `@rudderjs/console`) and **already passes the client-bundle gate** — the
+  Model/relations/casts/QueryBuilder layer is portable today.
+- Standalone use needs no Rudder app: `ModelRegistry.set(adapter)` is a plain call.
+  `import { Model }`, set an adapter, query.
+
+The seam that makes this work is a **hard split inside the native engine**:
+
+| Layer | Portable? | Notes |
+|---|---|---|
+| **SQL compiler** (`Dialect`: build `SELECT … WHERE … $1` + bindings) | **Universal** | pure string building, zero platform deps — identical in Node/RN/browser |
+| **Driver** (`execute(sql, bindings) → rows`) | **Per-platform** | the *only* thing that differs |
+
+So per-platform support is a **thin driver**, not a reimplementation:
+
+- **Node** → `better-sqlite3` / `pg` / `mysql2` (Phases 1–6)
+- **React Native** → `op-sqlite` / `expo-sqlite` (async — fine, terminals are already `Promise<T>`) — **Phase 9**
+- **Browser** → `wa-sqlite` / `sql.js` (WASM) — later, optional
+
+**Design rule:** the `Driver` interface is defined and the compiler is kept
+driver-free **from Phase 1**, so RN/browser drivers drop in later without touching the
+compiler. Retrofitting this seam later is expensive; defining it now is nearly free.
+
+**RN-specific caveat to verify early:** `@rudderjs/orm` currently depends on
+`@rudderjs/console` (pulls `@clack` in its graph). It passes the browser eval gate, but
+Metro (RN's bundler) may still try to bundle it. Confirm the import is lazy / move the
+CLI-only bits (factory/seeder are already subpaths) so RN never sees `@clack`; add a
+`"react-native"` export condition and test Metro resolution of the driver subpath.
+
 **The value and the cost live in two different boxes:**
 
 | Box | Size | Risk | Where the payoff is |
@@ -90,8 +125,12 @@ contract is proven.
 - [ ] Phase 6 — MySQL dialect (`mysql2`) + libsql/Turso
 - [ ] Phase 7 — **Schema builder + migrations** (separate plan; own gate)
 - [ ] Phase 8 — Provider wiring, config, scaffolder, docs, release
+- [ ] Phase 9 — **Runtime portability**: React Native driver (`op-sqlite`/`expo-sqlite`)
+      + standalone-Node docs (browser/WASM optional). Can start any time after the
+      `Driver` seam lands in Phase 1.
 
-Each phase = one or more PRs. Stop at any gate.
+Each phase = one or more PRs. Stop at any gate. The `Driver`/`Dialect` split is a
+**Phase-1 design requirement** (Task 1.1) even though the RN driver itself is Phase 9.
 
 ---
 
@@ -117,6 +156,11 @@ Each phase = one or more PRs. Stop at any gate.
    Driver loads are lazy `await import()` inside functions only.
 6. **`fix:`/`feat:` changeset** for `@rudderjs/orm` (the engine ships inside it). Each
    driver-enabling phase is a **minor** bump.
+7. **Keep the SQL compiler driver-free (portability rule).** The `Dialect`/compiler
+   layer builds SQL strings + bindings only — no `import` of any driver, no `node:`, no
+   I/O. All execution goes through the `Driver` interface (`execute(sql, bindings) →
+   rows`). This is what lets a React Native / browser driver drop in later without
+   touching the compiler. If compiler code reaches for a driver, that's a bug.
 
 ---
 
@@ -139,8 +183,14 @@ Goal: prove the contract is sufficient for reads against a real driver, fast.
 - `better-sqlite3` added as the first **optional peer** of `@rudderjs/orm`.
 - `NativeAdapter implements OrmAdapter`; `NativeQueryBuilder<T>` skeleton throwing
   `NotImplemented` on every terminal.
-- A `Dialect` abstraction: `{ quoteId, placeholder(i), supportsReturning, ... }` with
-  a `SqliteDialect` first impl. This is the seam that pg/mysql plug into later.
+- **Two seams, defined now (portability requirement):**
+  - `Dialect` — `{ quoteId, placeholder(i), supportsReturning, ... }`, `SqliteDialect`
+    first. The seam pg/mysql plug into.
+  - `Driver` — `{ execute(sql, bindings): Promise<rows>, close() }`. The **per-platform**
+    seam: a `BetterSqlite3Driver` now; `op-sqlite`/`expo-sqlite` (RN) and WASM (browser)
+    later. The `NativeQueryBuilder`/compiler talks **only** to `Driver` + `Dialect`,
+    never a concrete driver — so RN/browser drop in without touching the compiler
+    (cross-phase rule 7). Defining this seam now is nearly free; retrofitting it is not.
 - **Client gate first:** before any logic, add `@rudderjs/orm` to the smoke-gate
   TARGETS (if not already) and confirm `pnpm test:client-bundle` is green with the new
   subpath present but unreferenced from the main entry. This locks the constraint in
@@ -254,6 +304,27 @@ up/down-only first — it's more Laravel-like and an order of magnitude less sur
 
 ---
 
+## Phase 9 — Runtime portability (React Native, standalone Node, browser)
+> Unblocked once the `Driver` seam lands in Phase 1. Independent of the migration
+> sub-project; can run in parallel with Phases 5–8.
+
+- **React Native driver:** a `Driver` impl over `op-sqlite` (or `expo-sqlite`) exposed at
+  a subpath (e.g. `@rudderjs/orm/native/expo`), driver as an optional peer. Reuses the
+  universal SQL compiler + `SqliteDialect` unchanged.
+- **Bundler plumbing:** add a `"react-native"` export condition; verify Metro resolves
+  the driver subpath and does **not** drag `@clack`/`@rudderjs/console` into the RN
+  bundle (make that import lazy or move CLI-only bits out — flagged in "Runtime-agnostic
+  by design"). Confirm `reflect-metadata` is only needed if Models use decorators
+  (they're static-property-based today — verify).
+- **Standalone Node:** doc + example showing the ORM used outside Rudder
+  (`import { Model }` + `ModelRegistry.set(new NativeAdapter(...))`, no app bootstrap).
+- **Browser/WASM (optional, later):** a `wa-sqlite`/`sql.js` `Driver` for the same
+  compiler — only if there's demand.
+- **Conformance:** run the dialect-agnostic Model suite against the RN driver in an RN
+  test harness (or at minimum the SQL-compiler-level tests, since the compiler is shared).
+
+---
+
 ## Explicitly NOT in this plan (yet)
 - Replacing prisma/drizzle — both **stay** as optional packages. Native = the
   batteries-included default that ships inside `@rudderjs/orm`.
@@ -269,3 +340,7 @@ up/down-only first — it's more Laravel-like and an order of magnitude less sur
 2. **Migrations model**: up/down-only (recommended) vs. full schema diffing?
 3. **Transactions scope** (GATE A): native-only, or add to the shared contract for
    all three adapters at once?
+4. **Runtime portability priority**: is React Native (Phase 9) a near-term target that
+   should gate design choices now, or a "keep the door open, build later" — the `Driver`
+   seam is required either way, but RN-target raises the bar on the `@rudderjs/console`
+   dependency cleanup and Metro testing.
