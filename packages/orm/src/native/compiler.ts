@@ -218,6 +218,154 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   return { sql, bindings: b.values }
 }
 
+// ─── Write path (Phase 2) ──────────────────────────────────
+//
+// INSERT / UPDATE / DELETE compilation. Same rules as the read path: every
+// value is a bound parameter, every identifier is validated + quoted via the
+// dialect. Affected-row counts come from `RETURNING *` (rows.length) so the
+// `Driver` result shape stays `Row[]` — the engine never reads driver-specific
+// `changes`/`lastInsertRowid` metadata.
+
+/** Shared options for write compilers. */
+interface WriteOpts {
+  /** Clauses AND-ed onto the WHERE (e.g. the primary-key match for by-id writes). */
+  extraConditions?: ConditionNode[]
+  /** Append `RETURNING *` so the executor returns the affected rows. */
+  returning?: boolean
+}
+
+/** Drop keys whose value is `undefined` — better-sqlite3 rejects `undefined`
+ *  bindings, and an absent column should fall to its DB default, not error.
+ *  `null` is kept (it's a real SQL value). Mirrors the Model layer's
+ *  `_toData()` undefined-filtering for the `query().create()` bypass path. */
+function definedEntries(data: Record<string, unknown>): Array<[string, unknown]> {
+  return Object.entries(data).filter(([, v]) => v !== undefined)
+}
+
+/**
+ * Compile an INSERT for one or more rows. Single-row (`create`) and multi-row
+ * (`insertMany`) share this. The column list is the first-seen union of every
+ * row's defined keys; a row missing a union column binds `null`. With
+ * `returning`, appends `RETURNING *` (single-row `create` reads the inserted
+ * row back). Throws on an empty `rows` array — callers guard the no-op.
+ */
+export function compileInsert(
+  state: NativeQueryState,
+  dialect: Dialect,
+  rows: Array<Record<string, unknown>>,
+  opts: { returning?: boolean } = {},
+): CompiledQuery {
+  if (rows.length === 0) {
+    throw new Error('[RudderJS ORM native] compileInsert called with no rows.')
+  }
+  const table = dialect.quoteId(state.table)
+
+  // First-seen union of defined columns across all rows.
+  const columns: string[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    for (const [k, v] of Object.entries(row)) {
+      if (v !== undefined && !seen.has(k)) { seen.add(k); columns.push(k) }
+    }
+  }
+
+  // No columns at all → rely entirely on DB defaults.
+  if (columns.length === 0) {
+    let sql = `INSERT INTO ${table} DEFAULT VALUES`
+    if (opts.returning) sql += ` RETURNING *`
+    return { sql, bindings: [] }
+  }
+
+  const b = new Bindings(dialect)
+  const quotedCols = columns.map(c => dialect.quoteId(c)).join(', ')
+  const tuples = rows.map(row => {
+    const placeholders = columns.map(c => {
+      const v = row[c]
+      return b.add(v === undefined ? null : v)
+    })
+    return `(${placeholders.join(', ')})`
+  }).join(', ')
+
+  let sql = `INSERT INTO ${table} (${quotedCols}) VALUES ${tuples}`
+  if (opts.returning) sql += ` RETURNING *`
+  return { sql, bindings: b.values }
+}
+
+/**
+ * Compile `UPDATE <table> SET col = ? [, …] [WHERE …] [RETURNING *]`.
+ *
+ * SET bindings are emitted before WHERE bindings, matching positional `?`
+ * order. `undefined`-valued columns are dropped (see {@link definedEntries}).
+ * Throws when there's nothing to set.
+ */
+export function compileUpdate(
+  state: NativeQueryState,
+  dialect: Dialect,
+  data: Record<string, unknown>,
+  opts: WriteOpts = {},
+): CompiledQuery {
+  const entries = definedEntries(data)
+  if (entries.length === 0) {
+    throw new Error('[RudderJS ORM native] compileUpdate called with no columns to set.')
+  }
+  const b = new Bindings(dialect)
+  const table = dialect.quoteId(state.table)
+  const setClause = entries.map(([col, v]) => `${dialect.quoteId(col)} = ${b.add(v)}`).join(', ')
+
+  let sql = `UPDATE ${table} SET ${setClause}`
+  const where = compileWhereWithExtra(state, dialect, b, opts.extraConditions)
+  if (where) sql += ` WHERE ${where}`
+  if (opts.returning) sql += ` RETURNING *`
+  return { sql, bindings: b.values }
+}
+
+/**
+ * Compile an atomic counter update: `UPDATE <table> SET col = col + ? [, extra = ?]
+ * [WHERE …] [RETURNING *]`. `delta` is the signed amount (decrement passes a
+ * negative). `extra` columns are written in the same statement. Pure SQL —
+ * `col = col + ?` reads and writes atomically at the DB, safe under concurrency.
+ */
+export function compileIncrement(
+  state: NativeQueryState,
+  dialect: Dialect,
+  column: string,
+  delta: number,
+  extra: Record<string, unknown>,
+  opts: WriteOpts = {},
+): CompiledQuery {
+  const b = new Bindings(dialect)
+  const table = dialect.quoteId(state.table)
+  const col = dialect.quoteId(column)
+
+  const assignments = [`${col} = ${col} + ${b.add(delta)}`]
+  for (const [k, v] of definedEntries(extra)) {
+    assignments.push(`${dialect.quoteId(k)} = ${b.add(v)}`)
+  }
+
+  let sql = `UPDATE ${table} SET ${assignments.join(', ')}`
+  const where = compileWhereWithExtra(state, dialect, b, opts.extraConditions)
+  if (where) sql += ` WHERE ${where}`
+  if (opts.returning) sql += ` RETURNING *`
+  return { sql, bindings: b.values }
+}
+
+/** Compile `DELETE FROM <table> [WHERE …] [RETURNING *]`. With `returning`,
+ *  the executor returns the deleted rows so the caller can take `rows.length`
+ *  as the affected count (no driver `changes` metadata needed). */
+export function compileDelete(
+  state: NativeQueryState,
+  dialect: Dialect,
+  opts: WriteOpts = {},
+): CompiledQuery {
+  const b = new Bindings(dialect)
+  const table = dialect.quoteId(state.table)
+  let sql = `DELETE FROM ${table}`
+  const where = compileWhereWithExtra(state, dialect, b, opts.extraConditions)
+  if (where) sql += ` WHERE ${where}`
+  if (opts.returning) sql += ` RETURNING *`
+  return { sql, bindings: b.values }
+}
+
 /**
  * WHERE builder that also folds in terminal-supplied `extraConditions` (e.g.
  * the primary-key match for `find(id)`). The extras are AND-ed at the top

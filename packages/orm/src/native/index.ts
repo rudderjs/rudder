@@ -16,12 +16,19 @@ export { NativeQueryBuilder } from './query-builder.js'
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
 export { SqliteDialect, validateIdentifier } from './dialect.js'
 export type { Dialect } from './dialect.js'
-export type { Driver, Row } from './driver.js'
+export type { Driver, Executor, Row } from './driver.js'
 export { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 export type { BetterSqlite3DriverConfig } from './drivers/better-sqlite3.js'
 
 // Compiler (pure) — exported for unit testing and advanced reuse.
-export { compileSelect, compileCount } from './compiler.js'
+export {
+  compileSelect,
+  compileCount,
+  compileInsert,
+  compileUpdate,
+  compileIncrement,
+  compileDelete,
+} from './compiler.js'
 export type { CompiledQuery, NativeQueryState, ConditionNode } from './compiler.js'
 
 // Errors.

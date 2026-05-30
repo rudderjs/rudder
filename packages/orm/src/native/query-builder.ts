@@ -1,12 +1,15 @@
 // ─── NativeQueryBuilder ────────────────────────────────────
 //
-// Implements the `QueryBuilder<T>` contract over a {@link Driver} + {@link
-// Dialect}. PHASE 1: the read path (first/find/get/all/count/paginate) is
-// live; every write, relation, aggregate, and vector terminal throws
-// {@link NativeNotImplementedError} until its phase lands.
+// Implements the `QueryBuilder<T>` contract over an {@link Executor} + {@link
+// Dialect}. PHASE 1 shipped the read path (first/find/get/all/count/paginate);
+// PHASE 2 adds the write path (create/update/delete/increment/… + soft deletes).
+// Relation, aggregate, and vector terminals still throw
+// {@link NativeNotImplementedError} until Phase 3.
 //
-// It talks ONLY to the compiler (pure) + the Driver interface — never a
-// concrete driver, never `node:`. Construction is cheap; one builder per query.
+// It talks ONLY to the compiler (pure) + the Executor interface — never a
+// concrete driver, never `node:`. Because writes go through an `Executor` (not
+// the top-level connection directly), a transaction scope (Phase 4) drops in
+// without touching this class. Construction is cheap; one builder per query.
 
 import type {
   QueryBuilder,
@@ -19,10 +22,14 @@ import type {
   AggregateFn,
 } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
-import type { Driver, Row } from './driver.js'
+import type { Executor, Row } from './driver.js'
 import {
   compileSelect,
   compileCount,
+  compileInsert,
+  compileUpdate,
+  compileIncrement,
+  compileDelete,
   type ConditionNode,
   type NativeQueryState,
 } from './compiler.js'
@@ -40,7 +47,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private _isSubBuilder = false
 
   constructor(
-    private readonly driver:     Driver,
+    private readonly executor:   Executor,
     private readonly dialect:    Dialect,
     private readonly table:      string,
     private readonly primaryKey: string,
@@ -116,7 +123,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   private _addGroup(boolean: 'AND' | 'OR', fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): void {
-    const sub = new NativeQueryBuilder<T>(this.driver, this.dialect, this.table, this.primaryKey)
+    const sub = new NativeQueryBuilder<T>(this.executor, this.dialect, this.table, this.primaryKey)
       ._markSubBuilder()
     fn(sub)
     if (sub._conditions.length === 0) return // empty group is a no-op
@@ -139,24 +146,21 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async first(): Promise<T | null> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1 })
-    const rows = await this.driver.execute(sql, bindings)
+    const rows = await this.executor.execute(sql, bindings)
     return (rows[0] as T | undefined) ?? null
   }
 
   async find(id: number | string): Promise<T | null> {
     this._assertNotSubBuilder()
-    const extra: ConditionNode[] = [
-      { kind: 'clause', boolean: 'AND', clause: { column: this.primaryKey, operator: '=', value: id } },
-    ]
-    const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1, extraConditions: extra })
-    const rows = await this.driver.execute(sql, bindings)
+    const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1, extraConditions: this._pkCondition(id) })
+    const rows = await this.executor.execute(sql, bindings)
     return (rows[0] as T | undefined) ?? null
   }
 
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect)
-    const rows = await this.driver.execute(sql, bindings)
+    const rows = await this.executor.execute(sql, bindings)
     return rows as T[]
   }
 
@@ -167,7 +171,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async count(): Promise<number> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileCount(this._state(), this.dialect)
-    const rows = await this.driver.execute(sql, bindings)
+    const rows = await this.executor.execute(sql, bindings)
     return Number((rows[0] as Row | undefined)?.['count'] ?? 0)
   }
 
@@ -184,7 +188,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       offsetN: (safePage - 1) * safePerPage,
     }
     const { sql, bindings } = compileSelect(pageState, this.dialect)
-    const rows = await this.driver.execute(sql, bindings)
+    const rows = await this.executor.execute(sql, bindings)
 
     const lastPage = Math.max(1, Math.ceil(total / safePerPage))
     return {
@@ -208,35 +212,129 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   withPivot(..._columns: string[]): this { return this }
 
-  create(_data: Partial<T>): Promise<T> {
-    throw new NativeNotImplementedError('create', 'Phase 2 (write path)')
+  /** @internal — the primary-key match used by by-id terminals. */
+  private _pkCondition(id: number | string): ConditionNode[] {
+    return [{ kind: 'clause', boolean: 'AND', clause: { column: this.primaryKey, operator: '=', value: id } }]
   }
-  update(_id: number | string, _data: Partial<T>): Promise<T> {
-    throw new NativeNotImplementedError('update', 'Phase 2 (write path)')
+
+  /**
+   * @internal — state for a by-id write (`update`/`delete`/`restore`/
+   * `forceDelete`/`increment`). The accumulated `where()` predicate and
+   * soft-delete scoping are dropped — these target a single row by primary key
+   * (the PK match is passed as an `extraCondition`). Matches the orm-drizzle
+   * adapter, whose by-id writes also ignore chained wheres.
+   */
+  private _idState(): NativeQueryState {
+    return { ...this._state(), conditions: [], softDelete: 'with' }
   }
-  delete(_id: number | string): Promise<void> {
-    throw new NativeNotImplementedError('delete', 'Phase 2 (write path)')
+
+  async create(data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileInsert(
+      this._state(), this.dialect, [data as Record<string, unknown>], { returning: true },
+    )
+    const rows = await this.executor.execute(sql, bindings)
+    if (!rows[0]) throw new Error('[RudderJS ORM native] create() returned no rows.')
+    return rows[0] as T
   }
-  insertMany(_rows: Partial<T>[]): Promise<void> {
-    throw new NativeNotImplementedError('insertMany', 'Phase 2 (write path)')
+
+  async update(id: number | string, data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileUpdate(
+      this._idState(), this.dialect, data as Record<string, unknown>,
+      { extraConditions: this._pkCondition(id), returning: true },
+    )
+    const rows = await this.executor.execute(sql, bindings)
+    if (!rows[0]) throw new Error('[RudderJS ORM native] update() returned no rows.')
+    return rows[0] as T
   }
-  deleteAll(): Promise<number> {
-    throw new NativeNotImplementedError('deleteAll', 'Phase 2 (write path)')
+
+  async updateAll(data: Partial<T>): Promise<number> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileUpdate(
+      this._state(), this.dialect, data as Record<string, unknown>, { returning: true },
+    )
+    const rows = await this.executor.execute(sql, bindings)
+    return rows.length
   }
-  updateAll(_data: Partial<T>): Promise<number> {
-    throw new NativeNotImplementedError('updateAll', 'Phase 2 (write path)')
+
+  async delete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
+    if (this._softDeletes) {
+      // Soft delete: stamp deletedAt instead of removing the row. ISO string —
+      // the read path filters on `deletedAt IS [NOT] NULL` regardless of format,
+      // and better-sqlite3 can't bind a Date directly.
+      const { sql, bindings } = compileUpdate(
+        this._idState(), this.dialect, { deletedAt: new Date().toISOString() },
+        { extraConditions: this._pkCondition(id) },
+      )
+      await this.executor.execute(sql, bindings)
+      return
+    }
+    const { sql, bindings } = compileDelete(
+      this._idState(), this.dialect, { extraConditions: this._pkCondition(id) },
+    )
+    await this.executor.execute(sql, bindings)
   }
-  restore(_id: number | string): Promise<T> {
-    throw new NativeNotImplementedError('restore', 'Phase 2 (write path)')
+
+  async deleteAll(): Promise<number> {
+    this._assertNotSubBuilder()
+    // Uses the full current predicate INCLUDING soft-delete scope (call
+    // withTrashed() first to bulk-delete trashed rows too) — matches orm-drizzle.
+    const { sql, bindings } = compileDelete(this._state(), this.dialect, { returning: true })
+    const rows = await this.executor.execute(sql, bindings)
+    return rows.length
   }
-  forceDelete(_id: number | string): Promise<void> {
-    throw new NativeNotImplementedError('forceDelete', 'Phase 2 (write path)')
+
+  async insertMany(rows: Partial<T>[]): Promise<void> {
+    this._assertNotSubBuilder()
+    if (rows.length === 0) return
+    const { sql, bindings } = compileInsert(
+      this._state(), this.dialect, rows as Record<string, unknown>[], { returning: false },
+    )
+    await this.executor.execute(sql, bindings)
   }
-  increment(_id: number | string, _column: string, _amount?: number, _extra?: Record<string, unknown>): Promise<T> {
-    throw new NativeNotImplementedError('increment', 'Phase 2 (write path)')
+
+  async restore(id: number | string): Promise<T> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileUpdate(
+      this._idState(), this.dialect, { deletedAt: null },
+      { extraConditions: this._pkCondition(id), returning: true },
+    )
+    const rows = await this.executor.execute(sql, bindings)
+    return rows[0] as T
   }
-  decrement(_id: number | string, _column: string, _amount?: number, _extra?: Record<string, unknown>): Promise<T> {
-    throw new NativeNotImplementedError('decrement', 'Phase 2 (write path)')
+
+  async forceDelete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileDelete(
+      this._idState(), this.dialect, { extraConditions: this._pkCondition(id) },
+    )
+    await this.executor.execute(sql, bindings)
+  }
+
+  increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    return this._delta(id, column, amount, extra)
+  }
+
+  decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    return this._delta(id, column, -amount, extra)
+  }
+
+  /** @internal — shared increment/decrement path. `delta` is signed. Atomic
+   *  `SET col = col + ?` at the DB; NO observer events fire (pure data-plane,
+   *  matching the ORM's documented increment/decrement semantics). */
+  private async _delta(
+    id: number | string, column: string, delta: number, extra: Record<string, unknown>,
+  ): Promise<T> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileIncrement(
+      this._idState(), this.dialect, column, delta, extra,
+      { extraConditions: this._pkCondition(id), returning: true },
+    )
+    const rows = await this.executor.execute(sql, bindings)
+    if (!rows[0]) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
+    return rows[0] as T
   }
 
   // ── relations + aggregates (Phase 3) ─────────────────────
