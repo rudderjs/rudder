@@ -235,7 +235,13 @@ export function performReboot(server: ViteDevServer, files: string[], cwd: strin
     console.log(`[hmr] clear-globals ${(tCleared - t0).toFixed(1)}ms · invalidate ${(tInvalidated - tCleared).toFixed(1)}ms (${allScoped ? 'scoped' : 'all'})`)
   }
   const rel = files.map(f => path.relative(cwd, f) || f).join(', ')
-  console.log(`[RudderJS] change detected — reloading (${rel})`)
+  // Mirror Vite's HMR line (`<dim time> [vite] hmr update <dim files>`): dim
+  // timestamp, a bold orange [Rudder] tag, the action, then the dim file(s).
+  const d    = new Date()
+  const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+  const dim  = (s: string): string => `\x1b[2m${s}\x1b[22m`
+  const tag  = `\x1b[1m\x1b[38;5;208m[Rudder]\x1b[39m\x1b[22m`
+  console.log(`${dim(time)} ${tag} \x1b[32mchange detected\x1b[39m ${dim(rel)}`)
 }
 
 /**
