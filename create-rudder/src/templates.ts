@@ -100,7 +100,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   files['package.json']         = packageJson(ctx)
   if (ctx.pm === 'pnpm') {
-    files['pnpm-workspace.yaml'] = pnpmWorkspace()
+    files['pnpm-workspace.yaml'] = pnpmWorkspace(ctx)
   }
   files['tsconfig.json']        = tsconfigJson(ctx)
   files['vite.config.ts']       = viteConfig(ctx)

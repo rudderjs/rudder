@@ -410,6 +410,22 @@ describe('getTemplates() — pnpm-workspace.yaml', () => {
     assert.ok(!('pnpm-workspace.yaml' in getTemplates(ctx({ pm: 'yarn' }))))
     assert.ok(!('pnpm-workspace.yaml' in getTemplates(ctx({ pm: 'bun' }))))
   })
+
+  it('carries the onlyBuiltDependencies allowlist (pnpm 11 reads it here, not package.json)', () => {
+    const ws = getTemplates(ctx({ pm: 'pnpm', db: 'sqlite', orm: 'prisma' }))['pnpm-workspace.yaml']!
+    assert.match(ws, /onlyBuiltDependencies:/)
+    assert.match(ws, /- better-sqlite3/)
+    assert.match(ws, /- esbuild/)
+    assert.match(ws, /- '@prisma\/engines'/)  // @-scoped names must be YAML-quoted
+    assert.match(ws, /- prisma/)
+    assert.match(ws, /^packages: \[\]/m)       // still a standalone (non-merging) workspace
+  })
+
+  it('omits prisma/sqlite build entries when not selected', () => {
+    const ws = getTemplates(ctx({ pm: 'pnpm', db: 'postgresql', orm: 'drizzle' }))['pnpm-workspace.yaml']!
+    assert.doesNotMatch(ws, /better-sqlite3|@prisma\/engines/)
+    assert.match(ws, /- esbuild/)
+  })
 })
 
 // ─── PM helpers ────────────────────────────────────────────

@@ -1,6 +1,20 @@
 import { type PackageManager } from './package-managers.js'
 import { type TemplateContext } from '../templates.js'
 
+/**
+ * Dependencies whose install/build scripts must be allowed to run. pnpm 10+ and
+ * Bun block dependency lifecycle scripts by default, so these need an explicit
+ * allowlist (`onlyBuiltDependencies` for pnpm, `trustedDependencies` for Bun) or
+ * the native binding / Prisma engine never builds. Shared between the
+ * `package.json` field and `pnpm-workspace.yaml` so the two never drift.
+ */
+export function builtDependencies(ctx: TemplateContext): string[] {
+  const built: string[] = ['esbuild']
+  if (ctx.orm === 'prisma') built.push('@prisma/engines', 'prisma')
+  if (ctx.db === 'sqlite') built.unshift('better-sqlite3')
+  return built
+}
+
 export function packageJson(ctx: TemplateContext): string {
   const { frameworks, tailwind, shadcn, db } = ctx
   const hasReact = frameworks.includes('react')
@@ -147,9 +161,7 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.orm === 'prisma') devDeps['prisma'] = '^7.0.0'
   if (ctx.packages.boost)   devDeps['@rudderjs/boost'] = 'latest'
 
-  const builtDeps: string[] = ['esbuild']
-  if (ctx.orm === 'prisma') { builtDeps.push('@prisma/engines', 'prisma') }
-  if (db === 'sqlite') builtDeps.unshift('better-sqlite3')
+  const builtDeps = builtDependencies(ctx)
 
   const pmField: Record<string, unknown> = {}
   if (ctx.pm === 'pnpm') {

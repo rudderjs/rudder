@@ -1,4 +1,5 @@
 import type { TemplateContext } from '../templates.js'
+import { builtDependencies } from './package-json.js'
 
 export function dotenv(ctx: TemplateContext): string {
   const lines = [
@@ -119,6 +120,25 @@ bootstrap/cache/
 `
 }
 
-export function pnpmWorkspace(): string {
-  return `# Standalone project — prevents pnpm from merging with a parent workspace\npackages: []\n`
+export function pnpmWorkspace(ctx: TemplateContext): string {
+  // pnpm 10+ blocks dependency build scripts by default. pnpm 11 reads the
+  // `onlyBuiltDependencies` allowlist from THIS file (pnpm-workspace.yaml), NOT
+  // from package.json#pnpm — and because this file exists (we generate it to
+  // stop pnpm merging the app into a parent workspace), the package.json
+  // allowlist is ignored on pnpm 11. So the allowlist must live here too, or the
+  // SQLite native binding / Prisma engine never builds and `db:generate` fails.
+  const allow = builtDependencies(ctx)
+    .map(d => `  - ${d.startsWith('@') ? `'${d}'` : d}`)
+    .join('\n')
+  return [
+    '# Standalone project — prevents pnpm from merging with a parent workspace',
+    'packages: []',
+    '',
+    '# Allow these dependencies to run install/build scripts (pnpm blocks them by',
+    '# default). Mirrors package.json#pnpm.onlyBuiltDependencies; pnpm 11 reads',
+    '# the allowlist from here, not package.json.',
+    'onlyBuiltDependencies:',
+    allow,
+    '',
+  ].join('\n')
 }
