@@ -161,13 +161,13 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.orm === 'prisma') devDeps['prisma'] = '^7.0.0'
   if (ctx.packages.boost)   devDeps['@rudderjs/boost'] = 'latest'
 
-  const builtDeps = builtDependencies(ctx)
-
   const pmField: Record<string, unknown> = {}
-  if (ctx.pm === 'pnpm') {
-    pmField['pnpm'] = { onlyBuiltDependencies: builtDeps }
-  } else if (ctx.pm === 'bun') {
-    pmField['trustedDependencies'] = builtDeps
+  // pnpm: build-script approval lives in pnpm-workspace.yaml
+  // (`dangerouslyAllowAllBuilds`) — pnpm 11 ignores `package.json#pnpm` and warns
+  // about it, so we deliberately don't emit it here.
+  // Bun also blocks postinstalls by default; its allowlist is trustedDependencies.
+  if (ctx.pm === 'bun') {
+    pmField['trustedDependencies'] = builtDependencies(ctx)
   }
   // npm and yarn allow all lifecycle scripts by default — no extra field needed
 

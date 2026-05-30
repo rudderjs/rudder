@@ -59,9 +59,10 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-30 — pnpm-workspace.yaml now carries the
-  // `onlyBuiltDependencies` allowlist (pnpm 11 reads it from there, not
-  // package.json#pnpm) so SQLite/Prisma build scripts actually run.
+  // Baseline last captured 2026-05-30 — pnpm-workspace.yaml uses
+  // `dangerouslyAllowAllBuilds: true` (the setting that runs dependency build
+  // scripts on both pnpm 10 and 11) instead of an onlyBuiltDependencies
+  // allowlist; the dead package.json#pnpm field was dropped.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +72,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 61
-const EXPECTED_TOTAL_BYTES = 49900
-const EXPECTED_CONTENT_HASH = '5abb696f554a08adba81107625ee2042926a4c4b86f5d04dc008d05be9900a85'
+const EXPECTED_TOTAL_BYTES = 49590
+const EXPECTED_CONTENT_HASH = 'fe419222609da7d1d0ccb0cbf730fbe6552c427b2d9a855126ddfd9b7c365962'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

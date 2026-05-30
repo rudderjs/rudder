@@ -1,5 +1,4 @@
 import type { TemplateContext } from '../templates.js'
-import { builtDependencies } from './package-json.js'
 
 export function dotenv(ctx: TemplateContext): string {
   const lines = [
@@ -120,25 +119,23 @@ bootstrap/cache/
 `
 }
 
-export function pnpmWorkspace(ctx: TemplateContext): string {
-  // pnpm 10+ blocks dependency build scripts by default. pnpm 11 reads the
-  // `onlyBuiltDependencies` allowlist from THIS file (pnpm-workspace.yaml), NOT
-  // from package.json#pnpm — and because this file exists (we generate it to
-  // stop pnpm merging the app into a parent workspace), the package.json
-  // allowlist is ignored on pnpm 11. So the allowlist must live here too, or the
-  // SQLite native binding / Prisma engine never builds and `db:generate` fails.
-  const allow = builtDependencies(ctx)
-    .map(d => `  - ${d.startsWith('@') ? `'${d}'` : d}`)
-    .join('\n')
+export function pnpmWorkspace(): string {
+  // pnpm 10+ blocks dependency build/postinstall scripts by default. Without
+  // this, the SQLite native binding (better-sqlite3), the Prisma engine and
+  // esbuild never build, so `db:generate`/`db:push`/`dev` fail with
+  // ERR_PNPM_IGNORED_BUILDS. A scaffolded app's dependencies are all
+  // framework-curated, and npm/yarn run every postinstall by default anyway, so
+  // we opt in to running them here. (pnpm 11 no longer honors an
+  // `onlyBuiltDependencies` allowlist for a standalone, non-workspace app, and
+  // ignores `package.json#pnpm` entirely — `dangerouslyAllowAllBuilds` is the
+  // setting that works on both pnpm 10 and 11. Tighten it if you prefer to vet
+  // each dependency with `pnpm approve-builds`.)
   return [
     '# Standalone project — prevents pnpm from merging with a parent workspace',
     'packages: []',
     '',
-    '# Allow these dependencies to run install/build scripts (pnpm blocks them by',
-    '# default). Mirrors package.json#pnpm.onlyBuiltDependencies; pnpm 11 reads',
-    '# the allowlist from here, not package.json.',
-    'onlyBuiltDependencies:',
-    allow,
+    '# Run dependency build scripts (pnpm blocks them by default; see note above)',
+    'dangerouslyAllowAllBuilds: true',
     '',
   ].join('\n')
 }
