@@ -276,6 +276,10 @@ is wanted, we can ship it here as the built-in default (`@rudderjs/orm` minor) a
 
 ## Phase 7 — Schema builder + migrations (SEPARATE PLAN)
 > The big, gated sub-project. Do **not** start before GATE B.
+> **Detailed plan:** [`2026-05-31-native-orm-migrations.md`](./2026-05-31-native-orm-migrations.md)
+> — Laravel `Schema`/`Blueprint` parity **with generated TypeScript column types as
+> a first-class output** (the differentiator; without it, native migrations would
+> regress Prisma/Drizzle's typed models).
 
 Scope to design in its own plan doc:
 - A Laravel-style schema builder (`Schema.create('users', t => { t.id(); t.string(); … })`).
