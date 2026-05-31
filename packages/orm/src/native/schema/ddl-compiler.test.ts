@@ -174,6 +174,116 @@ describe('DDL compiler — indexes', () => {
   })
 })
 
+// ── Foreign keys (7.6) ────────────────────────────────────
+describe('DDL compiler — foreign keys', () => {
+  it('constrained() infers the table (user_id → users) and references id', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('user_id').constrained()
+    })
+    assert.match(
+      stmt?.sql ?? '',
+      /CONSTRAINT "posts_user_id_foreign" FOREIGN KEY \("user_id"\) REFERENCES "users" \("id"\)/,
+    )
+  })
+
+  it('constrained() strips a camelCase Id suffix (authorId → authors)', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('authorId').constrained()
+    })
+    assert.match(stmt?.sql ?? '', /FOREIGN KEY \("authorId"\) REFERENCES "authors" \("id"\)/)
+  })
+
+  it('constrained(table) takes an explicit referenced table', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('author_id').constrained('users')
+    })
+    assert.match(stmt?.sql ?? '', /FOREIGN KEY \("author_id"\) REFERENCES "users" \("id"\)/)
+  })
+
+  it('references().on() builds the FK explicitly', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('user_id').references('uuid').on('users')
+    })
+    assert.match(stmt?.sql ?? '', /FOREIGN KEY \("user_id"\) REFERENCES "users" \("uuid"\)/)
+  })
+
+  it('emits ON DELETE / ON UPDATE clauses with SQL keywords', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('user_id').constrained().onDelete('cascade').onUpdate('restrict')
+    })
+    assert.match(stmt?.sql ?? '', /REFERENCES "users" \("id"\) ON DELETE CASCADE ON UPDATE RESTRICT/)
+  })
+
+  it("maps the 'set null' / setNull aliases to SET NULL", () => {
+    const [a] = create('posts', (t) => { t.id(); t.foreignId('user_id').constrained().onDelete('set null') })
+    const [b] = create('posts', (t) => { t.id(); t.foreignId('user_id').constrained().onDelete('setNull') })
+    assert.match(a?.sql ?? '', /ON DELETE SET NULL/)
+    assert.match(b?.sql ?? '', /ON DELETE SET NULL/)
+  })
+
+  it("maps the 'no action' / noAction aliases to NO ACTION", () => {
+    const [stmt] = create('posts', (t) => { t.id(); t.foreignId('user_id').constrained().onUpdate('noAction') })
+    assert.match(stmt?.sql ?? '', /ON UPDATE NO ACTION/)
+  })
+
+  it('table-level foreign() supports a composite key', () => {
+    const [stmt] = create('memberships', (t) => {
+      t.id()
+      t.integer('orgId')
+      t.integer('userId')
+      t.foreign(['orgId', 'userId']).references(['org_id', 'user_id']).on('org_users')
+    })
+    assert.match(
+      stmt?.sql ?? '',
+      /CONSTRAINT "memberships_orgId_userId_foreign" FOREIGN KEY \("orgId", "userId"\) REFERENCES "org_users" \("org_id", "user_id"\)/,
+    )
+  })
+
+  it('a custom constraint name overrides the default', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreign('user_id').references('id').on('users').name('fk_posts_author')
+    })
+    assert.match(stmt?.sql ?? '', /CONSTRAINT "fk_posts_author" FOREIGN KEY/)
+  })
+
+  it('renders FK constraints after the column lines and primary key', () => {
+    const [stmt] = create('posts', (t) => {
+      t.id()
+      t.foreignId('user_id').constrained()
+    })
+    const sql = stmt?.sql ?? ''
+    assert.ok(sql.indexOf('"user_id" INTEGER') < sql.indexOf('CONSTRAINT'), 'column line precedes the FK constraint')
+  })
+
+  it('rejects a foreign-key action outside the allowlist', () => {
+    assert.throws(
+      () => create('posts', (t) => { t.id(); t.foreignId('user_id').constrained().onDelete('drop table' as never) }),
+      (e: unknown) => e instanceof NativeOrmError && e.code === 'NATIVE_DDL_BAD_FK_ACTION',
+    )
+  })
+
+  it('rejects a references().on() FK missing its referenced table', () => {
+    assert.throws(
+      () => create('posts', (t) => { t.id(); t.foreignId('user_id').references('id') }),
+      (e: unknown) => e instanceof NativeOrmError && e.code === 'NATIVE_DDL_FK_NO_TABLE',
+    )
+  })
+
+  it('rejects an injection attempt in the referenced table', () => {
+    assert.throws(() => create('posts', (t) => { t.id(); t.foreignId('user_id').constrained('users"; DROP TABLE x; --') }))
+  })
+
+  it('rejects an injection attempt in a foreign() column name', () => {
+    assert.throws(() => create('posts', (t) => { t.id(); t.foreign('a" , "b').references('id').on('users') }))
+  })
+})
+
 describe('DDL compiler — DROP TABLE', () => {
   it('compiles DROP TABLE', () => {
     assert.strictEqual(compileDropTable('users', {}, dialect).sql, 'DROP TABLE "users"')
@@ -272,6 +382,27 @@ describe('DDL compiler — ALTER TABLE', () => {
 
   it('rejects an injection attempt in a renamed column', () => {
     assert.throws(() => alter('users', (t) => t.renameColumn('a', 'b"; DROP TABLE x; --')))
+  })
+
+  it('rejects ADDing a foreign key on SQLite (no in-place ALTER for FKs)', () => {
+    assert.throws(
+      () => alter('posts', (t) => t.foreignId('user_id').nullable().constrained()),
+      (e: unknown) => e instanceof NativeNotImplementedError,
+    )
+  })
+
+  it('rejects a table-level foreign() on an alter', () => {
+    assert.throws(
+      () => alter('posts', (t) => t.foreign('user_id').references('id').on('users')),
+      (e: unknown) => e instanceof NativeNotImplementedError,
+    )
+  })
+
+  it('rejects dropForeign on SQLite with a clear pointer', () => {
+    assert.throws(
+      () => alter('posts', (t) => t.dropForeign('posts_user_id_foreign')),
+      (e: unknown) => e instanceof NativeNotImplementedError,
+    )
   })
 })
 

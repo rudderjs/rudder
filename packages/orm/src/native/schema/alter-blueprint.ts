@@ -27,6 +27,11 @@ export class AlterBlueprint extends Blueprint {
   readonly renamedColumns: RenameColumn[] = []
   /** Indexes to drop by name (`t.dropIndex('users_email_unique')`). */
   readonly droppedIndexes: string[] = []
+  /** Foreign keys to drop, by constraint name or by the column list they cover
+   *  (`t.dropForeign('users_user_id_foreign')` / `t.dropForeign(['user_id'])`).
+   *  SQLite can't drop an FK in place, so the alter compiler rejects these with
+   *  a clear pointer — recorded here only so the intent surfaces a good error. */
+  readonly droppedForeignKeys: Array<string | string[]> = []
 
   /** Drop an existing column. */
   dropColumn(...names: string[]): void {
@@ -41,5 +46,11 @@ export class AlterBlueprint extends Blueprint {
   /** Drop an index by name. */
   dropIndex(name: string): void {
     this.droppedIndexes.push(name)
+  }
+
+  /** Drop a foreign key by constraint name or by the column(s) it covers.
+   *  Not supported in place on SQLite — the compiler throws a helpful error. */
+  dropForeign(target: string | string[]): void {
+    this.droppedForeignKeys.push(target)
   }
 }
