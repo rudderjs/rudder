@@ -1,8 +1,10 @@
 // ─── NativeDatabaseProvider ────────────────────────────────
 //
 // Node-only. The built-in database provider for the native engine, loaded from
-// the `@rudderjs/orm/native` subpath via `rudderjs.providerSubpath` (the main
-// `@rudderjs/orm` entry is client-bundle-reachable and must never import this).
+// the `@rudderjs/orm/native/provider` subpath via `rudderjs.providerSubpath`
+// (the main `@rudderjs/orm` entry is client-bundle-reachable and must never
+// import this; the `@rudderjs/orm/native` engine barrel stays framework-free,
+// so the provider lives in its own subpath — see #806).
 //
 // **Opt-in by config.** `@rudderjs/orm` is installed in *every* app, so unlike
 // the prisma/drizzle `DatabaseProvider`s — which assume one-adapter-package-per-
@@ -47,7 +49,7 @@ export interface NativeDatabaseConfig {
 }
 
 /**
- * Auto-discovered (via `rudderjs.providerSubpath: './native'`) service provider
+ * Auto-discovered (via `rudderjs.providerSubpath: './native/provider'`) service provider
  * that boots a `NativeAdapter` from `config('database')` — but only when the
  * default connection opts in with `engine: 'native'`. Wires:
  *   - `ModelRegistry.set(adapter)` so `@rudderjs/orm` Models route through native
