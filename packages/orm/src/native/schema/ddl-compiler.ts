@@ -16,8 +16,9 @@
 
 import type { Dialect } from '../dialect.js'
 import type { CompiledQuery } from '../compiler.js'
-import { NativeOrmError } from '../errors.js'
+import { NativeOrmError, NativeNotImplementedError } from '../errors.js'
 import type { Blueprint, IndexDefinition } from './blueprint.js'
+import type { AlterBlueprint } from './alter-blueprint.js'
 import type { ColumnDefinition } from './column.js'
 
 /** Render a column's DEFAULT value as a SQL literal (DDL can't bind). Only the
@@ -82,6 +83,16 @@ function collectIndexes(blueprint: Blueprint): IndexDefinition[] {
   return out
 }
 
+/** `CREATE [UNIQUE] INDEX "name" ON "table" ("c1", …)` — shared by create + alter. */
+function compileCreateIndex(table: string, idx: IndexDefinition, dialect: Dialect): CompiledQuery {
+  return {
+    sql:
+      `CREATE ${idx.unique ? 'UNIQUE ' : ''}INDEX ${dialect.quoteId(indexName(table, idx))} ` +
+      `ON ${dialect.quoteId(table)} (${idx.columns.map(c => dialect.quoteId(c)).join(', ')})`,
+    bindings: [],
+  }
+}
+
 /**
  * Compile `Schema.create(...)` to a `CREATE TABLE` plus any `CREATE INDEX`
  * statements (in that order). Each is a {@link CompiledQuery} with empty
@@ -118,12 +129,7 @@ export function compileCreateTable(blueprint: Blueprint, dialect: Dialect): Comp
     bindings: [],
   }
 
-  const indexes = collectIndexes(blueprint).map<CompiledQuery>(idx => ({
-    sql:
-      `CREATE ${idx.unique ? 'UNIQUE ' : ''}INDEX ${dialect.quoteId(indexName(blueprint.table, idx))} ` +
-      `ON ${dialect.quoteId(blueprint.table)} (${idx.columns.map(c => dialect.quoteId(c)).join(', ')})`,
-    bindings: [],
-  }))
+  const indexes = collectIndexes(blueprint).map(idx => compileCreateIndex(blueprint.table, idx, dialect))
 
   return [create, ...indexes]
 }
@@ -134,4 +140,61 @@ export function compileDropTable(table: string, opts: { ifExists?: boolean }, di
     sql: `DROP TABLE ${opts.ifExists ? 'IF EXISTS ' : ''}${dialect.quoteId(table)}`,
     bindings: [],
   }
+}
+
+/** Compile `Schema.rename(from, to)`. */
+export function compileRenameTable(from: string, to: string, dialect: Dialect): CompiledQuery {
+  return { sql: `ALTER TABLE ${dialect.quoteId(from)} RENAME TO ${dialect.quoteId(to)}`, bindings: [] }
+}
+
+/**
+ * Compile `Schema.table(...)` to the `ALTER TABLE` / `CREATE INDEX` / `DROP
+ * INDEX` statements its intents require, in dependency order: rename columns →
+ * add columns → add indexes → drop indexes → drop columns. Each is emitted as a
+ * separate statement (SQLite has no multi-clause `ALTER TABLE`).
+ *
+ * SQLite ADD COLUMN can't add a PRIMARY KEY column, and a NOT NULL column must
+ * carry a default — both are rejected here with a clear message rather than
+ * letting SQLite throw a cryptic one. Changing an existing column's type
+ * (`.change()`) needs the table-rebuild dance and is deferred to 7.4b.
+ */
+export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): CompiledQuery[] {
+  const t = dialect.quoteId(blueprint.table)
+  const out: CompiledQuery[] = []
+
+  // 1. Renames first, so any later op refers to the new name.
+  for (const r of blueprint.renamedColumns) {
+    out.push({ sql: `ALTER TABLE ${t} RENAME COLUMN ${dialect.quoteId(r.from)} TO ${dialect.quoteId(r.to)}`, bindings: [] })
+  }
+
+  // 2. Add columns (one ALTER ... ADD COLUMN each), with SQLite's restrictions.
+  for (const col of blueprint.columns) {
+    if (col.change) {
+      throw new NativeNotImplementedError(`Schema.table column change() on "${blueprint.table}.${col.name}"`, 'a later phase (7.4b — the SQLite table-rebuild path)')
+    }
+    if (col.autoIncrement || col.primary) {
+      throw new NativeOrmError('NATIVE_DDL_ADD_PRIMARY', `[RudderJS ORM native] Cannot ADD a primary-key column ("${col.name}") to an existing table on SQLite. Create the table with its primary key, or rebuild it.`)
+    }
+    if (!col.nullable && !col.hasDefault && !col.useCurrent) {
+      throw new NativeOrmError('NATIVE_DDL_ADD_NOT_NULL', `[RudderJS ORM native] Adding a NOT NULL column ("${col.name}") to an existing table requires a default — chain \`.default(...)\` or \`.nullable()\`.`)
+    }
+    out.push({ sql: `ALTER TABLE ${t} ADD COLUMN ${compileColumn(col, dialect, false)}`, bindings: [] })
+  }
+
+  // 3. New indexes (table-level + per-column unique()/index() on added columns).
+  for (const idx of collectIndexes(blueprint)) {
+    out.push(compileCreateIndex(blueprint.table, idx, dialect))
+  }
+
+  // 4. Drop indexes (by name — independent of the table identifier on SQLite).
+  for (const name of blueprint.droppedIndexes) {
+    out.push({ sql: `DROP INDEX ${dialect.quoteId(name)}`, bindings: [] })
+  }
+
+  // 5. Drop columns last.
+  for (const name of blueprint.droppedColumns) {
+    out.push({ sql: `ALTER TABLE ${t} DROP COLUMN ${dialect.quoteId(name)}`, bindings: [] })
+  }
+
+  return out
 }

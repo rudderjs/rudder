@@ -12,6 +12,7 @@
 // migration run) throws a clear error rather than a null-deref.
 
 import type { Blueprint } from './blueprint.js'
+import type { AlterBlueprint } from './alter-blueprint.js'
 import { SchemaBuilder } from './schema-builder.js'
 import { NativeOrmError } from '../errors.js'
 
@@ -48,6 +49,12 @@ export const Schema = {
   // Callers `await` them, so a uniform rejection is the least surprising contract.
   async create(table: string, build: (table: Blueprint) => void): Promise<void> {
     return active().create(table, build)
+  },
+  async table(table: string, build: (table: AlterBlueprint) => void): Promise<void> {
+    return active().table(table, build)
+  },
+  async rename(from: string, to: string): Promise<void> {
+    return active().rename(from, to)
   },
   async drop(table: string): Promise<void> {
     return active().drop(table)

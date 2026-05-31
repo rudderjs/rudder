@@ -287,7 +287,14 @@ revisit diffing only if real demand appears.
 - [ ] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`
       → `Model<TName>` binding green end-to-end. *If this doesn't land cleanly,
       stop and reconsider — without it the feature is a regression.*
-- [ ] 7.4 — `Schema.table` (alter): add/change/drop/rename incl. the SQLite rebuild
+- [~] 7.4 — `Schema.table` (alter): add/change/drop/rename incl. the SQLite rebuild.
+      **Shipped (native-ALTER subset):** `Schema.table` (add column / dropColumn /
+      renameColumn / add index / dropIndex) + `Schema.rename` via `AlterBlueprint`
+      + `compileAlterTable`/`compileRenameTable`. SQLite ADD-COLUMN limits enforced
+      (no ADD primary-key; NOT NULL needs a default). 18 tests (pure shape +
+      live-table exec). **DEFERRED → 7.4b:** `.change()` (column-type change via the
+      SQLite 12-step table-rebuild) — surfaced on `ColumnBuilder.change()`, throws
+      `NativeNotImplementedError` until the rebuild lands.
 - [ ] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches
 - [ ] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants)
 - [ ] 7.7 — Postgres dialect DDL

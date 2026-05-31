@@ -94,3 +94,48 @@ describe('SchemaBuilder — drop + introspection', () => {
     assert.strictEqual(await schema.hasColumn('users', 'nope'), false)
   })
 })
+
+describe('SchemaBuilder.table — alters against a live table', () => {
+  beforeEach(async () => {
+    await schema.create('users', (t) => { t.id(); t.string('name') })
+  })
+
+  it('adds a column', async () => {
+    await schema.table('users', (t) => t.string('email').nullable())
+    assert.strictEqual(await schema.hasColumn('users', 'email'), true)
+  })
+
+  it('renames a column', async () => {
+    await schema.table('users', (t) => t.renameColumn('name', 'fullName'))
+    assert.strictEqual(await schema.hasColumn('users', 'name'), false)
+    assert.strictEqual(await schema.hasColumn('users', 'fullName'), true)
+  })
+
+  it('drops a column', async () => {
+    await schema.table('users', (t) => t.dropColumn('name'))
+    assert.strictEqual(await schema.hasColumn('users', 'name'), false)
+  })
+
+  it('adds a column with a real, enforced unique index', async () => {
+    await schema.table('users', (t) => t.string('email').nullable().unique())
+    await driver.execute('INSERT INTO users (name, email) VALUES (?, ?)', ['a', 'x@y.z'])
+    await assert.rejects(() => driver.execute('INSERT INTO users (name, email) VALUES (?, ?)', ['b', 'x@y.z']))
+  })
+
+  it('drops an index by name', async () => {
+    await schema.table('users', (t) => t.string('email').nullable().unique())
+    await schema.table('users', (t) => t.dropIndex('users_email_unique'))
+    // duplicates now allowed (index gone)
+    await driver.execute('INSERT INTO users (name, email) VALUES (?, ?)', ['a', 'dup'])
+    await driver.execute('INSERT INTO users (name, email) VALUES (?, ?)', ['b', 'dup'])
+  })
+})
+
+describe('SchemaBuilder.rename — renames a table', () => {
+  it('renames the table (old gone, new present)', async () => {
+    await schema.create('users', (t) => { t.id(); t.string('name') })
+    await schema.rename('users', 'accounts')
+    assert.strictEqual(await schema.hasTable('users'), false)
+    assert.strictEqual(await schema.hasTable('accounts'), true)
+  })
+})
