@@ -6,7 +6,7 @@ ORM contract, `Model` base class, and `ModelRegistry` for RudderJS applications.
 pnpm add @rudderjs/orm
 ```
 
-This package provides the shared abstractions. For a working database connection use an adapter:
+This package provides the shared abstractions plus a **built-in native SQLite engine** at the node-only `@rudderjs/orm/native` subpath. For Postgres/MySQL, or to keep using Prisma/Drizzle, install an adapter:
 
 - `@rudderjs/orm-prisma` — Prisma adapter (SQLite, PostgreSQL, MySQL)
 - `@rudderjs/orm-drizzle` — Drizzle adapter (SQLite, PostgreSQL, LibSQL)
@@ -28,6 +28,41 @@ export default [
 ```
 
 The provider calls `ModelRegistry.set(adapter)` during boot — no manual wiring needed.
+
+### Standalone — no framework, no providers
+
+`@rudderjs/orm` is a plain library: nothing on the query path imports `@rudderjs/core`, so you can drive the `Model` layer from any Node script or worker. Install the package and the `better-sqlite3` peer (no `@rudderjs/core` / `@rudderjs/console` — those are optional peers used only by the framework provider and CLI), then wire the adapter yourself:
+
+```bash
+npm install @rudderjs/orm better-sqlite3
+```
+
+```ts
+import { Model, ModelRegistry } from '@rudderjs/orm'
+import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/orm/native'
+
+class Todo extends Model {
+  static table = 'todos'
+  static casts = { done: 'boolean' }
+}
+
+// No migrations on the SQLite engine — create tables via the driver, then hand
+// the open driver to the adapter (you own its lifecycle).
+const driver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+await driver.execute(
+  'CREATE TABLE todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, done INTEGER)',
+  [],
+)
+ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver }))
+
+await Todo.create({ title: 'first', done: false })
+const done = await Todo.query().where('done', true).get()
+console.log((await Todo.find(1))?.toJSON()) // { id: 1, title: 'first', done: false }
+
+await driver.close()
+```
+
+`ModelRegistry.set(adapter)` is exactly what the framework provider does at boot. Pass `{ url: 'file:./dev.db' }` to `NativeAdapter.make()` instead of `driverInstance` to let the adapter open and own the connection. This flow is certified on every CI run (`scripts/orm-standalone-smoke.mjs` — pack, install outside the workspace, round-trip).
 
 ---
 

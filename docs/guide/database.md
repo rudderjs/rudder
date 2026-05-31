@@ -54,9 +54,50 @@ To wire it explicitly instead of via auto-discovery:
 
 ```ts
 // bootstrap/providers.ts
-import { nativeDatabase } from '@rudderjs/orm/native'
+import { nativeDatabase } from '@rudderjs/orm/native/provider'
 export default [ ...(await defaultProviders()), nativeDatabase(), AppServiceProvider ]
 ```
+
+### Standalone — `@rudderjs/orm` in any Node app
+
+The native engine is decoupled from the Rudder framework: `@rudderjs/orm` is a plain library, and nothing on the query path imports `@rudderjs/core`. You can use the `Model` layer in any Node project — a script, a worker, a non-Rudder server — by wiring the adapter yourself with two packages and no providers:
+
+```bash
+npm install @rudderjs/orm better-sqlite3
+```
+
+`@rudderjs/core` and `@rudderjs/console` are **not** pulled in — they're optional peers, used only by the framework provider and the CLI subpaths. A standalone install is just `@rudderjs/orm` + its one runtime dep (`@rudderjs/contracts`) + the `better-sqlite3` peer.
+
+```ts
+import { Model, ModelRegistry } from '@rudderjs/orm'
+import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/orm/native'
+
+class Todo extends Model {
+  static table = 'todos'
+  static casts = { done: 'boolean' }
+}
+
+// No migrations under the SQLite engine, so create tables via the driver,
+// then hand the open driver to the adapter (you own its lifecycle).
+const driver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+await driver.execute(
+  'CREATE TABLE todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, done INTEGER)',
+  [],
+)
+ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver }))
+
+// From here, the full Model API works — no Rudder bootstrap required.
+await Todo.create({ title: 'first', done: false })
+const done = await Todo.query().where('done', true).get()
+const todo = await Todo.find(1)
+console.log(todo?.toJSON()) // { id: 1, title: 'first', done: false }  ← boolean cast round-trips
+
+await driver.close()
+```
+
+The key call is `ModelRegistry.set(adapter)` — the same thing the framework provider does during `boot()`. `NativeAdapter.make({ driverInstance })` takes a driver you opened (so you control `CREATE TABLE` and `close()`); pass `{ url: 'file:./dev.db' }` instead to let the adapter open and own the connection.
+
+> This exact flow is certified on every CI run by `scripts/orm-standalone-smoke.mjs`, which `pnpm pack`s `@rudderjs/orm`, installs it into a throwaway project **outside** the workspace, asserts `@rudderjs/console` was not dragged in, and runs the round-trip above. If the install grows a hard framework dependency, that job goes red.
 
 ## Quick start
 
