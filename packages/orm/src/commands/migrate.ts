@@ -355,6 +355,86 @@ export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string): 
   }
 }
 
+// ─── Native engine migration stub (7.3) ──────────────────
+//
+// `make:migration <name>` on a native app has no external CLI to delegate to,
+// so it writes a hand-authored up/down stub directly — the same role
+// `prisma migrate dev --create-only` / `drizzle-kit generate` play for those
+// ORMs. Laravel-style name inference scaffolds the common case (`create_*_table`).
+
+/**
+ * Build the contents of a native migration stub file. Pure; no I/O. Exported
+ * for testing and so apps can compose the stub themselves if their layout
+ * differs from the convention {@link writeNativeMigration} uses.
+ *
+ * Name inference (Laravel parity):
+ *  - `create_<table>_table` → an `up()` that scaffolds `Schema.create('<table>', …)`
+ *    with `t.id()` + `t.timestamps()`, and a `down()` that drops the table.
+ *  - any other name → a generic empty up/down stub with `// TODO` markers.
+ *
+ * Table alters (`Schema.table`) are intentionally NOT scaffolded — they ship in
+ * a separate phase (7.4); a generic name yields an empty stub the author fills in.
+ */
+export function buildNativeMigrationStub(name: string): string {
+  const header = `import { Migration, Schema } from '@rudderjs/orm/native'\n\nexport default class extends Migration {\n`
+  const footer = `}\n`
+
+  const createMatch = /^create_(\w+)_table$/.exec(name)
+  if (createMatch) {
+    const table = createMatch[1]
+    return (
+      header +
+      `  async up() {\n` +
+      `    await Schema.create('${table}', (t) => {\n` +
+      `      t.id()\n` +
+      `      t.timestamps()\n` +
+      `    })\n` +
+      `  }\n\n` +
+      `  async down() {\n` +
+      `    await Schema.dropIfExists('${table}')\n` +
+      `  }\n` +
+      footer
+    )
+  }
+
+  return (
+    header +
+    `  async up() {\n` +
+    `    // TODO: define the schema changes for this migration\n` +
+    `  }\n\n` +
+    `  async down() {\n` +
+    `    // TODO: reverse the schema changes made in up()\n` +
+    `  }\n` +
+    footer
+  )
+}
+
+export interface NativeMigrationResult {
+  filePath: string
+  contents: string
+}
+
+/**
+ * Write a native migration stub to `database/migrations/<ts>_<name>.ts`,
+ * creating the directory if needed. Mirrors {@link writeVectorMigration}'s
+ * style (`now` is injectable for deterministic tests).
+ */
+export async function writeNativeMigration(
+  name: string,
+  cwd: string = process.cwd(),
+  now: Date = new Date(),
+): Promise<NativeMigrationResult> {
+  assertSafeName(name)
+  const contents = buildNativeMigrationStub(name)
+  const ts       = migrationTimestamp(now)
+  const filePath = join(cwd, 'database', 'migrations', `${ts}_${name}.ts`)
+
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, contents, 'utf8')
+
+  return { filePath, contents }
+}
+
 // ─── Command Registration ─────────────────────────────────
 
 /**
@@ -472,6 +552,18 @@ export function registerMigrateCommands(
     }
 
     const name = args[0] ?? 'migration'
+
+    // Native app (no prisma/drizzle adapter package) → write a hand-authored
+    // up/down stub directly; there's no external CLI to delegate to. This is
+    // boot-free: it only writes a file (make:migration is in the CLI skip-boot
+    // set), so no adapter is required.
+    if (detectORM(cwd) === null) {
+      const result = await writeNativeMigration(name, cwd)
+      console.log('  ORM: native')
+      console.log(`  Wrote ${result.filePath.replace(cwd + '/', '')}`)
+      return
+    }
+
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'make:migration', { name })
