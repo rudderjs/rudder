@@ -61,7 +61,7 @@ export { rebuildTable } from './schema/rebuild.js'
 export { readColumns, readIndexSql, isAutoincrement, readTables } from './schema/introspect.js'
 export type { RawColumn } from './schema/introspect.js'
 // Schema → TypeScript types generator (GATE 7-types).
-export { sqliteTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts } from './schema/types-generator.js'
+export { sqliteTypeToTs, pgTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts } from './schema/types-generator.js'
 export type { GeneratedColumnType, TableTypes } from './schema/types-generator.js'
 export { collectSchemaTypes, generateSchemaTypes, registryDtsPath } from './schema/schema-types.js'
 export type { ModelCastInfo } from './schema/schema-types.js'

@@ -313,7 +313,15 @@ revisit diffing only if real demand appears.
       rejects `change()` (the rebuild needs the executor) — by design.
 - [x] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches — shipped #814.
 - [x] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants) — shipped #816.
-- [~] 7.7 — Postgres dialect DDL + driver
+- [x] 7.7 — Postgres dialect DDL + driver + introspection (types). **7.7c shipped:**
+      `pgTypeToTs` (information_schema `data_type` → TS, reflecting what the driver
+      returns on read: `numeric`→string, `jsonb`→unknown, `timestamptz`→Date,
+      `int8`→number, `bytea`→Uint8Array) + dialect-aware `readTables`/`readColumns`
+      (information_schema) + a threaded per-dialect mapper through
+      `resolveColumnType`/`buildTableTypes`/`collectSchemaTypes` (defaults to
+      `sqliteTypeToTs`, back-compat). So `schema:types` now generates correct TS
+      from a Postgres schema; casts still override storage types. ~20 pure tests +
+      a live introspection→registry.d.ts suite (gated `PG_TEST_URL`, runs in `orm-pg`).
       **7.7a/b shipped (PR #819):** `PgDialect` (`src/native/dialect-pg.ts`) —
       `"`-quoted identifiers, `$n` placeholders, `supportsReturning`, full
       `columnTypeSql` mapping (bigserial PK / varchar(n) / text / int / bigint /

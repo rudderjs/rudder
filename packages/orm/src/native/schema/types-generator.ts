@@ -46,6 +46,40 @@ export function sqliteTypeToTs(declared: string): string {
 }
 
 /**
+ * Map a Postgres `information_schema.columns.data_type` to a base TS type. The
+ * mapping reflects what the porsager driver actually returns on READ (so the
+ * generated type matches runtime), which `casts` then refine:
+ *  - `int8`/`bigint` → `number` (the pg driver parses OID 20 to a JS number);
+ *  - `numeric`/`money` → `string` (porsager keeps these as strings for
+ *    precision safety — a `float`/`decimal` cast refines them to `number`);
+ *  - `json`/`jsonb` → `unknown` (a `json` cast or a typed `casts` entry refines);
+ *  - `timestamp*`/`date` → `Date`; `bytea` → `Uint8Array`; the rest → `string`.
+ */
+export function pgTypeToTs(declared: string): string {
+  const t = declared.toLowerCase()
+  switch (t) {
+    case 'boolean':                     return 'boolean'
+    case 'smallint':
+    case 'integer':
+    case 'bigint':
+    case 'real':
+    case 'double precision':            return 'number'
+    case 'numeric':
+    case 'money':                       return 'string'
+    case 'json':
+    case 'jsonb':                       return 'unknown'
+    case 'bytea':                       return 'Uint8Array'
+    case 'date':                        return 'Date'
+    default:
+      // varchar/char surface as `character varying`/`character`; timestamps as
+      // `timestamp with/without time zone`; times as `time …`. Match by prefix.
+      if (t.startsWith('timestamp')) return 'Date'
+      if (t.startsWith('character') || t.startsWith('time') || t === 'text' || t === 'uuid') return 'string'
+      return 'unknown'
+  }
+}
+
+/**
  * The TS type a declared cast produces on READ (`toJSON`/hydration). Casts
  * OVERRIDE the storage type — a `boolean` cast turns an INTEGER column into
  * `boolean`, a `json` cast turns TEXT into `unknown`, etc. Returns null for
@@ -76,19 +110,30 @@ export function castToTs(cast: BuiltInCast | string): string | null {
 /**
  * Resolve one column's TS type: a declared cast wins over the storage mapping,
  * and a nullable column widens with `| null`. The primary key and NOT NULL
- * columns stay non-null.
+ * columns stay non-null. `typeToTs` is the per-dialect storage mapper
+ * ({@link sqliteTypeToTs} by default; {@link pgTypeToTs} for Postgres).
  */
-export function resolveColumnType(col: RawColumn, casts: Record<string, string>): GeneratedColumnType {
+export function resolveColumnType(
+  col: RawColumn,
+  casts: Record<string, string>,
+  typeToTs: (declared: string) => string = sqliteTypeToTs,
+): GeneratedColumnType {
   const declaredCast = casts[col.name]
-  const base = (declaredCast && castToTs(declaredCast)) || sqliteTypeToTs(col.type)
+  const base = (declaredCast && castToTs(declaredCast)) || typeToTs(col.type)
   // A column is nullable on read when it permits NULL and isn't the PK.
   const nullable = !col.notNull && col.pk === 0
   return { name: col.name, ts: nullable ? `${base} | null` : base }
 }
 
-/** Build one table's {@link TableTypes} from its columns + casts. */
-export function buildTableTypes(table: string, columns: RawColumn[], casts: Record<string, string> = {}): TableTypes {
-  return { table, columns: columns.map((c) => resolveColumnType(c, casts)) }
+/** Build one table's {@link TableTypes} from its columns + casts, using the
+ *  given per-dialect storage mapper (defaults to the SQLite mapping). */
+export function buildTableTypes(
+  table: string,
+  columns: RawColumn[],
+  casts: Record<string, string> = {},
+  typeToTs: (declared: string) => string = sqliteTypeToTs,
+): TableTypes {
+  return { table, columns: columns.map((c) => resolveColumnType(c, casts, typeToTs)) }
 }
 
 /**

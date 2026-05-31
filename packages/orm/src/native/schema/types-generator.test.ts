@@ -5,12 +5,49 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RawColumn } from './introspect.js'
 import {
-  sqliteTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts,
+  sqliteTypeToTs, pgTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts,
 } from './types-generator.js'
 
 function col(name: string, type: string, over: Partial<RawColumn> = {}): RawColumn {
   return { name, type, notNull: false, dflt: null, pk: 0, ...over }
 }
+
+describe('pgTypeToTs — information_schema data_type mapping', () => {
+  const cases: Array<[string, string]> = [
+    ['boolean', 'boolean'],
+    ['smallint', 'number'], ['integer', 'number'], ['bigint', 'number'],
+    ['real', 'number'], ['double precision', 'number'],
+    ['numeric', 'string'], ['money', 'string'],   // porsager keeps these as strings
+    ['json', 'unknown'], ['jsonb', 'unknown'],
+    ['bytea', 'Uint8Array'],
+    ['date', 'Date'],
+    ['timestamp with time zone', 'Date'], ['timestamp without time zone', 'Date'],
+    ['character varying', 'string'], ['character', 'string'], ['text', 'string'],
+    ['uuid', 'string'],
+    ['time without time zone', 'string'], ['time with time zone', 'string'],
+  ]
+  for (const [pg, ts] of cases) {
+    it(`${pg} → ${ts}`, () => assert.equal(pgTypeToTs(pg), ts))
+  }
+  it('is case-insensitive', () => assert.equal(pgTypeToTs('JSONB'), 'unknown'))
+  it('unknown types fall back to unknown', () => assert.equal(pgTypeToTs('tsvector'), 'unknown'))
+})
+
+describe('resolveColumnType — per-dialect mapper', () => {
+  it('uses pgTypeToTs when passed (jsonb → unknown, not the SQLite affinity)', () => {
+    assert.equal(resolveColumnType(col('meta', 'jsonb', { notNull: true }), {}, pgTypeToTs).ts, 'unknown')
+  })
+  it('a cast still overrides the pg storage type', () => {
+    assert.equal(resolveColumnType(col('meta', 'jsonb', { notNull: true }), { meta: 'json' }, pgTypeToTs).ts, 'unknown')
+    assert.equal(resolveColumnType(col('active', 'integer', { notNull: true }), { active: 'boolean' }, pgTypeToTs).ts, 'boolean')
+  })
+  it('a nullable pg column widens with | null', () => {
+    assert.equal(resolveColumnType(col('seen_at', 'timestamp with time zone'), {}, pgTypeToTs).ts, 'Date | null')
+  })
+  it('defaults to the SQLite mapper when no mapper is passed (back-compat)', () => {
+    assert.equal(resolveColumnType(col('n', 'INTEGER', { notNull: true }), {}).ts, 'number')
+  })
+})
 
 describe('sqliteTypeToTs — affinity mapping', () => {
   it('INT family → number', () => {
