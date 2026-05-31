@@ -23,10 +23,13 @@ export { NativeQueryBuilder } from './query-builder.js'
 
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
 export { SqliteDialect, validateIdentifier } from './dialect.js'
+export { PgDialect } from './dialect-pg.js'
 export type { Dialect } from './dialect.js'
 export type { Driver, Executor, Transaction, Row } from './driver.js'
 export { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 export type { BetterSqlite3DriverConfig } from './drivers/better-sqlite3.js'
+export { PostgresDriver } from './drivers/postgres.js'
+export type { PostgresDriverConfig } from './drivers/postgres.js'
 
 // Compiler (pure) — exported for unit testing and advanced reuse.
 export {
@@ -58,7 +61,7 @@ export { rebuildTable } from './schema/rebuild.js'
 export { readColumns, readIndexSql, isAutoincrement, readTables } from './schema/introspect.js'
 export type { RawColumn } from './schema/introspect.js'
 // Schema → TypeScript types generator (GATE 7-types).
-export { sqliteTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts } from './schema/types-generator.js'
+export { sqliteTypeToTs, pgTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts } from './schema/types-generator.js'
 export type { GeneratedColumnType, TableTypes } from './schema/types-generator.js'
 export { collectSchemaTypes, generateSchemaTypes, registryDtsPath } from './schema/schema-types.js'
 export type { ModelCastInfo } from './schema/schema-types.js'

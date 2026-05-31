@@ -13,14 +13,17 @@
 import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
+import { PgDialect } from './dialect-pg.js'
 import type { Driver, Executor, Transaction } from './driver.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
+import { PostgresDriver } from './drivers/postgres.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
 import type { ModelCastInfo } from './schema/schema-types.js'
 
-/** Supported native drivers. Phase 1 ships `sqlite`; `pg`/`mysql` land later. */
-export type NativeDriverName = 'sqlite'
+/** Supported native drivers. SQLite (better-sqlite3) + Postgres (porsager
+ *  `postgres`); MySQL lands in 7.8. */
+export type NativeDriverName = 'sqlite' | 'pg'
 
 /** Config for {@link native} / {@link NativeAdapter.make}. */
 export interface NativeConfig {
@@ -29,11 +32,17 @@ export interface NativeConfig {
    * tests or hand-wired setups (you own the driver's lifecycle).
    */
   driverInstance?: Driver
+  /** Dialect to pair with a {@link driverInstance}. Defaults to SQLite — pass
+   *  `new PgDialect()` when hand-wiring a Postgres driver. Ignored when a
+   *  built-in `driver` is named (that path picks the matching dialect). */
+  dialect?: Dialect
   /** Which built-in driver to open. Defaults to `'sqlite'`. */
   driver?: NativeDriverName
   /**
-   * Connection URL / path. For SQLite: a file path, `file:` URL, or
-   * `':memory:'`. Falls back to `DATABASE_URL`, then `:memory:`.
+   * Connection URL / path. For SQLite: a file path, `file:` URL, or `':memory:'`.
+   * For Postgres: a `postgres://…` connection string. Falls back to
+   * `DATABASE_URL`, then `:memory:` (SQLite only — a Postgres driver with no URL
+   * fails fast with a clear connection error).
    */
   url?: string
   /** Default primary-key column for models that don't override it. */
@@ -84,7 +93,7 @@ export class NativeAdapter implements OrmAdapter {
 
     // Caller-supplied driver: no caching, they own the lifecycle.
     if (config.driverInstance) {
-      return NativeAdapter._topLevel(config.driverInstance, new SqliteDialect(), primaryKey)
+      return NativeAdapter._topLevel(config.driverInstance, config.dialect ?? new SqliteDialect(), primaryKey)
     }
 
     const driverName = config.driver ?? 'sqlite'
@@ -182,6 +191,10 @@ async function openDriver(
     case 'sqlite': {
       const driver = await BetterSqlite3Driver.open({ filename: url })
       return { driver, dialect: new SqliteDialect() }
+    }
+    case 'pg': {
+      const driver = await PostgresDriver.open({ url })
+      return { driver, dialect: new PgDialect() }
     }
     default: {
       const _exhaustive: never = driverName
