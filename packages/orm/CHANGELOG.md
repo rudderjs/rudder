@@ -1,5 +1,96 @@
 # @rudderjs/orm
 
+## 1.13.0
+
+### Minor Changes
+
+- edd1747: Native engine Phase 8 (scoped) — ship native as an opt-in SQLite engine.
+
+  The native engine (`@rudderjs/orm/native`) is now wired as a selectable, batteries-included database engine — no external ORM package, just `@rudderjs/orm` + `better-sqlite3`.
+
+  - **`NativeDatabaseProvider`** (auto-discovered via `rudderjs.providerSubpath: './native'`) boots a `NativeAdapter` from `config('database')`. It's **opt-in and inert by default**: it activates only when the default connection sets `engine: 'native'`. Because `@rudderjs/orm` is installed in every app, this config gate is what lets the provider be auto-discovered without clobbering a Prisma/Drizzle adapter — in those apps it discovers, sees no `engine: 'native'`, and returns early. An explicit `nativeDatabase()` helper is also exported for hand-wired `bootstrap/providers.ts`.
+  - **Doctor:** new `@rudderjs/orm/doctor` subpath contributes an `orm-native:db-connect` `--deep` check that reuses the driver opened during boot (skips cleanly when the app isn't on native). Registered in the CLI's doctor loader.
+  - **`@rudderjs/core`** is now an optional peer of `@rudderjs/orm` (used only by the node-only native provider; the client-bundle gate is unaffected since the main entry never imports the subpath).
+  - **Docs:** the database guide documents native as a selectable engine, the `engine: 'native'` config, transactions, the client-safety contract, and the explicit "no native migrations yet — bring your own schema" caveat.
+
+  **Not in scope (deliberate):** `create-rudder` still defaults to Prisma/Drizzle — flipping the scaffolder default needs a native schema/migration story (Phase 7, deferred). Postgres/MySQL and native migrations remain out.
+
+- b03289e: Add the built-in native database engine at the node-only `@rudderjs/orm/native` subpath — Phase 1 (SQLite read path).
+
+  `@rudderjs/orm/native` ships a first-party query engine that talks directly to `better-sqlite3` (an optional peer), alongside the existing optional `@rudderjs/orm-prisma` and `@rudderjs/orm-drizzle` adapters. This first phase implements the **read** path only — `first` / `find` / `get` / `all` / `count` / `paginate`, the full `WhereOperator` set, `where` / `orWhere`, `whereGroup` / `orWhereGroup` with Laravel precedence, ordering, limit/offset, and soft-delete scoping (`withTrashed` / `onlyTrashed`). Write, relation, aggregate, and vector terminals throw `NativeNotImplementedError` until their phases land.
+
+  The engine is split into two seams from day one for runtime portability: a pure `Dialect` (SQL text — `SqliteDialect` first) and a per-platform `Driver` (`execute`/`close` — `BetterSqlite3Driver` now). The SQL compiler is driver-free and fully parameterized — values always flow through bindings, identifiers are validated and quoted — so a React Native / browser driver can drop in later without touching it. The native code lives entirely under the `./native` subpath and is never re-exported from the client-reachable main entry.
+
+- 0f20ccb: Native engine Phase 3 — relations & aggregates at `@rudderjs/orm/native`.
+
+  Implements the relation/aggregate terminals on `NativeQueryBuilder` (previously throwing `NativeNotImplementedError`), compiling correlated subqueries via the existing pure `Dialect`/compiler + `Executor` seams:
+
+  - **`whereRelationExists`** (`whereHas` / `whereDoesntHave`) → correlated `EXISTS` / `NOT EXISTS`. Direct relations (hasMany/hasOne/belongsTo/morphMany/morphOne) compile to a single subquery; through-pivot relations (belongsToMany/morphToMany/morphedByMany) to a nested pivot→related `EXISTS`. `extraEquals` (morph discriminators) and constraint wheres are bound parameters; correlation references the outer table by qualified column.
+  - **`withAggregate`** (`withCount`/`withExists`/`withSum`/`withMin`/`withMax`/`withAvg`) → one correlated `(subselect) AS alias` per request in the SELECT list, including through-pivot joins, `extraEquals`, and related-model soft-delete scoping. `exists` wraps the count in `(… ) > 0`; `sum` coalesces to 0.
+  - **`_aggregate(fn, column?)`** → single-scalar terminal (`SELECT fn(col) FROM table WHERE …`) powering `instance.loadCount`/`loadSum`/etc. Empty-set semantics: count→0, sum→0, min/max/avg→null, exists→false.
+
+  This makes native's `whereHas` work with **no per-driver setup** — unlike orm-prisma (needs a declared `@relation`) and orm-drizzle (needs a table registry).
+
+  Every value is bound; identifiers are validated + quoted. Binding order is preserved across SELECT-list aggregate subselects and the WHERE.
+
+  **Known limitation (deferred):** direct (non-polymorphic) eager `with()` is not yet native — the current adapter contract passes relation names only, with no join shape, so a direct `with()` would silently return rows without the relation populated. Native now emits a one-time dev-mode warning instead of silently no-op'ing; polymorphic `with()` already works (resolved in the Model layer). Real native direct-eager-load is a contract-gap decision deferred to a later phase.
+
+- 7a258fb: Native engine Phase 4 — transactions.
+
+  Adds first-class database transactions to the ORM, implemented on the native engine (`@rudderjs/orm/native`):
+
+  - **`transaction(fn)`** (exported from `@rudderjs/orm`) and the **`Model.transaction(fn)`** alias run `fn` inside a database transaction. Every `Model` query issued anywhere inside the callback — across any model — executes on the transaction's connection, threaded transparently via `AsyncLocalStorage` (no call-site changes, no explicit handle passing). The unit commits when `fn` resolves and rolls back (re-throwing) when it rejects.
+  - **Nesting maps to SAVEPOINTs.** A nested `transaction()` opens a savepoint; an inner failure rolls back only its own work and leaves the outer transaction intact, while an uncaught inner error propagates and rolls back the whole outer transaction.
+  - **Contract addition:** `OrmAdapter` gains an **optional** `transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>)`. It passes a transaction-scoped adapter; the Model layer threads it through `AsyncLocalStorage`. Optional = a capability flag — adapters without transaction support omit it, and `transaction()` surfaces a clear error against one. The native engine implements it; the Prisma/Drizzle adapters do not expose it yet (follow-up).
+  - The native `Driver` seam gains a `Transaction` type (an `Executor` that can open a nested savepoint); the `better-sqlite3` driver implements BEGIN/COMMIT/ROLLBACK with depth-tracked SAVEPOINT nesting over an async callback.
+
+  Client-bundle-safe by construction: `node:async_hooks` is lazy-imported only from `transaction()`, never at module-eval time, so `@rudderjs/orm`'s main entry stays out of any browser graph (`Client Bundle Smoke` green).
+
+  **Single-connection caveat (SQLite):** transactions assume they aren't run concurrently against one SQLite handle (SQLite serializes writers anyway). Pooled drivers (pg/mysql, later phases) will pin a dedicated client per transaction.
+
+- 0a75a7a: Native engine Phase 2 — the SQLite write path at `@rudderjs/orm/native`.
+
+  Implements the write terminals on `NativeQueryBuilder` (previously throwing `NativeNotImplementedError`), compiling parameterized DML via the existing Dialect/Driver seams:
+
+  - `create(data)` → `INSERT … RETURNING *`; `update(id, data)` → `UPDATE … WHERE pk = ? RETURNING *`
+  - `updateAll(data)` / `deleteAll()` → bulk DML; affected count from `RETURNING *` rows
+  - `delete(id)` (soft-delete-aware — stamps `deletedAt` when enabled, else hard `DELETE`), `restore(id)`, `forceDelete(id)`
+  - `insertMany(rows)` → batched multi-row insert
+  - `increment` / `decrement(id, col, amount, extra?)` → atomic `SET col = col ± ?` (no observer events — pure data-plane)
+
+  Every value is bound; identifiers are validated + quoted. Affected-row counts come from `RETURNING *` (`rows.length`), so the `Driver` result shape stays `Row[]` — no driver metadata (`changes`/`lastInsertRowid`) is read.
+
+  **Transaction-aware by construction (no public API yet):** the `Driver` interface gains `transaction(fn)` yielding a transaction-scoped `Executor`, and the query builder runs writes through an `Executor` rather than the top-level connection. This lets the Phase-4 public `transaction()` API slot in without a refactor. `BetterSqlite3Driver` implements it with `BEGIN`/`COMMIT`/`ROLLBACK`.
+
+  Also fixes a Phase-1 issue: `NativeAdapter.disconnect()` now evicts the cached `globalThis` client so a later `make()` with the same `driver::url` signature opens a fresh driver instead of reusing the closed one.
+
+  Conformance: the write + soft-delete slices of the `@rudderjs/orm` Model suite run green against the native engine + in-memory `better-sqlite3` (`native-write.test.ts`); `compiler-write.test.ts` covers INSERT/UPDATE/DELETE/increment SQL shape, bindings, and identifier safety.
+
+### Patch Changes
+
+- fcabe3b: Fix the native SQLite engine throwing on raw boolean bindings.
+
+  `better-sqlite3` only binds numbers, strings, bigints, buffers, and `null` — a raw JS `boolean` raised `TypeError: SQLite3 can only bind …`. The `better-sqlite3` driver now maps `true`/`false` to the integers `1`/`0` (SQLite has no boolean type), so raw boolean values that bypass a column cast bind cleanly: an untyped `where('flag', true)` predicate, or a `query().create({ flag: true })` on a column without a `boolean` cast. Typed boolean columns were already fine — the cast layer serializes `true → 1` before the value reaches the driver. Other unbindable values (`Date`, plain objects) are still passed through so the driver rejects them with its own clear error.
+
+- 4c82967: Decouple `@rudderjs/orm` from `@rudderjs/console` for standalone (any-Node-app) use.
+
+  `@rudderjs/console` was a hard `dependency`, so `npm i @rudderjs/orm` dragged the CLI/`@clack` graph into every install — even a plain Node project that only uses `Model` + the native engine and never touches the framework CLI. It's now an **optional peer** (matching `@rudderjs/core` and `better-sqlite3`).
+
+  The Model layer, the `@rudderjs/orm/native` engine, and `./commands/prune` never imported it; only the framework-CLI subpaths do (`./doctor`, `./commands/migrate` at runtime; `./commands/make-factory` / `./commands/make-seeder` are type-only). Those subpaths only ever load inside a Rudder app, where `@rudderjs/console` is already present via `@rudderjs/cli` / `@rudderjs/core` — so **Rudder apps are unaffected**. Standalone installs now get a leaner dependency graph with no CLI tooling pulled in.
+
+- d1a28f6: Fix `@rudderjs/orm/native` requiring `@rudderjs/core` in a standalone (non-Rudder) Node app.
+
+  The `@rudderjs/orm/native` barrel re-exported `NativeDatabaseProvider`, which `extends ServiceProvider` from `@rudderjs/core` (an optional peer) — so importing the engine eagerly loaded `@rudderjs/core` and crashed (`ERR_MODULE_NOT_FOUND`) in a plain Node project that installed only `@rudderjs/orm` + a driver.
+
+  The framework provider now lives on its own subpath, **`@rudderjs/orm/native/provider`** (auto-discovery picks it up via `rudderjs.providerSubpath` — no app change needed). The `./native` engine barrel is now framework-free, so `import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/orm/native'` works with no `@rudderjs/core` installed.
+
+  Apps that wire the provider by hand should import `nativeDatabase` from `@rudderjs/orm/native/provider` instead of `@rudderjs/orm/native`.
+
+  A new CI gate (`scripts/orm-standalone-smoke.mjs`) packs the package and installs it outside the workspace to certify standalone use and guard against a framework dependency regressing back into the install.
+
+- Updated dependencies [7a258fb]
+  - @rudderjs/contracts@1.9.0
+
 ## 1.12.11
 
 ### Patch Changes
