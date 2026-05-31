@@ -65,14 +65,17 @@
     "optional": true
   },
   "dependencies": {
-    "@rudderjs/contracts": "workspace:^",
-    "@rudderjs/console": "workspace:^"
+    "@rudderjs/contracts": "workspace:^"
   },
   "peerDependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "better-sqlite3": "^12.0.0"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/console": {
+      "optional": true
+    },
     "@rudderjs/core": {
       "optional": true
     },
@@ -81,6 +84,7 @@
     }
   },
   "devDependencies": {
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
