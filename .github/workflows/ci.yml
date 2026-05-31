@@ -357,6 +357,61 @@ jobs:
       - name: Standalone install + round-trip
         run: node scripts/orm-standalone-smoke.mjs
 
+  orm-pg:
+    # Live Postgres conformance for the native ORM engine. The default
+    # build-test matrix runs SQLite only (in-memory better-sqlite3); the pg
+    # round-trip tests (packages/orm/src/native/drivers/postgres.test.ts) skip
+    # themselves unless PG_TEST_URL is set. This job stands up a real Postgres
+    # service and points the suite at it, so the pg dialect + driver are exercised
+    # end-to-end in CI instead of only on a maintainer's machine. Linux-only —
+    # GitHub service containers don't run on Windows runners (the matrix's Windows
+    # leg keeps skipping the pg tests, which is fine; Ubuntu is the gate).
+    name: ORM Postgres (live)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rudder
+          POSTGRES_PASSWORD: rudder
+          POSTGRES_DB: rudder_native_pg_test
+        ports:
+          - 5432:5432
+        # Wait for the server to accept connections before the steps run.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `--force` bypasses the turbo cache so the live tests actually run against
+      # the service (PG_TEST_URL isn't part of the cache key); turbo builds the
+      # workspace deps first via `^build`.
+      - name: ORM tests against live Postgres
+        env:
+          PG_TEST_URL: postgres://rudder:rudder@localhost:5432/rudder_native_pg_test
+        run: pnpm turbo run test --filter @rudderjs/orm --force
+
   docs-build:
     # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the
     # only place that catches `.md` parser breakage (plan docs landing

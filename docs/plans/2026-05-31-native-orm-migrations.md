@@ -311,9 +311,23 @@ revisit diffing only if real demand appears.
       INTEGER PK AUTOINCREMENT), and indexes. v1: `change()` must be the only op in
       the call; can't change a PK column. 5 tests. The pure `compileAlterTable` still
       rejects `change()` (the rebuild needs the executor) — by design.
-- [ ] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches
-- [ ] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants)
-- [ ] 7.7 — Postgres dialect DDL
+- [x] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches — shipped #814.
+- [x] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants) — shipped #816.
+- [~] 7.7 — Postgres dialect DDL + driver
+      **7.7a/b shipped (PR #819):** `PgDialect` (`src/native/dialect-pg.ts`) —
+      `"`-quoted identifiers, `$n` placeholders, `supportsReturning`, full
+      `columnTypeSql` mapping (bigserial PK / varchar(n) / text / int / bigint /
+      boolean / timestamptz / jsonb / uuid / numeric(p,s) / double precision /
+      bytea) + a `Dialect.booleanLiteral(value)` seam (pg `true`/`false`,
+      sqlite/mysql `0`/`1`). `PostgresDriver` (`drivers/postgres.ts`) over porsager
+      `postgres` (new optional peer) — pooled, real transactions/savepoints,
+      `int8`→JS-number so `id` parity holds. `native({driver:'pg',url})` wiring;
+      `SchemaBuilder.hasTable`/`hasColumn` via `information_schema`. 30 pure shape
+      tests + a live round-trip suite (gated on `PG_TEST_URL`) run by a dedicated
+      `orm-pg` CI job with a `postgres:16` service. Verified locally against pg 14.
+      **Follow-up (c):** information_schema introspection for the TYPES generator +
+      `pgTypeToTs` threaded through `resolveColumnType` (still hardcodes
+      `sqliteTypeToTs`) — so `schema:types` generates correct TS from a pg schema.
 - [ ] 7.8 — MySQL dialect DDL (+ non-transactional caveats)
 - [ ] 7.9 — Scaffolder: native migrations as an option; docs (migration guide +
       "Eloquent-style schema" + the types-generation contract)

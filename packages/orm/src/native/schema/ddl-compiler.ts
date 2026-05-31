@@ -24,10 +24,10 @@ import type { ColumnDefinition, ForeignKeyAction, ForeignKeyDefinition } from '.
 /** Render a column's DEFAULT value as a SQL literal (DDL can't bind). Only the
  *  literal-able types are allowed; a Date/object/function default throws so the
  *  failure is at migrate time, not a silent `[object Object]` in the schema. */
-function defaultLiteral(value: unknown): string {
+function defaultLiteral(value: unknown, dialect: Dialect): string {
   if (value === null) return 'NULL'
   switch (typeof value) {
-    case 'boolean': return value ? '1' : '0'
+    case 'boolean': return dialect.booleanLiteral(value)
     case 'bigint':  return value.toString()
     case 'number':
       if (!Number.isFinite(value)) {
@@ -59,7 +59,7 @@ function compileColumn(column: ColumnDefinition, dialect: Dialect, inlinePrimary
   if (column.useCurrent) {
     parts.push('DEFAULT CURRENT_TIMESTAMP')
   } else if (column.hasDefault) {
-    parts.push(`DEFAULT ${defaultLiteral(column.default)}`)
+    parts.push(`DEFAULT ${defaultLiteral(column.default, dialect)}`)
   }
 
   if (inlinePrimary) parts.push('PRIMARY KEY')
