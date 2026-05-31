@@ -313,19 +313,21 @@ revisit diffing only if real demand appears.
       rejects `change()` (the rebuild needs the executor) — by design.
 - [x] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches — shipped #814.
 - [x] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants) — shipped #816.
-- [~] 7.7 — Postgres dialect DDL
-      **7.7a (dialect, no DB) shipped:** `PgDialect` (`src/native/dialect-pg.ts`) —
-      `"`-quoted identifiers, `$n` placeholders, `supportsReturning`, and the full
+- [~] 7.7 — Postgres dialect DDL + driver
+      **7.7a/b shipped (PR #819):** `PgDialect` (`src/native/dialect-pg.ts`) —
+      `"`-quoted identifiers, `$n` placeholders, `supportsReturning`, full
       `columnTypeSql` mapping (bigserial PK / varchar(n) / text / int / bigint /
       boolean / timestamptz / jsonb / uuid / numeric(p,s) / double precision /
-      bytea). Added a `Dialect.booleanLiteral(value)` seam so a boolean DEFAULT
-      renders per-dialect (pg `true`/`false`, sqlite/mysql `0`/`1`) — the only
-      per-dialect spot in the compiler's `defaultLiteral`. 30 pure shape tests.
-      **Follow-ups (need a live pg → CI `services: postgres`, gated on PG_TEST_URL):**
-      (b) `PostgresDriver` (`drivers/postgres.ts`, porsager `postgres`, real
-      transactions/savepoints) + wire `openDriver`/`NativeDriverName`/adapter dialect
-      selection; (c) information_schema introspection + `pgTypeToTs` threaded through
-      the types-generator (`resolveColumnType` currently hardcodes `sqliteTypeToTs`).
+      bytea) + a `Dialect.booleanLiteral(value)` seam (pg `true`/`false`,
+      sqlite/mysql `0`/`1`). `PostgresDriver` (`drivers/postgres.ts`) over porsager
+      `postgres` (new optional peer) — pooled, real transactions/savepoints,
+      `int8`→JS-number so `id` parity holds. `native({driver:'pg',url})` wiring;
+      `SchemaBuilder.hasTable`/`hasColumn` via `information_schema`. 30 pure shape
+      tests + a live round-trip suite (gated on `PG_TEST_URL`) run by a dedicated
+      `orm-pg` CI job with a `postgres:16` service. Verified locally against pg 14.
+      **Follow-up (c):** information_schema introspection for the TYPES generator +
+      `pgTypeToTs` threaded through `resolveColumnType` (still hardcodes
+      `sqliteTypeToTs`) — so `schema:types` generates correct TS from a pg schema.
 - [ ] 7.8 — MySQL dialect DDL (+ non-transactional caveats)
 - [ ] 7.9 — Scaffolder: native migrations as an option; docs (migration guide +
       "Eloquent-style schema" + the types-generation contract)

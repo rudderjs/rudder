@@ -28,6 +28,8 @@ export type { Dialect } from './dialect.js'
 export type { Driver, Executor, Transaction, Row } from './driver.js'
 export { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 export type { BetterSqlite3DriverConfig } from './drivers/better-sqlite3.js'
+export { PostgresDriver } from './drivers/postgres.js'
+export type { PostgresDriverConfig } from './drivers/postgres.js'
 
 // Compiler (pure) — exported for unit testing and advanced reuse.
 export {
