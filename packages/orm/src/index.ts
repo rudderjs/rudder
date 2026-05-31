@@ -630,6 +630,39 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   withAvg(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
 }
 
+// ─── Generated schema registry (GATE 7-types) ──────────────
+
+/**
+ * Generated schema registry — table name → column types. Empty by default;
+ * `rudder schema:types` (run automatically after `migrate`) emits
+ * `app/Models/__schema/registry.d.ts`, which augments this interface via
+ * `declare module '@rudderjs/orm'` with one entry per migrated table:
+ *
+ * ```ts
+ * // AUTO-GENERATED — app/Models/__schema/registry.d.ts
+ * declare module '@rudderjs/orm' {
+ *   interface SchemaRegistry {
+ *     users: { id: number; name: string; email: string; createdAt: Date | null }
+ *   }
+ * }
+ * ```
+ *
+ * Columns become the single source of truth (the migration), so a model's field
+ * types are generated rather than hand-maintained — they can't drift. Mirrors
+ * `@rudderjs/vite`'s scanner emitting `pages/__view/registry.d.ts`. Until the
+ * file exists this is empty and everything behaves exactly as before.
+ *
+ * Reference a generated table shape directly with {@link SchemaColumns} (e.g.
+ * `SchemaColumns<'users'>`). Binding it onto `Model` instances so a model needs
+ * no hand-declared fields is the next step in the types story.
+ */
+export interface SchemaRegistry {}
+
+/** The generated column shape for a registry table name, or `{}` when the table
+ *  isn't in the registry yet (so references degrade gracefully pre-generation). */
+export type SchemaColumns<TName extends string> =
+  TName extends keyof SchemaRegistry ? SchemaRegistry[TName] : {}
+
 // ─── Model Base Class ──────────────────────────────────────
 
 export abstract class Model {

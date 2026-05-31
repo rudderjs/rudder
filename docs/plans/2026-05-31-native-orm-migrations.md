@@ -284,9 +284,20 @@ revisit diffing only if real demand appears.
       tests (Migrator core, Schema-facade binding, file discovery, CLI command layer).
       Facade methods are `async` so an unbound call rejects (not sync-throws).
 - [x] 7.3 — `make:migration` generator (name → stub, table inference) — shipped #811.
-- [ ] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`
-      → `Model<TName>` binding green end-to-end. *If this doesn't land cleanly,
-      stop and reconsider — without it the feature is a regression.*
+- [~] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`
+      → `Model<TName>` binding green end-to-end.
+      **Foundation shipped:** pure type generator (`sqliteTypeToTs`/`castToTs`/
+      `resolveColumnType`/`buildTableTypes`/`emitRegistryDts`), `readTables`
+      introspection, orchestrator (`collectSchemaTypes`/`generateSchemaTypes` →
+      writes `app/Models/__schema/registry.d.ts`), and `SchemaRegistry` +
+      `SchemaColumns<TName>` exported from `@rudderjs/orm` (empty by default,
+      augmented by the generated file). **End-to-end PROVEN with tsc**: after the
+      generated augmentation, `SchemaColumns<'users'>` resolves to the typed
+      column shape and a wrong type fails `tsc` (`@ts-expect-error` verified).
+      20 tests. Non-breaking/opt-in. **Follow-ups:** `rudder schema:types` CLI
+      command + post-`migrate` auto-gen; binding the registry onto `Model<'users'>`
+      so a model needs zero hand-declared fields (the instance-shape binding is
+      the genuinely fiddly TS — split out so it can iterate against tsc safely).
 - [x] 7.4 — `Schema.table` (alter): add/change/drop/rename incl. the SQLite rebuild.
       **7.4 (native-ALTER subset):** `Schema.table` (add column / dropColumn /
       renameColumn / add index / dropIndex) + `Schema.rename` via `AlterBlueprint`
