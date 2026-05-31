@@ -349,6 +349,21 @@ export interface OrmAdapter {
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T>
   connect(): Promise<void>
   disconnect(): Promise<void>
+  /**
+   * Run `fn` inside a database transaction. The adapter passed to `fn` is
+   * **transaction-scoped** — every query built from it executes on the
+   * transaction's connection/handle, and the whole unit commits when `fn`
+   * resolves or rolls back (and re-throws) when it rejects. Nesting maps to
+   * savepoints.
+   *
+   * **Optional capability.** Adapters that don't support transactions omit this
+   * method; the ORM surfaces a clear error if `Model.transaction()` is called
+   * against one. The native engine (`@rudderjs/orm/native`) implements it; the
+   * Prisma/Drizzle adapters may not yet. The Model layer never calls the passed
+   * adapter directly — it threads it through an `AsyncLocalStorage` so existing
+   * `Model.query()` call sites inside `fn` transparently use the transaction.
+   */
+  transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T>
 }
 
 export interface OrmAdapterProvider {

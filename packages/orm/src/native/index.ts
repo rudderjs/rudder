@@ -16,7 +16,7 @@ export { NativeQueryBuilder } from './query-builder.js'
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
 export { SqliteDialect, validateIdentifier } from './dialect.js'
 export type { Dialect } from './dialect.js'
-export type { Driver, Executor, Row } from './driver.js'
+export type { Driver, Executor, Transaction, Row } from './driver.js'
 export { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 export type { BetterSqlite3DriverConfig } from './drivers/better-sqlite3.js'
 

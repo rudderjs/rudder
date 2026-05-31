@@ -1,4 +1,9 @@
 import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate } from '@rudderjs/contracts'
+// Type-only — erased at compile, so no runtime `node:async_hooks` import lands in
+// the eval graph. The real module is lazy-imported in `ensureTxStorage()`, which
+// only runs from `transaction()` — never reached in a client bundle. Keeps the
+// Client Bundle Smoke gate green by construction (CLAUDE.md client-bundle rule).
+import type { AsyncLocalStorage } from 'node:async_hooks'
 import { castGet, castSet, type CastDefinition } from './cast.js'
 import { type Attribute } from './attribute.js'
 import {
@@ -87,6 +92,14 @@ interface OrmRegistryStore {
   adapter:   OrmAdapter | null
   models:    Map<string, typeof Model>
   listeners: Set<(name: string, ModelClass: typeof Model) => void>
+  /**
+   * Holds the transaction-scoped adapter for the duration of a
+   * `Model.transaction()` callback (see {@link ensureTxStorage}). Lazily created
+   * on first use so `node:async_hooks` is never imported at module-eval time —
+   * keeping the main entry client-bundle-safe. `null` until the first
+   * transaction (and in non-Node runtimes that never call `transaction()`).
+   */
+  txStorage: AsyncLocalStorage<OrmAdapter> | null
 }
 
 const _g = globalThis as Record<string, unknown>
@@ -95,9 +108,59 @@ if (!_g['__rudderjs_orm_registry__']) {
     adapter:   null,
     models:    new Map(),
     listeners: new Set(),
+    txStorage: null,
   } satisfies OrmRegistryStore
 }
 const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
+
+// A pre-existing store from an older bundle of this module may lack `txStorage`
+// (added in the transactions phase). Normalize so the field is always present.
+_store.txStorage ??= null
+
+/**
+ * Lazily create the `AsyncLocalStorage` that scopes queries to an active
+ * transaction. The `node:async_hooks` import is dynamic and only reached from
+ * `transaction()`, so the main entry's eval graph stays free of `node:` imports
+ * (Client Bundle Smoke gate). Idempotent and shared via `_store`.
+ */
+async function ensureTxStorage(): Promise<AsyncLocalStorage<OrmAdapter>> {
+  if (_store.txStorage) return _store.txStorage
+  const { AsyncLocalStorage } = await import('node:async_hooks')
+  // Re-check after the await — a concurrent caller may have set it.
+  _store.txStorage ??= new AsyncLocalStorage<OrmAdapter>()
+  return _store.txStorage
+}
+
+/**
+ * Run `fn` inside a database transaction. Every `Model` query issued within `fn`
+ * (across any model) executes on the transaction's connection — the scoped
+ * adapter is threaded through `AsyncLocalStorage`, so existing call sites need no
+ * changes. Commits when `fn` resolves; rolls back and re-throws if it rejects.
+ * Nested `transaction()` calls map to SAVEPOINTs (inner rollback leaves the outer
+ * transaction intact).
+ *
+ * @example
+ * import { transaction } from '@rudderjs/orm'
+ * await transaction(async () => {
+ *   const user = await User.create({ name: 'Ada' })
+ *   await Account.create({ userId: user.id, balance: 0 })
+ * }) // both rows commit together, or neither does
+ *
+ * @throws if the active adapter doesn't implement `transaction()` (capability is
+ *   optional on the contract; the native engine supports it).
+ */
+export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
+  const adapter = ModelRegistry.getAdapter()
+  if (typeof adapter.transaction !== 'function') {
+    throw new Error(
+      '[RudderJS ORM] The active database adapter does not support transactions. ' +
+      'The native engine (@rudderjs/orm/native) implements them; the Prisma/Drizzle ' +
+      'adapters do not expose `transaction()` yet.',
+    )
+  }
+  const storage = await ensureTxStorage()
+  return adapter.transaction((txAdapter) => storage.run(txAdapter, fn))
+}
 
 // ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
 //
@@ -177,6 +240,12 @@ export class ModelRegistry {
   }
 
   static getAdapter(): OrmAdapter {
+    // Inside a `transaction()` callback, return the transaction-scoped adapter so
+    // every query joins the open transaction. `getStore()` is sync and cheap;
+    // it's `undefined` outside a transaction (and `txStorage` is `null` until the
+    // first transaction ever runs), so the normal path is unaffected.
+    const scoped = _store.txStorage?.getStore()
+    if (scoped) return scoped
     if (!_store.adapter) {
       throw new Error('[RudderJS ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
     }
@@ -1115,6 +1184,18 @@ export abstract class Model {
     }) as HydratingQueryBuilder<InstanceType<T>>
 
     return proxy
+  }
+
+  /**
+   * Run `fn` inside a database transaction. Convenience alias for the exported
+   * `transaction()` free function — `User.transaction(fn)` reads naturally at a
+   * model call site. Every `Model` query inside `fn` (any model) joins the
+   * transaction; commits on resolve, rolls back and re-throws on reject. Nested
+   * calls map to SAVEPOINTs. Throws if the active adapter lacks transaction
+   * support (native supports it).
+   */
+  static transaction<T>(fn: () => Promise<T>): Promise<T> {
+    return transaction(fn)
   }
 
   static query<T extends typeof Model>(this: T): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } {
