@@ -90,7 +90,7 @@ export class NativeDatabaseProvider extends ServiceProvider {
  *
  * @example
  * // bootstrap/providers.ts
- * import { nativeDatabase } from '@rudderjs/orm/native'
+ * import { nativeDatabase } from '@rudderjs/orm/native/provider'
  * export default [ ...(await defaultProviders()), nativeDatabase(), AppServiceProvider ]
  */
 export function nativeDatabase(): typeof NativeDatabaseProvider {

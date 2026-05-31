@@ -28,6 +28,12 @@
       "default": "./dist/native/index.js",
       "types": "./dist/native/index.d.ts"
     },
+    "./native/provider": {
+      "node": "./dist/native/provider.js",
+      "import": "./dist/native/provider.js",
+      "default": "./dist/native/provider.js",
+      "types": "./dist/native/provider.d.ts"
+    },
     "./doctor": {
       "import": "./dist/doctor.js",
       "default": "./dist/doctor.js",
@@ -60,7 +66,7 @@
   },
   "rudderjs": {
     "provider": "NativeDatabaseProvider",
-    "providerSubpath": "./native",
+    "providerSubpath": "./native/provider",
     "stage": "infrastructure",
     "optional": true
   },
