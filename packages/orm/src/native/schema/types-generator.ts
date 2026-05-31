@@ -17,7 +17,7 @@ import type { RawColumn } from './introspect.js'
 import type { BuiltInCast } from '../../cast.js'
 
 /** A column's resolved TypeScript type plus whether it's optional on read. */
-export interface ColumnType {
+export interface GeneratedColumnType {
   /** The TS type expression, e.g. `string`, `number | null`, `Date`. */
   ts:       string
   /** Column name (carried through for the emitter). */
@@ -27,7 +27,7 @@ export interface ColumnType {
 /** One table's generated shape: name → ordered column types. */
 export interface TableTypes {
   table:   string
-  columns: ColumnType[]
+  columns: GeneratedColumnType[]
 }
 
 /**
@@ -78,7 +78,7 @@ export function castToTs(cast: BuiltInCast | string): string | null {
  * and a nullable column widens with `| null`. The primary key and NOT NULL
  * columns stay non-null.
  */
-export function resolveColumnType(col: RawColumn, casts: Record<string, string>): ColumnType {
+export function resolveColumnType(col: RawColumn, casts: Record<string, string>): GeneratedColumnType {
   const declaredCast = casts[col.name]
   const base = (declaredCast && castToTs(declaredCast)) || sqliteTypeToTs(col.type)
   // A column is nullable on read when it permits NULL and isn't the PK.

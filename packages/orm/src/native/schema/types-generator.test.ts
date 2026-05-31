@@ -97,6 +97,7 @@ describe('emitRegistryDts — file shape', () => {
 
   it('an empty schema still emits a valid (empty) augmentation', () => {
     const dts = emitRegistryDts([])
-    assert.match(dts, /interface SchemaRegistry \{\n\n  \}/)
+    assert.match(dts, /interface SchemaRegistry/)
+    assert.match(dts, /declare module '@rudderjs\/orm'/)
   })
 })

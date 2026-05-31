@@ -656,12 +656,18 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
  * `SchemaColumns<'users'>`). Binding it onto `Model` instances so a model needs
  * no hand-declared fields is the next step in the types story.
  */
+// Deliberately empty — this is the augmentation TARGET. The generated
+// `app/Models/__schema/registry.d.ts` fills it in via `declare module`, exactly
+// like @rudderjs/vite's RouteRegistry. An empty interface is the correct shape
+// here (a type alias can't be augmented by module declaration merging).
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface SchemaRegistry {}
 
-/** The generated column shape for a registry table name, or `{}` when the table
- *  isn't in the registry yet (so references degrade gracefully pre-generation). */
+/** The generated column shape for a registry table name, or an empty shape when
+ *  the table isn't in the registry yet (so references degrade gracefully
+ *  pre-generation). */
 export type SchemaColumns<TName extends string> =
-  TName extends keyof SchemaRegistry ? SchemaRegistry[TName] : {}
+  TName extends keyof SchemaRegistry ? SchemaRegistry[TName] : Record<string, never>
 
 // ─── Model Base Class ──────────────────────────────────────
 

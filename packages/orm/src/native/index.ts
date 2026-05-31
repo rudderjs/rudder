@@ -59,7 +59,7 @@ export { readColumns, readIndexSql, isAutoincrement, readTables } from './schema
 export type { RawColumn } from './schema/introspect.js'
 // Schema → TypeScript types generator (GATE 7-types).
 export { sqliteTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts } from './schema/types-generator.js'
-export type { ColumnType, TableTypes } from './schema/types-generator.js'
+export type { GeneratedColumnType, TableTypes } from './schema/types-generator.js'
 export { collectSchemaTypes, generateSchemaTypes, registryDtsPath } from './schema/schema-types.js'
 export type { ModelCastInfo } from './schema/schema-types.js'
 export { Migration } from './schema/migration.js'
