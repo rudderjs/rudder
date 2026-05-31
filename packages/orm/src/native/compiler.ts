@@ -6,7 +6,12 @@
 // only identifiers (validated + quoted by the dialect) ever reach the SQL text
 // (cross-phase rule 2 — security gate).
 
-import type { WhereClause, OrderClause } from '@rudderjs/contracts'
+import type {
+  WhereClause,
+  OrderClause,
+  RelationExistencePredicate,
+  AggregateRequest,
+} from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 
 /**
@@ -38,6 +43,12 @@ export interface NativeQueryState {
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
   deletedAtColumn: string
+  /** Correlated EXISTS / NOT EXISTS predicates from `whereRelationExists`
+   *  (`whereHas` / `whereDoesntHave`). AND-merged into the WHERE. */
+  relationExists?: RelationExistencePredicate[]
+  /** Aggregate subselect requests from `withAggregate` (`withCount`/`withSum`/…).
+   *  Each becomes a `(subselect) AS alias` column in the SELECT list. */
+  aggregates?: AggregateRequest[]
 }
 
 /** A compiled statement: parameterized SQL + the positional bindings. */
@@ -138,16 +149,28 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
  * around the whole user predicate, matching orm-drizzle/orm-prisma.
  */
 function compileWhere(state: NativeQueryState, dialect: Dialect, b: Bindings): string {
+  // The user predicate binds first (positional order), so compile it up front —
+  // but we only know whether to parenthesize it after seeing the other
+  // top-level AND-ed components (soft-delete, EXISTS).
   const userExpr = compileNodes(state.conditions, dialect, b)
-  const softExpr = compileSoftDelete(state, dialect)
 
-  if (userExpr && softExpr) {
-    // Parenthesize the user predicate so an inner top-level OR doesn't escape
-    // the soft-delete AND (e.g. `(a OR b) AND deletedAt IS NULL`).
-    const wrapped = state.conditions.length > 1 ? `(${userExpr})` : userExpr
-    return `${wrapped} AND ${softExpr}`
+  const others: string[] = []
+  const softExpr = compileSoftDelete(state, dialect)
+  if (softExpr) others.push(softExpr)
+  // whereHas / whereDoesntHave — correlated EXISTS, AND-ed at the top level.
+  for (const pred of state.relationExists ?? []) {
+    others.push(compileExists(state.table, pred, dialect, b))
   }
-  return userExpr || softExpr
+
+  if (!userExpr) return others.join(' AND ')
+  if (others.length === 0) return userExpr
+
+  // There's something to AND the user predicate against. Parenthesize it when
+  // it has more than one top-level clause so an inner top-level OR can't escape
+  // the AND (e.g. `(a OR b) AND deletedAt IS NULL`). A single clause needs no
+  // parens.
+  const wrapped = state.conditions.length > 1 ? `(${userExpr})` : userExpr
+  return [wrapped, ...others].join(' AND ')
 }
 
 /** The `deletedAt IS [NOT] NULL` fragment, or `''` when not scoping. */
@@ -183,10 +206,16 @@ export function compileSelect(
   } = {},
 ): CompiledQuery {
   const b = new Bindings(dialect)
-  const select = overrides.selectColumns ?? '*'
+  const baseSelect = overrides.selectColumns ?? '*'
   const table = dialect.quoteId(state.table)
 
-  let sql = `SELECT ${select} FROM ${table}`
+  // Aggregate subselects (withCount/withSum/…) join the SELECT list. They're
+  // compiled BEFORE the WHERE so their bindings land first — matching the SQL
+  // text order (SELECT list precedes WHERE).
+  const aggParts = (state.aggregates ?? []).map(req => compileAggregateSubselect(state.table, req, dialect, b))
+  const selectList = aggParts.length > 0 ? [baseSelect, ...aggParts].join(', ') : baseSelect
+
+  let sql = `SELECT ${selectList} FROM ${table}`
 
   const where = compileWhereWithExtra(state, dialect, b, overrides.extraConditions)
   if (where) sql += ` WHERE ${where}`
@@ -396,3 +425,231 @@ function asInt(n: number): number {
   }
   return n
 }
+
+// ─── Relations + aggregates (Phase 3) ──────────────────────
+//
+// Correlated EXISTS / NOT EXISTS subqueries (whereHas) and aggregate subselects
+// (withCount/Sum/Min/Max/Avg/Exists). Both reference the OUTER query's table via
+// a qualified column (`"outer"."parentColumn"`) and qualify every inner column
+// with its own table so a column name shared between outer and inner can't go
+// ambiguous. Same purity + parameterization rules as the rest of the compiler.
+
+/** Qualified `"table"."column"` — both segments validated + quoted. */
+function qcol(table: string, column: string, dialect: Dialect): string {
+  return `${dialect.quoteId(table)}.${dialect.quoteId(column)}`
+}
+
+/**
+ * Render a `WhereClause` with its column qualified by `table`. Mirrors
+ * {@link compileClause} (operator map, `IS [NOT] NULL`, `IN`/`NOT IN` expansion)
+ * but every column reference is `"table"."col"` — required inside a correlated
+ * subquery where an unqualified name could resolve to the outer table.
+ */
+function compileClauseOn(table: string, clause: WhereClause, dialect: Dialect, b: Bindings): string {
+  const col = qcol(table, clause.column, dialect)
+  const { operator, value } = clause
+
+  if (operator === 'IN' || operator === 'NOT IN') {
+    const arr = Array.isArray(value) ? value : [value]
+    if (arr.length === 0) return operator === 'IN' ? '1 = 0' : '1 = 1'
+    const list = arr.map(v => b.add(v)).join(', ')
+    return `${col} ${operator} (${list})`
+  }
+  if (value === null && (operator === '=' || operator === '!=')) {
+    return `${col} IS ${operator === '=' ? '' : 'NOT '}NULL`
+  }
+  const op = OPERATOR_SQL[operator]
+  if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
+  return `${col} ${op} ${b.add(value)}`
+}
+
+/** AND-join non-empty fragments; `'1 = 1'` when there are none (keeps a bare
+ *  `WHERE` valid for the rare all-empty case). */
+function andAll(fragments: string[]): string {
+  const parts = fragments.filter(f => f !== '')
+  return parts.length === 0 ? '1 = 1' : parts.join(' AND ')
+}
+
+/**
+ * Compile a correlated `EXISTS (…)` / `NOT EXISTS (…)` fragment for a
+ * {@link RelationExistencePredicate}. Shares the caller's {@link Bindings} so
+ * its parameters stay in positional order with the surrounding WHERE.
+ *
+ * - **Direct** (hasMany/hasOne/belongsTo/morphMany/morphOne): single subquery
+ *   joining `related.relatedColumn = outer.parentColumn`, plus `extraEquals`
+ *   (morph discriminator) on the related table and the constraint wheres.
+ * - **Through-pivot** (belongsToMany/morphToMany/morphedByMany): nested EXISTS —
+ *   pivot rows for this parent (+ `extraEquals` on the pivot) whose related row
+ *   exists (+ constraint wheres on the related table).
+ *
+ * Soft-delete scoping is intentionally NOT applied here — it's the constrain
+ * callback's responsibility (documented), matching the other adapters.
+ */
+export function compileExists(
+  outerTable: string,
+  predicate: RelationExistencePredicate,
+  dialect: Dialect,
+  b: Bindings,
+): string {
+  const keyword = predicate.exists ? 'EXISTS' : 'NOT EXISTS'
+  const related = predicate.relatedTable
+
+  if (predicate.through) {
+    const pivot = predicate.through.pivotTable
+    // Compile in SQL-TEXT order so the shared `Bindings` stays positionally
+    // aligned: the pivot's `extraEquals` appears in the text BEFORE the nested
+    // inner EXISTS, so its parameters must bind first. (Building the inner
+    // EXISTS first would swap `taggableType` and the related constraint.)
+    const pivotKeyExpr = `${qcol(pivot, predicate.through.foreignPivotKey, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`
+    const extraExprs   = extraEqualsOn(pivot, predicate.extraEquals, dialect, b)
+
+    // Inner: the related row joined to this pivot row, plus constraint wheres.
+    const innerExprs = [
+      `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(pivot, predicate.through.relatedPivotKey, dialect)}`,
+      ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+    ]
+    const innerExists = `EXISTS (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(innerExprs)})`
+
+    const pivotExprs = [pivotKeyExpr, ...extraExprs, innerExists]
+    return `${keyword} (SELECT 1 FROM ${dialect.quoteId(pivot)} WHERE ${andAll(pivotExprs)})`
+  }
+
+  // Direct: one correlated subquery on the related table.
+  const exprs = [
+    `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
+    ...extraEqualsOn(related, predicate.extraEquals, dialect, b),
+    ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+  ]
+  return `${keyword} (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(exprs)})`
+}
+
+/** Render each `extraEquals` entry as a bound `"table"."k" = ?` fragment. */
+function extraEqualsOn(
+  table: string,
+  extraEquals: Record<string, unknown> | undefined,
+  dialect: Dialect,
+  b: Bindings,
+): string[] {
+  if (!extraEquals) return []
+  return Object.entries(extraEquals).map(([k, v]) => `${qcol(table, k, dialect)} = ${b.add(v)}`)
+}
+
+/** The `fn(col)` SQL for an aggregate, with COALESCE on sum so an empty match
+ *  set yields 0 not NULL. `count`/`exists` ignore the column. */
+function aggregateFnSql(req: AggregateRequest, relatedTable: string, dialect: Dialect): string {
+  if (req.fn === 'count' || req.fn === 'exists') return 'COUNT(*)'
+  const col = qcol(relatedTable, requireColumn(req.fn, req.column), dialect)
+  switch (req.fn) {
+    case 'sum': return `COALESCE(SUM(${col}), 0)`
+    case 'min': return `MIN(${col})`
+    case 'max': return `MAX(${col})`
+    case 'avg': return `AVG(${col})`
+  }
+}
+
+/** Resolve the required column for a numeric aggregate, or throw a clear error.
+ *  The Model layer always supplies it for sum/min/max/avg; this guards the
+ *  contract boundary instead of a bare `!`. */
+function requireColumn(fn: string, column: string | undefined): string {
+  if (column === undefined) {
+    throw new Error(`[RudderJS ORM native] Aggregate "${fn}" requires a column.`)
+  }
+  return column
+}
+
+/**
+ * Compile one aggregate request into a correlated subselect expression, aliased
+ * as `(…) AS "alias"`, for injection into the main SELECT list. `exists` wraps
+ * the COUNT in `(… ) > 0`. Mirrors the orm-drizzle aggregate-subquery shape.
+ */
+export function compileAggregateSubselect(
+  outerTable: string,
+  req: AggregateRequest,
+  dialect: Dialect,
+  b: Bindings,
+): string {
+  const js = req.joinShape
+  const related = js.relatedTable
+  const fnSql = aggregateFnSql(req, related, dialect)
+  const alias = dialect.quoteId(req.alias)
+
+  let subquery: string
+
+  if (js.through) {
+    const pivot = js.through.pivotTable
+    const pivotExprs = [
+      `${qcol(pivot, js.through.foreignPivotKey, dialect)} = ${qcol(outerTable, js.parentColumn, dialect)}`,
+      ...extraEqualsOn(pivot, js.extraEquals, dialect, b),
+    ]
+    // A join to the related table is needed only when the aggregate reads a
+    // related column, filters on it, or must honor its soft-delete flag.
+    const needJoin = req.fn === 'sum' || req.fn === 'min' || req.fn === 'max' || req.fn === 'avg'
+      || req.constraintWheres.length > 0
+      || js.softDeletes === true
+
+    if (!needJoin) {
+      subquery = `(SELECT ${fnSql} FROM ${dialect.quoteId(pivot)} WHERE ${andAll(pivotExprs)})`
+    } else {
+      const joined = [
+        ...pivotExprs,
+        ...req.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+        ...softDeleteOn(related, js.softDeletes, dialect),
+      ]
+      subquery =
+        `(SELECT ${fnSql} FROM ${dialect.quoteId(pivot)} ` +
+        `INNER JOIN ${dialect.quoteId(related)} ON ${qcol(related, js.relatedColumn, dialect)} = ${qcol(pivot, js.through.relatedPivotKey, dialect)} ` +
+        `WHERE ${andAll(joined)})`
+    }
+  } else {
+    const exprs = [
+      `${qcol(related, js.relatedColumn, dialect)} = ${qcol(outerTable, js.parentColumn, dialect)}`,
+      ...extraEqualsOn(related, js.extraEquals, dialect, b),
+      ...req.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+      ...softDeleteOn(related, js.softDeletes, dialect),
+    ]
+    subquery = `(SELECT ${fnSql} FROM ${dialect.quoteId(related)} WHERE ${andAll(exprs)})`
+  }
+
+  const valueExpr = req.fn === 'exists' ? `(${subquery} > 0)` : subquery
+  return `${valueExpr} AS ${alias}`
+}
+
+/** `["related"."deletedAt" IS NULL]` when the related Model soft-deletes, else `[]`. */
+function softDeleteOn(table: string, softDeletes: boolean | undefined, dialect: Dialect): string[] {
+  return softDeletes ? [`${qcol(table, 'deletedAt', dialect)} IS NULL`] : []
+}
+
+/**
+ * Compile a single-scalar aggregate terminal — `SELECT fn(col) AS value FROM
+ * table WHERE <wheres>` — for the `_aggregate(fn, column?)` contract method
+ * (powers `instance.loadSum`/`loadMin`/etc.). `count`/`exists` ignore the
+ * column and use `COUNT(*)`; the builder coerces the scalar afterward.
+ */
+export function compileScalarAggregate(
+  state: NativeQueryState,
+  dialect: Dialect,
+  fn: AggregateRequest['fn'],
+  column: string | undefined,
+): CompiledQuery {
+  const b = new Bindings(dialect)
+  const table = dialect.quoteId(state.table)
+
+  const expr =
+    fn === 'count' || fn === 'exists' ? 'COUNT(*)'
+    : fn === 'sum'                    ? `COALESCE(SUM(${dialect.quoteId(requireColumn(fn, column))}), 0)`
+    :                                   `${fn.toUpperCase()}(${dialect.quoteId(requireColumn(fn, column))})`
+
+  let sql = `SELECT ${expr} AS ${dialect.quoteId('value')} FROM ${table}`
+  const where = compileWhere(state, dialect, b)
+  if (where) sql += ` WHERE ${where}`
+  return { sql, bindings: b.values }
+}
+
+/** @internal — exported for the query builder so it can share one `Bindings`
+ *  run across the WHERE (clauses + EXISTS fragments) and the SELECT-list
+ *  aggregate subselects. Construction is otherwise module-private. */
+export function makeBindings(dialect: Dialect): Bindings {
+  return new Bindings(dialect)
+}
+
+export type { Bindings }

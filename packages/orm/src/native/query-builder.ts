@@ -30,14 +30,21 @@ import {
   compileUpdate,
   compileIncrement,
   compileDelete,
+  compileScalarAggregate,
   type ConditionNode,
   type NativeQueryState,
 } from './compiler.js'
-import { NativeNotImplementedError } from './errors.js'
+
+/** One-time dev warning that native `with(<direct relation>)` doesn't eager-load
+ *  yet (Phase 3 limitation). Keyed per relation name so each distinct call site
+ *  warns once. No-op in production. */
+const _warnedWith = new Set<string>()
 
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _conditions: ConditionNode[] = []
   private readonly _orders:     OrderClause[]   = []
+  private readonly _relationExists: RelationExistencePredicate[] = []
+  private readonly _aggregates:     AggregateRequest[] = []
   private _limitN:  number | null = null
   private _offsetN: number | null = null
   private _softDeletes  = false
@@ -79,6 +86,8 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       offsetN:         this._offsetN,
       softDelete:      this._resolveSoftDelete(),
       deletedAtColumn: 'deletedAt',
+      relationExists:  this._relationExists,
+      aggregates:      this._aggregates,
     }
   }
 
@@ -143,24 +152,42 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   // ── read terminals ───────────────────────────────────────
 
+  /**
+   * Coerce `withExists` aggregate aliases from SQLite's integer `1`/`0` to a JS
+   * boolean. SQLite has no boolean type, so the `(COUNT(*) > 0)` subselect comes
+   * back as a number — the Model contract (and the other adapters over Postgres,
+   * which returns a real boolean) expect `true`/`false`. Only `exists` requests
+   * are touched; count/sum/min/max/avg stay numeric. No-op when no aggregates.
+   */
+  private _coerceAggregates(rows: Row[]): Row[] {
+    const existsAliases = this._aggregates.filter(a => a.fn === 'exists').map(a => a.alias)
+    if (existsAliases.length === 0) return rows
+    for (const row of rows) {
+      for (const alias of existsAliases) {
+        if (alias in row) row[alias] = Number(row[alias]) > 0
+      }
+    }
+    return rows
+  }
+
   async first(): Promise<T | null> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1 })
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
     return (rows[0] as T | undefined) ?? null
   }
 
   async find(id: number | string): Promise<T | null> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1, extraConditions: this._pkCondition(id) })
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
     return (rows[0] as T | undefined) ?? null
   }
 
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect)
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
     return rows as T[]
   }
 
@@ -188,7 +215,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       offsetN: (safePage - 1) * safePerPage,
     }
     const { sql, bindings } = compileSelect(pageState, this.dialect)
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
 
     const lastPage = Math.max(1, Math.ceil(total / safePerPage))
     return {
@@ -204,9 +231,27 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   // ── write path (Phase 2) ─────────────────────────────────
 
-  with(..._relations: string[]): this {
-    // Eager loading lands in Phase 3; tolerate the call so the contract stays
-    // satisfied and read chains that pass `with()` don't blow up early.
+  with(...relations: string[]): this {
+    // Direct (non-polymorphic) eager-load isn't expressible through the current
+    // adapter contract — the adapter receives relation NAMES only, with no join
+    // shape. Polymorphic relations are already resolved in the Model layer
+    // (polymorphic-eager-load.ts) and never reach here. So a direct `with()`
+    // here is a silent no-op that would return rows WITHOUT the relation
+    // populated. Warn once per relation in dev so it isn't mistaken for working;
+    // production stays silent. Real native direct-eager-load is a contract-gap
+    // decision reported at the end of Phase 3.
+    const isProd = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'production'
+    if (!isProd) {
+      for (const rel of relations) {
+        if (_warnedWith.has(rel)) continue
+        _warnedWith.add(rel)
+        console.warn(
+          `[RudderJS ORM native] with("${rel}") does not eager-load direct relations yet — ` +
+          `the row is returned without "${rel}" populated. Load it via the relation accessor ` +
+          `(await instance.related("${rel}").get()) for now. Polymorphic relations are unaffected.`,
+        )
+      }
+    }
     return this
   }
 
@@ -339,13 +384,42 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   // ── relations + aggregates (Phase 3) ─────────────────────
 
-  whereRelationExists(_predicate: RelationExistencePredicate): this {
-    throw new NativeNotImplementedError('whereRelationExists', 'Phase 3 (relations)')
+  /**
+   * Accumulate a relation-existence predicate (`whereHas` / `whereDoesntHave`).
+   * Compiled to a correlated `EXISTS` / `NOT EXISTS` subquery AND-merged into
+   * the WHERE at terminal time. Composes with flat wheres, soft deletes, and
+   * other relation predicates.
+   */
+  whereRelationExists(predicate: RelationExistencePredicate): this {
+    this._relationExists.push(predicate)
+    return this
   }
-  withAggregate(_requests: AggregateRequest[]): this {
-    throw new NativeNotImplementedError('withAggregate', 'Phase 3 (relations)')
+
+  /**
+   * Accumulate aggregate eager-load requests (`withCount`/`withSum`/etc.). Each
+   * becomes a correlated `(subselect) AS alias` column in the SELECT list, so
+   * the value is stamped on every returned row under `alias` (the Model
+   * hydration layer copies it onto the instance).
+   */
+  withAggregate(requests: AggregateRequest[]): this {
+    this._aggregates.push(...requests)
+    return this
   }
-  _aggregate(_fn: AggregateFn, _column?: string): Promise<unknown> {
-    throw new NativeNotImplementedError('_aggregate', 'Phase 3 (relations)')
+
+  /**
+   * Single-scalar aggregate terminal — `SELECT fn(col) FROM table WHERE …`.
+   * Powers `instance.loadSum`/`loadMin`/etc. Returns `0` for count, `0` for sum
+   * on an empty set, `null` for min/max/avg on an empty set, and a boolean for
+   * `exists`. `column` is required for sum/min/max/avg.
+   */
+  async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
+    this._assertNotSubBuilder()
+    const { sql, bindings } = compileScalarAggregate(this._state(), this.dialect, fn, column)
+    const rows = await this.executor.execute(sql, bindings)
+    const raw = (rows[0] as Row | undefined)?.['value']
+    if (fn === 'count')  return Number(raw ?? 0)
+    if (fn === 'exists') return Number(raw ?? 0) > 0
+    if (raw === null || raw === undefined) return fn === 'sum' ? 0 : null
+    return Number(raw)
   }
 }

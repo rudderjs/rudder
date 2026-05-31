@@ -28,8 +28,12 @@ export {
   compileUpdate,
   compileIncrement,
   compileDelete,
+  compileExists,
+  compileAggregateSubselect,
+  compileScalarAggregate,
+  makeBindings,
 } from './compiler.js'
-export type { CompiledQuery, NativeQueryState, ConditionNode } from './compiler.js'
+export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from './compiler.js'
 
 // Errors.
 export {
