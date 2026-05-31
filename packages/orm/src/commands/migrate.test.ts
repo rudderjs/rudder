@@ -8,6 +8,7 @@ import {
   detectORM, buildArgs, assertSafeName, findSeederFile, hasPrismaSeedConfig, runSeeder,
   buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
   writeVectorMigration, runNativeMigrate, runNativeStatus,
+  runNativeRollback, runNativeRefresh, runNativeFresh,
   buildNativeMigrationStub, writeNativeMigration,
 } from './migrate.js'
 import { NativeAdapter } from '../native/adapter.js'
@@ -485,6 +486,75 @@ describe('migrate — native command layer', () => {
     await runNativeStatus(adapter, cwd)
     console.log = () => {}
     assert.ok(lines.some(l => l.includes('Ran') && l.includes('create_users')))
+  })
+})
+
+// ── Native rollback / refresh / fresh command layer (7.5) ─
+// Same harness shape as the 7.2 block: a temp database/migrations/ of `.mjs`
+// files driven against an in-memory adapter.
+
+describe('migrate — native rollback/refresh/fresh command layer', () => {
+  const nativeIndex = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), '../native/index.js')
+  const importBase = pathToFileURL(nativeIndex).href
+
+  const migration = (table: string) =>
+    `import { Migration, Schema } from ${JSON.stringify(importBase)}\n` +
+    `export default class extends Migration {\n` +
+    `  async up()   { await Schema.create(${JSON.stringify(table)}, (t) => { t.id(); t.string('name') }) }\n` +
+    `  async down() { await Schema.dropIfExists(${JSON.stringify(table)}) }\n` +
+    `}\n`
+
+  let cwd: string
+  let driver: Driver
+  let adapter: NativeAdapter
+  const realLog = console.log
+
+  beforeEach(async () => {
+    cwd = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-native-rrf-'))
+    await fs.mkdir(nodePath.join(cwd, 'database', 'migrations'), { recursive: true })
+    await fs.writeFile(nodePath.join(cwd, 'database', 'migrations', '2026_01_01_000000_create_users.mjs'), migration('users'))
+    await fs.writeFile(nodePath.join(cwd, 'database', 'migrations', '2026_01_02_000000_create_posts.mjs'), migration('posts'))
+    driver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+    adapter = await NativeAdapter.make({ driverInstance: driver })
+    console.log = () => {}
+  })
+  afterEach(async () => {
+    console.log = realLog
+    await driver.close()
+    await fs.rm(cwd, { recursive: true, force: true })
+  })
+
+  it('runNativeRollback reverts the last batch and drops its tables', async () => {
+    await runNativeMigrate(adapter, cwd) // both in batch 1
+    const count = await runNativeRollback(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), false)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), false)
+
+    // Nothing left to roll back.
+    assert.equal(await runNativeRollback(adapter, cwd), 0)
+  })
+
+  it('runNativeRefresh rolls everything back then re-applies', async () => {
+    await runNativeMigrate(adapter, cwd)
+    const count = await runNativeRefresh(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), true)
+  })
+
+  it('runNativeFresh drops all tables then re-applies', async () => {
+    await runNativeMigrate(adapter, cwd)
+    const count = await runNativeFresh(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), true)
+  })
+
+  it('runNativeFresh works even when nothing was migrated yet', async () => {
+    const count = await runNativeFresh(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
   })
 })
 

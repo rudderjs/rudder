@@ -380,7 +380,7 @@ async function main(): Promise<void> {
   const NO_BOOT_EXACT  = new Set([
     'providers:discover', 'module:publish', 'view:sync', 'routes:sync',
     'db:generate', 'db:push',
-    'migrate', 'migrate:fresh', 'migrate:status',
+    'migrate', 'migrate:fresh', 'migrate:status', 'migrate:rollback', 'migrate:refresh',
     'add', 'remove', 'upgrade', 'key:generate', 'about', 'test',
     // `doctor` fast-path runs filesystem/env checks only. `--deep` is handled
     // inside the command's handler, which boots the app on demand (Phase 4).
