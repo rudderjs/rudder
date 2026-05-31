@@ -13,9 +13,13 @@ export { NativeAdapter, native } from './adapter.js'
 export type { NativeConfig, NativeDriverName } from './adapter.js'
 export { NativeQueryBuilder } from './query-builder.js'
 
-// Built-in database provider (node-only; loaded via rudderjs.providerSubpath).
-export { NativeDatabaseProvider, nativeDatabase } from './provider.js'
-export type { NativeDatabaseConfig, NativeDatabaseConnectionConfig } from './provider.js'
+// NOTE: the framework provider (`NativeDatabaseProvider` / `nativeDatabase`) is
+// deliberately NOT re-exported here. It `extends ServiceProvider` from
+// `@rudderjs/core` (an optional peer), so re-exporting it would make this engine
+// barrel eagerly import `@rudderjs/core` — breaking a standalone-Node consumer
+// that installs only `@rudderjs/orm` + a driver. It lives on its own subpath,
+// `@rudderjs/orm/native/provider` (loaded via `rudderjs.providerSubpath`), so
+// importing the engine never drags the framework in.
 
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
 export { SqliteDialect, validateIdentifier } from './dialect.js'
