@@ -8,6 +8,7 @@ import {
   detectORM, buildArgs, assertSafeName, findSeederFile, hasPrismaSeedConfig, runSeeder,
   buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
   writeVectorMigration, runNativeMigrate, runNativeStatus,
+  buildNativeMigrationStub, writeNativeMigration,
 } from './migrate.js'
 import { NativeAdapter } from '../native/adapter.js'
 import { BetterSqlite3Driver } from '../native/drivers/better-sqlite3.js'
@@ -484,5 +485,76 @@ describe('migrate — native command layer', () => {
     await runNativeStatus(adapter, cwd)
     console.log = () => {}
     assert.ok(lines.some(l => l.includes('Ran') && l.includes('create_users')))
+  })
+})
+
+// ── Native engine make:migration stub generator (7.3) ─────
+
+describe('migrate — buildNativeMigrationStub()', () => {
+  it('imports Migration + Schema from @rudderjs/orm/native and default-exports a Migration subclass', () => {
+    const stub = buildNativeMigrationStub('whatever')
+    assert.match(stub, /import \{ Migration, Schema \} from '@rudderjs\/orm\/native'/)
+    assert.match(stub, /export default class extends Migration \{/)
+    assert.match(stub, /async up\(\)/)
+    assert.match(stub, /async down\(\)/)
+  })
+
+  it('scaffolds Schema.create + dropIfExists for a create_<table>_table name', () => {
+    const stub = buildNativeMigrationStub('create_users_table')
+    assert.match(stub, /await Schema\.create\('users', \(t\) => \{/)
+    assert.match(stub, /t\.id\(\)/)
+    assert.match(stub, /t\.timestamps\(\)/)
+    assert.match(stub, /await Schema\.dropIfExists\('users'\)/)
+  })
+
+  it('infers the table name from the middle segment (create_blog_posts_table → blog_posts)', () => {
+    const stub = buildNativeMigrationStub('create_blog_posts_table')
+    assert.match(stub, /await Schema\.create\('blog_posts',/)
+    assert.match(stub, /await Schema\.dropIfExists\('blog_posts'\)/)
+  })
+
+  it('produces a generic empty up/down stub with TODOs for a non-create name', () => {
+    const stub = buildNativeMigrationStub('add_votes_to_posts')
+    // No table inference → no Schema.create / dropIfExists scaffolding.
+    assert.doesNotMatch(stub, /Schema\.create/)
+    assert.doesNotMatch(stub, /Schema\.dropIfExists/)
+    // ...and no reference to Schema.table (alters are a separate phase, 7.4).
+    assert.doesNotMatch(stub, /Schema\.table/)
+    assert.match(stub, /async up\(\) \{\n\s+\/\/ TODO/)
+    assert.match(stub, /async down\(\) \{\n\s+\/\/ TODO/)
+  })
+})
+
+describe('migrate — writeNativeMigration()', () => {
+  let tmpDir: string
+  const fixedNow = new Date('2026-05-11T12:34:56Z')
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-native-stub-'))
+  })
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes a timestamped stub to database/migrations/<ts>_<name>.ts', async () => {
+    const result = await writeNativeMigration('create_users_table', tmpDir, fixedNow)
+    assert.match(
+      result.filePath.replace(/\\/g, '/'),
+      /database\/migrations\/20260511123456_create_users_table\.ts$/,
+    )
+    const written = await fs.readFile(result.filePath, 'utf8')
+    assert.equal(written, result.contents)
+    assert.match(written, /await Schema\.create\('users',/)
+  })
+
+  it('creates the database/migrations directory if it does not exist', async () => {
+    // tmpDir starts with no database/ dir at all.
+    const result = await writeNativeMigration('add_index', tmpDir, fixedNow)
+    const stat = await fs.stat(nodePath.dirname(result.filePath))
+    assert.ok(stat.isDirectory())
+  })
+
+  it('rejects an unsafe migration name', async () => {
+    await assert.rejects(() => writeNativeMigration('x; rm -rf .', tmpDir, fixedNow), /Invalid migration name/)
   })
 })
