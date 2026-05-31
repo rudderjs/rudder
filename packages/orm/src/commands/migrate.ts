@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { CliError } from '@rudderjs/console'
 import { ModelRegistry } from '../index.js'
 import type { OrmAdapter } from '@rudderjs/contracts'
+import type { ModelCastInfo } from '../native/schema/schema-types.js'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -323,14 +324,71 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
 // stay tool-only for prisma/drizzle), the native branch boots on demand to get
 // the configured adapter.
 
+/** The native engine's schema:types capability (GATE 7-types) — present on the
+ *  native adapter only. Lets `migrate*` and `schema:types` regenerate the typed
+ *  `registry.d.ts` from the live schema. */
+interface SchemaTypesCapable {
+  generateSchemaTypes(cwd: string, models: ModelCastInfo[]): Promise<{ path: string; tableCount: number }>
+}
+
 /** A native adapter is duck-typed by its `schemaBuilder()` accessor — prisma/
  *  drizzle adapters don't have it. Avoids an `instanceof` across module
  *  boundaries and keeps native off the cold-boot path for non-native apps. */
-type NativeAdapterLike = OrmAdapter & import('../native/schema/migrator.js').MigratorAdapter
+export type NativeAdapterLike = OrmAdapter
+  & import('../native/schema/migrator.js').MigratorAdapter
+  & SchemaTypesCapable
 
-function nativeAdapterOrNull(): NativeAdapterLike | null {
+export function nativeAdapterOrNull(): NativeAdapterLike | null {
   const adapter = ModelRegistry.get() as (OrmAdapter & { schemaBuilder?: unknown }) | null
   return adapter && typeof adapter.schemaBuilder === 'function' ? (adapter as NativeAdapterLike) : null
+}
+
+/**
+ * If this is a native-engine app, boot it on demand (the `migrate*` /
+ * `schema:types` commands skip app boot by default to stay tool-only for
+ * prisma/drizzle) and return the registered native adapter. Returns null for
+ * prisma/drizzle apps (an adapter package is present) or when no `bootApp` is
+ * injected (e.g. unit tests calling a runner directly).
+ */
+export async function resolveNativeAdapter(
+  cwd: string,
+  bootApp?: () => Promise<void>,
+): Promise<NativeAdapterLike | null> {
+  if (detectORM(cwd) !== null) return null
+  if (!bootApp) return null
+  await bootApp()
+  return nativeAdapterOrNull()
+}
+
+/**
+ * Collect each registered model's table + declared string casts, in the
+ * {@link ModelCastInfo} shape the schema-types generator folds in (so a
+ * `boolean`/`date`/`json` cast refines the generated column type). Class-based
+ * casts (custom `CastUsing`, `vector(...)`) are skipped — the generator can't
+ * name them, so the storage type wins, which is the correct fallback. Only
+ * models imported during boot are registered; absent models simply don't
+ * contribute casts (the column still gets its storage type).
+ */
+export function collectRegisteredModelCasts(): ModelCastInfo[] {
+  const out: ModelCastInfo[] = []
+  for (const [, ModelClass] of ModelRegistry.all()) {
+    const casts: Record<string, string> = {}
+    for (const [col, def] of Object.entries(ModelClass.casts ?? {})) {
+      if (typeof def === 'string') casts[col] = def
+    }
+    out.push({ table: ModelClass.getTable(), casts })
+  }
+  return out
+}
+
+/**
+ * Regenerate `app/Models/__schema/registry.d.ts` from a booted native adapter's
+ * live schema. Shared by the `schema:types` command and the post-`migrate`
+ * auto-gen hook. Logs the written path + table count.
+ */
+export async function runNativeSchemaTypes(adapter: NativeAdapterLike, cwd: string): Promise<void> {
+  const { path, tableCount } = await adapter.generateSchemaTypes(cwd, collectRegisteredModelCasts())
+  console.log(`  Schema types written to ${path.replace(cwd + '/', '')} (${tableCount} table${tableCount === 1 ? '' : 's'}).`)
 }
 
 /** Apply pending native migrations. Returns the count applied. */
@@ -485,20 +543,9 @@ export function registerMigrateCommands(
     return orm
   }
 
-  /**
-   * If this is a native-engine app, boot it (on demand — `migrate*` skip boot
-   * by default) and return the registered native adapter. Returns null for
-   * prisma/drizzle apps so the caller falls through to the shell-out path.
-   */
-  async function resolveNativeAdapter(): Promise<NativeAdapterLike | null> {
-    // A prisma/drizzle adapter package present → not native; use the shell-out.
-    if (detectORM(cwd) !== null) return null
-    // Native needs the booted adapter; without an injected bootApp (e.g. unit
-    // tests calling this directly) we can't, so fall through.
-    if (!opts.bootApp) return null
-    await opts.bootApp()
-    return nativeAdapterOrNull()
-  }
+  // Boot the native engine on demand (migrate* skip app boot by default) and
+  // return its adapter; null for prisma/drizzle apps → shell-out path.
+  const resolveNative = (): Promise<NativeAdapterLike | null> => resolveNativeAdapter(cwd, opts.bootApp)
 
   async function exec(
     orm: ORM,
@@ -525,11 +572,12 @@ export function registerMigrateCommands(
 
   // ── migrate ───────────────────────────────────────────
   rudder.command('migrate', async () => {
-    const native = await resolveNativeAdapter()
+    const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
       const count = await runNativeMigrate(native, cwd)
       console.log(count === 0 ? '  Nothing to migrate.' : `  Migrations complete (${count} applied).`)
+      await runNativeSchemaTypes(native, cwd)
       return
     }
     const orm = requireORM()
@@ -540,11 +588,12 @@ export function registerMigrateCommands(
 
   // ── migrate:fresh ─────────────────────────────────────
   rudder.command('migrate:fresh', async () => {
-    const native = await resolveNativeAdapter()
+    const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
       const count = await runNativeFresh(native, cwd)
       console.log(`  Database reset complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
+      await runNativeSchemaTypes(native, cwd)
       return
     }
     const orm = requireORM()
@@ -555,11 +604,12 @@ export function registerMigrateCommands(
 
   // ── migrate:rollback ──────────────────────────────────
   rudder.command('migrate:rollback', async () => {
-    const native = await resolveNativeAdapter()
+    const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
       const count = await runNativeRollback(native, cwd)
       console.log(count === 0 ? '  Nothing to roll back.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
+      await runNativeSchemaTypes(native, cwd)
       return
     }
     // Prisma/Drizzle migrations are forward-only — neither tool reverses an
@@ -574,11 +624,12 @@ export function registerMigrateCommands(
 
   // ── migrate:refresh ───────────────────────────────────
   rudder.command('migrate:refresh', async () => {
-    const native = await resolveNativeAdapter()
+    const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
       const count = await runNativeRefresh(native, cwd)
       console.log(`  Refresh complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
+      await runNativeSchemaTypes(native, cwd)
       return
     }
     const orm = requireORM()
@@ -591,7 +642,7 @@ export function registerMigrateCommands(
 
   // ── migrate:status ────────────────────────────────────
   rudder.command('migrate:status', async () => {
-    const native = await resolveNativeAdapter()
+    const native = await resolveNative()
     if (native) {
       await runNativeStatus(native, cwd)
       return

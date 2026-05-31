@@ -1,0 +1,3 @@
+undefined
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command "test:client-bundle" not found
+EXIT=254

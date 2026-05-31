@@ -19,6 +19,7 @@ import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
+import type { ModelCastInfo } from './schema/schema-types.js'
 
 /** Supported native drivers. SQLite (better-sqlite3) + Postgres (porsager
  *  `postgres`); MySQL lands in 7.8. */
@@ -130,6 +131,21 @@ export class NativeAdapter implements OrmAdapter {
    */
   schemaBuilder(): SchemaBuilder {
     return new SchemaBuilder(this.executor, this.dialect)
+  }
+
+  /**
+   * Generate `app/Models/__schema/registry.d.ts` from THIS connection's live
+   * schema (GATE 7-types) — introspect every table, fold in each model's
+   * declared `casts`, and (re)write the registry. Node-only; the fs-writing
+   * orchestrator is lazily imported so the adapter's static eval graph stays
+   * import-light. Returns the written path + table count for the CLI to report.
+   */
+  async generateSchemaTypes(
+    cwd: string,
+    models: ModelCastInfo[] = [],
+  ): Promise<{ path: string; tableCount: number }> {
+    const { generateSchemaTypes } = await import('./schema/schema-types.js')
+    return generateSchemaTypes(this.executor, this.dialect, cwd, models)
   }
 
   /**

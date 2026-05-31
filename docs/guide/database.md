@@ -46,9 +46,47 @@ pnpm add better-sqlite3   # the only peer; lazy-loaded, never in a client bundle
 
 That's the whole setup — Models, relations, `whereHas`/aggregates, soft deletes, and [transactions](#transactions) all work. The `@rudderjs/orm` main entry stays client-bundle-safe; the native driver and provider live only under the `./native` subpath and are never reachable from a browser graph.
 
-::: warning No native migrations yet
-The native engine is a **query engine**, not a schema/migration tool — `rudder migrate` / `db:push` still delegate to Prisma/Drizzle only. A native app must create its tables some other way (raw `CREATE TABLE`, or keep Prisma/Drizzle installed purely for migrations). For that reason `create-rudder` still scaffolds Prisma/Drizzle by default; native is an opt-in engine until a native migration story lands. Postgres/MySQL are also not yet supported on native.
+::: tip Native migrations (SQLite)
+The native engine ships its own Laravel-style schema builder + migration runner — `Schema.create` / `Schema.table`, `make:migration`, `migrate`, `migrate:rollback` / `migrate:refresh` / `migrate:fresh`, foreign keys, and transactional batches — for **SQLite** today. Postgres/MySQL DDL are in progress; until they land, `create-rudder` still scaffolds Prisma/Drizzle by default and native remains an opt-in engine. See [Typed models from migrations](#typed-models-from-migrations-schema-types) for the headline feature: column types generated from your migrations.
 :::
+
+### Typed models from migrations (`schema:types`)
+
+The native engine's headline feature: **a model's column types are generated from the migrated schema, not hand-maintained — so they can't drift.** Write the migration once; the model's field types come for free.
+
+After a `migrate`, the engine introspects the live database and writes `app/Models/__schema/registry.d.ts`, which augments an internal `SchemaRegistry` with one entry per table. Bind it onto a model with `Model.for<'table'>()` and the model needs **zero** hand-declared column fields:
+
+```ts
+// app/Models/User.ts — you write only intent + behavior
+import { Model } from '@rudderjs/orm'
+
+export class User extends Model.for<'users'>() {
+  static override table = 'users'
+  // no id!/name!/email! — those come from the generated registry
+}
+```
+
+Everything resolves off that one binding — direct finders, query-builder chains, and writes:
+
+```ts
+const u = await User.find(1)                  // u.id / u.name / u.email all typed
+await User.where('active', true).first()       // chained results typed too
+await User.create({ name, email })             // unknown columns fail `tsc`
+```
+
+**Generation runs automatically** after a successful native `migrate`, `migrate:fresh`, `migrate:refresh`, or `migrate:rollback`. Regenerate on demand without a full migrate:
+
+```bash
+pnpm rudder schema:types     # rewrite app/Models/__schema/registry.d.ts from the live schema
+```
+
+A few rules worth knowing:
+
+- **`casts` refine the generated type.** The generator emits the column's storage type, then folds in any string `static casts` — so a `boolean`/`date`/`json` cast surfaces as `boolean`/`Date`/the cast's type rather than the raw column affinity. Class-based casts (custom `CastUsing`, `vector(...)`) keep the storage type.
+- **Nullable columns widen to `T | null`;** the primary key and `NOT NULL` columns stay non-null.
+- **Commit the generated file.** Treat `app/Models/__schema/registry.d.ts` as checked-in (like Drizzle's schema, not Prisma's gitignored client) so `tsc`/CI is green without a generate step. It's never hand-edited — `migrate` / `schema:types` overwrite it.
+- **Opt-in and additive.** Plain `extends Model` (with or without hand-declared fields) keeps working exactly as before; `.for()` is the only thing that pulls in generated columns. At runtime `.for()` returns the class unchanged.
+- **prisma/drizzle apps** already generate a typed client (`db:generate`) / infer from their TS schema, so `schema:types` is a friendly no-op there.
 
 To wire it explicitly instead of via auto-discovery:
 
