@@ -355,6 +355,36 @@ export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string): 
   }
 }
 
+/** Roll back the last batch of native migrations. Returns the count reverted. */
+export async function runNativeRollback(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const { reverted } = await new Migrator(adapter).rollback(migrations, (name) => console.log(`  ✓ rolled back ${name}`))
+  return reverted.length
+}
+
+/** Roll back every native migration, then re-run them all. Returns the count
+ *  re-applied. */
+export async function runNativeRefresh(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrator = new Migrator(adapter)
+  await migrator.rollbackAll(migrations)
+  const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`))
+  return applied.length
+}
+
+/** Drop all tables (no `down()` needed), then re-run every native migration.
+ *  Returns the count applied. */
+export async function runNativeFresh(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrator = new Migrator(adapter)
+  await migrator.dropAllTables()
+  const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`))
+  return applied.length
+}
+
 // ─── Native engine migration stub (7.3) ──────────────────
 //
 // `make:migration <name>` on a native app has no external CLI to delegate to,
@@ -510,11 +540,54 @@ export function registerMigrateCommands(
 
   // ── migrate:fresh ─────────────────────────────────────
   rudder.command('migrate:fresh', async () => {
+    const native = await resolveNativeAdapter()
+    if (native) {
+      console.log('  ORM: native')
+      const count = await runNativeFresh(native, cwd)
+      console.log(`  Database reset complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
+      return
+    }
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate:fresh')
     console.log('  Database reset complete.')
   }).description('Drop all tables and re-run all migrations')
+
+  // ── migrate:rollback ──────────────────────────────────
+  rudder.command('migrate:rollback', async () => {
+    const native = await resolveNativeAdapter()
+    if (native) {
+      console.log('  ORM: native')
+      const count = await runNativeRollback(native, cwd)
+      console.log(count === 0 ? '  Nothing to roll back.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
+      return
+    }
+    // Prisma/Drizzle migrations are forward-only — neither tool reverses an
+    // applied migration. Point at the destructive reset instead of shelling out.
+    const orm = requireORM()
+    throw new CliError(
+      `migrate:rollback is only supported on the native engine. ${orm} migrations are forward-only — ` +
+      `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
+      1,
+    )
+  }).description('Roll back the last batch of migrations (native engine only)')
+
+  // ── migrate:refresh ───────────────────────────────────
+  rudder.command('migrate:refresh', async () => {
+    const native = await resolveNativeAdapter()
+    if (native) {
+      console.log('  ORM: native')
+      const count = await runNativeRefresh(native, cwd)
+      console.log(`  Refresh complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
+      return
+    }
+    const orm = requireORM()
+    throw new CliError(
+      `migrate:refresh is only supported on the native engine. ${orm} migrations are forward-only — ` +
+      `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
+      1,
+    )
+  }).description('Roll back all migrations and re-run them (native engine only)')
 
   // ── migrate:status ────────────────────────────────────
   rudder.command('migrate:status', async () => {
