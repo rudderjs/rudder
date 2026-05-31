@@ -48,10 +48,12 @@ export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from '.
 // `Migrator` + `discoverMigrations` (7.2). SQLite only; pg/mysql in 7.7/7.8.
 export { SchemaBuilder } from './schema/schema-builder.js'
 export { Blueprint } from './schema/blueprint.js'
+export { AlterBlueprint } from './schema/alter-blueprint.js'
+export type { RenameColumn } from './schema/alter-blueprint.js'
 export { ColumnBuilder, makeColumn } from './schema/column.js'
 export type { ColumnDefinition, ColumnType } from './schema/column.js'
 export type { IndexDefinition } from './schema/blueprint.js'
-export { compileCreateTable, compileDropTable } from './schema/ddl-compiler.js'
+export { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable } from './schema/ddl-compiler.js'
 export { Migration } from './schema/migration.js'
 export { Schema, withSchema } from './schema/schema-facade.js'
 export { Migrator, discoverMigrations } from './schema/migrator.js'

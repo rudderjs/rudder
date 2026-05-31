@@ -63,6 +63,10 @@ export interface ColumnDefinition {
   /** True for `increments()` — the dialect emits the full auto-increment PK
    *  spec, so the compiler skips the other inline modifiers for this column. */
   autoIncrement: boolean
+  /** `change()` — in a `Schema.table` alter, modify the existing column rather
+   *  than add it. On SQLite this needs the table-rebuild dance (7.4b); the alter
+   *  compiler throws a clear "not yet" until then. */
+  change:        boolean
 }
 
 /**
@@ -115,6 +119,13 @@ export class ColumnBuilder {
     this.def.unsigned = true
     return this
   }
+
+  /** In a `Schema.table` alter, modify this existing column instead of adding it.
+   *  (SQLite implements this via a table rebuild — lands in 7.4b.) */
+  change(): this {
+    this.def.change = true
+    return this
+  }
 }
 
 /** Build a {@link ColumnDefinition} with modifier defaults filled in. */
@@ -134,6 +145,7 @@ export function makeColumn(
     index:         false,
     unsigned:      false,
     autoIncrement: false,
+    change:        false,
     ...extra,
   }
 }

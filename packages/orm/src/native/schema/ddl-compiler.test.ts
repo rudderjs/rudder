@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { SqliteDialect } from '../dialect.js'
-import { NativeOrmError } from '../errors.js'
+import { NativeOrmError, NativeNotImplementedError } from '../errors.js'
 import { Blueprint } from './blueprint.js'
-import { compileCreateTable, compileDropTable } from './ddl-compiler.js'
+import { AlterBlueprint } from './alter-blueprint.js'
+import { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable } from './ddl-compiler.js'
 
 const dialect = new SqliteDialect()
 
@@ -188,5 +189,91 @@ describe('DDL compiler — identifier safety', () => {
   })
   it('rejects an injection attempt in a column name', () => {
     assert.throws(() => create('t', (t) => { t.id(); t.string('a" , "b') }))
+  })
+})
+
+// ── Schema.table alters (7.4) ─────────────────────────────
+describe('DDL compiler — ALTER TABLE', () => {
+  const alter = (table: string, build: (t: AlterBlueprint) => void) => {
+    const bp = new AlterBlueprint(table)
+    build(bp)
+    return compileAlterTable(bp, dialect)
+  }
+
+  it('adds a nullable column', () => {
+    const [stmt] = alter('users', (t) => t.string('bio').nullable())
+    assert.strictEqual(stmt?.sql, 'ALTER TABLE "users" ADD COLUMN "bio" TEXT')
+  })
+
+  it('adds a NOT NULL column when given a default', () => {
+    const [stmt] = alter('users', (t) => t.integer('hits').default(0))
+    assert.strictEqual(stmt?.sql, 'ALTER TABLE "users" ADD COLUMN "hits" INTEGER NOT NULL DEFAULT 0')
+  })
+
+  it('rejects adding a NOT NULL column with no default', () => {
+    assert.throws(
+      () => alter('users', (t) => t.string('name')),
+      (e: unknown) => e instanceof NativeOrmError && e.code === 'NATIVE_DDL_ADD_NOT_NULL',
+    )
+  })
+
+  it('rejects adding a primary-key column', () => {
+    assert.throws(
+      () => alter('users', (t) => t.integer('pk').primary()),
+      (e: unknown) => e instanceof NativeOrmError && e.code === 'NATIVE_DDL_ADD_PRIMARY',
+    )
+  })
+
+  it('renames a column', () => {
+    const [stmt] = alter('users', (t) => t.renameColumn('name', 'fullName'))
+    assert.strictEqual(stmt?.sql, 'ALTER TABLE "users" RENAME COLUMN "name" TO "fullName"')
+  })
+
+  it('drops a column', () => {
+    const [stmt] = alter('users', (t) => t.dropColumn('legacy'))
+    assert.strictEqual(stmt?.sql, 'ALTER TABLE "users" DROP COLUMN "legacy"')
+  })
+
+  it('adds a column plus its unique index', () => {
+    const stmts = alter('users', (t) => t.string('email').nullable().unique())
+    assert.strictEqual(stmts[0]?.sql, 'ALTER TABLE "users" ADD COLUMN "email" TEXT')
+    assert.strictEqual(stmts[1]?.sql, 'CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email")')
+  })
+
+  it('drops an index by name', () => {
+    const [stmt] = alter('users', (t) => t.dropIndex('users_email_unique'))
+    assert.strictEqual(stmt?.sql, 'DROP INDEX "users_email_unique"')
+  })
+
+  it('orders ops: rename → add → add-index → drop-index → drop-column', () => {
+    const stmts = alter('users', (t) => {
+      t.dropColumn('old')
+      t.string('slug').nullable().index()
+      t.renameColumn('a', 'b')
+      t.dropIndex('users_stale_index')
+    })
+    const sql = stmts.map(s => s.sql)
+    assert.match(sql[0] ?? '', /RENAME COLUMN "a" TO "b"/)
+    assert.match(sql[1] ?? '', /ADD COLUMN "slug"/)
+    assert.match(sql[2] ?? '', /CREATE INDEX "users_slug_index"/)
+    assert.match(sql[3] ?? '', /DROP INDEX "users_stale_index"/)
+    assert.match(sql[4] ?? '', /DROP COLUMN "old"/)
+  })
+
+  it('change() is deferred to 7.4b (throws NativeNotImplementedError)', () => {
+    assert.throws(
+      () => alter('users', (t) => t.string('name').change()),
+      (e: unknown) => e instanceof NativeNotImplementedError,
+    )
+  })
+
+  it('rejects an injection attempt in a renamed column', () => {
+    assert.throws(() => alter('users', (t) => t.renameColumn('a', 'b"; DROP TABLE x; --')))
+  })
+})
+
+describe('DDL compiler — RENAME TABLE', () => {
+  it('compiles a table rename', () => {
+    assert.strictEqual(compileRenameTable('users', 'accounts', dialect).sql, 'ALTER TABLE "users" RENAME TO "accounts"')
   })
 })

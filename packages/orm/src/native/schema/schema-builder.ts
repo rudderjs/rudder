@@ -15,7 +15,8 @@ import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
 import { NativeNotImplementedError } from '../errors.js'
 import { Blueprint } from './blueprint.js'
-import { compileCreateTable, compileDropTable } from './ddl-compiler.js'
+import { AlterBlueprint } from './alter-blueprint.js'
+import { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable } from './ddl-compiler.js'
 
 export class SchemaBuilder {
   constructor(
@@ -30,6 +31,21 @@ export class SchemaBuilder {
     for (const stmt of compileCreateTable(blueprint, this.dialect)) {
       await this.executor.execute(stmt.sql, stmt.bindings)
     }
+  }
+
+  /** `ALTER TABLE` — add/drop/rename columns + add/drop indexes via a callback. */
+  async table(table: string, build: (table: AlterBlueprint) => void): Promise<void> {
+    const blueprint = new AlterBlueprint(table)
+    build(blueprint)
+    for (const stmt of compileAlterTable(blueprint, this.dialect)) {
+      await this.executor.execute(stmt.sql, stmt.bindings)
+    }
+  }
+
+  /** Rename a table. */
+  async rename(from: string, to: string): Promise<void> {
+    const stmt = compileRenameTable(from, to, this.dialect)
+    await this.executor.execute(stmt.sql, stmt.bindings)
   }
 
   /** `DROP TABLE`. */
