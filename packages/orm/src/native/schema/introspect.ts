@@ -26,6 +26,16 @@ export interface RawColumn {
   pk:      number
 }
 
+/** Every user table name (excludes SQLite internal `sqlite_*` + the framework's
+ *  own `migrations` bookkeeping table — neither belongs in generated model types). */
+export async function readTables(executor: Executor): Promise<string[]> {
+  const rows = await executor.execute(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'migrations' ORDER BY name`,
+    [],
+  )
+  return rows.map((r) => String(r['name']))
+}
+
 /** Read a table's columns via `PRAGMA table_info`. */
 export async function readColumns(executor: Executor, dialect: Dialect, table: string): Promise<RawColumn[]> {
   const rows = await executor.execute(`PRAGMA table_info(${dialect.quoteId(table)})`, [])
