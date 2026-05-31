@@ -53,6 +53,15 @@ export interface Dialect {
    * column-type table); pg/mysql implement the same method.
    */
   columnTypeSql(column: ColumnDefinition): string
+
+  /**
+   * Render a `boolean` column DEFAULT as a SQL literal. DDL can't bind values,
+   * so the DDL compiler asks the dialect how to spell a boolean default: SQLite
+   * and MySQL store booleans as `0`/`1` integers, but Postgres has a real
+   * `boolean` type that rejects `DEFAULT 1` and wants `DEFAULT true`/`false`.
+   * This is the only spot in `defaultLiteral` that diverges per dialect.
+   */
+  booleanLiteral(value: boolean): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -91,6 +100,12 @@ export class SqliteDialect implements Dialect {
 
   placeholder(_index: number): string {
     return '?'
+  }
+
+  // SQLite has no boolean type; booleans round-trip as 0/1 integers, so a
+  // boolean default renders as the matching integer literal.
+  booleanLiteral(value: boolean): string {
+    return value ? '1' : '0'
   }
 
   // SQLite has a small set of storage classes and no real type checking, so the
