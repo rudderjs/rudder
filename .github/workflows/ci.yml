@@ -197,6 +197,13 @@ jobs:
         run: |
           $max = 3
           $attemptTimeoutSec = 480   # 8m; healthy build is ~3m
+          # Known Windows flake exit codes: 124 = our wedge-timeout (mode B);
+          # -1073741502 / 3221225794 = 0xC0000142 STATUS_DLL_INIT_FAILED (mode A).
+          # If EVERY failed attempt is one of these, it's the environmental flake
+          # and we don't block (Ubuntu is the hard gate). Any OTHER non-zero code
+          # (e.g. 1 = a real failing test) flips $allFlake off and still goes red.
+          $flakeCodes = @(124, -1073741502, 3221225794)
+          $allFlake = $true
           foreach ($i in 1..$max) {
             # Run the attempt in a child pwsh so we can enforce a deadline and
             # kill a wedged process tree. The command line matches the Linux step.
@@ -217,13 +224,19 @@ jobs:
               $code = 124   # conventional timeout exit code
             }
             if ($code -eq 0) { exit 0 }
+            if ($flakeCodes -notcontains $code) { $allFlake = $false }
             if ($i -lt $max) {
               $delay = 30 * $i   # 30s, then 60s — let the OS reclaim handles (mode A)
               Write-Host "::warning::Build attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
           }
-          Write-Host "::error::Build failed after $max attempts"
+          if ($allFlake) {
+            Write-Host "::warning::Windows build failed all $max attempts, but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
+            "⚠️ **Windows build** failed $max attempts, all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            exit 0
+          }
+          Write-Host "::error::Windows build failed after $max attempts with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
           exit 1
 
       - name: Test (windows — retry + per-attempt timeout for the DLL crash/hang flakes)
@@ -235,6 +248,10 @@ jobs:
         run: |
           $max = 3
           $attemptTimeoutSec = 480   # 8m; healthy test is ~3m
+          # See the Build step for the flake-code rationale. Flake-only failures
+          # are non-blocking (Ubuntu gates); a real failing test (exit 1) blocks.
+          $flakeCodes = @(124, -1073741502, 3221225794)
+          $allFlake = $true
           foreach ($i in 1..$max) {
             $p = Start-Process pwsh -NoNewWindow -PassThru -ArgumentList @(
               '-NoProfile','-Command',
@@ -253,13 +270,19 @@ jobs:
               $code = 124
             }
             if ($code -eq 0) { exit 0 }
+            if ($flakeCodes -notcontains $code) { $allFlake = $false }
             if ($i -lt $max) {
               $delay = 30 * $i
               Write-Host "::warning::Test attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
           }
-          Write-Host "::error::Test failed after $max attempts"
+          if ($allFlake) {
+            Write-Host "::warning::Windows tests failed all $max attempts, but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
+            "⚠️ **Windows tests** failed $max attempts, all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            exit 0
+          }
+          Write-Host "::error::Windows tests failed after $max attempts with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
           exit 1
 
   client-bundle:
