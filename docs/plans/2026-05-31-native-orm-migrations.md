@@ -263,9 +263,17 @@ revisit diffing only if real demand appears.
 
 ## Sub-phases & checkpoints
 
-- [ ] 7.0 — This plan landed (PR)
-- [ ] 7.1 — `Blueprint` + DDL compiler (SQLite): `Schema.create` + core column
-      types/modifiers → real tables; unit-tested SQL shape + execution
+- [x] 7.0 — This plan landed (PR)
+- [x] 7.1 — `Blueprint` + DDL compiler (SQLite): `Schema.create` + core column
+      types/modifiers → real tables; unit-tested SQL shape + execution.
+      **Shipped:** `Blueprint`/`ColumnBuilder` (`src/native/schema/`), pure
+      `compileCreateTable`/`compileDropTable`, `SchemaBuilder` (executor-bound:
+      `create`/`drop`/`dropIfExists`/`hasTable`/`hasColumn`), `Dialect.columnTypeSql`
+      seam on `SqliteDialect`. 40 tests (pure SQL shape + in-memory execution
+      round-trip through the Model layer). Exported from `@rudderjs/orm/native`.
+      DDL `DEFAULT`s render as escaped literals (DDL can't bind); timestamps/soft
+      deletes use camelCase (`createdAt`/`updatedAt`/`deletedAt`) per engine
+      convention. Static `Schema` facade + `Migration` base + runner deferred to 7.2.
 - [ ] 7.2 — Migration runner + `migrations` state table + `migrate` / `migrate:status`
 - [ ] 7.3 — `make:migration` generator (name → stub, table inference)
 - [ ] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`

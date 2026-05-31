@@ -7,7 +7,8 @@
 //
 // This module is PURE — string building only. No `node:`, no driver, no I/O.
 
-import { NativeIdentifierError } from './errors.js'
+import { NativeIdentifierError, NativeOrmError } from './errors.js'
+import type { ColumnDefinition } from './schema/column.js'
 
 /**
  * A SQL dialect: the knobs that change the emitted SQL text between databases.
@@ -38,6 +39,20 @@ export interface Dialect {
   /** Whether the dialect supports `INSERT/UPDATE/DELETE ... RETURNING`.
    *  Unused on the read path; defined now so Phase 2 branches on the seam. */
   readonly supportsReturning: boolean
+
+  /**
+   * DDL: the SQL fragment that follows a quoted column name in `CREATE TABLE` —
+   * the dialect's storage type plus any type-bundled clause. For an
+   * auto-incrementing column the dialect returns the *complete* spec
+   * (SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`; pg: `bigserial PRIMARY KEY`),
+   * and the DDL compiler appends no further modifiers to it. For every other
+   * column it returns just the type keyword and the compiler appends the shared
+   * `NOT NULL` / `DEFAULT` / `PRIMARY KEY` modifiers.
+   *
+   * This is the per-dialect half of the schema builder (parent plan Part 2's
+   * column-type table); pg/mysql implement the same method.
+   */
+  columnTypeSql(column: ColumnDefinition): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -76,5 +91,43 @@ export class SqliteDialect implements Dialect {
 
   placeholder(_index: number): string {
     return '?'
+  }
+
+  // SQLite has a small set of storage classes and no real type checking, so the
+  // mapping is coarse: TEXT for anything string-ish, INTEGER for ints/booleans,
+  // REAL/NUMERIC for floats/decimals, BLOB for binary. `length`/`precision` are
+  // recorded on the column for pg/mysql but carry no meaning in SQLite types.
+  columnTypeSql(column: ColumnDefinition): string {
+    if (column.autoIncrement) {
+      // SQLite bundles the PK into the type: an INTEGER PRIMARY KEY column is the
+      // rowid alias, and AUTOINCREMENT prevents id reuse. The compiler appends
+      // nothing else to this.
+      return 'INTEGER PRIMARY KEY AUTOINCREMENT'
+    }
+    switch (column.type) {
+      case 'increments': // only reached if an increments column isn't auto (defensive)
+      case 'integer':
+      case 'bigInteger':
+      case 'boolean':
+        return 'INTEGER'
+      case 'string':
+      case 'text':
+      case 'uuid':
+      case 'json':
+      case 'dateTime':
+      case 'timestamp':
+        return 'TEXT'
+      case 'float':
+        return 'REAL'
+      case 'decimal':
+        return 'NUMERIC'
+      case 'binary':
+        return 'BLOB'
+      default: {
+        // Exhaustiveness guard — a new ColumnType must extend this switch.
+        const unreachable: never = column.type
+        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[RudderJS ORM native] No SQLite type mapping for column type ${JSON.stringify(unreachable)}.`)
+      }
+    }
   }
 }

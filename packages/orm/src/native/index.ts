@@ -43,6 +43,16 @@ export {
 } from './compiler.js'
 export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from './compiler.js'
 
+// Schema builder (DDL) — Laravel-style `Blueprint` + per-dialect DDL compiler.
+// Phase 7.1 ships `Schema.create` / `drop` against SQLite. The migration runner
+// + static `Schema` facade land in 7.2.
+export { SchemaBuilder } from './schema/schema-builder.js'
+export { Blueprint } from './schema/blueprint.js'
+export { ColumnBuilder, makeColumn } from './schema/column.js'
+export type { ColumnDefinition, ColumnType } from './schema/column.js'
+export type { IndexDefinition } from './schema/blueprint.js'
+export { compileCreateTable, compileDropTable } from './schema/ddl-compiler.js'
+
 // Errors.
 export {
   NativeOrmError,
