@@ -16,6 +16,7 @@ import { SqliteDialect } from './dialect.js'
 import type { Driver, Executor, Transaction } from './driver.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
+import { SchemaBuilder } from './schema/schema-builder.js'
 
 /** Supported native drivers. Phase 1 ships `sqlite`; `pg`/`mysql` land later. */
 export type NativeDriverName = 'sqlite'
@@ -111,6 +112,15 @@ export class NativeAdapter implements OrmAdapter {
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
     const pk = opts?.primaryKey ?? this.primaryKey
     return new NativeQueryBuilder<T>(this.executor, this.dialect, table, pk)
+  }
+
+  /**
+   * A {@link SchemaBuilder} bound to this adapter's connection — the DDL surface
+   * the migration runner drives. Runs on the same executor as queries, so a
+   * transaction-scoped adapter's schema builder participates in the transaction.
+   */
+  schemaBuilder(): SchemaBuilder {
+    return new SchemaBuilder(this.executor, this.dialect)
   }
 
   /**
