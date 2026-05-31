@@ -91,7 +91,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # 40 (was 20) to leave headroom for the Windows per-attempt-timeout retry to
+    # self-heal a hung build/test attempt (kill at 8m → back off → retry) without
+    # the job-level timeout cancelling mid-recovery. A genuine hang still fails
+    # red deterministically at ~26m (3 × 8m + backoff); healthy runs are ~6m.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -123,27 +127,39 @@ jobs:
             turbo-${{ runner.os }}-node${{ matrix.node-version }}-
 
       # ── Windows-only build-flake mitigation (layered) ────────────────────
-      # `Build & Test (windows-latest)` intermittently dies with exit
-      # -1073741502 == 0xC0000142 == STATUS_DLL_INIT_FAILED: a spawned `tsc` /
-      # `node --test` process dies during DLL init before emitting output — the
-      # classic Windows desktop-heap / DLL-init exhaustion under many process
-      # spawns. Never reproduces on Linux/macOS; always clears on re-run.
-      # Defences, weakest-to-strongest:
+      # `Build & Test (windows-latest)` has TWO distinct intermittent failure
+      # modes (don't conflate them — that's why earlier single-cause fixes kept
+      # recurring):
+      #
+      #   A. CRASH — a spawned `tsc` / `node --test` exits -1073741502 ==
+      #      0xC0000142 == STATUS_DLL_INIT_FAILED: the process dies during DLL
+      #      init under Windows desktop-heap exhaustion (many process spawns).
+      #      Fails FAST (a few minutes), non-zero exit.
+      #   B. HANG — a spawned process instead WEDGES and never returns. The job
+      #      ran to its timeout and was cancelled (~25m). (NOT the turbo daemon:
+      #      turbo 2.x doesn't use it for `turbo run`.) Root cause unconfirmed —
+      #      a wedged build/test process under the same pressure.
+      #
+      # Both never reproduce on Linux/macOS and clear on re-run. Defences:
       #   1. Add-MpPreference exclusion — Defender scanning a DLL mid-load can
       #      aggravate the init failure. Best-effort; never fails CI.
       #   2. TURBO_CONCURRENCY=1 — serialise so only one process spawns at a time
-      #      (#784). Default on Linux. Cut the rate, but not to zero.
+      #      (#784). Default on Linux. Cuts the crash rate, but not to zero.
       #   3. TURBO_LOG_ORDER=stream — keep failures attributable, not swallowed.
-      #   4. Bounded retry WITH BACKOFF (#792 + #797) — #784's serialisation still
-      #      flaked, so the Windows Build/Test steps retry up to 3x in-process.
-      #      The backoff is load-bearing: a retry replays turbo's cache and
-      #      re-spawns only the crashed package in ~ms, hitting the still-
-      #      exhausted desktop heap — so an INSTANT retry fails all 3x in ~70ms
-      #      (observed on the #794-merge run). Sleeping 30s/60s between attempts
-      #      lets the OS reclaim the crashed processes' handles first. Turbo
-      #      caches successful tasks so retries are cheap; a REAL failure is
-      #      deterministic (fails all 3 attempts) and still goes red, so the
-      #      retry can't mask a true break.
+      #   4. Bounded retry WITH BACKOFF (#792 + #798) — handles mode A: a retry
+      #      replays turbo's cache and re-spawns only the crashed package in ~ms,
+      #      hitting the still-exhausted desktop heap, so an INSTANT retry fails
+      #      3x in ~70ms; sleeping 30s/60s lets the OS reclaim handles first.
+      #   5. PER-ATTEMPT TIMEOUT — handles mode B, which #4 is structurally blind
+      #      to: the retry only inspects the exit code, so a process that never
+      #      exits just blocks the loop until the job timeout. Each attempt now
+      #      runs in a child pwsh we kill (whole tree) if it exceeds 8m (healthy
+      #      is ~3m), turning a 25m cancel into kill→backoff→retry. On timeout we
+      #      dump the live node/pnpm/turbo/tsc processes so the next hang is
+      #      finally diagnosable instead of opaque.
+      #
+      # A REAL failure (crash or hang) is deterministic — fails all 3 attempts
+      # and still goes red — so the retry can't mask a true break.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -164,52 +180,82 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
-      # Windows: serialise + stream + retry up to 3x on the DLL-init flake.
-      # pwsh doesn't throw on a native non-zero exit, so the loop reads
-      # $LASTEXITCODE and retries; turbo's cache makes each retry near-instant
-      # for the packages that already succeeded.
-      - name: Build (windows — retried for the STATUS_DLL_INIT_FAILED flake)
+      # Windows: serialise + stream + retry up to 3x, with a PER-ATTEMPT TIMEOUT.
+      # Each attempt runs the turbo command in a child pwsh we wait on with a
+      # deadline (WaitForExit) and kill (whole process tree) if it wedges — so a
+      # crash (mode A, fast non-zero exit) AND a hang (mode B, no exit) both route
+      # into the same backoff+retry. On timeout we dump the live build processes
+      # for diagnostics. A real failure fails all 3 attempts and still goes red.
+      # (Inlined per step rather than shared — self-contained plain pwsh is easier
+      # to read and reason about than an interpolated function.)
+      - name: Build (windows — retry + per-attempt timeout for the DLL crash/hang flakes)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         env:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          # Backoff between attempts is load-bearing: a retry replays turbo's
-          # cache and re-spawns only the crashed package in milliseconds, hitting
-          # the still-exhausted desktop heap — so an INSTANT retry fails 3x in
-          # ~70ms. The DLL-init / desktop-heap exhaustion clears once the crashed
-          # processes' handles are reclaimed, which needs a few seconds. Sleep
-          # 30s, then 60s, before retrying so the runner recovers.
           $max = 3
+          $attemptTimeoutSec = 480   # 8m; healthy build is ~3m
           foreach ($i in 1..$max) {
-            pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
-            if ($LASTEXITCODE -eq 0) { exit 0 }
+            # Run the attempt in a child pwsh so we can enforce a deadline and
+            # kill a wedged process tree. The command line matches the Linux step.
+            $p = Start-Process pwsh -NoNewWindow -PassThru -ArgumentList @(
+              '-NoProfile','-Command',
+              "pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+            )
+            $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
+            if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
+              $code = $p.ExitCode
+            } else {
+              Write-Host "::warning::Build attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live build processes:"
+              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+                Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
+                Format-Table -AutoSize | Out-String | Write-Host
+              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+              $p.WaitForExit(15000) | Out-Null
+              $code = 124   # conventional timeout exit code
+            }
+            if ($code -eq 0) { exit 0 }
             if ($i -lt $max) {
-              $delay = 30 * $i
-              Write-Host "::warning::Build attempt $i/$max failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED) — waiting ${delay}s for desktop-heap recovery, then retrying"
+              $delay = 30 * $i   # 30s, then 60s — let the OS reclaim handles (mode A)
+              Write-Host "::warning::Build attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
           }
           Write-Host "::error::Build failed after $max attempts"
           exit 1
 
-      - name: Test (windows — retried for the STATUS_DLL_INIT_FAILED flake)
+      - name: Test (windows — retry + per-attempt timeout for the DLL crash/hang flakes)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         env:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          # Backoff between attempts — see the Build step's note: an instant
-          # retry hits the still-exhausted desktop heap and fails immediately.
           $max = 3
+          $attemptTimeoutSec = 480   # 8m; healthy test is ~3m
           foreach ($i in 1..$max) {
-            pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
-            if ($LASTEXITCODE -eq 0) { exit 0 }
+            $p = Start-Process pwsh -NoNewWindow -PassThru -ArgumentList @(
+              '-NoProfile','-Command',
+              "pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+            )
+            $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
+            if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
+              $code = $p.ExitCode
+            } else {
+              Write-Host "::warning::Test attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live test processes:"
+              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+                Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
+                Format-Table -AutoSize | Out-String | Write-Host
+              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+              $p.WaitForExit(15000) | Out-Null
+              $code = 124
+            }
+            if ($code -eq 0) { exit 0 }
             if ($i -lt $max) {
               $delay = 30 * $i
-              Write-Host "::warning::Test attempt $i/$max failed (exit $LASTEXITCODE; likely STATUS_DLL_INIT_FAILED) — waiting ${delay}s for desktop-heap recovery, then retrying"
+              Write-Host "::warning::Test attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
           }
