@@ -1,0 +1,70 @@
+// ─── SchemaBuilder (executor-bound) ────────────────────────
+//
+// Node-capable: the runtime entry point for the schema builder. Holds an
+// {@link Executor} (a connection or a transaction scope) plus a {@link Dialect},
+// compiles a {@link Blueprint} via the pure DDL compiler, and runs the resulting
+// statements. This is what a migration's `up()` / `down()` drives — directly in
+// 7.1, and behind the static `Schema` facade once the migration runner (7.2)
+// binds a builder to the active connection.
+//
+// `hasTable` / `hasColumn` introspect the live database (SQLite catalog). They
+// branch on `dialect.name`; pg/mysql introspection lands with their DDL dialects
+// (7.7 / 7.8).
+
+import type { Executor } from '../driver.js'
+import type { Dialect } from '../dialect.js'
+import { NativeNotImplementedError } from '../errors.js'
+import { Blueprint } from './blueprint.js'
+import { compileCreateTable, compileDropTable } from './ddl-compiler.js'
+
+export class SchemaBuilder {
+  constructor(
+    private readonly executor: Executor,
+    private readonly dialect:  Dialect,
+  ) {}
+
+  /** `CREATE TABLE` (+ any indexes) from a `Blueprint` callback. */
+  async create(table: string, build: (table: Blueprint) => void): Promise<void> {
+    const blueprint = new Blueprint(table)
+    build(blueprint)
+    for (const stmt of compileCreateTable(blueprint, this.dialect)) {
+      await this.executor.execute(stmt.sql, stmt.bindings)
+    }
+  }
+
+  /** `DROP TABLE`. */
+  async drop(table: string): Promise<void> {
+    const stmt = compileDropTable(table, {}, this.dialect)
+    await this.executor.execute(stmt.sql, stmt.bindings)
+  }
+
+  /** `DROP TABLE IF EXISTS`. */
+  async dropIfExists(table: string): Promise<void> {
+    const stmt = compileDropTable(table, { ifExists: true }, this.dialect)
+    await this.executor.execute(stmt.sql, stmt.bindings)
+  }
+
+  /** Whether `table` exists (catalog lookup). */
+  async hasTable(table: string): Promise<boolean> {
+    this.requireSqlite('hasTable')
+    const rows = await this.executor.execute(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      [table],
+    )
+    return rows.length > 0
+  }
+
+  /** Whether `table` has a `column` (catalog lookup). */
+  async hasColumn(table: string, column: string): Promise<boolean> {
+    this.requireSqlite('hasColumn')
+    // PRAGMA takes an identifier, not a bound value — quote+validate the name.
+    const rows = await this.executor.execute(`PRAGMA table_info(${this.dialect.quoteId(table)})`, [])
+    return rows.some(r => r['name'] === column)
+  }
+
+  private requireSqlite(method: string): void {
+    if (this.dialect.name !== 'sqlite') {
+      throw new NativeNotImplementedError(`SchemaBuilder.${method} on the "${this.dialect.name}" dialect`, 'a later phase (7.7 / 7.8)')
+    }
+  }
+}
