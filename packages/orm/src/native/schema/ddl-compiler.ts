@@ -19,7 +19,7 @@ import type { CompiledQuery } from '../compiler.js'
 import { NativeOrmError, NativeNotImplementedError } from '../errors.js'
 import type { Blueprint, IndexDefinition } from './blueprint.js'
 import type { AlterBlueprint } from './alter-blueprint.js'
-import type { ColumnDefinition } from './column.js'
+import type { ColumnDefinition, ForeignKeyAction, ForeignKeyDefinition } from './column.js'
 
 /** Render a column's DEFAULT value as a SQL literal (DDL can't bind). Only the
  *  literal-able types are allowed; a Date/object/function default throws so the
@@ -90,6 +90,56 @@ function collectIndexes(blueprint: Blueprint): IndexDefinition[] {
   return out
 }
 
+/** Default FK constraint name, Laravel-style: `{table}_{col[_col…]}_foreign`. */
+function foreignKeyName(table: string, fk: ForeignKeyDefinition): string {
+  return fk.name ?? `${table}_${fk.columns.join('_')}_foreign`
+}
+
+/** Render a normalized referential action to its SQL keyword (`set null` →
+ *  `SET NULL`). The value is allowlisted at record time, so this is a pure map. */
+function foreignKeyActionSql(action: ForeignKeyAction): string {
+  return action.toUpperCase()
+}
+
+/** Collect every foreign key to emit: per-column `constrained()` intents plus
+ *  table-level `foreign()` ones, in declaration order (columns first). */
+function collectForeignKeys(blueprint: Blueprint): ForeignKeyDefinition[] {
+  const out: ForeignKeyDefinition[] = []
+  for (const col of blueprint.columns) {
+    if (col.foreignKey) out.push(col.foreignKey)
+  }
+  out.push(...blueprint.foreignKeys)
+  return out
+}
+
+/** Render one FK as a `CONSTRAINT … FOREIGN KEY (…) REFERENCES "tbl" (…)
+ *  [ON DELETE …] [ON UPDATE …]` table-constraint line. Every identifier is
+ *  quoted+validated via the dialect; the referenced table/columns must be set. */
+function compileForeignKey(table: string, fk: ForeignKeyDefinition, dialect: Dialect): string {
+  if (!fk.on) {
+    throw new NativeOrmError(
+      'NATIVE_DDL_FK_NO_TABLE',
+      `[RudderJS ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" is missing its ` +
+      `referenced table — call \`.on('<table>')\` or use \`.constrained()\`.`,
+    )
+  }
+  if (fk.references.length === 0) {
+    throw new NativeOrmError(
+      'NATIVE_DDL_FK_NO_REFERENCES',
+      `[RudderJS ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" references no ` +
+      `columns — call \`.references('<column>')\` (defaults to "id" via \`.constrained()\`).`,
+    )
+  }
+  const cols    = fk.columns.map(c => dialect.quoteId(c)).join(', ')
+  const refCols = fk.references.map(c => dialect.quoteId(c)).join(', ')
+  let sql =
+    `CONSTRAINT ${dialect.quoteId(foreignKeyName(table, fk))} ` +
+    `FOREIGN KEY (${cols}) REFERENCES ${dialect.quoteId(fk.on)} (${refCols})`
+  if (fk.onDelete) sql += ` ON DELETE ${foreignKeyActionSql(fk.onDelete)}`
+  if (fk.onUpdate) sql += ` ON UPDATE ${foreignKeyActionSql(fk.onUpdate)}`
+  return sql
+}
+
 /** `CREATE [UNIQUE] INDEX "name" ON "table" ("c1", …)` — shared by create + alter. */
 function compileCreateIndex(table: string, idx: IndexDefinition, dialect: Dialect): CompiledQuery {
   return {
@@ -130,6 +180,10 @@ export function compileCreateTable(blueprint: Blueprint, dialect: Dialect): Comp
   if (tablePk) {
     lines.push(`  PRIMARY KEY (${tablePk.map(c => dialect.quoteId(c)).join(', ')})`)
   }
+  // Foreign keys come after the column lines / primary key, as table constraints.
+  for (const fk of collectForeignKeys(blueprint)) {
+    lines.push(`  ${compileForeignKey(blueprint.table, fk, dialect)}`)
+  }
 
   const create: CompiledQuery = {
     sql: `CREATE TABLE ${dialect.quoteId(blueprint.table)} (\n${lines.join(',\n')}\n)`,
@@ -168,6 +222,25 @@ export function compileRenameTable(from: string, to: string, dialect: Dialect): 
 export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): CompiledQuery[] {
   const t = dialect.quoteId(blueprint.table)
   const out: CompiledQuery[] = []
+
+  // SQLite can neither ADD nor DROP a foreign key in place (no such ALTER form),
+  // so reject any FK touched on an existing table with a pointer to the
+  // supported paths. (FK-on-alter via the table-rebuild dance is a follow-up.)
+  if (dialect.name === 'sqlite') {
+    const addsFk = blueprint.foreignKeys.length > 0 || blueprint.columns.some(c => c.foreignKey)
+    if (addsFk) {
+      throw new NativeNotImplementedError(
+        `Schema.table foreign key add on "${blueprint.table}" (SQLite)`,
+        'a later phase — SQLite can\'t ADD a foreign key in place; create the table with the FK, or use a column change()/rebuild',
+      )
+    }
+    if (blueprint.droppedForeignKeys.length > 0) {
+      throw new NativeNotImplementedError(
+        `Schema.table dropForeign on "${blueprint.table}" (SQLite)`,
+        'a later phase — SQLite can\'t DROP a foreign key in place; recreate the table without the FK, or use a column change()/rebuild',
+      )
+    }
+  }
 
   // 1. Renames first, so any later op refers to the new name.
   for (const r of blueprint.renamedColumns) {

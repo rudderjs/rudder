@@ -139,3 +139,48 @@ describe('SchemaBuilder.rename — renames a table', () => {
     assert.strictEqual(await schema.hasTable('accounts'), true)
   })
 })
+
+describe('SchemaBuilder.create — foreign keys are enforced (7.6)', () => {
+  // better-sqlite3 does NOT enable FK enforcement by default, and this PR
+  // deliberately does NOT change the production driver's default (that's a
+  // behavior change with its own blast radius). Enable it explicitly on the
+  // test driver so we can observe a real FK actually being enforced.
+  beforeEach(async () => {
+    await driver.execute('PRAGMA foreign_keys = ON', [])
+  })
+
+  async function createUsersAndPosts(onDelete?: 'cascade'): Promise<void> {
+    await schema.create('users', (t) => { t.id(); t.string('name') })
+    await schema.create('posts', (t) => {
+      t.id()
+      t.string('title')
+      const fk = t.foreignId('user_id').constrained() // → users.id
+      if (onDelete) fk.onDelete(onDelete)
+    })
+  }
+
+  it('rejects inserting a child row that references a non-existent parent', async () => {
+    await createUsersAndPosts()
+    await assert.rejects(() =>
+      driver.execute('INSERT INTO posts (title, user_id) VALUES (?, ?)', ['orphan', 999]),
+    )
+  })
+
+  it('accepts a child row whose parent exists', async () => {
+    await createUsersAndPosts()
+    await driver.execute('INSERT INTO users (id, name) VALUES (?, ?)', [1, 'Alice'])
+    await driver.execute('INSERT INTO posts (title, user_id) VALUES (?, ?)', ['Hello', 1])
+    const rows = await driver.execute('SELECT * FROM posts', [])
+    assert.strictEqual(rows.length, 1)
+  })
+
+  it('onDelete(cascade) removes children when the parent is deleted', async () => {
+    await createUsersAndPosts('cascade')
+    await driver.execute('INSERT INTO users (id, name) VALUES (?, ?)', [1, 'Alice'])
+    await driver.execute('INSERT INTO posts (title, user_id) VALUES (?, ?)', ['Hello', 1])
+    await driver.execute('INSERT INTO posts (title, user_id) VALUES (?, ?)', ['World', 1])
+    await driver.execute('DELETE FROM users WHERE id = ?', [1])
+    const rows = await driver.execute('SELECT * FROM posts', [])
+    assert.strictEqual(rows.length, 0)
+  })
+})

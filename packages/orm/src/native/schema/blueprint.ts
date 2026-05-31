@@ -11,7 +11,11 @@
 // consistent with the ORM's camelCase polymorphic columns. This is a deliberate
 // divergence from Laravel's snake_case.
 
-import { ColumnBuilder, makeColumn, type ColumnDefinition } from './column.js'
+import {
+  ColumnBuilder, makeColumn,
+  normalizeForeignKeyAction,
+  type ColumnDefinition, type ForeignKeyDefinition, type ForeignKeyActionInput,
+} from './column.js'
 
 /** A table-level index intent (`Blueprint.index` / `.unique` / column modifiers). */
 export interface IndexDefinition {
@@ -20,6 +24,40 @@ export interface IndexDefinition {
   unique:  boolean
   /** Index name. Defaults to `{table}_{col[_col…]}_{index|unique}` (Laravel-style). */
   name?:   string
+}
+
+/**
+ * Fluent builder for a table-level foreign key (`Blueprint.foreign(...)`).
+ * Mutates the {@link ForeignKeyDefinition} the Blueprint recorded and returns
+ * `this` so the constraint chains Laravel-style:
+ * `t.foreign('user_id').references('id').on('users').onDelete('cascade')`.
+ */
+export class ForeignKeyBuilder {
+  constructor(private readonly fk: ForeignKeyDefinition) {}
+
+  /** Referenced column(s) on the foreign table (defaults to `id`). */
+  references(columns: string | string[]): this {
+    this.fk.references = Array.isArray(columns) ? columns : [columns]
+    return this
+  }
+  /** Referenced table. */
+  on(table: string): this {
+    this.fk.on = table
+    return this
+  }
+  onDelete(action: ForeignKeyActionInput): this {
+    this.fk.onDelete = normalizeForeignKeyAction(action)
+    return this
+  }
+  onUpdate(action: ForeignKeyActionInput): this {
+    this.fk.onUpdate = normalizeForeignKeyAction(action)
+    return this
+  }
+  /** Override the default `{table}_{col[_col…]}_foreign` constraint name. */
+  name(name: string): this {
+    this.fk.name = name
+    return this
+  }
 }
 
 /**
@@ -33,6 +71,10 @@ export class Blueprint {
    *  inline via `.primary()` live on the column instead. */
   primaryColumns: string[] | null = null
   readonly indexes: IndexDefinition[] = []
+  /** Table-level foreign keys (`Blueprint.foreign(...)`). Column-level FKs
+   *  (`constrained()`) live on their {@link ColumnDefinition} instead; the
+   *  compiler collects both. */
+  readonly foreignKeys: ForeignKeyDefinition[] = []
 
   constructor(readonly table: string) {}
 
@@ -63,7 +105,8 @@ export class Blueprint {
   bigInteger(name: string): ColumnBuilder {
     return this.add(name, 'bigInteger')
   }
-  /** Unsigned big integer intended as a foreign key (FK constraint lands in 7.6). */
+  /** Unsigned big integer intended as a foreign key. Chain `.constrained()` (or
+   *  `.references(...).on(...)`) to attach the FK constraint. */
   foreignId(name: string): ColumnBuilder {
     return this.add(name, 'bigInteger', { unsigned: true })
   }
@@ -128,5 +171,21 @@ export class Blueprint {
   /** Composite (or single) non-unique index. */
   index(columns: string | string[], name?: string): void {
     this.indexes.push({ columns: Array.isArray(columns) ? columns : [columns], unique: false, ...(name !== undefined && { name }) })
+  }
+
+  /**
+   * Composite / explicit foreign key:
+   * `t.foreign('user_id').references('id').on('users').onDelete('cascade')`.
+   * Returns a {@link ForeignKeyBuilder}; the referenced column defaults to `id`.
+   * For the single-column shorthand, prefer `t.foreignId('user_id').constrained()`.
+   */
+  foreign(columns: string | string[]): ForeignKeyBuilder {
+    const fk: ForeignKeyDefinition = {
+      columns:    Array.isArray(columns) ? columns : [columns],
+      references: ['id'],
+      on:         '',
+    }
+    this.foreignKeys.push(fk)
+    return new ForeignKeyBuilder(fk)
   }
 }
