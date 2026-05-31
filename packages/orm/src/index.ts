@@ -653,8 +653,17 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
  * file exists this is empty and everything behaves exactly as before.
  *
  * Reference a generated table shape directly with {@link SchemaColumns} (e.g.
- * `SchemaColumns<'users'>`). Binding it onto `Model` instances so a model needs
- * no hand-declared fields is the next step in the types story.
+ * `SchemaColumns<'users'>`), or — the headline DX — bind it onto a model with
+ * {@link Model.for} so the model needs ZERO hand-declared column fields:
+ *
+ * ```ts
+ * export class User extends Model.for<'users'>() {
+ *   static override table = 'users'
+ *   // no id!/name!/email! — those come from the generated registry
+ * }
+ *
+ * const u = await User.find(1)   // u.name, u.email, … fully typed
+ * ```
  */
 // Deliberately empty — this is the augmentation TARGET. The generated
 // `app/Models/__schema/registry.d.ts` fills it in via `declare module`, exactly
@@ -1020,6 +1029,50 @@ export abstract class Model {
     // snapshot on first access — typically never, for read-and-discard rows.
     instance.#originalRaw = record as Record<string, unknown>
     return instance
+  }
+
+  /**
+   * Bind a generated table's column types onto a model (GATE 7-types). Extend the
+   * returned base instead of `Model` directly and the model's **instances carry
+   * the table's columns** — no hand-declared fields, no drift against the
+   * migration:
+   *
+   * ```ts
+   * export class User extends Model.for<'users'>() {
+   *   static override table = 'users'
+   * }
+   *
+   * const u = await User.find(1)               // u.id / u.name / u.email typed
+   * await User.where('active', true).first()   // chains are typed too
+   * await User.create({ name, email })         // unknown columns fail tsc
+   * ```
+   *
+   * The column shape comes from {@link SchemaRegistry}, which the generated
+   * `app/Models/__schema/registry.d.ts` augments (run `rudder schema:types`, or
+   * let `migrate` do it). `static casts` refine the storage type — the generator
+   * already folds them in, so a `boolean`/`date`/`json` cast surfaces as
+   * `boolean`/`Date`/the cast's type rather than the raw column affinity.
+   *
+   * Purely additive and type-level: at runtime this returns the class unchanged,
+   * so there is no behavioral difference from `extends Model`. Models that don't
+   * call `.for()` (and the loose `extends Model` form) keep working exactly as
+   * before — hand-declared fields are untouched.
+   *
+   * Resolves migrations-plan open-decision #1 in favour of the generic-style
+   * binding (over `static table` inference) — it covers static finders AND
+   * query-builder chains in one shape without touching the existing signatures.
+   */
+  static for<TName extends string>(
+    this: typeof Model,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): (abstract new (...args: any[]) => Model & SchemaColumns<TName>) & typeof Model {
+    // `any[]` (not `unknown[]`) in the construct signature is load-bearing: TS
+    // requires a subclass's base constructor return type to match `Model`'s, and
+    // only `any[]` args make the synthesized abstract ctor compatible (an
+    // `unknown[]` ctor trips TS2510 "Base constructors must all have the same
+    // return type"). The cast is contained to this one line.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this as unknown as (abstract new (...args: any[]) => Model & SchemaColumns<TName>) & typeof Model
   }
 
   /** @internal — wrap a QueryBuilder so its read methods return Model instances. */

@@ -206,6 +206,14 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerMigrateCommands'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
       register(rudder, { bootApp })
     },
+    // @rudderjs/orm → schema:types (GATE 7-types). Boots the native engine on
+    // demand to introspect its live schema (skips the standard app boot, like
+    // migrate*).
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/schema-types')
+      const register = mod['registerSchemaTypesCommand'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
+      register(rudder, { bootApp })
+    },
     // @rudderjs/orm → model:prune
     async () => {
       const mod = await tryImport('@rudderjs/orm', 'commands/prune')
