@@ -283,18 +283,23 @@ revisit diffing only if real demand appears.
       shell-out path unchanged. `migrations` table = `id`/`migration`/`batch`. 19 new
       tests (Migrator core, Schema-facade binding, file discovery, CLI command layer).
       Facade methods are `async` so an unbound call rejects (not sync-throws).
-- [ ] 7.3 — `make:migration` generator (name → stub, table inference)
+- [x] 7.3 — `make:migration` generator (name → stub, table inference) — shipped #811.
 - [ ] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`
       → `Model<TName>` binding green end-to-end. *If this doesn't land cleanly,
       stop and reconsider — without it the feature is a regression.*
-- [~] 7.4 — `Schema.table` (alter): add/change/drop/rename incl. the SQLite rebuild.
-      **Shipped (native-ALTER subset):** `Schema.table` (add column / dropColumn /
+- [x] 7.4 — `Schema.table` (alter): add/change/drop/rename incl. the SQLite rebuild.
+      **7.4 (native-ALTER subset):** `Schema.table` (add column / dropColumn /
       renameColumn / add index / dropIndex) + `Schema.rename` via `AlterBlueprint`
       + `compileAlterTable`/`compileRenameTable`. SQLite ADD-COLUMN limits enforced
-      (no ADD primary-key; NOT NULL needs a default). 18 tests (pure shape +
-      live-table exec). **DEFERRED → 7.4b:** `.change()` (column-type change via the
-      SQLite 12-step table-rebuild) — surfaced on `ColumnBuilder.change()`, throws
-      `NativeNotImplementedError` until the rebuild lands.
+      (no ADD primary-key; NOT NULL needs a default). 18 tests (pure shape + live exec).
+- [x] 7.4b — `Schema.table` column `change()` via the SQLite table-rebuild.
+      **Shipped:** `rebuildTable` (introspect → shadow table → copy → drop → rename
+      → recreate indexes) wired into `SchemaBuilder.table()` when a `.change()` is
+      present; introspection helpers `readColumns`/`readIndexSql`/`isAutoincrement`
+      (`introspect.ts`); `compileColumnSpec` exported. Preserves data, PK (incl.
+      INTEGER PK AUTOINCREMENT), and indexes. v1: `change()` must be the only op in
+      the call; can't change a PK column. 5 tests. The pure `compileAlterTable` still
+      rejects `change()` (the rebuild needs the executor) — by design.
 - [ ] 7.5 — `rollback` / `refresh` / `fresh` + batch tracking; transactional batches
 - [ ] 7.6 — Indexes + foreign keys (`constrained()`, `onDelete`, drop variants)
 - [ ] 7.7 — Postgres dialect DDL

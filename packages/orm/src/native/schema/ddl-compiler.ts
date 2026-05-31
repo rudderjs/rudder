@@ -67,6 +67,13 @@ function compileColumn(column: ColumnDefinition, dialect: Dialect, inlinePrimary
   return parts.join(' ')
 }
 
+/** A column's `"name" TYPE [NOT NULL] [DEFAULT …]` spec, no inline primary key.
+ *  Exported for the table-rebuild path (7.4b), which assembles a shadow
+ *  `CREATE TABLE` from a mix of changed columns and preserved (introspected) ones. */
+export function compileColumnSpec(column: ColumnDefinition, dialect: Dialect): string {
+  return compileColumn(column, dialect, false)
+}
+
 /** Default index name, Laravel-style: `{table}_{col[_col…]}_{index|unique}`. */
 function indexName(table: string, idx: IndexDefinition): string {
   return idx.name ?? `${table}_${idx.columns.join('_')}_${idx.unique ? 'unique' : 'index'}`

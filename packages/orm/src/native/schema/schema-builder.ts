@@ -17,6 +17,7 @@ import { NativeNotImplementedError } from '../errors.js'
 import { Blueprint } from './blueprint.js'
 import { AlterBlueprint } from './alter-blueprint.js'
 import { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable } from './ddl-compiler.js'
+import { rebuildTable } from './rebuild.js'
 
 export class SchemaBuilder {
   constructor(
@@ -33,10 +34,18 @@ export class SchemaBuilder {
     }
   }
 
-  /** `ALTER TABLE` — add/drop/rename columns + add/drop indexes via a callback. */
+  /** `ALTER TABLE` — add/drop/rename columns + add/drop indexes via a callback.
+   *  A `.change()` (column type/constraint change) can't be done in place on
+   *  SQLite, so it routes through the table-rebuild dance (7.4b) instead of a
+   *  plain `ALTER`. */
   async table(table: string, build: (table: AlterBlueprint) => void): Promise<void> {
     const blueprint = new AlterBlueprint(table)
     build(blueprint)
+    if (blueprint.columns.some(c => c.change)) {
+      this.requireSqlite('Schema.table column change()')
+      await rebuildTable(this.executor, this.dialect, blueprint)
+      return
+    }
     for (const stmt of compileAlterTable(blueprint, this.dialect)) {
       await this.executor.execute(stmt.sql, stmt.bindings)
     }

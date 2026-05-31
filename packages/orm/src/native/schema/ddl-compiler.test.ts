@@ -260,7 +260,10 @@ describe('DDL compiler — ALTER TABLE', () => {
     assert.match(sql[4] ?? '', /DROP COLUMN "old"/)
   })
 
-  it('change() is deferred to 7.4b (throws NativeNotImplementedError)', () => {
+  it('the pure compiler rejects change() — the rebuild lives in SchemaBuilder.table()', () => {
+    // compileAlterTable is the in-place ALTER path; a column type change needs
+    // live introspection + the table-rebuild dance, which only the (executor-
+    // bound) SchemaBuilder.table() can do. The pure compiler therefore throws.
     assert.throws(
       () => alter('users', (t) => t.string('name').change()),
       (e: unknown) => e instanceof NativeNotImplementedError,
