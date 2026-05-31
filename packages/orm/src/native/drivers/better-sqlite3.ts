@@ -90,14 +90,15 @@ export class BetterSqlite3Driver implements Driver {
   }
 
   async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+    const params = normalizeBindings(bindings)
     const stmt = this.db.prepare(sql)
     // `.all()` is only valid on statements that return rows. A SELECT — or any
     // write with a `RETURNING` clause — is a reader; a plain INSERT/UPDATE/DELETE
     // is not and routes through `.run()`, yielding no rows.
     if (stmt.reader) {
-      return stmt.all(...bindings) as Row[]
+      return stmt.all(...params) as Row[]
     }
-    stmt.run(...bindings)
+    stmt.run(...params)
     return []
   }
 
@@ -153,6 +154,31 @@ export class BetterSqlite3Driver implements Driver {
   async close(): Promise<void> {
     this.db.close()
   }
+}
+
+/**
+ * better-sqlite3 binds only numbers, strings, bigints, buffers, and `null` —
+ * a JS `boolean` throws `TypeError: SQLite3 can only bind …`. SQLite has no
+ * boolean type, so map `true`/`false` to the integers `1`/`0`; this round-trips
+ * with the ORM's `boolean` cast (which reads `0`/`1` back). The mapping covers
+ * raw boolean values that bypass a column cast — an untyped `where('flag', true)`
+ * predicate, or a `query().create({ flag: true })` on a column without a
+ * boolean cast. Other unbindable values (`Date`, plain objects) are passed
+ * through so better-sqlite3 still rejects them with its own clear error.
+ *
+ * Returns the original array reference when nothing needed coercion, so the
+ * common boolean-free path allocates nothing.
+ *
+ * Any future SQLite driver (libsql, op-sqlite for React Native) needs the same
+ * mapping — share this helper rather than re-deriving it per driver.
+ */
+function normalizeBindings(bindings: readonly unknown[]): unknown[] {
+  let hasBoolean = false
+  for (const v of bindings) {
+    if (typeof v === 'boolean') { hasBoolean = true; break }
+  }
+  if (!hasBoolean) return bindings as unknown[]
+  return bindings.map(v => (typeof v === 'boolean' ? (v ? 1 : 0) : v))
 }
 
 /** Strip a `file:` scheme and default to an in-memory database. */
