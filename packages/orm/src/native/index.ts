@@ -13,6 +13,10 @@ export { NativeAdapter, native } from './adapter.js'
 export type { NativeConfig, NativeDriverName } from './adapter.js'
 export { NativeQueryBuilder } from './query-builder.js'
 
+// Built-in database provider (node-only; loaded via rudderjs.providerSubpath).
+export { NativeDatabaseProvider, nativeDatabase } from './provider.js'
+export type { NativeDatabaseConfig, NativeDatabaseConnectionConfig } from './provider.js'
+
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
 export { SqliteDialect, validateIdentifier } from './dialect.js'
 export type { Dialect } from './dialect.js'

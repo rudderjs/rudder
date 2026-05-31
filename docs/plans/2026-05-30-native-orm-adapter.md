@@ -120,11 +120,11 @@ contract is proven.
 - [ ] Phase 2 — SQLite **write** path (create/update/delete/increment/bulk/soft-delete)
 - [x] Phase 3 — Relations (whereHas/whereDoesntHave, withAggregate, eager `with()`) — PR #800
 - [x] Phase 4 — **Transactions** (contract addition — `OrmAdapter.transaction?`, native impl, SAVEPOINT nesting, ALS scoping)
-- [ ] **GATE B** — "native query adapter, SQLite, full Model parity" — ship or stop?
-- [ ] Phase 5 — Postgres dialect (`pg`)
-- [ ] Phase 6 — MySQL dialect (`mysql2`) + libsql/Turso
-- [ ] Phase 7 — **Schema builder + migrations** (separate plan; own gate)
-- [ ] Phase 8 — Provider wiring, config, scaffolder, docs, release
+- [x] **GATE B** — "native query adapter, SQLite, full Model parity" — **SHIP SQLite as opt-in default, STOP.** No pg/mysql, no migration engine. Scaffolder default-flip deferred (needs a schema story).
+- [ ] Phase 5 — Postgres dialect (`pg`) — **stopped at GATE B (not pursuing)**
+- [ ] Phase 6 — MySQL dialect (`mysql2`) + libsql/Turso — **stopped at GATE B**
+- [ ] Phase 7 — **Schema builder + migrations** (separate plan; own gate) — **stopped at GATE B**
+- [x] Phase 8 (scoped) — `NativeDatabaseProvider` (config-gated on `engine: 'native'`), `nativeDatabase()`, `@rudderjs/orm/doctor` check, docs, changeset. **create-rudder default NOT flipped** (deferred — no native schema story).
 - [ ] Phase 9 — **Runtime portability**: React Native driver (`op-sqlite`/`expo-sqlite`)
       + standalone-Node docs (browser/WASM optional). Can start any time after the
       `Driver` seam lands in Phase 1.

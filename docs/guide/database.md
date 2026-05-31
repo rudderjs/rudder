@@ -1,28 +1,62 @@
 # Database
 
-Almost every modern web application talks to a database. Rudder makes that interaction painless through `@rudderjs/orm` — a unified `Model` base class that works with either Prisma or Drizzle as the adapter. The same model code runs against either; the adapter handles all SQL and connection pooling.
+Almost every modern web application talks to a database. Rudder makes that interaction painless through `@rudderjs/orm` — a unified `Model` base class that works with Prisma, Drizzle, or the **built-in native engine** as the adapter. The same model code runs against any of them; the adapter handles all SQL and connection pooling.
 
 ```
 Model (from @rudderjs/orm)
   └── ModelRegistry.getAdapter()
         └── OrmAdapter (interface)
+              ├── NativeAdapter   (@rudderjs/orm/native — built in)
               ├── PrismaAdapter   (@rudderjs/orm-prisma)
               └── DrizzleAdapter  (@rudderjs/orm-drizzle)
 ```
 
 ## Choosing an adapter
 
-Both adapters are first-party and feature-equivalent at the model layer. The choice comes down to schema preference.
+All three are first-party and feature-equivalent at the model layer. The choice comes down to schema preference and whether you want a zero-dependency query engine.
 
-| | Prisma | Drizzle |
-|---|---|---|
-| Schema | `prisma/schema/*.prisma` (SDL) | TypeScript schema files |
-| Migrations | `prisma migrate dev/deploy` | `drizzle-kit generate/migrate` |
-| Type safety | Generated client | Schema-inferred |
-| Relations via `Model.with()` | Supported | No-op (use raw Drizzle) |
-| Drivers | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
+| | Native (built-in) | Prisma | Drizzle |
+|---|---|---|---|
+| Install | `@rudderjs/orm` + `better-sqlite3` | `@rudderjs/orm-prisma` | `@rudderjs/orm-drizzle` |
+| Schema / migrations | **Bring your own** (no native migrations yet) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
+| Drivers | SQLite | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
+| `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
+| Relations via `Model.with()` | Polymorphic only | Supported | No-op (use raw Drizzle) |
+| Transactions (`transaction()`) | Supported | — | — |
 
-For setup details see [Prisma Adapter](/guide/database/prisma) or [Drizzle Adapter](/guide/database/drizzle). The rest of this guide is adapter-neutral.
+For setup details see [Native Engine](#native-engine-built-in) below, [Prisma Adapter](/guide/database/prisma), or [Drizzle Adapter](/guide/database/drizzle). The rest of this guide is adapter-neutral.
+
+## Native engine (built-in)
+
+The native engine ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — a first-party SQL query engine that talks directly to `better-sqlite3`, no external ORM. It's **opt-in**: a connection selects it with `engine: 'native'`, and the built-in `NativeDatabaseProvider` (auto-discovered) wires it up. Without that flag it stays dormant, so installing it alongside Prisma/Drizzle is harmless.
+
+```ts
+// config/database.ts
+export default {
+  default: 'sqlite',
+  connections: {
+    sqlite: { engine: 'native', driver: 'sqlite', url: Env.get('DATABASE_URL', 'file:./dev.db') },
+  },
+}
+```
+
+```bash
+pnpm add better-sqlite3   # the only peer; lazy-loaded, never in a client bundle
+```
+
+That's the whole setup — Models, relations, `whereHas`/aggregates, soft deletes, and [transactions](#transactions) all work. The `@rudderjs/orm` main entry stays client-bundle-safe; the native driver and provider live only under the `./native` subpath and are never reachable from a browser graph.
+
+::: warning No native migrations yet
+The native engine is a **query engine**, not a schema/migration tool — `rudder migrate` / `db:push` still delegate to Prisma/Drizzle only. A native app must create its tables some other way (raw `CREATE TABLE`, or keep Prisma/Drizzle installed purely for migrations). For that reason `create-rudder` still scaffolds Prisma/Drizzle by default; native is an opt-in engine until a native migration story lands. Postgres/MySQL are also not yet supported on native.
+:::
+
+To wire it explicitly instead of via auto-discovery:
+
+```ts
+// bootstrap/providers.ts
+import { nativeDatabase } from '@rudderjs/orm/native'
+export default [ ...(await defaultProviders()), nativeDatabase(), AppServiceProvider ]
+```
 
 ## Quick start
 
@@ -131,6 +165,23 @@ rudder.command('db:seed', async () => {
 ```
 
 Run with `pnpm rudder db:seed`.
+
+## Transactions
+
+Wrap a unit of work in a database transaction with `transaction()` (or the `Model.transaction()` alias). Every Model query issued inside the callback — across any model — runs on the transaction and commits together; if the callback throws, the whole unit rolls back and the error re-throws.
+
+```ts
+import { transaction } from '@rudderjs/orm'
+
+await transaction(async () => {
+  const user    = await User.create({ name: 'Ada', email: 'ada@example.com' })
+  await Account.create({ userId: user.id, balance: 0 })
+})  // both rows commit, or neither does
+```
+
+Queries join the transaction automatically — no handle to thread through. Nested `transaction()` calls map to **savepoints**: an inner failure rolls back only its own work while the outer transaction continues.
+
+> Transactions are implemented on the **native engine** today. Against the Prisma/Drizzle adapters, `transaction()` throws a clear "not supported" error (their wiring is a follow-up). The capability is an optional part of the `OrmAdapter` contract.
 
 ## Pitfalls
 
