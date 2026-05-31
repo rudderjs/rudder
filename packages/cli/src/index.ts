@@ -486,7 +486,24 @@ async function main(): Promise<void> {
     })
   }
 
-  program.action(() => program.help())
+  // Bare `rudder` (no args) → show help and exit 0. A help request isn't an error.
+  // This is handled explicitly rather than via a catch-all `program.action(...)`,
+  // because a default program action would ALSO swallow unknown commands (commander
+  // routes an unrecognized command into the program's own action handler), making a
+  // typo'd command exit 0 — the long-standing bug this replaces.
+  if (process.argv.slice(2).length === 0) program.help()
+
+  // Unknown command (e.g. `rudder this:does:not:exist`) → friendly error + non-zero
+  // exit, matching Laravel Artisan / npm / cargo. With no default program action set,
+  // commander emits `command:*` for an unrecognized command; we override its terse
+  // default message and set a non-zero exit code. `parseAsync()` resolves normally
+  // (no `exitOverride`), so the process exits with this code once the loop drains.
+  program.on('command:*', (operands: string[]) => {
+    console.error(`\x1b[31mUnknown command: ${operands[0]}\x1b[0m`)
+    console.error(`Run \x1b[1mrudder --help\x1b[0m for a list of available commands.`)
+    process.exitCode = 1
+  })
+
   await program.parseAsync()
 }
 
