@@ -118,8 +118,8 @@ contract is proven.
 - [ ] Phase 1 — Subpath scaffold + SQLite **read** path (conformance harness green)
 - [ ] **GATE A** — contract sufficiency review (does the spike reveal missing contract surface?)
 - [ ] Phase 2 — SQLite **write** path (create/update/delete/increment/bulk/soft-delete)
-- [ ] Phase 3 — Relations (whereHas/whereDoesntHave, withAggregate, eager `with()`)
-- [ ] Phase 4 — **Transactions** (contract addition — cross-cutting, all adapters)
+- [x] Phase 3 — Relations (whereHas/whereDoesntHave, withAggregate, eager `with()`) — PR #800
+- [x] Phase 4 — **Transactions** (contract addition — `OrmAdapter.transaction?`, native impl, SAVEPOINT nesting, ALS scoping)
 - [ ] **GATE B** — "native query adapter, SQLite, full Model parity" — ship or stop?
 - [ ] Phase 5 — Postgres dialect (`pg`)
 - [ ] Phase 6 — MySQL dialect (`mysql2`) + libsql/Turso
@@ -242,12 +242,29 @@ contract changes before writing the write path.
 
 ---
 
-## Phase 4 — Transactions (contract addition)
-- Add `transaction<T>(fn)` (+ savepoints for nesting) to the `OrmAdapter`/ORM
-  surface — **absent from all three adapters today**, so design it here once.
-- Implement on native (SQLite `BEGIN`/`COMMIT`/`ROLLBACK` + `SAVEPOINT`).
-- Provide no-op/delegating impls for prisma/drizzle so the surface is uniform
-  (or scope this to native-only behind a capability flag — decide at GATE A).
+## Phase 4 — Transactions (contract addition) ✅
+
+**Done.** Decisions taken (resolving GATE A open question #3):
+
+- Added **`transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>)`** to the shared
+  `OrmAdapter` contract — **optional**, which *is* the capability flag. Adapters
+  without transaction support omit it; the ORM throws a clear error against one.
+- **Public API:** `transaction(fn)` exported from `@rudderjs/orm` + the
+  `Model.transaction(fn)` alias. The scoped adapter is threaded through
+  `AsyncLocalStorage` so every `Model.query()` inside `fn` (any model)
+  transparently joins the transaction — no call-site changes, no handle passing.
+  `node:async_hooks` is lazy-imported only from `transaction()` (client-bundle
+  gate stays green by construction).
+- **Native impl:** SQLite `BEGIN`/`COMMIT`/`ROLLBACK`; **nesting → SAVEPOINT**
+  via a depth counter on the `better-sqlite3` driver. A new `Transaction` type on
+  the `Driver` seam (an `Executor` that can open a nested savepoint).
+- **prisma/drizzle delegating impls: deferred** to a follow-up. The optional
+  contract method keeps their surface valid; drizzle's better-sqlite3
+  transactions require a *synchronous* callback (the rabbit hole the native
+  driver sidesteps with savepoints over an async `fn`), so it needs its own design.
+- Conformance: `native-transactions.test.ts` covers commit, rollback+re-throw,
+  cross-model scoping, ALS teardown, nested savepoint partial rollback, uncaught
+  inner → full outer rollback, and the unsupported-adapter error.
 
 ### GATE B — ship-or-stop
 At this point native is a complete, conformance-passing **SQLite** query adapter

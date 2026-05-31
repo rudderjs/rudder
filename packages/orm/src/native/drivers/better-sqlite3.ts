@@ -8,7 +8,7 @@
 // better-sqlite3 is synchronous; we wrap its calls in resolved promises to
 // satisfy the async {@link Driver} contract shared with RN/WASM drivers.
 
-import type { Driver, Executor, Row } from '../driver.js'
+import type { Driver, Transaction, Row } from '../driver.js'
 import { NativeDriverError } from '../errors.js'
 
 // Minimal structural types for the slice of better-sqlite3 we use — avoids a
@@ -44,6 +44,15 @@ export interface BetterSqlite3DriverConfig {
  * {@link BetterSqlite3Driver.open} factory, which performs the lazy import.
  */
 export class BetterSqlite3Driver implements Driver {
+  /**
+   * Current transaction nesting depth. 0 = no open transaction; 1 = inside a
+   * top-level `BEGIN`; ≥2 = inside N−1 nested SAVEPOINTs. Drives the BEGIN-vs-
+   * SAVEPOINT choice in {@link transaction}. Single field is safe because
+   * better-sqlite3 is single-connection and synchronous — there is exactly one
+   * open transaction stack per driver instance.
+   */
+  private depth = 0
+
   private constructor(private readonly db: Bs3Database) {}
 
   /**
@@ -93,28 +102,51 @@ export class BetterSqlite3Driver implements Driver {
   }
 
   /**
-   * BEGIN/COMMIT/ROLLBACK around `fn`. better-sqlite3 is synchronous and
-   * single-connection, so the transaction-scoped {@link Executor} is the driver
-   * itself — every `execute` between BEGIN and COMMIT runs on the one open
-   * transaction. (We don't use better-sqlite3's own `db.transaction()` wrapper
-   * because it only accepts a *synchronous* function, and our `fn` is async.)
+   * Run `fn` inside a transaction. The top-level call wraps it in
+   * BEGIN/COMMIT/ROLLBACK; a nested call (depth ≥ 1) wraps it in a uniquely
+   * named SAVEPOINT so an inner failure rolls back only its own work, leaving
+   * the outer transaction intact. The transaction-scoped {@link Transaction} is
+   * the driver itself — better-sqlite3 is synchronous and single-connection, so
+   * every `execute` between the markers runs on the one open transaction.
    *
-   * Phase 2 keeps this single-level; Phase 4 adds SAVEPOINT-based nesting.
+   * (We don't use better-sqlite3's own `db.transaction()` wrapper because it
+   * only accepts a *synchronous* function, and our `fn` is async — savepoints
+   * give us the same nesting semantics over an async callback.)
+   *
+   * **Single-connection caveat:** because there is one connection, two
+   * *concurrently* in-flight top-level `transaction()` calls would collide on
+   * the same connection. SQLite serializes writers anyway; the native engine
+   * assumes transactions are not run concurrently against one SQLite handle.
+   * Pooled drivers (pg/mysql, Phase 5/6) pin a dedicated client per transaction.
    */
-  async transaction<T>(fn: (tx: Executor) => Promise<T>): Promise<T> {
-    this.db.exec('BEGIN')
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    const top = this.depth === 0
+    const savepoint = top ? null : `rudder_sp_${this.depth}`
+    if (top) this.db.exec('BEGIN')
+    else this.db.exec(`SAVEPOINT ${savepoint}`)
+    this.depth++
     try {
       const result = await fn(this)
-      this.db.exec('COMMIT')
+      if (top) this.db.exec('COMMIT')
+      else this.db.exec(`RELEASE ${savepoint}`)
       return result
     } catch (err) {
       try {
-        this.db.exec('ROLLBACK')
+        if (top) {
+          this.db.exec('ROLLBACK')
+        } else {
+          // Roll back to the savepoint, then release it so the saved name is
+          // discarded — otherwise it lingers on the outer transaction's stack.
+          this.db.exec(`ROLLBACK TO ${savepoint}`)
+          this.db.exec(`RELEASE ${savepoint}`)
+        }
       } catch {
         // A failed ROLLBACK (e.g. the transaction already aborted) must not mask
         // the original error — swallow it and re-throw the cause below.
       }
       throw err
+    } finally {
+      this.depth--
     }
   }
 

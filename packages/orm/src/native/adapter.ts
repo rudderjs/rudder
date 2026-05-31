@@ -13,7 +13,7 @@
 import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
-import type { Driver } from './driver.js'
+import type { Driver, Executor, Transaction } from './driver.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 
@@ -64,9 +64,16 @@ function cacheNativeClient(entry: NativeClientCacheEntry): void {
 
 export class NativeAdapter implements OrmAdapter {
   private constructor(
-    private readonly driver:     Driver,
+    /** Where queries run — the top-level connection, or a transaction scope. */
+    private readonly executor:   Executor,
+    /** Where a (nested) transaction is opened. Top-level: the {@link Driver};
+     *  scoped: the active {@link Transaction} (so nesting → SAVEPOINT). */
+    private readonly scope:      Transaction,
     private readonly dialect:    Dialect,
     private readonly primaryKey: string,
+    /** The owned connection — present only on the top-level adapter, `null` on
+     *  a transaction-scoped one (it must not close the shared connection). */
+    private readonly driver:     Driver | null,
   ) {}
 
   /** Build a `NativeAdapter`, opening the configured driver (lazy import). */
@@ -75,7 +82,7 @@ export class NativeAdapter implements OrmAdapter {
 
     // Caller-supplied driver: no caching, they own the lifecycle.
     if (config.driverInstance) {
-      return new NativeAdapter(config.driverInstance, new SqliteDialect(), primaryKey)
+      return NativeAdapter._topLevel(config.driverInstance, new SqliteDialect(), primaryKey)
     }
 
     const driverName = config.driver ?? 'sqlite'
@@ -87,17 +94,38 @@ export class NativeAdapter implements OrmAdapter {
 
     const reused = reusableNativeClient(signature)
     if (reused) {
-      return new NativeAdapter(reused.driver, reused.dialect, primaryKey)
+      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey)
     }
 
     const { driver, dialect } = await openDriver(driverName, url)
     cacheNativeClient({ signature, driver, dialect })
-    return new NativeAdapter(driver, dialect, primaryKey)
+    return NativeAdapter._topLevel(driver, dialect, primaryKey)
+  }
+
+  /** The adapter that owns the connection — queries and transactions both run
+   *  on `driver`; `disconnect()` may close it. */
+  private static _topLevel(driver: Driver, dialect: Dialect, primaryKey: string): NativeAdapter {
+    return new NativeAdapter(driver, driver, dialect, primaryKey, driver)
   }
 
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
     const pk = opts?.primaryKey ?? this.primaryKey
-    return new NativeQueryBuilder<T>(this.driver, this.dialect, table, pk)
+    return new NativeQueryBuilder<T>(this.executor, this.dialect, table, pk)
+  }
+
+  /**
+   * Run `fn` inside a transaction (or a SAVEPOINT when already inside one),
+   * passing it a transaction-scoped `NativeAdapter` whose queries execute on the
+   * transaction's connection. The Model layer threads that scoped adapter
+   * through `AsyncLocalStorage` so existing `Model.query()` calls inside `fn`
+   * transparently join the transaction. Commits on resolve; rolls back and
+   * re-throws on reject.
+   */
+  transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+    return this.scope.transaction((txScope) => {
+      const scoped = new NativeAdapter(txScope, txScope, this.dialect, this.primaryKey, null)
+      return fn(scoped)
+    })
   }
 
   async connect(): Promise<void> {
@@ -105,6 +133,9 @@ export class NativeAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
+    // A transaction-scoped adapter owns no connection — never close the shared
+    // one out from under the owning adapter.
+    if (!this.driver) return
     // Evict the cached client BEFORE closing so a later make() with the same
     // driver::url signature opens a fresh driver instead of reusing this closed
     // one. The cache only holds a self-opened driver (driverInstance bypasses

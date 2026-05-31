@@ -38,25 +38,37 @@ export interface Executor {
 }
 
 /**
- * A database connection the native engine drives. Extends {@link Executor} with
- * connection lifecycle + a transaction scope.
+ * A transaction scope: an {@link Executor} that can itself open a *nested*
+ * transaction (mapped to a SAVEPOINT). This is what `transaction()` hands its
+ * callback — the inner work executes on the scope, and a nested
+ * `scope.transaction(...)` rolls back only its own savepoint on failure,
+ * leaving the outer transaction intact.
+ *
+ * The query builder only needs {@link Executor}, so it runs unchanged whether
+ * driving the top-level connection or a transaction scope. Nesting support
+ * lives here (not on the bare `Executor`) so `Model.transaction()` can be called
+ * recursively and map to savepoints.
+ */
+export interface Transaction extends Executor {
+  /**
+   * Open a nested transaction (SAVEPOINT) on this scope. Commits/releases when
+   * `fn` resolves; rolls back to the savepoint and re-throws if it rejects.
+   */
+  transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T>
+}
+
+/**
+ * A database connection the native engine drives. A {@link Transaction} (so it
+ * can open a top-level transaction) plus connection lifecycle.
  *
  * Async by contract even though `better-sqlite3` is synchronous — RN/WASM
  * drivers are async, and the ORM's terminals are already `Promise<T>`, so a
  * uniform async signature lets every driver implement it the natural way.
+ *
+ * `transaction()` was defined in Phase 2 so the write path was transaction-aware
+ * by construction; Phase 4 wires the public `Model.transaction()` API to it.
  */
-export interface Driver extends Executor {
-  /**
-   * Run `fn` inside a database transaction, passing it an {@link Executor}
-   * scoped to that transaction. Commits when `fn` resolves; rolls back and
-   * re-throws if it rejects.
-   *
-   * Defined now (Phase 2) so the write path is transaction-aware by
-   * construction — Phase 4 wires the public `transaction()` API to it without
-   * touching the query builder. Not yet reachable from app code.
-   */
-  transaction<T>(fn: (tx: Executor) => Promise<T>): Promise<T>
-
+export interface Driver extends Transaction {
   /** Release the underlying connection/handle. Idempotent. */
   close(): Promise<void>
 }
