@@ -201,8 +201,10 @@ async function loadPackageCommands(): Promise<void> {
     // @rudderjs/orm → migrate, migrate:fresh, migrate:status, make:migration, db:push, db:generate
     async () => {
       const mod = await tryImport('@rudderjs/orm', 'commands/migrate')
-      const register = mod['registerMigrateCommands'] as (r: typeof rudder) => void
-      register(rudder)
+      // Pass bootApp so the native engine (no external CLI) can boot on demand
+      // to reach its configured adapter — migrate* otherwise skip app boot.
+      const register = mod['registerMigrateCommands'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
+      register(rudder, { bootApp })
     },
     // @rudderjs/orm → model:prune
     async () => {

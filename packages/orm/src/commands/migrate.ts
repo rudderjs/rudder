@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 import { CliError } from '@rudderjs/console'
+import { ModelRegistry } from '../index.js'
+import type { OrmAdapter } from '@rudderjs/contracts'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -311,6 +313,48 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
   return metric ? { table, column, dimensions, metric } : { table, column, dimensions }
 }
 
+// ─── Native engine migrations (in-process) ────────────────
+//
+// The native SQLite engine has no external CLI to shell out to — it runs
+// migrations in-process via `@rudderjs/orm/native`'s `Migrator`. A native app is
+// detected by the *absence* of an adapter package (`detectORM` → null): only
+// prisma/drizzle ship those, so "no ORM package + a registered native adapter"
+// means the native engine. Because `migrate`/`migrate:status` skip app boot (to
+// stay tool-only for prisma/drizzle), the native branch boots on demand to get
+// the configured adapter.
+
+/** A native adapter is duck-typed by its `schemaBuilder()` accessor — prisma/
+ *  drizzle adapters don't have it. Avoids an `instanceof` across module
+ *  boundaries and keeps native off the cold-boot path for non-native apps. */
+type NativeAdapterLike = OrmAdapter & import('../native/schema/migrator.js').MigratorAdapter
+
+function nativeAdapterOrNull(): NativeAdapterLike | null {
+  const adapter = ModelRegistry.get() as (OrmAdapter & { schemaBuilder?: unknown }) | null
+  return adapter && typeof adapter.schemaBuilder === 'function' ? (adapter as NativeAdapterLike) : null
+}
+
+/** Apply pending native migrations. Returns the count applied. */
+export async function runNativeMigrate(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const { applied } = await new Migrator(adapter).run(migrations, (name) => console.log(`  ✓ ${name}`))
+  return applied.length
+}
+
+/** Print native migration status (ran / pending per migration). */
+export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string): Promise<void> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const rows = await new Migrator(adapter).status(migrations)
+  if (rows.length === 0) {
+    console.log('  No migrations found in database/migrations.')
+    return
+  }
+  for (const r of rows) {
+    console.log(`  ${r.ran ? `Ran (batch ${r.batch})` : 'Pending'.padEnd(13)}  ${r.name}`)
+  }
+}
+
 // ─── Command Registration ─────────────────────────────────
 
 /**
@@ -319,15 +363,31 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
  */
 export function registerMigrateCommands(
   rudder: { command(name: string, handler: (args: string[]) => void | Promise<void>): { description(text: string): unknown } },
+  opts: { bootApp?: () => Promise<void> } = {},
 ): void {
   const cwd = process.cwd()
 
   function requireORM(): ORM {
     const orm = detectORM(cwd)
     if (!orm) {
-      throw new Error('No ORM detected. Install @rudderjs/orm-prisma or @rudderjs/orm-drizzle.')
+      throw new Error('No ORM detected. Install @rudderjs/orm-prisma or @rudderjs/orm-drizzle, or configure the native engine (engine: \'native\').')
     }
     return orm
+  }
+
+  /**
+   * If this is a native-engine app, boot it (on demand — `migrate*` skip boot
+   * by default) and return the registered native adapter. Returns null for
+   * prisma/drizzle apps so the caller falls through to the shell-out path.
+   */
+  async function resolveNativeAdapter(): Promise<NativeAdapterLike | null> {
+    // A prisma/drizzle adapter package present → not native; use the shell-out.
+    if (detectORM(cwd) !== null) return null
+    // Native needs the booted adapter; without an injected bootApp (e.g. unit
+    // tests calling this directly) we can't, so fall through.
+    if (!opts.bootApp) return null
+    await opts.bootApp()
+    return nativeAdapterOrNull()
   }
 
   async function exec(
@@ -355,6 +415,13 @@ export function registerMigrateCommands(
 
   // ── migrate ───────────────────────────────────────────
   rudder.command('migrate', async () => {
+    const native = await resolveNativeAdapter()
+    if (native) {
+      console.log('  ORM: native')
+      const count = await runNativeMigrate(native, cwd)
+      console.log(count === 0 ? '  Nothing to migrate.' : `  Migrations complete (${count} applied).`)
+      return
+    }
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate')
@@ -371,6 +438,11 @@ export function registerMigrateCommands(
 
   // ── migrate:status ────────────────────────────────────
   rudder.command('migrate:status', async () => {
+    const native = await resolveNativeAdapter()
+    if (native) {
+      await runNativeStatus(native, cwd)
+      return
+    }
     const orm = requireORM()
     // `prisma migrate status` exits non-zero for *informational* states (drift,
     // pending migrations, or a db:push-managed DB with no migrations dir) — not

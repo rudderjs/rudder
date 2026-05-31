@@ -3,11 +3,15 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import os from 'node:os'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   detectORM, buildArgs, assertSafeName, findSeederFile, hasPrismaSeedConfig, runSeeder,
   buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
-  writeVectorMigration,
+  writeVectorMigration, runNativeMigrate, runNativeStatus,
 } from './migrate.js'
+import { NativeAdapter } from '../native/adapter.js'
+import { BetterSqlite3Driver } from '../native/drivers/better-sqlite3.js'
+import type { Driver } from '../native/driver.js'
 
 describe('migrate — detectORM()', () => {
   let tmpDir: string
@@ -417,5 +421,68 @@ describe('migrate — writeVectorMigration()', () => {
     const result = await writeVectorMigration({ table: 'd', column: 'e', dimensions: 8, orm: 'prisma' }, tmpDir, fixedNow)
     assert.match(result.filePath.replace(/\\/g, '/'), /prisma\/migrations\//)
     assert.ok(result.prismaSchemaSnippet)
+  })
+})
+
+// ── Native engine command layer (7.2) ────────────────────
+// Exercises runNativeMigrate / runNativeStatus end-to-end: a temp project
+// `database/migrations/` of `.mjs` files driven against an in-memory adapter.
+// (The CLI handler's boot + adapter-detection glue is the only uncovered bit.)
+
+describe('migrate — native command layer', () => {
+  const nativeIndex = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), '../native/index.js')
+  const importBase = pathToFileURL(nativeIndex).href
+
+  const migration = (table: string) =>
+    `import { Migration, Schema } from ${JSON.stringify(importBase)}\n` +
+    `export default class extends Migration {\n` +
+    `  async up()   { await Schema.create(${JSON.stringify(table)}, (t) => { t.id(); t.string('name') }) }\n` +
+    `  async down() { await Schema.dropIfExists(${JSON.stringify(table)}) }\n` +
+    `}\n`
+
+  let cwd: string
+  let driver: Driver
+  let adapter: NativeAdapter
+  // Silence the commands' progress logging during the test.
+  const realLog = console.log
+
+  beforeEach(async () => {
+    cwd = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-native-mig-'))
+    await fs.mkdir(nodePath.join(cwd, 'database', 'migrations'), { recursive: true })
+    driver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+    adapter = await NativeAdapter.make({ driverInstance: driver })
+    console.log = () => {}
+  })
+  afterEach(async () => {
+    console.log = realLog
+    await driver.close()
+    await fs.rm(cwd, { recursive: true, force: true })
+  })
+
+  it('runNativeMigrate applies files from database/migrations and returns the count', async () => {
+    await fs.writeFile(nodePath.join(cwd, 'database', 'migrations', '2026_01_01_000000_create_users.mjs'), migration('users'))
+    await fs.writeFile(nodePath.join(cwd, 'database', 'migrations', '2026_01_02_000000_create_posts.mjs'), migration('posts'))
+
+    const count = await runNativeMigrate(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), true)
+
+    // Idempotent: a second run applies nothing.
+    assert.equal(await runNativeMigrate(adapter, cwd), 0)
+  })
+
+  it('runNativeMigrate returns 0 when there are no migration files', async () => {
+    assert.equal(await runNativeMigrate(adapter, cwd), 0)
+  })
+
+  it('runNativeStatus prints a row per migration without throwing', async () => {
+    await fs.writeFile(nodePath.join(cwd, 'database', 'migrations', '2026_01_01_000000_create_users.mjs'), migration('users'))
+    const lines: string[] = []
+    console.log = (s?: unknown) => { lines.push(String(s)) }
+    await runNativeMigrate(adapter, cwd)
+    await runNativeStatus(adapter, cwd)
+    console.log = () => {}
+    assert.ok(lines.some(l => l.includes('Ran') && l.includes('create_users')))
   })
 })

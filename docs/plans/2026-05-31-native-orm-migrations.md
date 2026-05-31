@@ -274,7 +274,15 @@ revisit diffing only if real demand appears.
       DDL `DEFAULT`s render as escaped literals (DDL can't bind); timestamps/soft
       deletes use camelCase (`createdAt`/`updatedAt`/`deletedAt`) per engine
       convention. Static `Schema` facade + `Migration` base + runner deferred to 7.2.
-- [ ] 7.2 — Migration runner + `migrations` state table + `migrate` / `migrate:status`
+- [x] 7.2 — Migration runner + `migrations` state table + `migrate` / `migrate:status`.
+      **Shipped:** `Migration` base + static `Schema` facade + `Migrator`
+      (ensureTable/ran/run/nextBatch/status) + `discoverMigrations` (loads
+      `database/migrations/*.{ts,js,mts,mjs}`, name-sorted). `NativeAdapter.schemaBuilder()`
+      exposes the connection. CLI `migrate`/`migrate:status` detect native (no
+      prisma/drizzle pkg) → boot on demand → run in-process `Migrator`; prisma/drizzle
+      shell-out path unchanged. `migrations` table = `id`/`migration`/`batch`. 19 new
+      tests (Migrator core, Schema-facade binding, file discovery, CLI command layer).
+      Facade methods are `async` so an unbound call rejects (not sync-throws).
 - [ ] 7.3 — `make:migration` generator (name → stub, table inference)
 - [ ] **GATE 7-types** — **the types story**: introspect → `__schema/registry.d.ts`
       → `Model<TName>` binding green end-to-end. *If this doesn't land cleanly,

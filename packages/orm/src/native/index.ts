@@ -43,15 +43,19 @@ export {
 } from './compiler.js'
 export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from './compiler.js'
 
-// Schema builder (DDL) — Laravel-style `Blueprint` + per-dialect DDL compiler.
-// Phase 7.1 ships `Schema.create` / `drop` against SQLite. The migration runner
-// + static `Schema` facade land in 7.2.
+// Schema builder (DDL) — Laravel-style `Blueprint` + per-dialect DDL compiler
+// (7.1) plus the migration runner: `Migration` base, static `Schema` facade, and
+// `Migrator` + `discoverMigrations` (7.2). SQLite only; pg/mysql in 7.7/7.8.
 export { SchemaBuilder } from './schema/schema-builder.js'
 export { Blueprint } from './schema/blueprint.js'
 export { ColumnBuilder, makeColumn } from './schema/column.js'
 export type { ColumnDefinition, ColumnType } from './schema/column.js'
 export type { IndexDefinition } from './schema/blueprint.js'
 export { compileCreateTable, compileDropTable } from './schema/ddl-compiler.js'
+export { Migration } from './schema/migration.js'
+export { Schema, withSchema } from './schema/schema-facade.js'
+export { Migrator, discoverMigrations } from './schema/migrator.js'
+export type { MigratorAdapter, LoadedMigration, MigrationStatus, RunResult } from './schema/migrator.js'
 
 // Errors.
 export {
