@@ -655,6 +655,9 @@ importers:
         specifier: workspace:^
         version: link:../contracts
     devDependencies:
+      '@rudderjs/core':
+        specifier: workspace:^
+        version: link:../core
       '@types/better-sqlite3':
         specifier: ^7.0.0
         version: 7.6.13

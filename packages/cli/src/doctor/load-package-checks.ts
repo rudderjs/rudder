@@ -24,7 +24,7 @@ const PACKAGES_WITH_CHECKS: string[] = [
   // rules. The dynamic import is `tryImport`-wrapped below, so packages not
   // installed in the user's app are silently skipped.
   '@rudderjs/auth', '@rudderjs/session', '@rudderjs/hash',
-  '@rudderjs/orm-prisma', '@rudderjs/orm-drizzle',
+  '@rudderjs/orm', '@rudderjs/orm-prisma', '@rudderjs/orm-drizzle',
   '@rudderjs/cashier-paddle',
   '@rudderjs/queue-bullmq', '@rudderjs/queue-inngest',
   '@rudderjs/broadcast-redis',
