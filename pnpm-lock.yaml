@@ -648,13 +648,13 @@ importers:
 
   packages/orm:
     dependencies:
-      '@rudderjs/console':
-        specifier: workspace:^
-        version: link:../console
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
     devDependencies:
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
