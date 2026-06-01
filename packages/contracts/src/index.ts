@@ -345,6 +345,45 @@ export interface OrmAdapterQueryOpts {
   primaryKey?: string
 }
 
+// ─── DB execution contracts (DB-facade seam) ───────────────
+//
+// The model-independent SQL execution surface. Owned here — the zero-dependency
+// foundation, beside `OrmAdapter` — and surfaced to apps via `@rudderjs/database`'s
+// `DB` facade, which re-exports these. The native engine (`@rudderjs/orm/native`)
+// implements them; every adapter shares this one import point, so the data layer
+// can later be extracted without a flag-day.
+
+/** A single result row — column name → value, as returned by the driver. */
+export type Row = Record<string, unknown>
+
+/**
+ * Runs parameterized SQL and returns rows. The minimal execution surface a SQL
+ * compiler / query builder depends on. Values flow through `bindings` (`?` / `$n`
+ * placeholders in `sql`) — the engine never string-interpolates them into `sql`.
+ */
+export interface Executor {
+  execute(sql: string, bindings: readonly unknown[]): Promise<Row[]>
+}
+
+/**
+ * A transaction scope: an {@link Executor} that can open a *nested* transaction
+ * (mapped to a SAVEPOINT). The inner work executes on the scope; a nested
+ * `scope.transaction(...)` rolls back only its own savepoint on failure.
+ */
+export interface Transaction extends Executor {
+  transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T>
+}
+
+/**
+ * A database connection: a {@link Transaction} (so it can open a top-level
+ * transaction) plus connection lifecycle. Async by contract so RN/WASM drivers
+ * implement it the natural way.
+ */
+export interface Connection extends Transaction {
+  /** Release the underlying connection/handle. Idempotent. */
+  close(): Promise<void>
+}
+
 export interface OrmAdapter {
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T>
   connect(): Promise<void>
@@ -364,6 +403,24 @@ export interface OrmAdapter {
    * `Model.query()` call sites inside `fn` transparently use the transaction.
    */
   transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T>
+
+  /**
+   * Raw `SELECT` escape hatch — the read half of `@rudderjs/database`'s `DB`
+   * facade (`DB.select`). Resolves to the matched rows.
+   *
+   * **Optional capability.** Adapters that don't implement it omit it; the
+   * facade throws an adapter-named error. Implemented over each adapter's
+   * existing raw path (native `Executor.execute`, Prisma `$queryRawUnsafe`,
+   * Drizzle `db.execute`).
+   */
+  selectRaw?(sql: string, bindings: readonly unknown[]): Promise<Row[]>
+
+  /**
+   * Raw writing-statement escape hatch — the write half of the `DB` facade
+   * (`DB.insert` / `update` / `delete` / `statement`). Resolves to the number
+   * of rows affected. Optional, mirroring {@link OrmAdapter.selectRaw}.
+   */
+  affectingStatement?(sql: string, bindings: readonly unknown[]): Promise<number>
 }
 
 export interface OrmAdapterProvider {

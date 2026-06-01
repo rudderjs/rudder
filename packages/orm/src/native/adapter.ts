@@ -14,7 +14,7 @@ import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts 
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
 import { PgDialect } from './dialect-pg.js'
-import type { Driver, Executor, Transaction } from './driver.js'
+import type { Driver, Executor, Transaction, Row } from './driver.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
@@ -122,6 +122,26 @@ export class NativeAdapter implements OrmAdapter {
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
     const pk = opts?.primaryKey ?? this.primaryKey
     return new NativeQueryBuilder<T>(this.executor, this.dialect, table, pk)
+  }
+
+  /**
+   * Raw `SELECT` for the `DB` facade (`DB.select`) — runs `sql` with positional
+   * `bindings` on this adapter's executor (the top-level connection, or the
+   * transaction scope when inside `transaction()`) and resolves to the rows.
+   */
+  async selectRaw(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+    return this.executor.execute(sql, bindings)
+  }
+
+  /**
+   * Raw writing statement for the `DB` facade (`DB.insert`/`update`/`delete`/
+   * `statement`). The native `Executor.execute` resolves to the affected /
+   * `RETURNING *` rows, so the rows-affected count is `rows.length` (consistent
+   * with the engine's RETURNING-*→rows decision).
+   */
+  async affectingStatement(sql: string, bindings: readonly unknown[]): Promise<number> {
+    const rows = await this.executor.execute(sql, bindings)
+    return rows.length
   }
 
   /**

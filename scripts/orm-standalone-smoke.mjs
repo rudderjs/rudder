@@ -12,9 +12,12 @@
 // (e.g. @rudderjs/console) creeping back into the install.
 //
 // Steps:
-//   1. `pnpm pack` @rudderjs/orm + its only runtime dep @rudderjs/contracts
-//      (pnpm rewrites the `workspace:^` range to the real version in the tarball).
-//   2. Scaffold a throwaway project that depends on those two tarballs +
+//   1. `pnpm pack` @rudderjs/orm + its runtime deps @rudderjs/contracts and
+//      @rudderjs/database (pnpm rewrites the `workspace:^` range to the real
+//      version in the tarball). database is packed locally because it isn't
+//      published to npm yet — orm depends on it via the PR1 data-layer edge, so
+//      a registry install would 404 until the first @rudderjs/database release.
+//   2. Scaffold a throwaway project that depends on those three tarballs +
 //      better-sqlite3 (the optional peer) — nothing else.
 //   3. `npm install` outside the monorepo (no workspace linking).
 //   4. Assert @rudderjs/console was NOT pulled in.
@@ -43,9 +46,11 @@ log(`work dir: ${work}`)
 
 let failed = false
 try {
-  // 1. Pack orm + its runtime dep contracts. `pnpm pack` rewrites `workspace:^`
-  //    to the resolved version, so the tarball is what npm consumers would get.
-  for (const pkg of ['contracts', 'orm']) {
+  // 1. Pack orm + its runtime deps contracts and database. `pnpm pack` rewrites
+  //    `workspace:^` to the resolved version, so each tarball is what npm
+  //    consumers would get. database must be packed locally too — it's the new
+  //    PR1 data-layer dep of orm and isn't on npm yet, so a registry resolve 404s.
+  for (const pkg of ['contracts', 'database', 'orm']) {
     log(`packing @rudderjs/${pkg}`)
     sh('pnpm', ['pack', '--pack-destination', tarDir], join(repoRoot, 'packages', pkg))
   }
@@ -57,8 +62,9 @@ try {
   }
   const ormTgz = tgz('rudderjs-orm-')
   const contractsTgz = tgz('rudderjs-contracts-')
+  const databaseTgz = tgz('rudderjs-database-')
 
-  // 2. Throwaway project: the two tarballs + better-sqlite3 from npm. No Rudder
+  // 2. Throwaway project: the three tarballs + better-sqlite3 from npm. No Rudder
   //    framework, no @rudderjs/console — exactly a plain Node consumer.
   writeFileSync(
     join(proj, 'package.json'),
@@ -71,6 +77,7 @@ try {
         dependencies: {
           '@rudderjs/orm': `file:${ormTgz}`,
           '@rudderjs/contracts': `file:${contractsTgz}`,
+          '@rudderjs/database': `file:${databaseTgz}`,
           'better-sqlite3': '^12.0.0',
         },
       },

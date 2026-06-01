@@ -264,20 +264,38 @@ function applyOverrides(pkg: Record<string, unknown>, pm: PM, overrides: Record<
     return
   }
 
+  const rewrittenDirect = new Set<string>()
   for (const field of ['dependencies', 'devDependencies'] as const) {
     const deps = pkg[field] as Record<string, string> | undefined
     if (!deps) continue
     for (const name of Object.keys(deps)) {
       const spec = overrides[name]
-      if (spec) deps[name] = spec
+      if (spec) {
+        deps[name] = spec
+        rewrittenDirect.add(name)
+      }
     }
   }
 
-  // yarn classic still honors `resolutions` for transitive deps that the linked
-  // packages drag in (e.g. peer @rudderjs/* refs). npm has no equivalent for
-  // file: paths, but transitive @rudderjs/* resolutions land on the same hoisted
-  // copy regardless because every linked package is already a `file:` ref.
-  if (pm === 'yarn') pkg['resolutions'] = overrides
+  // yarn classic honors `resolutions` for transitive deps that the linked
+  // packages drag in (e.g. peer @rudderjs/* refs).
+  if (pm === 'yarn') {
+    pkg['resolutions'] = overrides
+    return
+  }
+
+  // npm: the in-place rewrite above only reaches the app's *direct* deps. A
+  // transitive-only @rudderjs/* package — one a recipe never declares but a
+  // linked package depends on (e.g. @rudderjs/database, pulled in by
+  // @rudderjs/orm) — is never rewritten, so npm resolves it from the registry.
+  // That 404s for an unpublished package. Emit an `overrides` block for exactly
+  // the transitive ones, excluding the direct deps we already rewrote (npm errors
+  // EOVERRIDE when an override conflicts with a direct dependency).
+  const transitive: Record<string, string> = {}
+  for (const [name, spec] of Object.entries(overrides)) {
+    if (!rewrittenDirect.has(name)) transitive[name] = spec
+  }
+  if (Object.keys(transitive).length > 0) pkg['overrides'] = transitive
 }
 
 async function buildOverrides(pm: PM): Promise<Record<string, string>> {
