@@ -43,29 +43,32 @@ function requireAffecting(adapter: OrmAdapter): NonNullable<OrmAdapter['affectin
  * Laravel's `DB` facade. All methods take positional `bindings` (`?` / `$n`
  * placeholders) — values are never string-interpolated into `sql`.
  */
+// `async` (not bare `return`) so a missing-adapter / missing-seam guard throws
+// as a rejected promise rather than synchronously — the facade always presents a
+// Promise-returning contract, so callers can `.catch()` / `await assert.rejects`.
 export const DB = {
   /** Run a raw `SELECT` and resolve to the matched rows. */
-  select(sql: string, bindings: readonly unknown[] = []): Promise<Row[]> {
+  async select(sql: string, bindings: readonly unknown[] = []): Promise<Row[]> {
     return requireSelectRaw(resolveAdapter())(sql, bindings)
   },
 
   /** Run a raw `INSERT`. Resolves to the number of rows affected. */
-  insert(sql: string, bindings: readonly unknown[] = []): Promise<number> {
+  async insert(sql: string, bindings: readonly unknown[] = []): Promise<number> {
     return requireAffecting(resolveAdapter())(sql, bindings)
   },
 
   /** Run a raw `UPDATE`. Resolves to the number of rows affected. */
-  update(sql: string, bindings: readonly unknown[] = []): Promise<number> {
+  async update(sql: string, bindings: readonly unknown[] = []): Promise<number> {
     return requireAffecting(resolveAdapter())(sql, bindings)
   },
 
   /** Run a raw `DELETE`. Resolves to the number of rows affected. */
-  delete(sql: string, bindings: readonly unknown[] = []): Promise<number> {
+  async delete(sql: string, bindings: readonly unknown[] = []): Promise<number> {
     return requireAffecting(resolveAdapter())(sql, bindings)
   },
 
   /** Run an arbitrary raw statement (DDL, etc.). Resolves to rows affected. */
-  statement(sql: string, bindings: readonly unknown[] = []): Promise<number> {
+  async statement(sql: string, bindings: readonly unknown[] = []): Promise<number> {
     return requireAffecting(resolveAdapter())(sql, bindings)
   },
 
