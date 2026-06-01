@@ -430,6 +430,22 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/database:
+    dependencies:
+      '@rudderjs/contracts':
+        specifier: workspace:^
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: 20.19.35
+        version: 20.19.35
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/hash:
     dependencies:
       '@rudderjs/console':
@@ -651,6 +667,9 @@ importers:
       '@rudderjs/contracts':
         specifier: workspace:^
         version: link:../contracts
+      '@rudderjs/database':
+        specifier: workspace:^
+        version: link:../database
     devDependencies:
       '@rudderjs/console':
         specifier: workspace:^

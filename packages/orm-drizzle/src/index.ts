@@ -17,8 +17,11 @@ import type {
   OrderClause,
   PaginatedResult,
   RelationExistencePredicate,
+  Row,
 } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
+// Side effect: wires the DB facade to resolve this app's active ORM adapter.
+import '@rudderjs/orm/db-bridge'
 
 // ─── Minimal Drizzle DB interface ──────────────────────────
 
@@ -1153,6 +1156,60 @@ export class DrizzleAdapter implements OrmAdapter {
   async disconnect(): Promise<void> {
     const end = this.db.$client?.end
     if (typeof end === 'function') await end()
+  }
+
+  /**
+   * Compile a raw SQL string + positional bindings into a Drizzle `SQL` value.
+   * Splits on `?` / `$n` placeholders and parameterizes each binding via the
+   * `sql` template tag, so values are never string-interpolated into the query.
+   */
+  private rawSql(text: string, bindings: readonly unknown[]): SQL {
+    if (bindings.length === 0) return sql.raw(text)
+    const parts = text.split(/\?|\$\d+/)
+    let query: SQL = sql.raw(parts[0] ?? '')
+    for (let i = 0; i < bindings.length; i++) {
+      query = sql`${query}${bindings[i]}${sql.raw(parts[i + 1] ?? '')}`
+    }
+    return query
+  }
+
+  /**
+   * Raw `SELECT` for the `DB` facade (`DB.select`) via Drizzle's `db.execute`.
+   * Normalizes the per-driver result shape (postgres-js returns an array; node-pg
+   * returns `{ rows }`) to a flat `Row[]`.
+   */
+  async selectRaw(text: string, bindings: readonly unknown[]): Promise<Row[]> {
+    const exec = this.db.execute
+    if (typeof exec !== 'function') {
+      throw new Error(
+        '[RudderJS DB] db.execute() is not available on this Drizzle driver — ' +
+          'raw DB.select() requires a driver that supports execute() (postgres-js, pg, neon, or libsql).',
+      )
+    }
+    const result = await exec.call(this.db, this.rawSql(text, bindings))
+    if (Array.isArray(result)) return result as Row[]
+    return ((result as { rows?: Row[] })?.rows) ?? []
+  }
+
+  /**
+   * Raw writing statement for the `DB` facade (`DB.insert`/`update`/`delete`/
+   * `statement`) via Drizzle's `db.execute`. Resolves to the number of rows
+   * affected, reading whichever count field the underlying driver reports.
+   */
+  async affectingStatement(text: string, bindings: readonly unknown[]): Promise<number> {
+    const exec = this.db.execute
+    if (typeof exec !== 'function') {
+      throw new Error(
+        '[RudderJS DB] db.execute() is not available on this Drizzle driver — ' +
+          'raw DB writes require a driver that supports execute() (postgres-js, pg, neon, or libsql).',
+      )
+    }
+    const result = (await exec.call(this.db, this.rawSql(text, bindings))) as unknown
+    if (Array.isArray(result)) return result.length
+    const r = result as {
+      rowCount?: number; rowsAffected?: number; changes?: number; affectedRows?: number
+    }
+    return r?.rowCount ?? r?.rowsAffected ?? r?.changes ?? r?.affectedRows ?? 0
   }
 }
 

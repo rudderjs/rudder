@@ -87,6 +87,7 @@ import type {
   OrderClause,
   PaginatedResult,
   RelationExistencePredicate,
+  Row,
 } from '@rudderjs/contracts'
 import {
   MissingEmbedderError,
@@ -1222,6 +1223,30 @@ class PrismaAdapter implements OrmAdapter {
   }
 
   /**
+   * Raw `SELECT` for the `DB` facade (`DB.select`) via Prisma's
+   * `$queryRawUnsafe`. Bindings are passed as positional params, so Prisma
+   * parameterizes them rather than string-interpolating into `sql`.
+   */
+  async selectRaw(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+    const client = this.prisma as unknown as {
+      $queryRawUnsafe<T = unknown>(sql: string, ...args: unknown[]): Promise<T>
+    }
+    return (await client.$queryRawUnsafe<Row[]>(sql, ...bindings)) ?? []
+  }
+
+  /**
+   * Raw writing statement for the `DB` facade (`DB.insert`/`update`/`delete`/
+   * `statement`) via Prisma's `$executeRawUnsafe`, which resolves to the number
+   * of rows affected.
+   */
+  async affectingStatement(sql: string, bindings: readonly unknown[]): Promise<number> {
+    const client = this.prisma as unknown as {
+      $executeRawUnsafe(sql: string, ...args: unknown[]): Promise<number>
+    }
+    return client.$executeRawUnsafe(sql, ...bindings)
+  }
+
+  /**
    * Register a query listener. Used by telescope's QueryCollector.
    * Hooks into Prisma's `$on('query', ...)` event if available.
    */
@@ -1287,6 +1312,8 @@ export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
 
 import { ServiceProvider, config } from '@rudderjs/core'
 import { ModelRegistry } from '@rudderjs/orm'
+// Side effect: wires the DB facade to resolve this app's active ORM adapter.
+import '@rudderjs/orm/db-bridge'
 
 export class DatabaseProvider extends ServiceProvider {
   register(): void {}
