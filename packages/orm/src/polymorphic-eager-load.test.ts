@@ -48,6 +48,10 @@ class RecordingAdapter {
         return qb
       }) as QueryBuilder<Record<string, unknown>>['where'],
       orWhere: (() => qb) as QueryBuilder<Record<string, unknown>>['orWhere'],
+      selectRaw: () => qb,
+      whereRaw: () => qb,
+      orWhereRaw: () => qb,
+      orderByRaw: () => qb,
       orderBy: () => qb,
       limit:   () => qb,
       offset:  () => qb,

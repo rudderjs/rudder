@@ -8,6 +8,10 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
   const qb: QueryBuilder<T> = {
     where: () => qb,
     orWhere: () => qb,
+    selectRaw: () => qb,
+    whereRaw: () => qb,
+    orWhereRaw: () => qb,
+    orderByRaw: () => qb,
     orderBy: () => qb,
     limit: () => qb,
     offset: () => qb,
@@ -2068,6 +2072,10 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
         return qb
       },
       orWhere: () => qb,
+      selectRaw: () => qb,
+      whereRaw: () => qb,
+      orWhereRaw: () => qb,
+      orderByRaw: () => qb,
       orderBy: () => qb,
       limit:   () => qb,
       offset:  () => qb,

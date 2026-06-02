@@ -41,6 +41,10 @@ function makeRecorder(isSub: boolean = false): {
       node.parts.push({ kind: 'orWhere', col, op, val })
       return qb
     }) as QueryBuilder<unknown>['orWhere'],
+    selectRaw: () => qb,
+    whereRaw: () => qb,
+    orWhereRaw: () => qb,
+    orderByRaw: () => qb,
     whereGroup: (fn) => {
       const sub = makeRecorder(true)
       fn(sub.qb)

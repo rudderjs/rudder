@@ -36,6 +36,10 @@ function makeAdapter(rows: StoredRow[]): { adapter: OrmAdapter; rows: StoredRow[
         return qb
       },
       orWhere() { return qb },
+      selectRaw() { return qb },
+      whereRaw() { return qb },
+      orWhereRaw() { return qb },
+      orderByRaw() { return qb },
       orderBy(col: string, dir: OrderClause['direction'] = 'ASC') {
         state.order.push({ column: col, direction: dir })
         return qb

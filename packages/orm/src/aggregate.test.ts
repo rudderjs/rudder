@@ -68,6 +68,10 @@ function recordingAdapter(): RecordingHandle {
         return qb
       }) as QueryBuilder<T>['where'],
       orWhere: () => qb,
+      selectRaw: () => qb,
+      whereRaw: () => qb,
+      orWhereRaw: () => qb,
+      orderByRaw: () => qb,
       orderBy: () => qb,
       limit:   () => qb,
       offset:  () => qb,
