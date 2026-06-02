@@ -358,6 +358,47 @@ definition() {
 
 Generate a factory file with `pnpm rudder make:factory User`.
 
+### `Model.factory()` entry point
+
+Link the factory to its model with `static factoryClass` and call `Model.factory()` — the Laravel-style entry point, equivalent to `UserFactory.new()` and chaining the same verbs:
+
+```ts
+import { Model } from '@rudderjs/orm'
+import { UserFactory } from '../Factories/UserFactory.js'
+
+class User extends Model {
+  static factoryClass = UserFactory
+}
+
+await User.factory().create()
+await User.factory().state('admin').create()
+await User.factory().make(5)
+```
+
+Left unset, `User.factory()` throws a clear error telling you to add `static factoryClass`.
+
+### Building relationships
+
+Factories can persist related rows in one call. The foreign keys are resolved from the model's `static relations` (or inferred when a single relation of the right kind points at the other model).
+
+```ts
+// hasMany / hasOne — create children with the parent FK set
+await User.factory().has(Post.factory(), 3).create()          // user + 3 posts (userId set)
+await User.factory().has(Phone.factory(), 1, 'phone').create() // explicit relation name
+
+// belongsTo — create the parent first, then set this row's FK
+await Post.factory().for(User.factory()).create()             // post.userId → new user
+
+// belongsToMany — create related rows and attach through the pivot
+await User.factory().hasAttached(Role.factory(), 2, { active: true }).create()
+```
+
+Relationship builders run at `create()` time only (they persist). Polymorphic relations (`morph*`) are not yet supported — set the morph columns via `.with()` instead.
+
+### Mass assignment
+
+Factory `create()` bypasses mass-assignment (`fillable` / `guarded`) — matching Laravel — so a guarded model still receives every factory attribute. Observer events (`creating` / `created` / `saving` / `saved`) still fire. `make()` builds attributes without persisting and is unaffected.
+
 ## Fakes
 
 Every package that produces side effects (queues, mail, notifications, events, cache, storage, HTTP client, AI) ships a `.fake()` that swaps the real driver with an in-memory test double. Always call `.restore()` when done.

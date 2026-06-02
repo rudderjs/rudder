@@ -19,6 +19,10 @@ import {
   type AggregateSumSpec,
 } from './aggregate.js'
 import { attrEqual, readField, writeField, deleteField } from './utils.js'
+// Type-only — `ModelFactory` is re-exported below from './factory.js'. The import
+// is erased at compile time, so this does not introduce a runtime import cycle
+// (factory.ts already imports types from this module).
+import type { ModelFactory } from './factory.js'
 import {
   resolveBelongsToManyMeta,
   resolveMorphToManyMeta,
@@ -795,6 +799,41 @@ export abstract class Model {
    * await user!.roles().attach([1, 2, 3])
    */
   static relations: Record<string, RelationDefinition> = {}
+
+  /**
+   * The factory class linked to this model, enabling the `Model.factory()`
+   * entry point. Set it on the model subclass:
+   *
+   * ```ts
+   * class User extends Model {
+   *   static factoryClass = UserFactory
+   * }
+   * await User.factory().state('admin').create()   // ≡ UserFactory.new()...
+   * ```
+   *
+   * Left unset, `factory()` throws a clear error pointing here.
+   */
+  // `ModelFactory<any>` (not `<Record<string, unknown>>`) so a concrete factory
+  // like `UserFactory extends ModelFactory<{ name: string }>` assigns without
+  // tripping the generic's invariant `states()`/`with()` parameter positions —
+  // same reason the make:factory scaffolder stub uses `<any>`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static factoryClass?: { new (): ModelFactory<any> }
+
+  /**
+   * Return a fresh factory for this model — the Laravel-style entry point.
+   * Equivalent to `<Model>Factory.new()` and chains the same verbs
+   * (`.state()`, `.with()`, `.has()`, `.for()`, `.create()`, `.make()`).
+   *
+   * Requires `static factoryClass = <Model>Factory` on the subclass.
+   */
+  static factory<T extends typeof Model>(this: T): ModelFactory<Record<string, unknown>> {
+    const Fc = (this as typeof Model).factoryClass
+    if (!Fc) {
+      throw new Error(`[RudderJS ORM] No factory linked to ${this.name}. Add \`static factoryClass = ${this.name}Factory\` to the model, or call ${this.name}Factory.new() directly.`)
+    }
+    return new Fc()
+  }
 
   /** Columns to hide from JSON output */
   static hidden: string[] = []
