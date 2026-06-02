@@ -372,6 +372,27 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
+  // ── joins + structured projection ────────────────────────
+  // Drizzle's typed select maps each row back to one model; a join/projection
+  // changes the result shape (same reason selectRaw throws). Point at the native
+  // engine / DB facade rather than silently returning the wrong shape.
+  private _builderUnsupported(method: string): never {
+    throw new Error(
+      `[RudderJS ORM Drizzle] ${method} is not supported — Drizzle's typed select can't map a join/projection result back to hydrated models. ` +
+        `Use the native engine (@rudderjs/orm/native) for joins, or run the query via the DB facade: DB.select(sql, bindings).`,
+    )
+  }
+  select(..._columns: string[]): this { this._builderUnsupported('select()') }
+  join(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('join()') }
+  leftJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('leftJoin()') }
+  rightJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('rightJoin()') }
+  crossJoin(_table: string): this { this._builderUnsupported('crossJoin()') }
+  groupBy(..._columns: string[]): this { this._builderUnsupported('groupBy()') }
+  having(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('having()') }
+  orHaving(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('orHaving()') }
+  havingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('havingRaw()') }
+  orHavingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('orHavingRaw()') }
+
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
 

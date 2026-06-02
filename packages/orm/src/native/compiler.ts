@@ -46,6 +46,36 @@ export type OrderItem =
   | OrderClause
   | { kind: 'raw'; raw: RawFragment }
 
+/** The four join flavors. `cross` carries no ON conditions. */
+export type JoinType = 'inner' | 'left' | 'right' | 'cross'
+
+/**
+ * One condition inside a join's ON clause.
+ * - `on`    — column-vs-column (`"posts"."userId" = "users"."id"`); nothing binds.
+ * - `where` — column-vs-value (`"posts"."active" = ?`); the value binds.
+ */
+export type JoinCondition =
+  | { kind: 'on';    boolean: 'AND' | 'OR'; left: string; operator: WhereOperator; right: string }
+  | { kind: 'where'; boolean: 'AND' | 'OR'; clause: WhereClause }
+
+/** A single JOIN: type + table + its ON condition list (empty for `cross`). */
+export interface JoinNode {
+  type:       JoinType
+  table:      string
+  conditions: JoinCondition[]
+}
+
+/**
+ * One entry in a HAVING clause.
+ * - `clause` — `column <op> value` (the value binds); the column may be a
+ *   SELECT alias (`having('post_count', '>', 3)`).
+ * - `raw`    — a raw fragment, e.g. `havingRaw('COUNT(*) > ?', [3])` (the
+ *   portable way to filter on an aggregate — Postgres won't accept an alias here).
+ */
+export type HavingNode =
+  | { kind: 'clause'; boolean: 'AND' | 'OR'; clause: WhereClause }
+  | { kind: 'raw';    boolean: 'AND' | 'OR'; raw: RawFragment }
+
 /**
  * Everything the read compiler needs from a query. The `NativeQueryBuilder`
  * accumulates this; the compiler is otherwise stateless.
@@ -57,9 +87,23 @@ export interface NativeQueryState {
   orders:     OrderItem[]
   limitN:     number | null
   offsetN:    number | null
+  /** Structured projection columns from `select(...)`. When present (with or
+   *  without `rawSelects`) they REPLACE the default `*`. Each is identifier-
+   *  quoted (qualified `table.col` supported); raw aliasing goes via `selectRaw`. */
+  selects?:   string[]
   /** Raw projection fragments from `selectRaw`. When present they REPLACE the
-   *  default `*` (Laravel semantics — `selectRaw` is a projection, not additive). */
+   *  default `*` (Laravel semantics — `selectRaw` is a projection, not additive).
+   *  Combined with `selects` in call order (structured first, then raw). */
   rawSelects?: RawFragment[]
+  /** JOIN clauses from `join`/`leftJoin`/`rightJoin`/`crossJoin`, emitted
+   *  between FROM and WHERE in declaration order. */
+  joins?:     JoinNode[]
+  /** `GROUP BY` columns from `groupBy(...)`, emitted after WHERE. Quoted
+   *  (qualified `table.col` supported); no bindings. */
+  groupBy?:   string[]
+  /** `HAVING` predicates from `having`/`havingRaw`, emitted after GROUP BY.
+   *  Their bound values follow the WHERE's and precede ORDER BY's. */
+  having?:    HavingNode[]
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
@@ -270,6 +314,72 @@ function compileOrderBy(orders: OrderItem[], dialect: Dialect, b: Bindings): str
     .join(', ')
 }
 
+/** SQL keyword for each {@link JoinType}. */
+const JOIN_KEYWORD: Record<JoinType, string> = {
+  inner: 'INNER JOIN',
+  left:  'LEFT JOIN',
+  right: 'RIGHT JOIN',
+  cross: 'CROSS JOIN',
+}
+
+/** Render a join's ON condition list into one boolean expression. `on` nodes are
+ *  column-vs-column (both sides quoted, nothing bound); `where` nodes bind their
+ *  value through the shared {@link Bindings}. */
+function compileJoinConditions(conditions: JoinCondition[], dialect: Dialect, b: Bindings): string {
+  const parts: string[] = []
+  for (const c of conditions) {
+    let frag: string
+    if (c.kind === 'on') {
+      const op = OPERATOR_SQL[c.operator]
+      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(c.operator)}`)
+      frag = `${dialect.quoteId(c.left)} ${op} ${dialect.quoteId(c.right)}`
+    } else {
+      frag = compileClause(c.clause, dialect, b)
+    }
+    parts.push(parts.length === 0 ? frag : `${c.boolean} ${frag}`)
+  }
+  return parts.join(' ')
+}
+
+/**
+ * Compile the JOIN clauses (`''` when none). Emitted after FROM and before
+ * WHERE — so any bound values in a join's `where` condition land in positional
+ * order after the SELECT-list bindings (rawSelects/aggregates) and before the
+ * WHERE's. Shares the caller's {@link Bindings} to keep that order correct.
+ */
+function compileJoins(joins: JoinNode[], dialect: Dialect, b: Bindings): string {
+  return joins
+    .map(j => {
+      const table = dialect.quoteId(j.table)
+      const keyword = JOIN_KEYWORD[j.type]
+      if (j.type === 'cross') return `${keyword} ${table}`
+      const on = compileJoinConditions(j.conditions, dialect, b)
+      if (on === '') {
+        throw new Error(`[RudderJS ORM native] ${keyword} ${j.table} requires at least one ON condition.`)
+      }
+      return `${keyword} ${table} ON ${on}`
+    })
+    .join(' ')
+}
+
+/** `GROUP BY` column list (without the keyword), or `''` when none. Each column
+ *  is identifier-quoted (qualified `table.col` supported); no values bind. */
+function compileGroupBy(groupBy: string[], dialect: Dialect): string {
+  return groupBy.map(c => dialect.quoteId(c)).join(', ')
+}
+
+/** HAVING expression (without the keyword), or `''` when none. `clause` entries
+ *  bind their value; `raw` entries splice verbatim (and may bind via the shared
+ *  {@link Bindings}). Booleans connect siblings, first ignored — mirrors WHERE. */
+function compileHaving(having: HavingNode[], dialect: Dialect, b: Bindings): string {
+  const parts: string[] = []
+  for (const node of having) {
+    const frag = node.kind === 'raw' ? compileRaw(node.raw, b) : compileClause(node.clause, dialect, b)
+    parts.push(parts.length === 0 ? frag : `${node.boolean} ${frag}`)
+  }
+  return parts.join(' ')
+}
+
 /**
  * Compile a SELECT for the read terminals (`get`/`all`/`first`/`find`).
  *
@@ -291,12 +401,15 @@ export function compileSelect(
   const b = new Bindings(dialect)
   const table = dialect.quoteId(state.table)
 
-  // `selectRaw` REPLACES the default `*` projection (Laravel semantics). Compiled
-  // first so any of its `?` bindings land first — SQL text order (SELECT precedes
-  // WHERE). `overrides.selectColumns` (terminal-injected) still wins when set.
+  // `select(...)` / `selectRaw` REPLACE the default `*` projection (Laravel
+  // semantics). Structured columns (quoted) come first, then raw fragments —
+  // compiled before the WHERE so any `?` bindings land first (SELECT precedes
+  // WHERE in SQL text). `overrides.selectColumns` (terminal-injected) still wins.
+  const structuredSelects = (state.selects ?? []).map(c => dialect.quoteId(c))
   const rawSelects = state.rawSelects ?? []
+  const projection = [...structuredSelects, ...rawSelects.map(frag => compileRaw(frag, b))]
   const baseSelect = overrides.selectColumns
-    ?? (rawSelects.length > 0 ? rawSelects.map(frag => compileRaw(frag, b)).join(', ') : '*')
+    ?? (projection.length > 0 ? projection.join(', ') : '*')
 
   // Aggregate subselects (withCount/withSum/…) join the SELECT list. They're
   // compiled BEFORE the WHERE so their bindings land first — matching the SQL
@@ -306,8 +419,19 @@ export function compileSelect(
 
   let sql = `SELECT ${selectList} FROM ${table}`
 
+  // JOINs sit between FROM and WHERE; their `where`-condition bindings (if any)
+  // land after the SELECT-list bindings and before the WHERE's — SQL text order.
+  const joins = compileJoins(state.joins ?? [], dialect, b)
+  if (joins) sql += ` ${joins}`
+
   const where = compileWhereWithExtra(state, dialect, b, overrides.extraConditions)
   if (where) sql += ` WHERE ${where}`
+
+  // GROUP BY (no bindings) then HAVING (binds after WHERE, before ORDER BY).
+  const groupBy = compileGroupBy(state.groupBy ?? [], dialect)
+  if (groupBy) sql += ` GROUP BY ${groupBy}`
+  const having = compileHaving(state.having ?? [], dialect, b)
+  if (having) sql += ` HAVING ${having}`
 
   const orderBy = compileOrderBy(state.orders, dialect, b)
   if (orderBy) sql += ` ORDER BY ${orderBy}`
@@ -334,9 +458,29 @@ export function compileSelect(
 export function compileCount(state: NativeQueryState, dialect: Dialect): CompiledQuery {
   const b = new Bindings(dialect)
   const table = dialect.quoteId(state.table)
-  let sql = `SELECT COUNT(*) AS ${dialect.quoteId('count')} FROM ${table}`
+  const countCol = dialect.quoteId('count')
+  const joins = compileJoins(state.joins ?? [], dialect, b)
   const where = compileWhere(state, dialect, b)
-  if (where) sql += ` WHERE ${where}`
+  const groupBy = state.groupBy ?? []
+
+  // No GROUP BY → a plain scalar COUNT(*).
+  if (groupBy.length === 0) {
+    let sql = `SELECT COUNT(*) AS ${countCol} FROM ${table}`
+    if (joins) sql += ` ${joins}`
+    if (where) sql += ` WHERE ${where}`
+    return { sql, bindings: b.values }
+  }
+
+  // With GROUP BY, `COUNT(*)` would return one row per group. Laravel counts the
+  // NUMBER OF GROUPS by wrapping the grouped query in a subquery — so paginate()
+  // totals and count() agree. WHERE binds before HAVING (text order) via shared b.
+  let inner = `SELECT 1 FROM ${table}`
+  if (joins) inner += ` ${joins}`
+  if (where) inner += ` WHERE ${where}`
+  inner += ` GROUP BY ${compileGroupBy(groupBy, dialect)}`
+  const having = compileHaving(state.having ?? [], dialect, b)
+  if (having) inner += ` HAVING ${having}`
+  const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
   return { sql, bindings: b.values }
 }
 
