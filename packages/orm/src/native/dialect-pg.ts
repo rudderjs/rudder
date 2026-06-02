@@ -77,8 +77,8 @@ export class PgDialect implements Dialect {
       // `string` carries a length (Blueprint defaults it to 255); pg honours it.
       case 'string':     return `varchar(${column.length ?? 255})`
       case 'char':       return `char(${column.length ?? 255})`
-      case 'text':
       // pg has no mediumtext/longtext — `text` is unbounded and covers both.
+      case 'text':
       case 'mediumText':
       case 'longText':   return 'text'
       case 'boolean':    return 'boolean'
