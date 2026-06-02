@@ -104,4 +104,11 @@ describe('Prisma adapter — raw expressions throw with a DB-facade pointer', ()
     assert.throws(() => q.having('total', '>', 2),         /having\(\) is not supported/)
     assert.throws(() => q.havingRaw('COUNT(*) > ?', [3]),  /havingRaw\(\) is not supported/)
   })
+
+  it('union + unionAll throw with a native-engine / DB-facade pointer', async () => {
+    const q = await qb() as unknown as { union(o: unknown): unknown; unionAll(o: unknown): unknown }
+    const other = await qb()
+    assert.throws(() => q.union(other),    /union\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.unionAll(other), /unionAll\(\) is not supported/)
+  })
 })

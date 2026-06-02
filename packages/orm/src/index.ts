@@ -624,6 +624,12 @@ export function Cast(type: CastDefinition) {
 
 // ─── Hydrating QueryBuilder ────────────────────────────────
 
+/** Global-registry symbol the hydrating Proxy answers with its wrapped adapter
+ *  QB. The native `union(other)` reads it to unwrap a passed proxy. Defined via
+ *  `Symbol.for` in both places (here + the native QB) so no runtime value needs
+ *  to cross the node-only/client-reachable module boundary. */
+const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
 /**
  * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
  * `with()` etc. actually return. Extends the adapter contract with the
@@ -739,6 +745,15 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   havingRaw(sql: string, bindings?: readonly unknown[]): this
   /** OR-rooted {@link havingRaw}. */
   orHavingRaw(sql: string, bindings?: readonly unknown[]): this
+  /**
+   * `… UNION …` — combine this query with `other` (duplicate rows removed). The
+   * combined result takes THIS query's `ORDER BY` / `LIMIT` / `OFFSET`; the
+   * member's own are ignored. `other` is another native query (`Model.query()`).
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  union(other: QueryBuilder<Model>): this
+  /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
+  unionAll(other: QueryBuilder<Model>): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -1359,6 +1374,10 @@ export abstract class Model {
     // contained to this one site instead of leaking to every call site.
     const proxy = new Proxy(qb as object, {
       get(target, prop, receiver): unknown {
+        // Unwrap to the underlying adapter QB — `union(otherQuery)` reads this on
+        // the passed proxy so the native builder can splice the member's state.
+        // Matches the `Symbol.for` the native QB uses (no cross-module import).
+        if (prop === QB_TARGET) return target
         // ORM-side chainables that don't exist on the adapter QB itself —
         // intercept before the existence check below, since `whereHas` etc.
         // are added by this proxy, not by the adapter.

@@ -108,4 +108,10 @@ describe('Drizzle raw expressions', () => {
     assert.throws(() => q.having('total', '>', 2),        /having\(\) is not supported/)
     assert.throws(() => q.havingRaw('COUNT(*) > ?', [3]), /havingRaw\(\) is not supported/)
   })
+
+  it('union + unionAll throw with a native-engine / DB-facade pointer', () => {
+    const q = User.query() as unknown as { union(o: unknown): unknown; unionAll(o: unknown): unknown }
+    assert.throws(() => q.union(User.query()),    /union\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.unionAll(User.query()), /unionAll\(\) is not supported/)
+  })
 })

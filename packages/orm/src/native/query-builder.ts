@@ -46,6 +46,13 @@ import {
  *  warns once. No-op in production. */
 const _warnedWith = new Set<string>()
 
+/** Global-registry symbol the `HydratingQueryBuilder` Proxy answers with its
+ *  wrapped native builder. `union(other)` reads it to unwrap a passed proxy back
+ *  to the underlying `NativeQueryBuilder` so it can read the member's state.
+ *  `Symbol.for` (not an imported value) keeps the node-only native module out of
+ *  the client-reachable `index.ts` import graph. */
+const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _conditions: ConditionNode[] = []
   private readonly _orders:     OrderItem[]     = []
@@ -53,6 +60,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _joins:      JoinNode[]      = []
   private readonly _groupBy:    string[]        = []
   private readonly _having:     HavingNode[]    = []
+  private readonly _unions:     Array<{ all: boolean; state: NativeQueryState }> = []
   private readonly _rawSelects: RawFragment[]   = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
@@ -105,6 +113,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       joins:           this._joins,
       groupBy:         this._groupBy,
       having:          this._having,
+      unions:          this._unions,
       lock:            this._lock,
     }
   }
@@ -300,6 +309,33 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
     const val      = value === undefined ? operatorOrValue : value
     this._having.push({ kind: 'clause', boolean, clause: { column, operator, value: val } })
+    return this
+  }
+
+  // ── unions ───────────────────────────────────────────────
+
+  /** `… UNION …` — append another query as a UNION member (duplicate rows
+   *  removed). The combined result takes THIS query's ORDER BY / LIMIT / OFFSET;
+   *  the member's own are ignored. `other` is another native query (`Model.query()`). */
+  union(other: QueryBuilder<T>): this {
+    return this._addUnion(other, false)
+  }
+
+  /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
+  unionAll(other: QueryBuilder<T>): this {
+    return this._addUnion(other, true)
+  }
+
+  private _addUnion(other: QueryBuilder<T>, all: boolean): this {
+    // `other` is usually the HydratingQueryBuilder Proxy wrapping a
+    // NativeQueryBuilder — unwrap it via the global symbol the proxy answers.
+    const target = (other as unknown as Record<symbol, unknown>)[QB_TARGET] ?? other
+    if (!(target instanceof NativeQueryBuilder)) {
+      throw new Error(
+        '[RudderJS ORM native] union()/unionAll() requires another native query builder — pass a Model.query() of a native-engine model.',
+      )
+    }
+    this._unions.push({ all, state: (target as NativeQueryBuilder<T>)._state() })
     return this
   }
 

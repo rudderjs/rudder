@@ -277,6 +277,8 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   orHaving(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('orHaving()') }
   havingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('havingRaw()') }
   orHavingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('orHavingRaw()') }
+  union(_other: unknown): this { this._builderUnsupported('union()') }
+  unionAll(_other: unknown): this { this._builderUnsupported('unionAll()') }
 
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
