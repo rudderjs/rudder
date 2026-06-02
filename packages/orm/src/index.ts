@@ -95,6 +95,7 @@ export type { PruneOptions, PruneReport }           from './prune.js'
 export { CursorPaginator, encodeCursor, decodeCursor } from './cursor-paginator.js'
 export type { CursorOrder }                         from './cursor-paginator.js'
 export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
+export type { PivotQueryBuilder } from './relations/pivot-deferred.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
