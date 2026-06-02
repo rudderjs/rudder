@@ -55,6 +55,7 @@ import {
   partitionEagerLoads,
   attachPolymorphicRelations,
 } from './polymorphic-eager-load.js'
+import { attachDirectRelations } from './direct-eager-load.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
@@ -1083,14 +1084,25 @@ export abstract class Model {
      *  on this QB. Tagged on each hydrated instance via `aggregateKeysOf` so
      *  `_toData()` excludes them on writes. */
     const aggregateAliases = new Set<string>()
-    /** Polymorphic eager-load names captured by the proxy's `with` intercept.
-     *  Resolved after the terminal call returns hydrated parents (see
-     *  `./polymorphic-eager-load.ts`). Direct relation names are forwarded to
-     *  the adapter unchanged in the same call. */
+    /** Eager-load names the Model layer resolves after the terminal returns
+     *  hydrated parents (see `./polymorphic-eager-load.ts` +
+     *  `./direct-eager-load.ts`). Polymorphic names always land here; direct
+     *  relations land here only on a `'model-layer'` adapter (Drizzle), else
+     *  they're forwarded to the adapter's native `with()` in the same call. */
     const polymorphicWiths: string[] = []
+    const directWiths:      string[] = []
+    /** Adapter eager-load strategy. `'native'` (Prisma, or no adapter on a
+     *  detached sub-builder) forwards direct relations to the adapter;
+     *  `'model-layer'` (Drizzle) batches them here. */
+    const eagerStrategy: 'native' | 'model-layer' =
+      (_traceAdapter as { eagerLoadStrategy?: 'native' | 'model-layer' } | null)?.eagerLoadStrategy ?? 'native'
     const attachPoly = async (instances: InstanceType<T>[]): Promise<void> => {
-      if (polymorphicWiths.length === 0) return
-      await attachPolymorphicRelations(ModelClass, instances as ReadonlyArray<Model>, polymorphicWiths)
+      if (polymorphicWiths.length > 0) {
+        await attachPolymorphicRelations(ModelClass, instances as ReadonlyArray<Model>, polymorphicWiths)
+      }
+      if (directWiths.length > 0) {
+        await attachDirectRelations(ModelClass, instances as ReadonlyArray<Model>, directWiths)
+      }
     }
     const wrap = (r: unknown): InstanceType<T> => {
       const inst = ModelClass.hydrate.call(self, r) as InstanceType<T>
@@ -1179,8 +1191,9 @@ export abstract class Model {
         // resolution; adapter names are forwarded unchanged.
         if (prop === 'with') {
           return (...names: string[]): QueryBuilder<InstanceType<T>> => {
-            const { adapter, polymorphic } = partitionEagerLoads(ModelClass, names)
+            const { adapter, polymorphic, direct } = partitionEagerLoads(ModelClass, names, eagerStrategy)
             for (const n of polymorphic) if (!polymorphicWiths.includes(n)) polymorphicWiths.push(n)
+            for (const n of direct)      if (!directWiths.includes(n))      directWiths.push(n)
             if (adapter.length > 0) {
               ;(target as QueryBuilder<unknown>).with(...adapter)
             }

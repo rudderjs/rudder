@@ -21,7 +21,7 @@ All three are first-party and feature-equivalent at the model layer. The choice 
 | Schema / migrations | **Bring your own** (no native migrations yet) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
 | Drivers | SQLite | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
 | `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
-| Relations via `Model.with()` | Polymorphic only | Supported | No-op (use raw Drizzle) |
+| Relations via `Model.with()` | Polymorphic only | Supported | Supported (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) |
 | Transactions (`transaction()`) | Supported | — | — |
 
 For setup details see [Native Engine](#native-engine-built-in) below, [Prisma Adapter](/guide/database/prisma), or [Drizzle Adapter](/guide/database/drizzle). The rest of this guide is adapter-neutral.
