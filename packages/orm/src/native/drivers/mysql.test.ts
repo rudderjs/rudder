@@ -64,7 +64,7 @@ if (!MYSQL_URL) {
       await schema.dropIfExists('rudder_mysql_accounts')
       await schema.create('rudder_mysql_accounts', (t: Blueprint) => {
         t.id()
-        t.string('name')
+        t.string('name').unique()   // unique → upsert ON DUPLICATE KEY target
         t.boolean('active').default(true)
         t.integer('age').default(0)
       })
@@ -108,6 +108,21 @@ if (!MYSQL_URL) {
       assert.strictEqual((await Account.find(a.id))?.age, 31)
       await adapter().query('rudder_mysql_accounts').delete(a.id)
       assert.strictEqual(await Account.find(a.id), null)
+    })
+
+    it('upsert() inserts then updates on ON DUPLICATE KEY (real mysql, no RETURNING)', async () => {
+      await Account.create({ name: 'Ada', active: true, age: 1 })
+      // MySQL counts 1 per insert + 2 per ON DUPLICATE KEY update, so assert on
+      // resulting data, not the affected-rows number (documented quirk).
+      await Account.upsert(
+        [{ name: 'Ada', active: false, age: 99 }, { name: 'Cleo', active: true, age: 5 }],
+        'name', ['age'],
+      )
+      const ada = (await Account.where('name', 'Ada').first())!
+      assert.strictEqual(Number(ada.age), 99)        // age in update list → overwritten
+      assert.strictEqual(ada.active, true)           // active not in update list → unchanged
+      assert.strictEqual(Number((await Account.where('name', 'Cleo').first())!.age), 5)
+      assert.strictEqual(await Account.count(), 2)    // 1 updated, 1 inserted — no dupes
     })
 
     it('increment() re-SELECTs the updated row', async () => {

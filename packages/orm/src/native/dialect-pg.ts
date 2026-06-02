@@ -42,6 +42,15 @@ export class PgDialect implements Dialect {
     return value ? 'true' : 'false'
   }
 
+  // Postgres shares SQLite's `ON CONFLICT (target) DO UPDATE`/`DO NOTHING` form,
+  // referencing the rejected row via the `excluded` pseudo-table.
+  upsertClause(uniqueBy: readonly string[], update: readonly string[]): string {
+    const target = uniqueBy.map(c => this.quoteId(c)).join(', ')
+    if (update.length === 0) return `ON CONFLICT (${target}) DO NOTHING`
+    const sets = update.map(c => `${this.quoteId(c)} = excluded.${this.quoteId(c)}`).join(', ')
+    return `ON CONFLICT (${target}) DO UPDATE SET ${sets}`
+  }
+
   columnTypeSql(column: ColumnDefinition): string {
     if (column.autoIncrement) {
       // `bigserial` is the sequence-backed auto-increment column; bundling the

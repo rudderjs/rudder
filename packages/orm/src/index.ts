@@ -1623,6 +1623,68 @@ export abstract class Model {
   }
 
   /**
+   * Bulk insert-or-update — Laravel's `Model.upsert(values, uniqueBy, update)`.
+   * Inserts every row; on a unique-key conflict (the `uniqueBy` columns) updates
+   * the `update` columns from the incoming values instead of failing. Resolves to
+   * the number of rows affected.
+   *
+   * - `uniqueBy` — a single column name or an array; a matching unique
+   *   constraint/index must exist (the underlying `ON CONFLICT` / Prisma compound
+   *   key requires it).
+   * - `update` — columns to overwrite on conflict. Defaults to every inserted
+   *   column except the `uniqueBy` keys. An empty list means insert-or-ignore.
+   *
+   * **No mass-assignment filtering** — like `insertMany`, this is a bulk
+   * statement and `fillable`/`guarded` do **not** apply. Write-side casts and
+   * attribute mutators (`boolean`/`date`/`json`, custom setters) ARE applied per
+   * row. Observer events do **not** fire (pure data-plane, matching `insertMany`
+   * / `increment`).
+   *
+   * One atomic statement on native + Drizzle (`ON CONFLICT … DO UPDATE` /
+   * `ON DUPLICATE KEY UPDATE`); the Prisma adapter batches a per-row upsert in a
+   * single transaction. Throws if the active adapter lacks `upsert`.
+   *
+   * @example
+   * await User.upsert(
+   *   [{ email: 'a@x.com', name: 'A' }, { email: 'b@x.com', name: 'B' }],
+   *   'email',           // conflict target
+   *   ['name'],          // overwrite name on conflict; leave the rest
+   * )
+   */
+  static async upsert<T extends typeof Model>(
+    this: T,
+    rows: Array<Partial<InstanceType<T>>>,
+    uniqueBy: string | string[],
+    update?: string[],
+  ): Promise<number> {
+    const self = this as typeof Model
+    if (rows.length === 0) return 0
+    const keys = Array.isArray(uniqueBy) ? uniqueBy : [uniqueBy]
+
+    // Apply write-time casts/mutators per row (no mass-assignment filter — bulk op).
+    const prepared = rows.map(r => self._applyMutators(r as Record<string, unknown>))
+
+    // Default update set = every inserted column except the conflict keys.
+    let updateCols = update
+    if (!updateCols) {
+      const cols: string[] = []
+      const seen = new Set<string>()
+      for (const row of prepared) {
+        for (const k of Object.keys(row)) {
+          if (!seen.has(k)) { seen.add(k); cols.push(k) }
+        }
+      }
+      updateCols = cols.filter(c => !keys.includes(c))
+    }
+
+    const q = Model._q(this) as QueryBuilder<InstanceType<T>>
+    if (typeof q.upsert !== 'function') {
+      throw new Error(`[RudderJS ORM] The active adapter does not support upsert() (called on ${self.name}).`)
+    }
+    return q.upsert(prepared as Partial<InstanceType<T>>[], keys, updateCols)
+  }
+
+  /**
    * Run `fn` with all observer / listener firing muted for this model class.
    * Useful for bulk seeding or tests where lifecycle hooks would interfere.
    */

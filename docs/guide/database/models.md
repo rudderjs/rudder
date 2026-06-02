@@ -84,6 +84,25 @@ const user = await User.updateOrCreate(
 
 `firstOrCreate` filters by all keys in the first argument; the second argument is only used when creating. `updateOrCreate` always writes the second argument (whether updating or creating).
 
+Both are single-row, select-then-write. For **bulk, atomic** insert-or-update use `upsert`:
+
+### Bulk insert-or-update — `upsert`
+
+```ts
+// Insert each row; on a unique conflict (email), overwrite only `name`.
+await User.upsert(
+  [{ email: 'a@x.com', name: 'Alice' }, { email: 'b@x.com', name: 'Bob' }],
+  'email',            // uniqueBy — a single column or string[] (a matching UNIQUE index must exist)
+  ['name'],           // columns to overwrite on conflict; omit → all inserted columns except uniqueBy
+)
+```
+
+- One atomic statement on the native + Drizzle adapters (`ON CONFLICT … DO UPDATE` on SQLite/Postgres, `ON DUPLICATE KEY UPDATE` on MySQL). The Prisma adapter batches a per-row `upsert` in a single transaction (no portable bulk ON CONFLICT). Returns the number of rows affected.
+- An **empty `update` list** means insert-or-ignore (`DO NOTHING`).
+- Like `insertMany`, `upsert` is a **bulk write — `fillable`/`guarded` do not apply** (write-side casts/mutators still do), and **observer events do not fire**.
+- A matching UNIQUE constraint on `uniqueBy` must exist, exactly as the SQL clause / Prisma compound key requires.
+- **MySQL quirk:** the returned count is rows-*touched* (MySQL counts 1 per insert and 2 per updated row), not rows-distinct.
+
 | QueryBuilder method | Description |
 |---|---|
 | `where(col, value)` / `where(col, op, value)` | Filter (operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `IN`, `NOT IN`) |
@@ -93,6 +112,7 @@ const user = await User.updateOrCreate(
 | `with(...rels)` | Eager-load relations (Prisma) |
 | `first()` / `find(id)` / `get()` | Read |
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
+| `upsert(rows, uniqueBy, update?)` | Bulk insert-or-update (atomic ON CONFLICT) |
 | `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
 

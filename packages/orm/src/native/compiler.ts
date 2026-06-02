@@ -282,12 +282,17 @@ export function compileInsert(
   state: NativeQueryState,
   dialect: Dialect,
   rows: Array<Record<string, unknown>>,
-  opts: { returning?: boolean } = {},
+  opts: { returning?: boolean; upsert?: { uniqueBy: readonly string[]; update: readonly string[] } } = {},
 ): CompiledQuery {
   if (rows.length === 0) {
     throw new Error('[RudderJS ORM native] compileInsert called with no rows.')
   }
   const table = dialect.quoteId(state.table)
+  // Conflict suffix (before RETURNING) for an upsert. Identifiers only — quoted
+  // by the dialect; values stay parameterized in the VALUES tuples.
+  const conflict = opts.upsert
+    ? ` ${dialect.upsertClause(opts.upsert.uniqueBy, opts.upsert.update)}`
+    : ''
 
   // First-seen union of defined columns across all rows.
   const columns: string[] = []
@@ -300,7 +305,7 @@ export function compileInsert(
 
   // No columns at all → rely entirely on DB defaults.
   if (columns.length === 0) {
-    let sql = `INSERT INTO ${table} DEFAULT VALUES`
+    let sql = `INSERT INTO ${table} DEFAULT VALUES${conflict}`
     if (opts.returning) sql += ` RETURNING *`
     return { sql, bindings: [] }
   }
@@ -315,7 +320,7 @@ export function compileInsert(
     return `(${placeholders.join(', ')})`
   }).join(', ')
 
-  let sql = `INSERT INTO ${table} (${quotedCols}) VALUES ${tuples}`
+  let sql = `INSERT INTO ${table} (${quotedCols}) VALUES ${tuples}${conflict}`
   if (opts.returning) sql += ` RETURNING *`
   return { sql, bindings: b.values }
 }

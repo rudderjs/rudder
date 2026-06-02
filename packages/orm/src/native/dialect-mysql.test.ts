@@ -146,6 +146,18 @@ describe('MysqlDialect — drop & rename', () => {
   })
 })
 
+describe('MysqlDialect — upsertClause', () => {
+  it('builds ON DUPLICATE KEY UPDATE with VALUES() refs (ignores uniqueBy)', () => {
+    assert.strictEqual(
+      dialect.upsertClause(['email'], ['name', 'visits']),
+      'ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `visits` = VALUES(`visits`)',
+    )
+  })
+  it('empty update → no-op self-assignment on the first uniqueBy column', () => {
+    assert.strictEqual(dialect.upsertClause(['email'], []), 'ON DUPLICATE KEY UPDATE `email` = VALUES(`email`)')
+  })
+})
+
 describe('MysqlDialect — guards', () => {
   it('throws NATIVE_DDL_EMPTY_TABLE on a table with no columns', () => {
     assert.throws(

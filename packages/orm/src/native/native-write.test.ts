@@ -31,6 +31,23 @@ class Doc extends Model {
   deletedAt!: string | null
 }
 
+// upsert targets: a UNIQUE column + a composite primary key.
+class User extends Model {
+  static override table = 'users'
+  static override casts = { active: 'boolean' as const }
+  id!: number
+  email!: string
+  name!: string
+  visits!: number
+  active!: boolean
+}
+class Membership extends Model {
+  static override table = 'memberships'
+  userId!: number
+  teamId!: number
+  role!: string
+}
+
 let driver: Driver
 
 beforeEach(async () => {
@@ -39,6 +56,10 @@ beforeEach(async () => {
     `CREATE TABLE posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, views INTEGER DEFAULT 0, published INTEGER DEFAULT 0)`, [])
   await driver.execute(
     `CREATE TABLE docs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, deletedAt TEXT)`, [])
+  await driver.execute(
+    `CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT, visits INTEGER DEFAULT 0, active INTEGER DEFAULT 0)`, [])
+  await driver.execute(
+    `CREATE TABLE memberships (userId INTEGER NOT NULL, teamId INTEGER NOT NULL, role TEXT, PRIMARY KEY (userId, teamId))`, [])
   ModelRegistry.reset()
   ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver }))
 })
@@ -207,5 +228,72 @@ describe('native write — instance save() round-trip', () => {
     const found = await Post.find(post.id)
     assert.strictEqual(found!.title, 'viaSaveEdited')
     assert.strictEqual(await Post.count(), 1)
+  })
+})
+
+describe('native upsert — Model.upsert() end-to-end (SQLite RETURNING)', () => {
+  it('inserts new rows and returns the affected count', async () => {
+    const n = await User.upsert(
+      [{ email: 'a@x.com', name: 'Ada' }, { email: 'b@x.com', name: 'Bob' }],
+      'email', ['name'],
+    )
+    assert.strictEqual(n, 2)
+    assert.strictEqual(await User.count(), 2)
+    assert.strictEqual((await User.where('email', 'a@x.com').first())!.name, 'Ada')
+  })
+
+  it('updates only the listed columns on a unique conflict (no duplicate row)', async () => {
+    await User.create({ email: 'a@x.com', name: 'Ada', visits: 1 })
+    await User.upsert([{ email: 'a@x.com', name: 'Ada Lovelace', visits: 99 }], 'email', ['name'])
+    const row = (await User.where('email', 'a@x.com').first())!
+    assert.strictEqual(await User.count(), 1)
+    assert.strictEqual(row.name, 'Ada Lovelace')
+    assert.strictEqual(row.visits, 1) // not in update list → unchanged
+  })
+
+  it('default update set overwrites every non-unique inserted column', async () => {
+    await User.create({ email: 'a@x.com', name: 'Ada', visits: 1 })
+    await User.upsert([{ email: 'a@x.com', name: 'Ada2', visits: 5 }], 'email')
+    const row = (await User.where('email', 'a@x.com').first())!
+    assert.strictEqual(row.name, 'Ada2')
+    assert.strictEqual(row.visits, 5)
+  })
+
+  it('empty update list → DO NOTHING (insert-or-ignore)', async () => {
+    await User.create({ email: 'a@x.com', name: 'Original', visits: 7 })
+    await User.upsert([{ email: 'a@x.com', name: 'Ignored', visits: 0 }], 'email', [])
+    const row = (await User.where('email', 'a@x.com').first())!
+    assert.strictEqual(row.name, 'Original')
+    assert.strictEqual(row.visits, 7)
+    assert.strictEqual(await User.count(), 1)
+  })
+
+  it('mixes insert + update in one call', async () => {
+    await User.create({ email: 'a@x.com', name: 'Ada', visits: 1 })
+    await User.upsert(
+      [{ email: 'a@x.com', name: 'Ada New' }, { email: 'c@x.com', name: 'Cleo' }],
+      'email', ['name'],
+    )
+    assert.strictEqual(await User.count(), 2)
+    assert.strictEqual((await User.where('email', 'a@x.com').first())!.name, 'Ada New')
+    assert.strictEqual((await User.where('email', 'c@x.com').first())!.name, 'Cleo')
+  })
+
+  it('conflicts on a composite uniqueBy', async () => {
+    await Membership.upsert([{ userId: 1, teamId: 2, role: 'member' }], ['userId', 'teamId'], ['role'])
+    await Membership.upsert([{ userId: 1, teamId: 2, role: 'admin' }], ['userId', 'teamId'], ['role'])
+    const rows = await Membership.all()
+    assert.strictEqual(rows.length, 1)
+    assert.strictEqual((rows[0] as Membership).role, 'admin')
+  })
+
+  it('applies write-time casts (boolean) and no-ops on an empty rows array', async () => {
+    assert.strictEqual(await User.upsert([], 'email'), 0)
+    await User.upsert([{ email: 'a@x.com', name: 'Ada', active: true }], 'email', ['active'])
+    const row = (await User.where('email', 'a@x.com').first())!
+    // Write cast serialized `true` → integer 1 (the hydrated instance carries the
+    // raw DB int; the boolean cast resolves on toJSON()).
+    assert.strictEqual((row as unknown as { active: number }).active, 1)
+    assert.strictEqual((row.toJSON() as Record<string, unknown>)['active'], true)
   })
 })
