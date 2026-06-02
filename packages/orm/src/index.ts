@@ -48,6 +48,7 @@ import {
   hasThroughDeferredQb,
 } from './relations/pivot-deferred.js'
 import { resolveHasThroughMeta } from './relations/has-through.js'
+import { buildRelationDefault, wrapWithDefault, type RelationDefault } from './relations/with-default.js'
 import {
   makeBelongsToManyAccessor,
   makeMorphToManyAccessor,
@@ -95,6 +96,7 @@ export type { PruneOptions, PruneReport }           from './prune.js'
 export { CursorPaginator, encodeCursor, decodeCursor } from './cursor-paginator.js'
 export type { CursorOrder }                         from './cursor-paginator.js'
 export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
+export type { RelationDefault } from './relations/with-default.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -454,6 +456,14 @@ export type RelationDefinition =
       foreignKey?: string
       /** Override the local column joined against `foreignKey`. */
       localKey?:   string
+      /**
+       * Null-object default for a `belongsTo` / `hasOne` that resolves to no
+       * row (Laravel's `->withDefault()`). `true` → empty instance; an object →
+       * instance with those attributes; a callback `(instance, parent) => void`
+       * → customise per parent. Applies on both lazy (`related().first()`) and
+       * eager (`with()`) reads. Ignored on `hasMany` (its default is `[]`).
+       */
+      withDefault?: RelationDefault
     }
   | {
       type:             'belongsToMany'
@@ -1363,6 +1373,13 @@ export abstract class Model {
      *  they're forwarded to the adapter's native `with()` in the same call. */
     const polymorphicWiths: string[] = []
     const directWiths:      string[] = []
+    /** `with()`'d single-result relations (`belongsTo`/`hasOne`) declaring a
+     *  `withDefault` — applied after the terminal returns, substituting the
+     *  null-object default for any parent whose relation came back null. Runs
+     *  for every adapter strategy (the relation may be resolved natively by the
+     *  adapter or by the Model-layer loader; either way the value lands on the
+     *  instance before this post-pass inspects it). */
+    const relationDefaults: Array<{ name: string; Related: typeof Model; spec: RelationDefault }> = []
     /** Order terms recorded as `orderBy()` is called on this proxy, in call
      *  order. The adapter QB exposes no public getter for its recorded sort, so
      *  `cursorPaginate` reads this to build the keyset WHERE. Each call is still
@@ -1379,6 +1396,15 @@ export abstract class Model {
       }
       if (directWiths.length > 0) {
         await attachDirectRelations(ModelClass, instances as ReadonlyArray<Model>, directWiths)
+      }
+      if (relationDefaults.length > 0) {
+        for (const inst of instances) {
+          for (const { name, Related, spec } of relationDefaults) {
+            if (readField(inst, name) == null) {
+              writeField(inst, name, buildRelationDefault(Related, spec, inst as unknown as Model))
+            }
+          }
+        }
       }
     }
     const wrap = (r: unknown): InstanceType<T> => {
@@ -1540,6 +1566,15 @@ export abstract class Model {
             for (const n of direct)      if (!directWiths.includes(n))      directWiths.push(n)
             if (adapter.length > 0) {
               ;(target as QueryBuilder<unknown>).with(...adapter)
+            }
+            // Record single-result `withDefault` relations for the post-terminal
+            // null-object substitution (runs regardless of adapter strategy).
+            for (const n of names) {
+              const d = ModelClass.relations[n]
+              if (!d || (d.type !== 'belongsTo' && d.type !== 'hasOne')) continue
+              if (d.withDefault === undefined) continue
+              if (relationDefaults.some(r => r.name === n)) continue
+              relationDefaults.push({ name: n, Related: d.model(), spec: d.withDefault })
             }
             return proxy
           }
@@ -2976,10 +3011,16 @@ export abstract class Model {
       const fk        = def.foreignKey ?? `${fkCamel(Related.name)}Id`
       const localCol  = def.localKey   ?? fk
       const localVal  = readField(this, localCol)
-      if (localVal === undefined || localVal === null) {
+      // A null FK is a legitimate "no related row" when `withDefault` is set —
+      // the query yields nothing and the default takes over. `undefined` still
+      // throws: it means the column wasn't loaded, a usage error either way.
+      if (localVal === undefined || (localVal === null && def.withDefault === undefined)) {
         throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
-      return Related.where(Related.primaryKey, localVal) as QueryBuilder<Model>
+      const base = Related.where(Related.primaryKey, localVal) as QueryBuilder<Model>
+      return def.withDefault === undefined
+        ? base
+        : wrapWithDefault(base, () => buildRelationDefault(Related, def.withDefault!, this))
     }
 
     // hasOne / hasMany — related model holds the FK pointing back to us.
@@ -2992,7 +3033,12 @@ export abstract class Model {
     if (localVal === undefined || localVal === null) {
       throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
     }
-    return Related.where(fk, localVal) as QueryBuilder<Model>
+    const base = Related.where(fk, localVal) as QueryBuilder<Model>
+    // `withDefault` only applies to the single-result `hasOne`; `hasMany`
+    // ignores it (an empty list is its own null-object).
+    return simpleDef.type === 'hasOne' && simpleDef.withDefault !== undefined
+      ? wrapWithDefault(base, () => buildRelationDefault(Related, simpleDef.withDefault!, this))
+      : base
   }
 
   /**
