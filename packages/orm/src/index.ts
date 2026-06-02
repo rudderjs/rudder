@@ -735,6 +735,12 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    */
   select(...columns: string[]): this
   /**
+   * `SELECT DISTINCT` — de-duplicate the result rows. With `distinct()`,
+   * `count()` / `paginate()` count the distinct rows. **Native engine only** —
+   * throws on Drizzle/Prisma.
+   */
+  distinct(): this
+  /**
    * `INNER JOIN`. Simple form `join('posts', 'posts.userId', '=', 'users.id')`
    * (operator defaults to `=` in the two-column form) or callback form
    * `join('posts', (j) => j.on(...).where(...))` for compound ON clauses.
@@ -1866,6 +1872,9 @@ export abstract class Model {
   // ── join / select entry points (native engine only) ──
   static select<T extends typeof Model>(this: T, ...columns: string[]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).select(...columns)
+  }
+  static distinct<T extends typeof Model>(this: T): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).distinct()
   }
   static join<T extends typeof Model>(this: T, table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).join(table, first, operator, second)

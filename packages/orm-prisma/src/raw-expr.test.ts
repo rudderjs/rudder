@@ -82,12 +82,14 @@ describe('Prisma adapter — raw expressions throw with a DB-facade pointer', ()
   it('joins + select() throw with a native-engine / DB-facade pointer', async () => {
     const q = await qb() as unknown as {
       select(...c: string[]): unknown
+      distinct(): unknown
       join(t: string, f: string, o?: string, s?: string): unknown
       leftJoin(t: string, f: string, o?: string, s?: string): unknown
       rightJoin(t: string, f: string, o?: string, s?: string): unknown
       crossJoin(t: string): unknown
     }
     assert.throws(() => q.select('id', 'name'),                       /select\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.distinct(),                                 /distinct\(\) is not supported/)
     assert.throws(() => q.join('posts', 'posts.userId', '=', 'id'),  /join\(\) is not supported.*native engine.*DB\.select/s)
     assert.throws(() => q.leftJoin('posts', 'posts.userId', '=', 'id'),  /leftJoin\(\) is not supported/)
     assert.throws(() => q.rightJoin('posts', 'posts.userId', '=', 'id'), /rightJoin\(\) is not supported/)
