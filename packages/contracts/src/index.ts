@@ -114,6 +114,13 @@ export interface RelationExistencePredicate {
   relation:        string
   /** True for `whereHas`, false for `whereDoesntHave`. */
   exists:          boolean
+  /** How this predicate joins to the WHERE built so far. `'AND'` (default) for
+   *  `whereHas`/`whereDoesntHave`; `'OR'` for the `orWhereHas` family. */
+  boolean?:        'AND' | 'OR'
+  /** Count comparison for the `has(relation, operator, count)` family. When set,
+   *  the subquery becomes `(SELECT COUNT(*) …) <operator> <value>` instead of a
+   *  bare `EXISTS`. Absent = plain existence. */
+  count?:          { operator: WhereOperator; value: number }
   /** Related table name (already resolved from the relation declaration). */
   relatedTable:    string
   /** Column on the parent table joined against `relatedColumn`. */

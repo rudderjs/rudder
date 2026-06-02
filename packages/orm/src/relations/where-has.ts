@@ -250,6 +250,7 @@ export function attachWhereHas<TQ>(
   relation:  string,
   exists:    boolean,
   constrain?: (q: QueryBuilder<Model>) => void,
+  opts?:     { boolean?: 'AND' | 'OR'; count?: { operator: WhereOperator; value: number } },
 ): QueryBuilder<TQ> {
   const def = Parent.relations[relation]
   if (!def) {
@@ -264,6 +265,10 @@ export function attachWhereHas<TQ>(
 
   const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
   const predicate        = buildRelationPredicate(Parent, relation, def, exists, constraintWheres)
+  // OR-rooting (orWhereHas family) + count comparison (has(rel, op, n)) ride on
+  // the predicate so the adapter sees them in one shape.
+  if (opts?.boolean) predicate.boolean = opts.boolean
+  if (opts?.count)   predicate.count   = opts.count
   return q.whereRelationExists(predicate)
 }
 

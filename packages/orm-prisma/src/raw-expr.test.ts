@@ -56,4 +56,26 @@ describe('Prisma adapter — raw expressions throw with a DB-facade pointer', ()
     const q = await qb()
     assert.doesNotThrow(() => q.orderBy('age', 'DESC'))
   })
+
+  it('whereColumn throws with a DB-facade pointer', async () => {
+    const q = await qb() as unknown as { whereColumn(a: string, b: string): unknown }
+    assert.throws(() => q.whereColumn('balance', 'overdraft'), /whereColumn\(\) is not supported.*DB\.select/s)
+  })
+
+  it('orWhereColumn throws', async () => {
+    const q = await qb() as unknown as { orWhereColumn(a: string, b: string): unknown }
+    assert.throws(() => q.orWhereColumn('balance', 'overdraft'), /orWhereColumn\(\) is not supported/)
+  })
+
+  it('has() count comparison throws with a pointer', async () => {
+    const q = await qb()
+    const base = { relation: 'posts', exists: true, relatedTable: 'post', parentColumn: 'id', relatedColumn: 'userId', constraintWheres: [] }
+    assert.throws(() => q.whereRelationExists({ ...base, count: { operator: '>=', value: 3 } }), /count comparison is not supported/)
+  })
+
+  it('orWhereHas (OR-rooted existence) throws', async () => {
+    const q = await qb()
+    const base = { relation: 'posts', exists: true, relatedTable: 'post', parentColumn: 'id', relatedColumn: 'userId', constraintWheres: [] }
+    assert.throws(() => q.whereRelationExists({ ...base, boolean: 'OR' }), /OR-rooted relation existence\) is not supported/)
+  })
 })

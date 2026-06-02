@@ -234,11 +234,29 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       `[RudderJS ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client can't splice raw SQL. Run the raw query via the DB facade: DB.select(sql, bindings) / DB.statement(sql, bindings).`,
     )
   }
+  /** Plain whereHas/whereDoesntHave work on Prisma via `some`/`none`; the count
+   *  (`has(rel, op, n)`) and OR-rooted (`orWhereHas`) forms have no structured
+   *  equivalent — throw with a pointer rather than silently dropping them. */
+  private _assertPlainRelationPredicate(p: RelationExistencePredicate): void {
+    if (p.count) {
+      throw new Error(
+        `[RudderJS ORM Prisma] has("${p.relation}", …) count comparison is not supported — Prisma relation filters (some/none/every) can't express a count operator. Use whereHas() for existence, or DB.select(...) with a COUNT(*) subquery.`,
+      )
+    }
+    if (p.boolean === 'OR') {
+      throw new Error(
+        `[RudderJS ORM Prisma] orWhereHas("${p.relation}") (OR-rooted relation existence) is not supported on the Prisma adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
+      )
+    }
+  }
 
   selectRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('selectRaw()') }
   whereRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('whereRaw()') }
   orWhereRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('orWhereRaw()') }
   orderByRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('orderByRaw()') }
+  // Prisma's query API has no column-vs-column comparison; route through raw.
+  whereColumn(_left: string, _operatorOrRight: string, _right?: string): this { this._rawUnsupported('whereColumn()') }
+  orWhereColumn(_left: string, _operatorOrRight: string, _right?: string): this { this._rawUnsupported('orWhereColumn()') }
 
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
@@ -258,6 +276,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   _enableSoftDeletes(): this { this._softDeletes = true; return this }
 
   whereRelationExists(p: RelationExistencePredicate): this {
+    this._assertPlainRelationPredicate(p)
     if (p.extraEquals === undefined && p.through === undefined) {
       // Direct relation — assumes the relation is declared in the Prisma
       // schema with the same name. Prisma resolves the join itself.
