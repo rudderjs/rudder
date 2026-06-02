@@ -15,6 +15,9 @@ export type BuiltInCast =
   | 'encrypted'
   | 'encrypted:array'
   | 'encrypted:object'
+  | 'hashed'
+  /** Fixed-precision decimal kept as a string with N fractional digits, e.g. `'decimal:2'`. */
+  | `decimal:${number}`
 
 /** Interface for a custom cast class. */
 export interface CastUsing {
@@ -24,7 +27,21 @@ export interface CastUsing {
   set(key: string, value: unknown, attributes: Record<string, unknown>): unknown
 }
 
-export type CastDefinition = BuiltInCast | (new () => CastUsing)
+/**
+ * A TypeScript `enum` (or a plain const object) used directly as a cast — maps a
+ * column to a closed set of primitive values. On read/write the value is
+ * validated against the enum's members; an unknown value throws.
+ *
+ * ```ts
+ * enum Status { Active = 'active', Archived = 'archived' }
+ * class Post extends Model {
+ *   static casts = { status: Status } as const satisfies Record<string, CastDefinition>
+ * }
+ * ```
+ */
+export type EnumLike = Record<string, string | number>
+
+export type CastDefinition = BuiltInCast | (new () => CastUsing) | EnumLike
 
 // ─── Vector cast (#B7 Phase 1) ──────────────────────────────
 
@@ -136,10 +153,15 @@ export function castGet(type: string, key: string, value: unknown, attributes: R
   if (value === null || value === undefined) return value
 
   if (typeof type !== 'string') {
-    // custom cast class — type is a constructor
-    const instance = new (type as unknown as new () => CastUsing)()
-    return instance.get(key, value, attributes)
+    // Non-string cast: either a custom cast class (CastUsing) or an enum.
+    if (_isCastUsingCtor(type)) {
+      const instance = new (type as unknown as new () => CastUsing)()
+      return instance.get(key, value, attributes)
+    }
+    return _enumCast(key, type as unknown as EnumLike, value)
   }
+
+  if (type.startsWith('decimal:')) return _decimalCast(type, key, value)
 
   switch (type) {
     case 'string':    return String(value)
@@ -157,6 +179,8 @@ export function castGet(type: string, key: string, value: unknown, attributes: R
     case 'encrypted:array':
     case 'encrypted:object':
       return _decrypt(type, value)
+    // `hashed` is one-way — on read the stored hash is returned verbatim.
+    case 'hashed':    return value
     default:          return value
   }
 }
@@ -166,9 +190,14 @@ export function castSet(type: string, key: string, value: unknown, attributes: R
   if (value === null || value === undefined) return value
 
   if (typeof type !== 'string') {
-    const instance = new (type as unknown as new () => CastUsing)()
-    return instance.set(key, value, attributes)
+    if (_isCastUsingCtor(type)) {
+      const instance = new (type as unknown as new () => CastUsing)()
+      return instance.set(key, value, attributes)
+    }
+    return _enumCast(key, type as unknown as EnumLike, value)
   }
+
+  if (type.startsWith('decimal:')) return _decimalCast(type, key, value)
 
   switch (type) {
     case 'string':    return String(value)
@@ -185,6 +214,7 @@ export function castSet(type: string, key: string, value: unknown, attributes: R
     case 'encrypted:array':
     case 'encrypted:object':
       return _encrypt(type, value)
+    case 'hashed':    return _hash(key, value)
     default:          return value
   }
 }
@@ -200,6 +230,105 @@ function _parseJson(key: string, value: string): unknown {
       `Verify the column stores serialized JSON; if it stores raw strings, change the cast to "string" or remove it.`,
     )
   }
+}
+
+// ─── decimal:N ──────────────────────────────────────────────
+
+/**
+ * Fixed-precision decimal. Both read and write normalize to a string with N
+ * fractional digits (`'9.99'`) — strings avoid the float-rounding drift you'd
+ * get round-tripping money through a JS `number`. N is parsed from the cast
+ * key (`'decimal:2'`).
+ */
+function _decimalCast(type: string, key: string, value: unknown): string {
+  const places = parseInt(type.slice('decimal:'.length), 10)
+  if (!Number.isInteger(places) || places < 0) {
+    throw new Error(`[RudderJS ORM] Invalid decimal cast "${type}" on column "${key}" — expected \`decimal:N\` with N a non-negative integer.`)
+  }
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) {
+    throw new Error(`[RudderJS ORM] decimal cast on column "${key}" got a non-numeric value (${String(value)}).`)
+  }
+  return num.toFixed(places)
+}
+
+// ─── enum cast ──────────────────────────────────────────────
+
+/** A custom cast class has `get`/`set` on its prototype; an enum object does not. */
+function _isCastUsingCtor(type: unknown): boolean {
+  if (typeof type !== 'function') return false
+  const proto = (type as { prototype?: { get?: unknown; set?: unknown } }).prototype
+  return typeof proto?.get === 'function' && typeof proto?.set === 'function'
+}
+
+/**
+ * Allowed primitive values of an enum object. TypeScript numeric enums emit a
+ * reverse mapping (`{ 0: 'Active', Active: 0 }`) — the numeric-string keys are
+ * the reverse entries, so we skip them and keep only the forward values.
+ */
+function _enumValues(enumObj: EnumLike): Set<string | number> {
+  const out = new Set<string | number>()
+  for (const [k, v] of Object.entries(enumObj)) {
+    if (/^\d+$/.test(k)) continue
+    out.add(v)
+  }
+  return out
+}
+
+/**
+ * Validate a value against an enum's members and pass it through. For a TS enum
+ * the member *is* its primitive value (`Status.Active === 'active'`), so the
+ * same check serves both the read and write sides.
+ */
+function _enumCast(key: string, enumObj: EnumLike, value: unknown): string | number {
+  const values = _enumValues(enumObj)
+  if (!values.has(value as string | number)) {
+    const allowed = [...values].map(v => JSON.stringify(v)).join(', ')
+    throw new Error(`[RudderJS ORM] Invalid enum value for column "${key}": ${JSON.stringify(value)}. Allowed: ${allowed}.`)
+  }
+  return value as string | number
+}
+
+// ─── hashed ─────────────────────────────────────────────────
+
+/** Minimal sync slice of `@rudderjs/hash`'s registered driver (read via the shared registry). */
+interface SyncHashDriver {
+  makeSync?(value: string): string
+  isHashed?(value: string): boolean
+}
+
+/**
+ * Read the registered hash driver from `@rudderjs/hash`'s globalThis-shared
+ * registry. We don't import `@rudderjs/hash` here — it's a node-only package and
+ * `cast.ts` must stay client-bundle safe — so we reach the singleton store
+ * directly (the same store the `Hash` facade reads/writes). Returns `null` when
+ * no driver is registered (hash not installed / not booted).
+ */
+function _getHashDriver(): SyncHashDriver | null {
+  const store = (globalThis as Record<string, unknown>)['__rudderjs_hash_registry__'] as { driver?: SyncHashDriver | null } | undefined
+  return store?.driver ?? null
+}
+
+const _HASHED_RE = /^\$(2[aby]?|argon2(id|i|d))\$/
+
+/**
+ * One-way hash on write. Re-hashing an already-hashed value is a no-op
+ * (Laravel's behavior) so resaving a loaded row doesn't double-hash. Uses the
+ * registered driver's synchronous `makeSync` — bcrypt supports it; argon2
+ * doesn't (its `makeSync` throws a clear message).
+ */
+function _hash(key: string, value: unknown): string {
+  const driver = _getHashDriver()
+  if (!driver) {
+    throw new Error(`[RudderJS ORM] The "hashed" cast on column "${key}" requires @rudderjs/hash. Install it and register a hash driver (add hash() to your providers).`)
+  }
+  const str = String(value)
+  const already = typeof driver.isHashed === 'function' ? driver.isHashed(str) : _HASHED_RE.test(str)
+  if (already) return str
+  if (typeof driver.makeSync !== 'function') {
+    throw new Error(`[RudderJS ORM] The registered hash driver has no synchronous hashing API (e.g. argon2), which the "hashed" cast on column "${key}" needs. Use the bcrypt driver, or hash via an async mutator instead.`)
+  }
+  return driver.makeSync(str)
 }
 
 // ─── Encryption stubs ───────────────────────────────────────

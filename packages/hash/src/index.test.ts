@@ -50,6 +50,18 @@ describe('BcryptDriver', () => {
   it('needsRehash() returns true for a non-bcrypt string', () => {
     assert.strictEqual(driver.needsRehash('not-a-hash'), true)
   })
+
+  it('makeSync() produces a bcrypt hash that check() verifies', async () => {
+    const hashed = driver.makeSync('secret')
+    assert.ok(hashed.startsWith('$2'))
+    assert.strictEqual(await driver.check('secret', hashed), true)
+    assert.strictEqual(await driver.check('wrong', hashed), false)
+  })
+
+  it('isHashed() recognises a bcrypt digest and rejects plain text', () => {
+    assert.strictEqual(driver.isHashed(driver.makeSync('x')), true)
+    assert.strictEqual(driver.isHashed('plain'), false)
+  })
 })
 
 // ─── HashRegistry ─────────────────────────────────────────
@@ -125,6 +137,17 @@ describe('Hash facade', () => {
   it('needsRehash() returns false for current config', async () => {
     const hashed = await Hash.make('test')
     assert.strictEqual(Hash.needsRehash(hashed), false)
+  })
+
+  it('makeSync() hashes synchronously and roundtrips through check()', async () => {
+    const hashed = Hash.makeSync('secret')
+    assert.ok(hashed.startsWith('$2'))
+    assert.strictEqual(await Hash.check('secret', hashed), true)
+  })
+
+  it('isHashed() distinguishes a digest from plain text', () => {
+    assert.strictEqual(Hash.isHashed(Hash.makeSync('x')), true)
+    assert.strictEqual(Hash.isHashed('plain-text'), false)
   })
 })
 
