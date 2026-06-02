@@ -14,7 +14,8 @@
 // so defaults are rendered as escaped literals. That's safe here because
 // migration authors — not end users — write them.
 
-import type { Dialect } from '../dialect.js'
+import { Expression } from '@rudderjs/contracts'
+import { quoteSqlString, type Dialect } from '../dialect.js'
 import type { CompiledQuery } from '../compiler.js'
 import { NativeOrmError, NativeNotImplementedError } from '../errors.js'
 import type { Blueprint, IndexDefinition } from './blueprint.js'
@@ -23,9 +24,14 @@ import type { ColumnDefinition, ForeignKeyAction, ForeignKeyDefinition } from '.
 
 /** Render a column's DEFAULT value as a SQL literal (DDL can't bind). Only the
  *  literal-able types are allowed; a Date/object/function default throws so the
- *  failure is at migrate time, not a silent `[object Object]` in the schema. */
+ *  failure is at migrate time, not a silent `[object Object]` in the schema. An
+ *  `Expression` (`raw('…')`) is spliced verbatim — the escape hatch for function
+ *  defaults like `raw('gen_random_uuid()')`. */
 function defaultLiteral(value: unknown, dialect: Dialect): string {
   if (value === null) return 'NULL'
+  // raw(...) default — splice the literal fragment, no quoting (it carries no
+  // bindings; DDL can't bind anyway).
+  if (value instanceof Expression) return String(value.getValue())
   switch (typeof value) {
     case 'boolean': return dialect.booleanLiteral(value)
     case 'bigint':  return value.toString()
@@ -62,9 +68,29 @@ function compileColumn(column: ColumnDefinition, dialect: Dialect, inlinePrimary
     parts.push(`DEFAULT ${defaultLiteral(column.default, dialect)}`)
   }
 
+  // `ON UPDATE CURRENT_TIMESTAMP` is MySQL-only grammar; pg/sqlite have no inline
+  // form, so the modifier is silently dropped there (Laravel does the same).
+  if (dialect.name === 'mysql' && column.useCurrentOnUpdate) parts.push('ON UPDATE CURRENT_TIMESTAMP')
+
   if (inlinePrimary) parts.push('PRIMARY KEY')
 
+  // MySQL takes an inline column COMMENT (last). pg comments out-of-line (a
+  // separate COMMENT ON COLUMN statement, emitted by the table compiler); sqlite
+  // has no column comments at all.
+  if (dialect.name === 'mysql' && column.comment !== undefined) parts.push(`COMMENT ${quoteSqlString(column.comment)}`)
+
   return parts.join(' ')
+}
+
+/** Postgres `COMMENT ON COLUMN "table"."col" IS '…'` statement for a column that
+ *  carries a `.comment(...)`, or null when the dialect comments inline (mysql) or
+ *  not at all (sqlite), or the column has no comment. */
+function compileColumnComment(table: string, column: ColumnDefinition, dialect: Dialect): CompiledQuery | null {
+  if (dialect.name !== 'pg' || column.comment === undefined) return null
+  return {
+    sql: `COMMENT ON COLUMN ${dialect.quoteId(table)}.${dialect.quoteId(column.name)} IS ${quoteSqlString(column.comment)}`,
+    bindings: [],
+  }
 }
 
 /** A column's `"name" TYPE [NOT NULL] [DEFAULT …]` spec, no inline primary key.
@@ -192,7 +218,12 @@ export function compileCreateTable(blueprint: Blueprint, dialect: Dialect): Comp
 
   const indexes = collectIndexes(blueprint).map(idx => compileCreateIndex(blueprint.table, idx, dialect))
 
-  return [create, ...indexes]
+  // Postgres column comments are separate statements (pg has no inline COMMENT).
+  const comments = blueprint.columns
+    .map(c => compileColumnComment(blueprint.table, c, dialect))
+    .filter((c): c is CompiledQuery => c !== null)
+
+  return [create, ...indexes, ...comments]
 }
 
 /** Compile `Schema.drop(...)` / `Schema.dropIfExists(...)`. */
@@ -258,7 +289,17 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     if (!col.nullable && !col.hasDefault && !col.useCurrent) {
       throw new NativeOrmError('NATIVE_DDL_ADD_NOT_NULL', `[RudderJS ORM native] Adding a NOT NULL column ("${col.name}") to an existing table requires a default — chain \`.default(...)\` or \`.nullable()\`.`)
     }
-    out.push({ sql: `ALTER TABLE ${t} ADD COLUMN ${compileColumn(col, dialect, false)}`, bindings: [] })
+    let addSql = `ALTER TABLE ${t} ADD COLUMN ${compileColumn(col, dialect, false)}`
+    // Positional ADD (MySQL only): FIRST wins over AFTER. pg/sqlite have no
+    // positional ADD COLUMN, so these are silently ignored there (Laravel too).
+    if (dialect.name === 'mysql') {
+      if (col.first)      addSql += ' FIRST'
+      else if (col.after) addSql += ` AFTER ${dialect.quoteId(col.after)}`
+    }
+    out.push({ sql: addSql, bindings: [] })
+    // pg out-of-line comment for the added column.
+    const comment = compileColumnComment(blueprint.table, col, dialect)
+    if (comment) out.push(comment)
   }
 
   // 3. New indexes (table-level + per-column unique()/index() on added columns).

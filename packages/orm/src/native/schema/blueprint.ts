@@ -66,6 +66,14 @@ export class ForeignKeyBuilder {
     this.fk.onUpdate = normalizeForeignKeyAction(action)
     return this
   }
+  /** `onDelete('cascade')`. */
+  cascadeOnDelete(): this { return this.onDelete('cascade') }
+  /** `onDelete('restrict')`. */
+  restrictOnDelete(): this { return this.onDelete('restrict') }
+  /** `onDelete('set null')` — pair with nullable column(s). */
+  nullOnDelete(): this { return this.onDelete('set null') }
+  /** `onUpdate('cascade')`. */
+  cascadeOnUpdate(): this { return this.onUpdate('cascade') }
   /** Override the default `{table}_{col[_col…]}_foreign` constraint name. */
   name(name: string): this {
     this.fk.name = name
