@@ -633,6 +633,30 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   withMin(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
   withMax(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
   withAvg(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+  /**
+   * Process the result set in memory-bounded pages. Re-runs the query with
+   * `LIMIT size OFFSET n` per page and invokes `callback` with each page's
+   * hydrated rows. Returning `false` from the callback stops early.
+   * Resolves `true` if it ran to completion, `false` if the callback bailed.
+   *
+   * Like Laravel's `chunk`, results rely on a consistent sort — add an
+   * `orderBy` (ideally on a unique column) so pages don't overlap or skip when
+   * rows shift between pages. `chunk` overrides any `limit`/`offset` already on
+   * the query.
+   */
+  chunk(size: number, callback: (rows: T[]) => void | boolean | Promise<void | boolean>): Promise<boolean>
+  /**
+   * Stream the result set one row at a time as an async iterator, fetching
+   * `size` rows per underlying page (default 1000). Pairs with `chunk` as the
+   * large-dataset pattern:
+   *
+   * ```ts
+   * for await (const user of User.query().orderBy('id').lazy()) { … }
+   * ```
+   *
+   * Same sort caveat as `chunk` — add an `orderBy` for stable paging.
+   */
+  lazy(size?: number): AsyncGenerator<T, void, undefined>
 }
 
 // ─── Generated schema registry (GATE 7-types) ──────────────
@@ -1239,6 +1263,56 @@ export abstract class Model {
             return proxy
           }
         }
+        // `chunk` / `lazy` — memory-bounded iteration. Both page the SAME query
+        // via LIMIT/OFFSET (mutating `target`'s limit/offset each pass) and reuse
+        // the `get` hydration path (wrapMany + attachPoly). Implemented here, off
+        // the adapter contract, since they compose existing QB primitives.
+        const fetchPage = async (size: number, offset: number): Promise<InstanceType<T>[]> => {
+          ;(target as QueryBuilder<InstanceType<T>>).limit(size).offset(offset)
+          const page = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+          await attachPoly(page)
+          return page
+        }
+        if (prop === 'chunk') {
+          return async (
+            size: number,
+            callback: (rows: InstanceType<T>[]) => void | boolean | Promise<void | boolean>,
+          ): Promise<boolean> => {
+            if (!Number.isInteger(size) || size <= 0) {
+              throw new Error('[RudderJS ORM] chunk(size, callback): size must be a positive integer.')
+            }
+            let offset = 0
+            for (;;) {
+              const page = await fetchPage(size, offset)
+              ormTraceTerminal(ModelClass, 'chunk', page.length, _traceAdapter)
+              if (page.length === 0) break
+              const result = await callback(page)
+              if (result === false) return false
+              if (page.length < size) break
+              offset += size
+            }
+            return true
+          }
+        }
+        if (prop === 'lazy') {
+          return (size = 1000): AsyncGenerator<InstanceType<T>, void, undefined> => {
+            if (!Number.isInteger(size) || size <= 0) {
+              throw new Error('[RudderJS ORM] lazy(size): size must be a positive integer.')
+            }
+            async function* generate(): AsyncGenerator<InstanceType<T>, void, undefined> {
+              let offset = 0
+              for (;;) {
+                const page = await fetchPage(size, offset)
+                ormTraceTerminal(ModelClass, 'lazy', page.length, _traceAdapter)
+                if (page.length === 0) break
+                for (const row of page) yield row
+                if (page.length < size) break
+                offset += size
+              }
+            }
+            return generate()
+          }
+        }
         const value = Reflect.get(target, prop, receiver) as unknown
         if (typeof value !== 'function') return value
 
@@ -1721,6 +1795,28 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] The active adapter does not support upsert() (called on ${self.name}).`)
     }
     return q.upsert(prepared as Partial<InstanceType<T>>[], keys, updateCols)
+  }
+
+  /**
+   * Process every row in memory-bounded pages — `User.chunk(200, rows => …)`.
+   * Convenience entry for `Model.query().chunk(...)`; see the QueryBuilder method
+   * for paging semantics (add an `orderBy` for stable pages). Returning `false`
+   * from the callback stops early.
+   */
+  static chunk<T extends typeof Model>(
+    this: T,
+    size: number,
+    callback: (rows: InstanceType<T>[]) => void | boolean | Promise<void | boolean>,
+  ): Promise<boolean> {
+    return Model._q(this).chunk(size, callback)
+  }
+
+  /**
+   * Stream every row one at a time — `for await (const u of User.lazy()) …`.
+   * Convenience entry for `Model.query().lazy(size)` (default page size 1000).
+   */
+  static lazy<T extends typeof Model>(this: T, size?: number): AsyncGenerator<InstanceType<T>, void, undefined> {
+    return Model._q(this).lazy(size)
   }
 
   /**

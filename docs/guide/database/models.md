@@ -113,8 +113,30 @@ await User.upsert(
 | `first()` / `find(id)` / `get()` | Read |
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
 | `upsert(rows, uniqueBy, update?)` | Bulk insert-or-update (atomic ON CONFLICT) |
+| `chunk(size, cb)` / `lazy(size?)` | Memory-bounded iteration over large result sets |
 | `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
+
+### Iterating large result sets — `chunk` / `lazy`
+
+Loading millions of rows into memory at once is a footgun. `chunk` and `lazy` page the query under the hood (`LIMIT size OFFSET n`) so only one page is resident at a time.
+
+```ts
+// Process the table in pages of 200. Return false from the callback to stop early.
+await User.query().orderBy('id').chunk(200, async (users) => {
+  for (const user of users) await sendDigest(user)
+})
+
+// Stream rows one at a time (async iterator); pages of 1000 by default.
+for await (const user of User.query().where('active', true).orderBy('id').lazy()) {
+  await reindex(user)
+}
+```
+
+- Both are also available as Model statics: `User.chunk(200, cb)` / `User.lazy()`.
+- **Add an `orderBy`** (ideally on a unique column such as the primary key) — offset paging relies on a consistent sort, or rows can overlap/skip between pages. Same caveat as Laravel's `chunk`.
+- `chunk` resolves `true` if it ran to completion, `false` if the callback bailed. `lazy(size?)` returns an async generator, so `break` stops fetching.
+- They override any `limit`/`offset` already on the query.
 
 ### Precedence in mixed `where` + `orWhere` chains
 
