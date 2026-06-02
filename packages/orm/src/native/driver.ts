@@ -20,6 +20,29 @@ export type { Row, Executor, Transaction, Connection } from '@rudderjs/contracts
 
 import type { Connection } from '@rudderjs/contracts'
 
+/** Result metadata for a write run through {@link AffectingExecutor}. */
+export interface AffectingResult {
+  /** The auto-increment id the write generated, or `null` when none (a
+   *  non-auto-increment key, or an UPDATE/DELETE). */
+  insertId:     number | null
+  /** Rows the statement affected — the count callers return from
+   *  `updateAll` / `deleteAll` and `DB.insert/update/delete`. */
+  affectedRows: number
+}
+
+/**
+ * A write-with-metadata escape hatch for dialects WITHOUT `RETURNING` (MySQL).
+ * On SQLite/Postgres the engine reads written rows back via `RETURNING *`
+ * (`Executor.execute`), so those drivers don't implement this. The MySQL driver
+ * does: the query builder's no-RETURNING path reads `insertId` (for `create`)
+ * and `affectedRows` (for `updateAll`/`deleteAll`) from here, then re-SELECTs by
+ * primary key for terminals that must return the row. A native-only seam (not in
+ * `@rudderjs/contracts`) — accessed by capability check, never on the read path.
+ */
+export interface AffectingExecutor {
+  affectingExecute(sql: string, bindings: readonly unknown[]): Promise<AffectingResult>
+}
+
 /**
  * A database connection the native engine drives — the per-platform seam.
  * Structurally identical to the canonical {@link Connection}; the distinct name

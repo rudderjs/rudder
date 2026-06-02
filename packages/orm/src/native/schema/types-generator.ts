@@ -80,6 +80,47 @@ export function pgTypeToTs(declared: string): string {
 }
 
 /**
+ * Map a MySQL `information_schema.columns.data_type` to a base TS type. The
+ * `data_type` is the base type WITHOUT length/precision, which `casts` then
+ * refine:
+ *  - integer family (`tinyint`/`smallint`/`mediumint`/`int`/`bigint`) → `number`.
+ *    Note `tinyint(1)` (MySQL's BOOLEAN alias) surfaces as `tinyint` here → `number`;
+ *    a declared `boolean` cast refines it to `boolean` (same treatment as pg);
+ *  - `decimal`/`numeric` → `string` (precision safety, matching pg — a
+ *    `float`/`decimal` cast refines to `number`);
+ *  - `float`/`double`/`real` → `number`;
+ *  - `json` → `unknown` (a `json` cast or typed `casts` entry refines);
+ *  - `date`/`datetime`/`timestamp` → `Date`; `blob`/`binary` → `Uint8Array`;
+ *  - char/text families → `string`; everything else → `unknown`.
+ */
+export function mysqlTypeToTs(declared: string): string {
+  const t = declared.toLowerCase()
+  switch (t) {
+    case 'tinyint':
+    case 'smallint':
+    case 'mediumint':
+    case 'int':
+    case 'integer':
+    case 'bigint':                return 'number'
+    case 'decimal':
+    case 'numeric':               return 'string'
+    case 'float':
+    case 'double':
+    case 'double precision':
+    case 'real':                  return 'number'
+    case 'json':                  return 'unknown'
+    case 'date':
+    case 'datetime':
+    case 'timestamp':             return 'Date'
+    default:
+      // varchar/char/text families → string; blob/binary families → Uint8Array.
+      if (t.includes('char') || t.includes('text') || t === 'enum' || t === 'set') return 'string'
+      if (t.includes('blob') || t.includes('binary')) return 'Uint8Array'
+      return 'unknown'
+  }
+}
+
+/**
  * The TS type a declared cast produces on READ (`toJSON`/hydration). Casts
  * OVERRIDE the storage type — a `boolean` cast turns an INTEGER column into
  * `boolean`, a `json` cast turns TEXT into `unknown`, etc. Returns null for

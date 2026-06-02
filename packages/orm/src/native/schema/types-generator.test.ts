@@ -5,7 +5,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RawColumn } from './introspect.js'
 import {
-  sqliteTypeToTs, pgTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts,
+  sqliteTypeToTs, pgTypeToTs, mysqlTypeToTs, castToTs, resolveColumnType, buildTableTypes, emitRegistryDts,
 } from './types-generator.js'
 
 function col(name: string, type: string, over: Partial<RawColumn> = {}): RawColumn {
@@ -31,6 +31,29 @@ describe('pgTypeToTs — information_schema data_type mapping', () => {
   }
   it('is case-insensitive', () => assert.equal(pgTypeToTs('JSONB'), 'unknown'))
   it('unknown types fall back to unknown', () => assert.equal(pgTypeToTs('tsvector'), 'unknown'))
+})
+
+describe('mysqlTypeToTs — information_schema data_type mapping', () => {
+  const cases: Array<[string, string]> = [
+    ['tinyint', 'number'], ['smallint', 'number'], ['mediumint', 'number'],
+    ['int', 'number'], ['integer', 'number'], ['bigint', 'number'],
+    ['decimal', 'string'], ['numeric', 'string'],   // precision-safe like pg numeric
+    ['float', 'number'], ['double', 'number'], ['real', 'number'],
+    ['json', 'unknown'],
+    ['date', 'Date'], ['datetime', 'Date'], ['timestamp', 'Date'],
+    ['varchar', 'string'], ['char', 'string'], ['text', 'string'],
+    ['longtext', 'string'], ['enum', 'string'], ['set', 'string'],
+    ['blob', 'Uint8Array'], ['longblob', 'Uint8Array'], ['varbinary', 'Uint8Array'],
+  ]
+  for (const [my, ts] of cases) {
+    it(`${my} → ${ts}`, () => assert.equal(mysqlTypeToTs(my), ts))
+  }
+  it('tinyint(1) base type tinyint → number (a boolean cast refines it)', () => {
+    assert.equal(mysqlTypeToTs('tinyint'), 'number')
+    assert.equal(resolveColumnType(col('active', 'tinyint', { notNull: true }), { active: 'boolean' }, mysqlTypeToTs).ts, 'boolean')
+  })
+  it('is case-insensitive', () => assert.equal(mysqlTypeToTs('JSON'), 'unknown'))
+  it('unknown types fall back to unknown', () => assert.equal(mysqlTypeToTs('geometry'), 'unknown'))
 })
 
 describe('resolveColumnType — per-dialect mapper', () => {

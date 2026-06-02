@@ -14,16 +14,18 @@ import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts 
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
 import { PgDialect } from './dialect-pg.js'
-import type { Driver, Executor, Transaction, Row } from './driver.js'
+import { MysqlDialect } from './dialect-mysql.js'
+import type { Driver, Executor, Transaction, Row, AffectingExecutor } from './driver.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
+import { MysqlDriver } from './drivers/mysql.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
 import type { ModelCastInfo } from './schema/schema-types.js'
 
-/** Supported native drivers. SQLite (better-sqlite3) + Postgres (porsager
- *  `postgres`); MySQL lands in 7.8. */
-export type NativeDriverName = 'sqlite' | 'pg'
+/** Supported native drivers. SQLite (better-sqlite3), Postgres (porsager
+ *  `postgres`), and MySQL (`mysql2`). */
+export type NativeDriverName = 'sqlite' | 'pg' | 'mysql'
 
 /** Config for {@link native} / {@link NativeAdapter.make}. */
 export interface NativeConfig {
@@ -135,11 +137,21 @@ export class NativeAdapter implements OrmAdapter {
 
   /**
    * Raw writing statement for the `DB` facade (`DB.insert`/`update`/`delete`/
-   * `statement`). The native `Executor.execute` resolves to the affected /
-   * `RETURNING *` rows, so the rows-affected count is `rows.length` (consistent
-   * with the engine's RETURNING-*→rows decision).
+   * `statement`). On SQLite/Postgres the caller's `RETURNING *` makes
+   * `Executor.execute` resolve to the affected rows, so the count is
+   * `rows.length`. On MySQL (no RETURNING) the affected count comes from the
+   * driver's result metadata via {@link AffectingExecutor} instead.
    */
   async affectingStatement(sql: string, bindings: readonly unknown[]): Promise<number> {
+    // On a no-RETURNING driver (MySQL) a raw write returns no rows — read the
+    // affected count from the driver's result metadata instead. SQLite/Postgres
+    // don't implement AffectingExecutor; they fall back to `rows.length`, where
+    // the caller's `RETURNING *` makes the count correct (the existing contract).
+    const ex = this.executor as Partial<AffectingExecutor>
+    if (typeof ex.affectingExecute === 'function') {
+      const { affectedRows } = await ex.affectingExecute(sql, bindings)
+      return affectedRows
+    }
     const rows = await this.executor.execute(sql, bindings)
     return rows.length
   }
@@ -215,6 +227,10 @@ async function openDriver(
     case 'pg': {
       const driver = await PostgresDriver.open({ url })
       return { driver, dialect: new PgDialect() }
+    }
+    case 'mysql': {
+      const driver = await MysqlDriver.open({ url })
+      return { driver, dialect: new MysqlDialect() }
     }
     default: {
       const _exhaustive: never = driverName

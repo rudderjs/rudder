@@ -37,7 +37,8 @@ export interface NativeDatabaseConnectionConfig {
    * (or set another value) to keep using prisma/drizzle.
    */
   engine?:     'native' | (string & {})
-  /** Underlying driver. Native ships `sqlite` today (pg/mysql land later). */
+  /** Underlying driver: `sqlite` (better-sqlite3), `pg` (postgres), or `mysql`
+   *  (mysql2). The matching optional peer must be installed. */
   driver?:     NativeDriverName | (string & {})
   /** Connection URL / path (`file:./dev.db`, `:memory:`, …). */
   url?:        string
@@ -71,16 +72,21 @@ export class NativeDatabaseProvider extends ServiceProvider {
     // collision guard: prisma/drizzle apps discover this provider but skip here.
     if (!conn || conn.engine !== 'native') return
 
-    if (conn.driver && conn.driver !== 'sqlite') {
+    // Native ships three drivers: sqlite (better-sqlite3), pg (postgres), and
+    // mysql (mysql2). Validate the configured name here — `NativeAdapter.make`
+    // then lazy-loads the matching optional peer and surfaces a clear install /
+    // connection error if it's missing or the URL is unreachable.
+    const driver = conn.driver ?? 'sqlite'
+    const KNOWN: readonly NativeDriverName[] = ['sqlite', 'pg', 'mysql']
+    if (!KNOWN.includes(driver as NativeDriverName)) {
       throw new Error(
-        `[RudderJS ORM native] The native engine currently supports the \`sqlite\` ` +
-        `driver only — got \`${conn.driver}\`. Use @rudderjs/orm-prisma or ` +
-        `@rudderjs/orm-drizzle for Postgres/MySQL, or set \`driver: 'sqlite'\`.`,
+        `[RudderJS ORM native] Unknown native driver \`${driver}\` — supported drivers ` +
+        `are ${KNOWN.map((d) => `\`${d}\``).join(', ')}. (Postgres uses \`pg\`, MySQL uses \`mysql\`.)`,
       )
     }
 
     const adapter = await NativeAdapter.make({
-      driver: 'sqlite',
+      driver: driver as NativeDriverName,
       ...(conn.url !== undefined && { url: conn.url }),
       ...(conn.primaryKey !== undefined && { primaryKey: conn.primaryKey }),
     })
