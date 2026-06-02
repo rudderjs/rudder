@@ -5,6 +5,7 @@ import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, Model
 // Client Bundle Smoke gate green by construction (CLAUDE.md client-bundle rule).
 import type { AsyncLocalStorage } from 'node:async_hooks'
 import { castGet, castSet, type CastDefinition } from './cast.js'
+import { generateUuid, generateUlid } from './keys.js'
 import { type Attribute } from './attribute.js'
 import {
   AGGREGATES_SYMBOL,
@@ -816,6 +817,25 @@ export abstract class Model {
 
   /** Primary key column */
   static primaryKey = 'id'
+
+  /**
+   * Primary-key value type. `'int'` (the default) is a database-assigned
+   * auto-increment — the ORM never sets it on insert. `'uuid'` and `'ulid'`
+   * are application-generated: when the primary key is unset on
+   * `Model.create()` / `instance.save()`, the ORM stamps a fresh value before
+   * the insert (Laravel's `HasUuids` / `HasUlids` traits).
+   *
+   * ```ts
+   * class ApiToken extends Model {
+   *   static override keyType = 'ulid'   // sortable 26-char Crockford Base32
+   * }
+   * await ApiToken.create({ name: 'ci' })   // id auto-filled, no DB sequence
+   * ```
+   *
+   * Pair with a matching schema column (`table.uuid('id').primary()` /
+   * `table.ulid('id').primary()`); the value type here only governs generation.
+   */
+  static keyType: 'int' | 'uuid' | 'ulid' = 'int'
 
   /**
    * Discriminator value written to `{morph}Type` columns by polymorphic
@@ -2170,10 +2190,24 @@ export abstract class Model {
     return Model._doCreate.call(this, filtered) as Promise<InstanceType<T>>
   }
 
+  /**
+   * @internal — stamp an application-generated primary key when `keyType` is
+   * `'uuid'` / `'ulid'` and the key is unset. No-op for the default `'int'`
+   * (database auto-increment) or when the caller already supplied a value.
+   */
+  private static _ensureGeneratedKey(payload: Record<string, unknown>): Record<string, unknown> {
+    if (this.keyType !== 'uuid' && this.keyType !== 'ulid') return payload
+    const pk = this.primaryKey
+    const existing = payload[pk]
+    if (existing !== undefined && existing !== null) return payload
+    return { ...payload, [pk]: this.keyType === 'uuid' ? generateUuid() : generateUlid() }
+  }
+
   /** @internal — create path that skips the fillable filter. Used by `save()`. */
   private static async _doCreate<T extends typeof Model>(this: T, data: Record<string, unknown>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data)
+    payload = self._ensureGeneratedKey(payload)
 
     const creatingResult = await self._fireEvent('creating', payload)
     if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
