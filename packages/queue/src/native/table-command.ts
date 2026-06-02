@@ -4,7 +4,7 @@
 // (Laravel's `make:queue-table` / `make:queue-failed-table`). Node-only — kept
 // off the main entry's static graph and loaded dynamically by the command.
 
-import { mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { jobsTableStub, failedJobsTableStub } from './migrations.js'
 
@@ -54,8 +54,15 @@ export async function writeQueueMigrations(
     }
     const file = `${timestamp(offset)}_${suffix}.ts`
     const full = join(dir, file)
-    if (existsSync(full)) continue
-    writeFileSync(full, content, 'utf8')
+    // Atomic create-if-absent — `wx` fails with EEXIST rather than a
+    // check-then-write race (the `alreadyHas` suffix scan above is the real
+    // dedup; this guards the exact-timestamp filename colliding).
+    try {
+      writeFileSync(full, content, { flag: 'wx' })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue
+      throw err
+    }
     written.push(join('database', 'migrations', file))
   }
   return written
