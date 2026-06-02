@@ -1,4 +1,13 @@
 import { ServiceProvider, config } from '@rudderjs/core'
+import { createRequire } from 'node:module'
+
+// Synchronous CJS resolver — lets the bcrypt driver call `bcryptjs.hashSync`
+// without an `await import()`. Required by the synchronous `makeSync` path that
+// `@rudderjs/orm`'s `hashed` cast depends on (casts run in a sync write path).
+const _require = createRequire(import.meta.url)
+
+// Matches both bcrypt (`$2a$`/`$2b$`/`$2y$`) and argon2 (`$argon2id$` …) digests.
+const HASHED_RE = /^\$(2[aby]?|argon2(id|i|d))\$/
 
 // ─── Hash Driver Contract ─────────────────────────────────
 
@@ -6,6 +15,14 @@ export interface HashDriver {
   make(value: string): Promise<string>
   check(value: string, hashed: string): Promise<boolean>
   needsRehash(hashed: string): boolean
+  /**
+   * Synchronous hash. Optional — only sync-capable algorithms (bcrypt)
+   * implement it; argon2 throws. Backs `Hash.makeSync` and the ORM `hashed`
+   * cast (which runs in a synchronous write path and cannot await).
+   */
+  makeSync?(value: string): string
+  /** Whether `value` is already a hash produced by this driver's algorithm. */
+  isHashed?(value: string): boolean
 }
 
 // ─── Hash Registry ────────────────────────────────────────
@@ -69,6 +86,25 @@ export class Hash {
   static needsRehash(hashed: string): boolean {
     return this.driver().needsRehash(hashed)
   }
+
+  /**
+   * Synchronous hash. Throws if the active driver has no sync implementation
+   * (argon2). Exists for synchronous call sites — notably the ORM `hashed`
+   * cast, which runs in a write path that cannot await.
+   */
+  static makeSync(value: string): string {
+    const d = this.driver()
+    if (typeof d.makeSync !== 'function') {
+      throw new Error('[RudderJS Hash] The active hash driver does not support synchronous hashing. Use Hash.make() (async) or switch to the bcrypt driver.')
+    }
+    return d.makeSync(value)
+  }
+
+  /** Whether `value` already looks like a hash (delegates to the driver if it implements `isHashed`). */
+  static isHashed(value: string): boolean {
+    const d = this.driver()
+    return typeof d.isHashed === 'function' ? d.isHashed(value) : HASHED_RE.test(value)
+  }
 }
 
 // ─── Bcrypt Driver (built-in) ─────────────────────────────
@@ -89,6 +125,13 @@ export class BcryptDriver implements HashDriver {
     return bcrypt.hash(value, this.rounds)
   }
 
+  makeSync(value: string): string {
+    // Synchronous require — bcryptjs is pure-JS so `hashSync` blocks the event
+    // loop (matches Laravel's synchronous Hash::make); fine for the cast path.
+    const bcrypt = _require('bcryptjs') as typeof import('bcryptjs')
+    return bcrypt.hashSync(value, this.rounds)
+  }
+
   async check(value: string, hashed: string): Promise<boolean> {
     const bcrypt = (await import('bcryptjs')).default
     return bcrypt.compare(value, hashed)
@@ -98,6 +141,10 @@ export class BcryptDriver implements HashDriver {
     const match = hashed.match(/^\$2[aby]?\$(\d{2})\$/)
     if (!match) return true
     return parseInt(match[1]!, 10) !== this.rounds
+  }
+
+  isHashed(value: string): boolean {
+    return /^\$2[aby]?\$\d{2}\$/.test(value)
   }
 }
 
@@ -130,9 +177,19 @@ export class Argon2Driver implements HashDriver {
     })
   }
 
+  makeSync(_value: string): string {
+    // argon2 is a native addon with no synchronous API. Sync call sites (the
+    // ORM `hashed` cast) must use the bcrypt driver or hash via an async mutator.
+    throw new Error('[RudderJS Hash] The argon2 driver has no synchronous hashing API. Use Hash.make() (async), switch to the bcrypt driver, or hash via an async mutator.')
+  }
+
   async check(value: string, hashed: string): Promise<boolean> {
     const argon2 = await import('argon2')
     return argon2.verify(hashed, value)
+  }
+
+  isHashed(value: string): boolean {
+    return /^\$argon2(id|i|d)\$/.test(value)
   }
 
   needsRehash(hashed: string): boolean {
