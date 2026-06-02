@@ -16,6 +16,19 @@ import {
   normalizeForeignKeyAction,
   type ColumnDefinition, type ForeignKeyDefinition, type ForeignKeyActionInput,
 } from './column.js'
+import { NativeOrmError } from '../errors.js'
+
+/** Validate that an `enum`/`set` column got a non-empty value list. The values
+ *  themselves are quoted at compile time, so the only check here is presence. */
+function requireValues(kind: 'enum' | 'set', values: string[]): string[] {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new NativeOrmError(
+      'NATIVE_DDL_EMPTY_ENUM',
+      `[RudderJS ORM native] ${kind}() requires a non-empty list of allowed values.`,
+    )
+  }
+  return values
+}
 
 /** A table-level index intent (`Blueprint.index` / `.unique` / column modifiers). */
 export interface IndexDefinition {
@@ -105,24 +118,88 @@ export class Blueprint {
   bigInteger(name: string): ColumnBuilder {
     return this.add(name, 'bigInteger')
   }
+  /** Small integer — `smallint` (pg/mysql), `INTEGER` (sqlite). */
+  smallInteger(name: string): ColumnBuilder {
+    return this.add(name, 'smallInteger')
+  }
+  /** Tiny integer — `tinyint` (mysql), `smallint` (pg), `INTEGER` (sqlite). */
+  tinyInteger(name: string): ColumnBuilder {
+    return this.add(name, 'tinyInteger')
+  }
+  /** Medium integer — `mediumint` (mysql), `integer` (pg), `INTEGER` (sqlite). */
+  mediumInteger(name: string): ColumnBuilder {
+    return this.add(name, 'mediumInteger')
+  }
   /** Unsigned big integer intended as a foreign key. Chain `.constrained()` (or
    *  `.references(...).on(...)`) to attach the FK constraint. */
   foreignId(name: string): ColumnBuilder {
     return this.add(name, 'bigInteger', { unsigned: true })
+  }
+  /**
+   * Laravel `foreignIdFor`: an unsigned big-integer FK column whose name is
+   * derived from a related table (`'users'` → `userId`) unless `column` is given.
+   * Chain `.constrained()` to attach the constraint. Naming follows the engine's
+   * camelCase convention (singularize + `Id`), a divergence from Laravel's
+   * `{snake}_id`.
+   */
+  foreignIdFor(related: string, column?: string): ColumnBuilder {
+    const singular = related.endsWith('s') ? related.slice(0, -1) : related
+    return this.foreignId(column ?? `${singular}Id`)
   }
 
   // ── Strings / text ──
   string(name: string, length = 255): ColumnBuilder {
     return this.add(name, 'string', { length })
   }
+  /** Fixed-length `char(length)` (pg/mysql); `TEXT` on sqlite. */
+  char(name: string, length = 255): ColumnBuilder {
+    return this.add(name, 'char', { length })
+  }
   text(name: string): ColumnBuilder {
     return this.add(name, 'text')
+  }
+  /** `mediumtext` (mysql); `text` (pg/sqlite). */
+  mediumText(name: string): ColumnBuilder {
+    return this.add(name, 'mediumText')
+  }
+  /** `longtext` (mysql); `text` (pg/sqlite). */
+  longText(name: string): ColumnBuilder {
+    return this.add(name, 'longText')
   }
   uuid(name = 'uuid'): ColumnBuilder {
     return this.add(name, 'uuid')
   }
+  /** 26-char ULID — `char(26)` (pg/mysql), `TEXT` (sqlite). */
+  ulid(name = 'ulid'): ColumnBuilder {
+    return this.add(name, 'ulid')
+  }
+  /** A `uuid` column intended as a foreign key — chain `.constrained()`. */
+  foreignUuid(name: string): ColumnBuilder {
+    return this.add(name, 'uuid')
+  }
+  /** A `ulid` column intended as a foreign key — chain `.constrained()`. */
+  foreignUlid(name: string): ColumnBuilder {
+    return this.add(name, 'ulid')
+  }
   json(name: string): ColumnBuilder {
     return this.add(name, 'json')
+  }
+  /** `jsonb` (pg) — binary JSON; falls back to `json` (mysql) / `TEXT` (sqlite). */
+  jsonb(name: string): ColumnBuilder {
+    return this.add(name, 'jsonb')
+  }
+  /**
+   * Enumerated string column. `enum(...)` on MySQL; `varchar(255)` + a
+   * `CHECK (… IN (…))` constraint on pg/sqlite. Values are migration-author
+   * supplied — rendered as quoted literals, never bound. Throws on an empty list.
+   */
+  enum(name: string, values: string[]): ColumnBuilder {
+    return this.add(name, 'enum', { enumValues: requireValues('enum', values) })
+  }
+  /** MySQL `set(...)` — multiple allowed values stored as a comma list. Throws a
+   *  clear NotImplemented on pg/sqlite (no native SET type). */
+  set(name: string, values: string[]): ColumnBuilder {
+    return this.add(name, 'set', { enumValues: requireValues('set', values) })
   }
 
   // ── Numbers ──
@@ -132,10 +209,23 @@ export class Blueprint {
   float(name: string): ColumnBuilder {
     return this.add(name, 'float')
   }
+  /** Double-precision float — `double precision` (pg), `double` (mysql), `REAL` (sqlite). */
+  double(name: string): ColumnBuilder {
+    return this.add(name, 'double')
+  }
 
   // ── Booleans / dates / binary ──
   boolean(name: string): ColumnBuilder {
     return this.add(name, 'boolean')
+  }
+  /** Calendar date (no time) — `date` (pg/mysql), `TEXT` (sqlite). */
+  date(name: string): ColumnBuilder {
+    return this.add(name, 'date')
+  }
+  /** Time of day (no date). Optional fractional-seconds `precision` → `time(p)`
+   *  on pg/mysql; `TEXT` on sqlite. */
+  time(name: string, precision?: number): ColumnBuilder {
+    return this.add(name, 'time', precision === undefined ? {} : { precision })
   }
   dateTime(name: string): ColumnBuilder {
     return this.add(name, 'dateTime')

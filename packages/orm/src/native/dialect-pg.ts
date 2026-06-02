@@ -10,7 +10,7 @@
 // validated through the shared {@link validateIdentifier} security gate.
 
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, type Dialect } from './dialect.js'
+import { validateIdentifier, quoteValueList, type Dialect } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
@@ -70,19 +70,44 @@ export class PgDialect implements Dialect {
       case 'increments': return 'serial'
       case 'integer':    return 'integer'
       case 'bigInteger': return 'bigint'
+      // pg has no tinyint/mediumint — smallint covers tiny/small, integer covers medium.
+      case 'tinyInteger':
+      case 'smallInteger': return 'smallint'
+      case 'mediumInteger': return 'integer'
       // `string` carries a length (Blueprint defaults it to 255); pg honours it.
       case 'string':     return `varchar(${column.length ?? 255})`
-      case 'text':       return 'text'
+      case 'char':       return `char(${column.length ?? 255})`
+      case 'text':
+      // pg has no mediumtext/longtext — `text` is unbounded and covers both.
+      case 'mediumText':
+      case 'longText':   return 'text'
       case 'boolean':    return 'boolean'
+      case 'date':       return 'date'
+      // Optional fractional-seconds precision → time(p); plain time otherwise.
+      case 'time':       return column.precision === undefined ? 'time' : `time(${column.precision})`
       // Both dateTime and timestamp map to timestamptz — timezone-aware is the
       // safer default and matches the plan's column-type table.
       case 'dateTime':
       case 'timestamp':  return 'timestamptz'
-      case 'json':       return 'jsonb'
+      // json maps to jsonb (binary, indexable) — the pg-idiomatic default; jsonb
+      // is explicit.
+      case 'json':
+      case 'jsonb':      return 'jsonb'
       case 'uuid':       return 'uuid'
+      case 'ulid':       return 'char(26)'
       case 'decimal':    return `numeric(${column.precision ?? 8}, ${column.scale ?? 2})`
       case 'float':      return 'double precision'
+      case 'double':     return 'double precision'
       case 'binary':     return 'bytea'
+      // pg has no native enum-by-value-list inline; mirror Laravel's pg grammar:
+      // a varchar + CHECK (… IN (…)). `set` has no pg equivalent.
+      case 'enum':
+        return `varchar(255) CHECK (${this.quoteId(column.name)} IN (${quoteValueList(column.enumValues ?? [])}))`
+      case 'set':
+        throw new NativeOrmError(
+          'NATIVE_DDL_UNSUPPORTED_TYPE',
+          `[RudderJS ORM native] Postgres has no SET column type ("${column.name}"). Use enum(), a json column, or a join table.`,
+        )
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type

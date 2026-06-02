@@ -102,6 +102,22 @@ export interface Dialect {
 const SEGMENT = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /**
+ * Quote a string as a SQL literal (single-quoted, embedded `'` doubled). Used
+ * for DDL value lists that can't be bound — `enum`/`set` allowed-value lists and
+ * the `CHECK (… IN (…))` constraint on pg/sqlite. Migration-author supplied, so
+ * escaping (not an allowlist) is the right boundary, matching the column-DEFAULT
+ * literal path in the DDL compiler.
+ */
+export function quoteSqlString(value: string): string {
+  return `'${String(value).replace(/'/g, "''")}'`
+}
+
+/** Render an `enum`/`set` value list as a `(quoted, list)` for inline use. */
+export function quoteValueList(values: readonly string[]): string {
+  return values.map(quoteSqlString).join(', ')
+}
+
+/**
  * Validate a (possibly dotted) identifier and return its segments. Throws
  * {@link NativeIdentifierError} on anything that isn't a plain
  * `[letter|_][letter|digit|_]*` per dot-separated segment.
@@ -171,21 +187,42 @@ export class SqliteDialect implements Dialect {
       case 'increments': // only reached if an increments column isn't auto (defensive)
       case 'integer':
       case 'bigInteger':
+      case 'tinyInteger':
+      case 'smallInteger':
+      case 'mediumInteger':
       case 'boolean':
         return 'INTEGER'
       case 'string':
+      case 'char':
       case 'text':
+      case 'mediumText':
+      case 'longText':
       case 'uuid':
+      case 'ulid':
       case 'json':
+      case 'jsonb':
+      case 'date':
+      case 'time':
       case 'dateTime':
       case 'timestamp':
         return 'TEXT'
       case 'float':
+      case 'double':
         return 'REAL'
       case 'decimal':
         return 'NUMERIC'
       case 'binary':
         return 'BLOB'
+      // SQLite has no enum/set type. Mirror Laravel's SQLite grammar: a TEXT
+      // column with a CHECK (… IN (…)) constraint. `set` genuinely has no
+      // single-column equivalent (multiple values), so it's unsupported.
+      case 'enum':
+        return `TEXT CHECK (${this.quoteId(column.name)} IN (${quoteValueList(column.enumValues ?? [])}))`
+      case 'set':
+        throw new NativeOrmError(
+          'NATIVE_DDL_UNSUPPORTED_TYPE',
+          `[RudderJS ORM native] SQLite has no SET column type ("${column.name}"). Use enum(), a json column, or a pivot table.`,
+        )
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type

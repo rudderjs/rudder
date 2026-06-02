@@ -90,16 +90,29 @@ export type ColumnType =
   | 'increments'   // auto-incrementing integer primary key
   | 'integer'
   | 'bigInteger'
+  | 'tinyInteger'
+  | 'smallInteger'
+  | 'mediumInteger'
   | 'string'       // varchar(length) on pg/mysql; TEXT on sqlite
+  | 'char'         // char(length) on pg/mysql; TEXT on sqlite
   | 'text'
+  | 'mediumText'   // mediumtext on mysql; text on pg/sqlite
+  | 'longText'     // longtext on mysql; text on pg/sqlite
   | 'boolean'
+  | 'date'
+  | 'time'         // time(precision?) on pg/mysql; TEXT on sqlite
   | 'dateTime'
   | 'timestamp'
   | 'json'
+  | 'jsonb'        // jsonb on pg; json on mysql; TEXT on sqlite
   | 'uuid'
+  | 'ulid'         // char(26) on pg/mysql; TEXT on sqlite
   | 'decimal'
   | 'float'
+  | 'double'
   | 'binary'
+  | 'enum'         // enum(...) on mysql; varchar+CHECK on pg/sqlite
+  | 'set'          // set(...) on mysql; NotImplemented on pg/sqlite
 
 /**
  * The recorded shape of one column. Built by {@link ColumnBuilder}; consumed by
@@ -111,9 +124,14 @@ export interface ColumnDefinition {
   type:          ColumnType
   /** `string(name, length)` — kept for pg/mysql `varchar(N)`; SQLite ignores it. */
   length?:       number
-  /** `decimal(name, precision, scale)`. */
+  /** `decimal(name, precision, scale)`; also the fractional-seconds precision
+   *  for `time(name, precision)`. */
   precision?:    number
   scale?:        number
+  /** Allowed values for `enum(name, [...])` / `set(name, [...])`. Rendered as a
+   *  quoted literal list (mysql `enum(...)`/`set(...)`) or a `CHECK (... IN ...)`
+   *  constraint (pg/sqlite `enum`). Migration-author supplied — quoted, never bound. */
+  enumValues?:   string[]
   nullable:      boolean
   /** Whether a DEFAULT was set (distinguishes `default(null)` from "no default"). */
   hasDefault:    boolean

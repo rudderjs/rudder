@@ -15,7 +15,7 @@
 //     boolean default renders as `1`/`0` (same as SQLite).
 
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, type Dialect } from './dialect.js'
+import { validateIdentifier, quoteValueList, type Dialect } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
@@ -80,22 +80,38 @@ export class MysqlDialect implements Dialect {
       case 'increments': return 'int'
       case 'integer':    return 'int'
       case 'bigInteger': return 'bigint'
+      // MySQL has the full small-integer family natively.
+      case 'tinyInteger':   return 'tinyint'
+      case 'smallInteger':  return 'smallint'
+      case 'mediumInteger': return 'mediumint'
       // `string` carries a length (Blueprint defaults it to 255); MySQL honours it.
       case 'string':     return `varchar(${column.length ?? 255})`
+      case 'char':       return `char(${column.length ?? 255})`
       case 'text':       return 'text'
+      case 'mediumText': return 'mediumtext'
+      case 'longText':   return 'longtext'
       // BOOLEAN is a tinyint(1) alias; spell it out so introspection reads
       // `tinyint` and a `boolean` cast refines it back to `boolean`.
       case 'boolean':    return 'tinyint(1)'
+      case 'date':       return 'date'
+      case 'time':       return column.precision === undefined ? 'time' : `time(${column.precision})`
       // MySQL distinguishes datetime (no tz, full range) from timestamp (UTC,
       // 1970–2038, auto-update quirks). Map the portable types straight across.
       case 'dateTime':   return 'datetime'
       case 'timestamp':  return 'timestamp'
-      case 'json':       return 'json'
-      // MySQL has no native UUID type — store as a fixed-width char(36).
+      // MySQL has no jsonb — its `json` type is already binary-backed.
+      case 'json':
+      case 'jsonb':      return 'json'
+      // MySQL has no native UUID/ULID type — store as fixed-width char.
       case 'uuid':       return 'char(36)'
+      case 'ulid':       return 'char(26)'
       case 'decimal':    return `decimal(${column.precision ?? 8}, ${column.scale ?? 2})`
       case 'float':      return 'double'
+      case 'double':     return 'double'
       case 'binary':     return 'blob'
+      // MySQL has both enum and set natively.
+      case 'enum':       return `enum(${quoteValueList(column.enumValues ?? [])})`
+      case 'set':        return `set(${quoteValueList(column.enumValues ?? [])})`
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type
