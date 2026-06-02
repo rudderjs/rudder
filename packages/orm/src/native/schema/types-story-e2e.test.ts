@@ -47,13 +47,16 @@ import { generateSchemaTypes, type ModelCastInfo } from './schema-types.js'
 // node --test runs from the package dir (packages/orm); turbo keeps the same cwd.
 const ormRoot = process.cwd()
 const repoRoot = join(ormRoot, '..', '..')
-const tscBin = join(repoRoot, 'node_modules', '.bin', 'tsc')
 const ormDts = join(ormRoot, 'dist-test', 'index.d.ts')
 const contractsDts = join(repoRoot, 'packages', 'contracts', 'dist', 'index.d.ts')
 
+const require_ = createRequire(join(ormRoot, 'noop.js'))
+// Run tsc as `node <typescript/bin/tsc>` rather than the `node_modules/.bin/tsc`
+// shim: on Windows the shim is `tsc.cmd`, which execFileSync can't exec directly
+// (it needs a shell) — the JS entry runs identically on every platform.
+const tscJs = require_.resolve('typescript/bin/tsc')
 // @types/node is pnpm-hoisted under a versioned .pnpm path — resolve it rather
 // than hardcode, so the spawned tsc finds node typings on any machine.
-const require_ = createRequire(join(ormRoot, 'noop.js'))
 const nodeTypesRoot = dirname(dirname(require_.resolve('@types/node/package.json')))
 
 // The model the generated registry types — declares the `active` boolean cast so
@@ -70,13 +73,17 @@ export class Account extends Model.for<'rudder_types_story'>() {
 // mirroring what collectRegisteredModelCasts() yields at runtime.
 const MODELS: ModelCastInfo[] = [{ table: 'rudder_types_story', casts: { active: 'boolean' } }]
 
+// tsc accepts forward slashes on every platform; normalizing avoids Windows
+// backslashes landing in (and being escaped through) the JSON tsconfig.
+const fwd = (p: string): string => p.replace(/\\/g, '/')
+
 function writeTsconfig(root: string, files: string[]): string {
   const path = join(root, 'tsconfig.json')
   writeFileSync(
     path,
     JSON.stringify(
       {
-        extends: join(repoRoot, 'tsconfig.base.json'),
+        extends: fwd(join(repoRoot, 'tsconfig.base.json')),
         compilerOptions: {
           noEmit: true,
           // Plain diagnostics (no ANSI/code-frames) so the negative control's
@@ -89,14 +96,14 @@ function writeTsconfig(root: string, files: string[]): string {
           moduleResolution: 'Bundler',
           skipLibCheck: true,
           types: ['node'],
-          typeRoots: [nodeTypesRoot],
-          baseUrl: root,
+          typeRoots: [fwd(nodeTypesRoot)],
+          baseUrl: fwd(root),
           paths: {
-            '@rudderjs/orm': [ormDts],
-            '@rudderjs/contracts': [contractsDts],
+            '@rudderjs/orm': [fwd(ormDts)],
+            '@rudderjs/contracts': [fwd(contractsDts)],
           },
         },
-        files,
+        files: files.map(fwd),
       },
       null,
       2,
@@ -108,7 +115,7 @@ function writeTsconfig(root: string, files: string[]): string {
 /** Spawn the real tsc over a tsconfig. Returns the exit code + combined output. */
 function typecheck(tsconfigPath: string): { ok: boolean; output: string } {
   try {
-    execFileSync(tscBin, ['-p', tsconfigPath], { stdio: 'pipe', encoding: 'utf8' })
+    execFileSync(process.execPath, [tscJs, '-p', tsconfigPath], { stdio: 'pipe', encoding: 'utf8' })
     return { ok: true, output: '' }
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string }
