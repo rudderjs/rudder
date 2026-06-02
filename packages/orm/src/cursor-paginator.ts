@@ -62,7 +62,10 @@ function toBase64Url(s: string): string {
     for (const byte of bytes) bin += String.fromCharCode(byte)
     b64 = btoa(bin)
   }
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  // `=` only ever appears as trailing base64 padding (never mid-string), so a
+  // global char strip is equivalent to `/=+$/` — and avoids the anchored-quantifier
+  // ReDoS pattern CodeQL flags on the latter.
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
 function fromBase64Url(s: string): string {
