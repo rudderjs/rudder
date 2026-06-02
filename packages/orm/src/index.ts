@@ -645,6 +645,66 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   withMin(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
   withMax(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
   withAvg(arg1: string | Record<string, AggregateSumSpec>, arg2?: string): this
+
+  // ── where-sugar (Model-layer; composed from where/whereGroup/orderBy) ──
+  /** `WHERE col IN (...)`. Sugar for `where(col, 'IN', values)`. */
+  whereIn(column: string, values: readonly unknown[]): this
+  /** `WHERE col NOT IN (...)`. */
+  whereNotIn(column: string, values: readonly unknown[]): this
+  /** OR-rooted `IN`. */
+  orWhereIn(column: string, values: readonly unknown[]): this
+  /** OR-rooted `NOT IN`. */
+  orWhereNotIn(column: string, values: readonly unknown[]): this
+  /** `WHERE col IS NULL`. */
+  whereNull(column: string): this
+  /** `WHERE col IS NOT NULL`. */
+  whereNotNull(column: string): this
+  /** OR-rooted `IS NULL`. */
+  orWhereNull(column: string): this
+  /** OR-rooted `IS NOT NULL`. */
+  orWhereNotNull(column: string): this
+  /** `WHERE col BETWEEN a AND b` (inclusive). Compiles to a grouped `>= a AND <= b`. */
+  whereBetween(column: string, range: readonly [unknown, unknown]): this
+  /** `WHERE col NOT BETWEEN a AND b`. Compiles to a grouped `< a OR > b`. */
+  whereNotBetween(column: string, range: readonly [unknown, unknown]): this
+  /** OR-rooted `BETWEEN`. */
+  orWhereBetween(column: string, range: readonly [unknown, unknown]): this
+  /** OR-rooted `NOT BETWEEN`. */
+  orWhereNotBetween(column: string, range: readonly [unknown, unknown]): this
+  /**
+   * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
+   * given). The callback receives this builder + the value, so clauses compose
+   * conditionally without breaking the chain. Mirrors Laravel's `when`.
+   *
+   * ```ts
+   * User.query().when(role, (q, r) => q.where('role', r)).get()
+   * ```
+   */
+  when<V>(value: V, callback: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
+  /** Inverse of {@link when} — runs `callback` when `value` is falsy. */
+  unless<V>(value: V, callback: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
+  /** `ORDER BY col DESC` (default column `createdAt`). */
+  latest(column?: string): this
+  /** `ORDER BY col ASC` (default column `createdAt`). */
+  oldest(column?: string): this
+  /** Resolve the query and return a flat array of one column's values. */
+  pluck<K extends keyof T>(column: K): Promise<T[K][]>
+  pluck(column: string): Promise<unknown[]>
+  /** Resolve the first row and return one column's value (or `undefined`). */
+  value<K extends keyof T>(column: K): Promise<T[K] | undefined>
+  value(column: string): Promise<unknown>
+  /** `SELECT SUM(col)` scalar terminal (0 on an empty set). */
+  sum(column: string): Promise<number>
+  /** `SELECT MAX(col)` scalar terminal (null on an empty set). */
+  max(column: string): Promise<number | null>
+  /** `SELECT MIN(col)` scalar terminal (null on an empty set). */
+  min(column: string): Promise<number | null>
+  /** `SELECT AVG(col)` scalar terminal (null on an empty set). */
+  avg(column: string): Promise<number | null>
+  /** Whether any row matches the current constraints. */
+  exists(): Promise<boolean>
+  /** Whether no row matches the current constraints. */
+  doesntExist(): Promise<boolean>
   /**
    * Process the result set in memory-bounded pages. Re-runs the query with
    * `LIMIT size OFFSET n` per page and invokes `callback` with each page's
@@ -1330,6 +1390,39 @@ export abstract class Model {
             return proxy
           }
         }
+        // where-sugar — named where variants + conditional clauses + scalar
+        // terminals, composed from the adapter QB's existing primitives
+        // (where/orWhere/whereGroup/orderBy/get/first/_aggregate). Implemented
+        // here off the adapter contract so every adapter gets them for free.
+        {
+          const q = target as QueryBuilder<InstanceType<T>>
+          switch (prop) {
+            case 'whereIn':         return (c: string, v: readonly unknown[]) => { q.where(c, 'IN', v as unknown[]); return proxy }
+            case 'whereNotIn':      return (c: string, v: readonly unknown[]) => { q.where(c, 'NOT IN', v as unknown[]); return proxy }
+            case 'orWhereIn':       return (c: string, v: readonly unknown[]) => { q.orWhere(c, 'IN', v as unknown[]); return proxy }
+            case 'orWhereNotIn':    return (c: string, v: readonly unknown[]) => { q.orWhere(c, 'NOT IN', v as unknown[]); return proxy }
+            case 'whereNull':       return (c: string) => { q.where(c, '=', null); return proxy }
+            case 'whereNotNull':    return (c: string) => { q.where(c, '!=', null); return proxy }
+            case 'orWhereNull':     return (c: string) => { q.orWhere(c, '=', null); return proxy }
+            case 'orWhereNotNull':  return (c: string) => { q.orWhere(c, '!=', null); return proxy }
+            case 'whereBetween':    return (c: string, [a, b]: [unknown, unknown]) => { q.whereGroup(g => { g.where(c, '>=', a).where(c, '<=', b) }); return proxy }
+            case 'whereNotBetween': return (c: string, [a, b]: [unknown, unknown]) => { q.whereGroup(g => { g.where(c, '<', a).orWhere(c, '>', b) }); return proxy }
+            case 'orWhereBetween':  return (c: string, [a, b]: [unknown, unknown]) => { q.orWhereGroup(g => { g.where(c, '>=', a).where(c, '<=', b) }); return proxy }
+            case 'orWhereNotBetween': return (c: string, [a, b]: [unknown, unknown]) => { q.orWhereGroup(g => { g.where(c, '<', a).orWhere(c, '>', b) }); return proxy }
+            case 'latest':          return (c = 'createdAt') => { q.orderBy(c, 'DESC'); return proxy }
+            case 'oldest':          return (c = 'createdAt') => { q.orderBy(c, 'ASC'); return proxy }
+            case 'when':            return (val: unknown, cb: (q: unknown, v: unknown) => void, otherwise?: (q: unknown, v: unknown) => void) => { if (val) cb?.(proxy, val); else otherwise?.(proxy, val); return proxy }
+            case 'unless':          return (val: unknown, cb: (q: unknown, v: unknown) => void, otherwise?: (q: unknown, v: unknown) => void) => { if (!val) cb?.(proxy, val); else otherwise?.(proxy, val); return proxy }
+            case 'pluck':           return async (c: string): Promise<unknown[]> => wrapMany(await q.get()).map(r => (r as Record<string, unknown>)[c])
+            case 'value':           return async (c: string): Promise<unknown> => { const r = wrapMaybe(await q.first()); return r ? (r as Record<string, unknown>)[c] : undefined }
+            case 'sum':             return (c: string) => q._aggregate('sum', c)
+            case 'max':             return (c: string) => q._aggregate('max', c)
+            case 'min':             return (c: string) => q._aggregate('min', c)
+            case 'avg':             return (c: string) => q._aggregate('avg', c)
+            case 'exists':          return () => q._aggregate('exists')
+            case 'doesntExist':     return async (): Promise<boolean> => !(await q._aggregate('exists'))
+          }
+        }
         // `chunk` / `lazy` — memory-bounded iteration. Both page the SAME query
         // via LIMIT/OFFSET (mutating `target`'s limit/offset each pass) and reuse
         // the `get` hydration path (wrapMany + attachPoly). Implemented here, off
@@ -1594,6 +1687,62 @@ export abstract class Model {
 
   static where<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).where(column, value)
+  }
+
+  // ── where-sugar static entry points (mirror the HydratingQueryBuilder sugar) ──
+  static whereIn<T extends typeof Model>(this: T, column: string, values: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereIn(column, values)
+  }
+  static whereNotIn<T extends typeof Model>(this: T, column: string, values: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereNotIn(column, values)
+  }
+  static whereNull<T extends typeof Model>(this: T, column: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereNull(column)
+  }
+  static whereNotNull<T extends typeof Model>(this: T, column: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereNotNull(column)
+  }
+  static whereBetween<T extends typeof Model>(this: T, column: string, range: readonly [unknown, unknown]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereBetween(column, range)
+  }
+  static whereNotBetween<T extends typeof Model>(this: T, column: string, range: readonly [unknown, unknown]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereNotBetween(column, range)
+  }
+  static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).latest(column)
+  }
+  static oldest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).oldest(column)
+  }
+  static when<T extends typeof Model, V>(this: T, value: V, callback: (q: HydratingQueryBuilder<InstanceType<T>>, value: V) => void, otherwise?: (q: HydratingQueryBuilder<InstanceType<T>>, value: V) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).when(value, callback, otherwise)
+  }
+  static unless<T extends typeof Model, V>(this: T, value: V, callback: (q: HydratingQueryBuilder<InstanceType<T>>, value: V) => void, otherwise?: (q: HydratingQueryBuilder<InstanceType<T>>, value: V) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).unless(value, callback, otherwise)
+  }
+  static pluck<T extends typeof Model>(this: T, column: string): Promise<unknown[]> {
+    return Model._q(this).pluck(column)
+  }
+  static value<T extends typeof Model>(this: T, column: string): Promise<unknown> {
+    return Model._q(this).value(column)
+  }
+  static sum<T extends typeof Model>(this: T, column: string): Promise<number> {
+    return Model._q(this).sum(column)
+  }
+  static max<T extends typeof Model>(this: T, column: string): Promise<number | null> {
+    return Model._q(this).max(column)
+  }
+  static min<T extends typeof Model>(this: T, column: string): Promise<number | null> {
+    return Model._q(this).min(column)
+  }
+  static avg<T extends typeof Model>(this: T, column: string): Promise<number | null> {
+    return Model._q(this).avg(column)
+  }
+  static exists<T extends typeof Model>(this: T): Promise<boolean> {
+    return Model._q(this).exists()
+  }
+  static doesntExist<T extends typeof Model>(this: T): Promise<boolean> {
+    return Model._q(this).doesntExist()
   }
 
   /**
