@@ -11,7 +11,7 @@
 // throws a clear error naming that adapter.
 
 import type { OrmAdapter, Row } from '@rudderjs/contracts'
-import { resolveAdapter } from './registry-bridge.js'
+import { resolveAdapter, resolveTransactionRunner } from './registry-bridge.js'
 import { Expression, raw } from './expression.js'
 
 function adapterName(adapter: OrmAdapter): string {
@@ -70,6 +70,22 @@ export const DB = {
   /** Run an arbitrary raw statement (DDL, etc.). Resolves to rows affected. */
   async statement(sql: string, bindings: readonly unknown[] = []): Promise<number> {
     return requireAffecting(resolveAdapter())(sql, bindings)
+  },
+
+  /**
+   * Run `fn` inside a database transaction, mirroring Laravel's `DB::transaction`.
+   * Every `Model.*` and `DB.*` call issued inside `fn` runs on the *same* open
+   * transaction — the runner (pushed in by `@rudderjs/orm`) threads the
+   * transaction-scoped adapter through `AsyncLocalStorage`, so no connection is
+   * passed around. Commits when `fn` resolves; rolls back and re-throws if it
+   * rejects. Nested `DB.transaction()` / `Model.transaction()` calls map to
+   * savepoints where the driver supports them.
+   *
+   * @throws if no transaction runner is registered (no database provider loaded),
+   *   or if the active adapter doesn't implement `transaction()`.
+   */
+  async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    return resolveTransactionRunner()(fn)
   },
 
   /** Wrap a literal SQL fragment so the query layer splices it verbatim. */

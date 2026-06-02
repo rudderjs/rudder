@@ -6,6 +6,8 @@ import {
   Expression,
   registerAdapterResolver,
   resolveAdapter,
+  registerTransactionRunner,
+  resolveTransactionRunner,
   __resetAdapterResolver,
 } from './index.js'
 
@@ -89,6 +91,38 @@ test('DB write throws an adapter-named error when the seam is missing', async ()
   await assert.rejects(
     () => DB.insert('insert into t default values'),
     /LegacyAdapter does not implement affectingStatement\(\)/,
+  )
+})
+
+test('resolveTransactionRunner throws a clear error when none is registered', () => {
+  assert.throws(() => resolveTransactionRunner(), /No transaction runner is available/)
+})
+
+test('DB.transaction throws a clear error when no runner is registered', async () => {
+  await assert.rejects(() => DB.transaction(async () => 1), /No transaction runner is available/)
+})
+
+test('DB.transaction delegates to the registered runner and returns its result', async () => {
+  let ran = false
+  registerTransactionRunner(async (fn) => {
+    ran = true
+    return fn()
+  })
+
+  const result = await DB.transaction(async () => 'committed')
+
+  assert.equal(ran, true)
+  assert.equal(result, 'committed')
+})
+
+test('DB.transaction propagates a rejection from the callback', async () => {
+  // The runner re-throws whatever the callback rejects with (commit/rollback is
+  // the adapter's job; the facade is a thin pass-through).
+  registerTransactionRunner(async (fn) => fn())
+
+  await assert.rejects(
+    () => DB.transaction(async () => { throw new Error('boom') }),
+    /boom/,
   )
 })
 

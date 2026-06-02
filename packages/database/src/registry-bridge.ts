@@ -13,7 +13,18 @@
 
 import type { OrmAdapter } from '@rudderjs/contracts'
 
+/**
+ * Runs `fn` inside a database transaction, returning its result. Pushed in by
+ * `@rudderjs/orm` (its `transaction()` free function) so `DB.transaction()` reuses
+ * the ORM's `AsyncLocalStorage` transaction scoping — every `Model.*` AND `DB.*`
+ * call inside `fn` joins the *same* open transaction (one connection, not two).
+ * `@rudderjs/database` can't import `@rudderjs/orm`, so the runner is injected the
+ * same way the adapter resolver is.
+ */
+export type TransactionRunner = <T>(fn: () => Promise<T>) => Promise<T>
+
 let resolver: (() => OrmAdapter) | null = null
+let txRunner: TransactionRunner | null = null
 
 /**
  * Register the function that resolves the active ORM adapter. Called once by
@@ -41,7 +52,33 @@ export function resolveAdapter(): OrmAdapter {
   return resolver()
 }
 
-/** @internal — test-only reset of the registered resolver. */
+/**
+ * Register the function that runs work inside a transaction. Called by
+ * `@rudderjs/orm`'s `db-bridge` module alongside {@link registerAdapterResolver},
+ * passing the ORM's `transaction()` free function (which owns the ALS scoping).
+ * Idempotent — last registration wins (a dev HMR re-boot re-installs the same fn).
+ */
+export function registerTransactionRunner(fn: TransactionRunner): void {
+  txRunner = fn
+}
+
+/**
+ * Resolve the active transaction runner. Throws a clear error when none has been
+ * registered — i.e. `@rudderjs/orm` (and a database provider) wasn't loaded.
+ */
+export function resolveTransactionRunner(): TransactionRunner {
+  if (!txRunner) {
+    throw new Error(
+      '[RudderJS DB] No transaction runner is available. DB.transaction() runs ' +
+        'through @rudderjs/orm — make sure a database provider is registered (and ' +
+        '@rudderjs/orm installed) before calling DB.transaction().',
+    )
+  }
+  return txRunner
+}
+
+/** @internal — test-only reset of the registered resolver + transaction runner. */
 export function __resetAdapterResolver(): void {
   resolver = null
+  txRunner = null
 }

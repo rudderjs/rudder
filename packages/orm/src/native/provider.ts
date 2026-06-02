@@ -22,6 +22,11 @@ import { ServiceProvider, config } from '@rudderjs/core'
 import { ModelRegistry } from '../index.js'
 import { NativeAdapter } from './adapter.js'
 import type { NativeDriverName } from './adapter.js'
+// Side effect: wires the DB facade to resolve this app's active ORM adapter and
+// pushes the transaction runner — mirrors the prisma/drizzle adapter entries, so
+// `DB.*` / `DB.transaction()` work in native-engine apps too. Node-only subpath,
+// never on the client bundle path.
+import '../db-bridge.js'
 
 /** One connection entry in `config/database.ts`. Mirrors the prisma/drizzle
  *  shapes, plus the `engine` discriminator the native provider gates on. */
