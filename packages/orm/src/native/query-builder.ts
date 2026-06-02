@@ -19,6 +19,7 @@ import type {
   RelationExistencePredicate,
   AggregateRequest,
   AggregateFn,
+  JoinClause,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
@@ -34,6 +35,9 @@ import {
   type ConditionNode,
   type OrderItem,
   type RawFragment,
+  type JoinNode,
+  type JoinCondition,
+  type HavingNode,
   type NativeQueryState,
 } from './compiler.js'
 
@@ -42,9 +46,21 @@ import {
  *  warns once. No-op in production. */
 const _warnedWith = new Set<string>()
 
+/** Global-registry symbol the `HydratingQueryBuilder` Proxy answers with its
+ *  wrapped native builder. `union(other)` reads it to unwrap a passed proxy back
+ *  to the underlying `NativeQueryBuilder` so it can read the member's state.
+ *  `Symbol.for` (not an imported value) keeps the node-only native module out of
+ *  the client-reachable `index.ts` import graph. */
+const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _conditions: ConditionNode[] = []
   private readonly _orders:     OrderItem[]     = []
+  private readonly _selects:    string[]        = []
+  private readonly _joins:      JoinNode[]      = []
+  private readonly _groupBy:    string[]        = []
+  private readonly _having:     HavingNode[]    = []
+  private readonly _unions:     Array<{ all: boolean; state: NativeQueryState }> = []
   private readonly _rawSelects: RawFragment[]   = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
@@ -92,7 +108,12 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       deletedAtColumn: 'deletedAt',
       relationExists:  this._relationExists,
       aggregates:      this._aggregates,
+      selects:         this._selects,
       rawSelects:      this._rawSelects,
+      joins:           this._joins,
+      groupBy:         this._groupBy,
+      having:          this._having,
+      unions:          this._unions,
       lock:            this._lock,
     }
   }
@@ -196,6 +217,125 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   orderByRaw(sql: string, bindings: readonly unknown[] = []): this {
     this._orders.push({ kind: 'raw', raw: { sql, bindings } })
+    return this
+  }
+
+  // ── projection + joins ───────────────────────────────────
+
+  /** Structured projection — `select('users.id', 'posts.title')`. Each column is
+   *  identifier-quoted (qualified `table.col` supported) and REPLACES the default
+   *  `*`. Accumulates with `selectRaw` (structured first, then raw). */
+  select(...columns: string[]): this {
+    this._selects.push(...columns)
+    return this
+  }
+
+  /** `INNER JOIN`. Simple form `join('posts', 'posts.userId', '=', 'users.id')`
+   *  (the operator is optional and defaults to `=`); callback form
+   *  `join('posts', (j) => j.on(...).where(...))` for compound ON clauses. */
+  join(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('inner', table, first, operator, second)
+  }
+
+  /** `LEFT JOIN` — same call forms as {@link join}. */
+  leftJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('left', table, first, operator, second)
+  }
+
+  /** `RIGHT JOIN` — same call forms as {@link join}. (SQLite 3.39+; native on pg/mysql.) */
+  rightJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('right', table, first, operator, second)
+  }
+
+  /** `CROSS JOIN` — Cartesian product, no ON clause. */
+  crossJoin(table: string): this {
+    this._joins.push({ type: 'cross', table, conditions: [] })
+    return this
+  }
+
+  private _addJoin(
+    type: 'inner' | 'left' | 'right',
+    table: string,
+    first: string | ((join: JoinClause) => void),
+    operator?: WhereOperator,
+    second?: string,
+  ): this {
+    const conditions: JoinCondition[] = []
+    if (typeof first === 'function') {
+      first(new NativeJoinClause(conditions))
+    } else {
+      // Two-arg ON (`join(t, 'a', 'b')`) is equality; three-arg carries the operator.
+      const op    = (second === undefined ? '=' : operator) as WhereOperator
+      const right = second === undefined ? operator as string : second
+      conditions.push({ kind: 'on', boolean: 'AND', left: first, operator: op, right })
+    }
+    this._joins.push({ type, table, conditions })
+    return this
+  }
+
+  // ── grouping ─────────────────────────────────────────────
+
+  /** `GROUP BY col [, …]` — columns identifier-quoted (qualified `table.col` ok). */
+  groupBy(...columns: string[]): this {
+    this._groupBy.push(...columns)
+    return this
+  }
+
+  /** `HAVING col <op> value` — filter on grouped rows / a SELECT alias. Two-arg
+   *  form is equality; the value binds. For an aggregate use {@link havingRaw}. */
+  having(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    return this._pushHaving('AND', column, operatorOrValue, value)
+  }
+
+  /** OR-rooted {@link having}. */
+  orHaving(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    return this._pushHaving('OR', column, operatorOrValue, value)
+  }
+
+  /** `HAVING <raw>` — the portable way to filter on an aggregate, e.g.
+   *  `havingRaw('COUNT(*) > ?', [3])`. `?` placeholders bind positionally. */
+  havingRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._having.push({ kind: 'raw', boolean: 'AND', raw: { sql, bindings } })
+    return this
+  }
+
+  /** OR-rooted {@link havingRaw}. */
+  orHavingRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._having.push({ kind: 'raw', boolean: 'OR', raw: { sql, bindings } })
+    return this
+  }
+
+  private _pushHaving(boolean: 'AND' | 'OR', column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const val      = value === undefined ? operatorOrValue : value
+    this._having.push({ kind: 'clause', boolean, clause: { column, operator, value: val } })
+    return this
+  }
+
+  // ── unions ───────────────────────────────────────────────
+
+  /** `… UNION …` — append another query as a UNION member (duplicate rows
+   *  removed). The combined result takes THIS query's ORDER BY / LIMIT / OFFSET;
+   *  the member's own are ignored. `other` is another native query (`Model.query()`). */
+  union(other: QueryBuilder<T>): this {
+    return this._addUnion(other, false)
+  }
+
+  /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
+  unionAll(other: QueryBuilder<T>): this {
+    return this._addUnion(other, true)
+  }
+
+  private _addUnion(other: QueryBuilder<T>, all: boolean): this {
+    // `other` is usually the HydratingQueryBuilder Proxy wrapping a
+    // NativeQueryBuilder — unwrap it via the global symbol the proxy answers.
+    const target = (other as unknown as Record<symbol, unknown>)[QB_TARGET] ?? other
+    if (!(target instanceof NativeQueryBuilder)) {
+      throw new Error(
+        '[RudderJS ORM native] union()/unionAll() requires another native query builder — pass a Model.query() of a native-engine model.',
+      )
+    }
+    this._unions.push({ all, state: (target as NativeQueryBuilder<T>)._state() })
     return this
   }
 
@@ -594,5 +734,45 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     if (fn === 'exists') return Number(raw ?? 0) > 0
     if (raw === null || raw === undefined) return fn === 'sum' ? 0 : null
     return Number(raw)
+  }
+}
+
+/**
+ * The sub-builder passed to the callback form of `join(...)`. Pushes
+ * {@link JoinCondition}s into the array the `NativeQueryBuilder` holds for that
+ * join — `on`/`orOn` are column-vs-column (nothing binds), `where`/`orWhere`
+ * are column-vs-value (the value binds at compile time).
+ */
+export class NativeJoinClause implements JoinClause {
+  constructor(private readonly conditions: JoinCondition[]) {}
+
+  on(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    return this._pushOn('AND', left, operatorOrRight, right)
+  }
+
+  orOn(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    return this._pushOn('OR', left, operatorOrRight, right)
+  }
+
+  where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    return this._pushWhere('AND', column, operatorOrValue, value)
+  }
+
+  orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    return this._pushWhere('OR', column, operatorOrValue, value)
+  }
+
+  private _pushOn(boolean: 'AND' | 'OR', left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    const operator = (right === undefined ? '=' : operatorOrRight) as WhereOperator
+    const rightCol = right === undefined ? operatorOrRight as string : right
+    this.conditions.push({ kind: 'on', boolean, left, operator, right: rightCol })
+    return this
+  }
+
+  private _pushWhere(boolean: 'AND' | 'OR', column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const val      = value === undefined ? operatorOrValue : value
+    this.conditions.push({ kind: 'where', boolean, clause: { column, operator, value: val } })
+    return this
   }
 }

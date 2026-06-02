@@ -1,4 +1,4 @@
-import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate } from '@rudderjs/contracts'
+import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate, JoinClause } from '@rudderjs/contracts'
 // Type-only — erased at compile, so no runtime `node:async_hooks` import lands in
 // the eval graph. The real module is lazy-imported in `ensureTxStorage()`, which
 // only runs from `transaction()` — never reached in a client bundle. Keeps the
@@ -72,7 +72,7 @@ import {
   type KeysetBuilder,
 } from './cursor-paginator.js'
 
-export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape, JoinClause } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
 export { vector }                                  from './cast.js'
 export {
@@ -624,6 +624,12 @@ export function Cast(type: CastDefinition) {
 
 // ─── Hydrating QueryBuilder ────────────────────────────────
 
+/** Global-registry symbol the hydrating Proxy answers with its wrapped adapter
+ *  QB. The native `union(other)` reads it to unwrap a passed proxy. Defined via
+ *  `Symbol.for` in both places (here + the native QB) so no runtime value needs
+ *  to cross the node-only/client-reachable module boundary. */
+const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
 /**
  * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
  * `with()` etc. actually return. Extends the adapter contract with the
@@ -695,6 +701,59 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   /** OR-rooted {@link whereColumn}. */
   orWhereColumn(left: string, right: string): this
   orWhereColumn(left: string, operator: WhereOperator, right: string): this
+
+  // ── joins + structured projection ──
+  /**
+   * Restrict the projection to specific columns — `select('users.id',
+   * 'posts.title')`. Each is identifier-quoted (qualified `table.col` works) and
+   * REPLACES the default `*`; accumulates with {@link QueryBuilder.selectRaw}.
+   * **Native engine only** — throws on Drizzle/Prisma (their typed clients can't
+   * map an arbitrary projection back to a model); use `DB.select(...)` there.
+   */
+  select(...columns: string[]): this
+  /**
+   * `INNER JOIN`. Simple form `join('posts', 'posts.userId', '=', 'users.id')`
+   * (operator defaults to `=` in the two-column form) or callback form
+   * `join('posts', (j) => j.on(...).where(...))` for compound ON clauses.
+   * **Native engine only** — throws on Drizzle/Prisma (use the native engine or
+   * `DB.select(...)`).
+   */
+  join(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this
+  /** `LEFT JOIN` — same call forms as {@link join}. Native engine only. */
+  leftJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this
+  /** `RIGHT JOIN` — same call forms as {@link join}. Native engine only. */
+  rightJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this
+  /** `CROSS JOIN` (Cartesian product, no ON). Native engine only. */
+  crossJoin(table: string): this
+  /**
+   * `GROUP BY col [, …]` — columns identifier-quoted (qualified `table.col` ok).
+   * With a GROUP BY present, `count()`/`paginate()` count the number of groups.
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  groupBy(...columns: string[]): this
+  /**
+   * `HAVING col <op> value` — filter grouped rows (or a SELECT alias on engines
+   * that allow it). Two-arg form is equality; the value binds. For an aggregate
+   * predicate use {@link havingRaw}. **Native engine only.**
+   */
+  having(column: string, value: unknown): this
+  having(column: string, operator: WhereOperator, value: unknown): this
+  /** OR-rooted {@link having}. */
+  orHaving(column: string, value: unknown): this
+  orHaving(column: string, operator: WhereOperator, value: unknown): this
+  /** `HAVING <raw>` — portable aggregate filter, e.g. `havingRaw('COUNT(*) > ?', [3])`. */
+  havingRaw(sql: string, bindings?: readonly unknown[]): this
+  /** OR-rooted {@link havingRaw}. */
+  orHavingRaw(sql: string, bindings?: readonly unknown[]): this
+  /**
+   * `… UNION …` — combine this query with `other` (duplicate rows removed). The
+   * combined result takes THIS query's `ORDER BY` / `LIMIT` / `OFFSET`; the
+   * member's own are ignored. `other` is another native query (`Model.query()`).
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  union(other: QueryBuilder<Model>): this
+  /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
+  unionAll(other: QueryBuilder<Model>): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -1315,6 +1374,10 @@ export abstract class Model {
     // contained to this one site instead of leaking to every call site.
     const proxy = new Proxy(qb as object, {
       get(target, prop, receiver): unknown {
+        // Unwrap to the underlying adapter QB — `union(otherQuery)` reads this on
+        // the passed proxy so the native builder can splice the member's state.
+        // Matches the `Symbol.for` the native QB uses (no cross-module import).
+        if (prop === QB_TARGET) return target
         // ORM-side chainables that don't exist on the adapter QB itself —
         // intercept before the existence check below, since `whereHas` etc.
         // are added by this proxy, not by the adapter.
@@ -1776,6 +1839,35 @@ export abstract class Model {
     return (right === undefined
       ? Model._q(this).whereColumn(left, operatorOrRight)
       : Model._q(this).whereColumn(left, operatorOrRight as WhereOperator, right))
+  }
+  // ── join / select entry points (native engine only) ──
+  static select<T extends typeof Model>(this: T, ...columns: string[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).select(...columns)
+  }
+  static join<T extends typeof Model>(this: T, table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).join(table, first, operator, second)
+  }
+  static leftJoin<T extends typeof Model>(this: T, table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).leftJoin(table, first, operator, second)
+  }
+  static rightJoin<T extends typeof Model>(this: T, table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).rightJoin(table, first, operator, second)
+  }
+  static crossJoin<T extends typeof Model>(this: T, table: string): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).crossJoin(table)
+  }
+  static groupBy<T extends typeof Model>(this: T, ...columns: string[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).groupBy(...columns)
+  }
+  static having<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static having<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static having<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).having(column, operatorOrValue)
+      : Model._q(this).having(column, operatorOrValue as WhereOperator, value))
+  }
+  static havingRaw<T extends typeof Model>(this: T, sql: string, bindings?: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).havingRaw(sql, bindings)
   }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)
