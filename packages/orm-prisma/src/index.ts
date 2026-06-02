@@ -1120,10 +1120,19 @@ function _aggregateDefault(fn: AggregateFn): unknown {
 
 // ─── Prisma Adapter ────────────────────────────────────────
 
+/** Monotonic counter for unique nested-transaction SAVEPOINT names. */
+let savepointSeq = 0
+
 class PrismaAdapter implements OrmAdapter {
   private _driver: string
 
-  private constructor(readonly prismaClient: PrismaClient, driver?: string) {
+  private constructor(
+    readonly prismaClient: PrismaClient,
+    driver?: string,
+    /** True when bound to an interactive-transaction client (`tx`): nesting maps
+     *  to a SAVEPOINT and lifecycle calls are no-ops on the shared connection. */
+    private readonly txScoped = false,
+  ) {
     this._driver = driver ?? 'sqlite'
   }
   /** @internal — expose the raw PrismaClient for DI binding */
@@ -1215,11 +1224,59 @@ class PrismaAdapter implements OrmAdapter {
   }
 
   async connect(): Promise<void> {
+    // A transaction-scoped adapter shares the open connection — never re-connect.
+    if (this.txScoped) return
     await this.prisma.$connect()
   }
 
   async disconnect(): Promise<void> {
+    // Never close the shared connection from inside a transaction scope (and the
+    // interactive-transaction client has no `$disconnect`).
+    if (this.txScoped) return
     await this.prisma.$disconnect()
+  }
+
+  /**
+   * Run `fn` inside a Prisma interactive transaction. The adapter passed to `fn`
+   * is bound to Prisma's transaction client, so every query built from it — and,
+   * via the ORM's `AsyncLocalStorage`, every `Model.*` / `DB.*` call inside the
+   * callback — executes on that one transaction. Commits when `fn` resolves;
+   * rolls back and re-throws when it rejects.
+   *
+   * **Nesting → SAVEPOINT.** Prisma's interactive-transaction client can't open
+   * another `$transaction`, so a nested call brackets `fn` with a `SAVEPOINT` /
+   * `RELEASE SAVEPOINT` (or `ROLLBACK TO SAVEPOINT` on failure) on the same
+   * connection — matching the native engine's savepoint semantics. SAVEPOINT is
+   * supported by SQLite, Postgres, and MySQL alike.
+   */
+  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+    if (this.txScoped) return this.savepoint(fn)
+
+    const client = this.prisma as unknown as {
+      $transaction<R>(fn: (tx: PrismaClient) => Promise<R>): Promise<R>
+    }
+    return client.$transaction((txClient) => {
+      const scoped = new PrismaAdapter(txClient, this._driver, true)
+      return fn(scoped)
+    })
+  }
+
+  /** Nested-transaction body: a SAVEPOINT on the current transaction connection.
+   *  `fn` receives this same scoped adapter (same `tx` client / connection). */
+  private async savepoint<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+    const name = `rudder_sp_${(savepointSeq = (savepointSeq + 1) % Number.MAX_SAFE_INTEGER)}`
+    const exec = this.prisma as unknown as {
+      $executeRawUnsafe(sql: string, ...args: unknown[]): Promise<number>
+    }
+    await exec.$executeRawUnsafe(`SAVEPOINT ${name}`)
+    try {
+      const result = await fn(this)
+      await exec.$executeRawUnsafe(`RELEASE SAVEPOINT ${name}`)
+      return result
+    } catch (err) {
+      await exec.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${name}`)
+      throw err
+    }
   }
 
   /**

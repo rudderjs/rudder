@@ -9,6 +9,9 @@ export { Expression, raw } from './expression.js'
 export {
   registerAdapterResolver,
   resolveAdapter,
+  registerTransactionRunner,
+  resolveTransactionRunner,
   __resetAdapterResolver,
 } from './registry-bridge.js'
+export type { TransactionRunner } from './registry-bridge.js'
 export type { Row, Executor, Transaction, Connection } from './execution.js'

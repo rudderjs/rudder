@@ -12,8 +12,13 @@
 // Resolving through `getAdapter()` (not a cached adapter) means `DB.*` inside a
 // `Model.transaction()` callback transparently joins the open transaction —
 // `ModelRegistry.getAdapter()` returns the transaction-scoped adapter there.
+//
+// The same module also pushes `transaction()` in as the facade's transaction
+// runner so `DB.transaction(fn)` reuses the ORM's `AsyncLocalStorage` scoping —
+// every `Model.*` AND `DB.*` call inside `fn` joins the one open transaction.
 
-import { registerAdapterResolver } from '@rudderjs/database'
-import { ModelRegistry } from './index.js'
+import { registerAdapterResolver, registerTransactionRunner } from '@rudderjs/database'
+import { ModelRegistry, transaction } from './index.js'
 
 registerAdapterResolver(() => ModelRegistry.getAdapter())
+registerTransactionRunner(transaction)

@@ -47,6 +47,10 @@ type DrizzleDb = {
    *  queries route through `execute(sql)` because pgvector ops can't
    *  be expressed via the fluent select API. */
   execute?(query: SQL): Promise<unknown>
+  /** Open a transaction. Drizzle's tx object is itself a `DrizzleDb` whose own
+   *  `transaction()` opens a nested SAVEPOINT — so the adapter gets cross-adapter
+   *  `transaction()` + nesting for free by re-binding to the scoped `tx`. */
+  transaction?<T>(fn: (tx: DrizzleDb) => Promise<T>): Promise<T>
   $client?: { end?: () => Promise<void> }
 }
 
@@ -1156,6 +1160,36 @@ export class DrizzleAdapter implements OrmAdapter {
   async disconnect(): Promise<void> {
     const end = this.db.$client?.end
     if (typeof end === 'function') await end()
+  }
+
+  /**
+   * Run `fn` inside a Drizzle transaction (`db.transaction`). The adapter passed
+   * to `fn` is re-bound to Drizzle's transaction-scoped `db`, so every query
+   * built from it — and, via the ORM's `AsyncLocalStorage`, every `Model.*` /
+   * `DB.*` call inside the callback — executes on that one transaction. Commits
+   * when `fn` resolves; rolls back and re-throws when it rejects.
+   *
+   * **Nesting → SAVEPOINT for free.** Drizzle's `tx` is itself a `DrizzleDb`
+   * whose `transaction()` opens a nested SAVEPOINT, so a nested call on the
+   * scoped adapter rolls back only its own savepoint — matching the native
+   * engine. The `better-sqlite3` driver runs transactions synchronously and
+   * rejects async callbacks; use `libsql` / Postgres / MySQL for async work
+   * inside a transaction.
+   */
+  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+    const run = this.db.transaction
+    if (typeof run !== 'function') {
+      throw new Error(
+        '[RudderJS ORM Drizzle] This Drizzle driver does not support transaction() — ' +
+          'db.transaction() is unavailable on the configured client.',
+      )
+    }
+    // `.call` drops the generic binding, so the callback result widens to
+    // `unknown` — cast back to the declared `Promise<T>`.
+    return run.call(this.db, (txDb: DrizzleDb) => {
+      const scoped = new DrizzleAdapter(txDb, this.tables, this.primaryKey, this.dialect)
+      return fn(scoped)
+    }) as Promise<T>
   }
 
   /**
