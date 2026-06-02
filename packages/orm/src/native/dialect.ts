@@ -80,6 +80,20 @@ export interface Dialect {
    * interpolated here — only identifiers, quoted via {@link quoteId}.
    */
   upsertClause(uniqueBy: readonly string[], update: readonly string[]): string
+
+  /**
+   * The pessimistic-locking suffix appended to a `SELECT` (after ORDER BY /
+   * LIMIT), or `''` when the dialect has no row-level locking. Powers
+   * `QueryBuilder.lockForUpdate()` / `sharedLock()`:
+   *
+   * - Postgres / MySQL 8: `' FOR UPDATE'` / `' FOR SHARE'`.
+   * - SQLite: `''` — there is no per-row lock; a write transaction already
+   *   serializes writers, so the reservation is safe without a suffix.
+   *
+   * Always prefixed with a leading space so the compiler can concatenate it
+   * unconditionally.
+   */
+  lockSql(mode: 'update' | 'shared'): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -124,6 +138,13 @@ export class SqliteDialect implements Dialect {
   // boolean default renders as the matching integer literal.
   booleanLiteral(value: boolean): string {
     return value ? '1' : '0'
+  }
+
+  // SQLite has no row-level pessimistic lock — a write transaction (BEGIN
+  // IMMEDIATE) already serializes writers, so the queue reservation is safe
+  // without a `FOR UPDATE` suffix. No-op.
+  lockSql(_mode: 'update' | 'shared'): string {
+    return ''
   }
 
   // SQLite + Postgres share the ON CONFLICT (target) DO UPDATE / DO NOTHING form,

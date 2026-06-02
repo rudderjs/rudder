@@ -53,6 +53,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private _softDeletes  = false
   private _withTrashed  = false
   private _onlyTrashed  = false
+  private _lock: 'update' | 'shared' | null = null
   /** Marks a sub-builder created for whereGroup — terminals throw on it. */
   private _isSubBuilder = false
 
@@ -92,6 +93,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       relationExists:  this._relationExists,
       aggregates:      this._aggregates,
       rawSelects:      this._rawSelects,
+      lock:            this._lock,
     }
   }
 
@@ -179,6 +181,14 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   withTrashed(): this { this._withTrashed = true; return this }
   onlyTrashed(): this { this._onlyTrashed = true; return this }
+
+  /** Pessimistic `FOR UPDATE` row lock (no-op on SQLite — see {@link Dialect.lockSql}).
+   *  Only meaningful inside a `transaction()`; the powering primitive for the
+   *  native database queue's atomic job reservation. */
+  lockForUpdate(): this { this._lock = 'update'; return this }
+
+  /** Shared `FOR SHARE` row lock (no-op on SQLite). */
+  sharedLock(): this { this._lock = 'shared'; return this }
 
   // ── read terminals ───────────────────────────────────────
 
@@ -300,7 +310,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
    * adapter, whose by-id writes also ignore chained wheres.
    */
   private _idState(): NativeQueryState {
-    return { ...this._state(), conditions: [], softDelete: 'with' }
+    return { ...this._state(), conditions: [], softDelete: 'with', lock: null }
   }
 
   // ── no-RETURNING write path (MySQL) ──────────────────────

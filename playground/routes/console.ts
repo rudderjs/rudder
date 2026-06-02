@@ -36,6 +36,18 @@ Rudder.command('db:seed', async () => {
   console.log('Done. 3 users seeded.')
 }).description('Seed the database with sample data')
 
+Rudder.command('queue:demo', async () => {
+  const { WelcomeUserJob } = await import('App/Jobs/WelcomeUserJob.js')
+  const { FailingJob }     = await import('App/Jobs/FailingJob.js')
+
+  await WelcomeUserJob.dispatch('Alice', 'alice@example.com').send()
+  await WelcomeUserJob.dispatch('Bob',   'bob@example.com').send()
+  await FailingJob.dispatch('Crash on purpose').send()
+
+  console.log('\nDispatched 3 jobs onto the configured queue.')
+  console.log('Process them: pnpm rudder queue:work --stop-when-empty\n')
+}).description('Dispatch a few demo jobs onto the queue (pairs with queue:work)')
+
 // ─── Scheduled Tasks ───────────────────────────────────────
 
 // Flush the users query cache every 5 minutes so stale data doesn't linger

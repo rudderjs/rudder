@@ -115,6 +115,28 @@ export interface DispatchOptions {
   __context?: Record<string, unknown>
 }
 
+/**
+ * Worker-loop options parsed from `queue:work` flags. Honored by self-hosted
+ * polling drivers (the native `database` driver); managed drivers (BullMQ,
+ * Inngest) own their own retry/concurrency model and ignore these.
+ */
+export interface WorkerOptions {
+  /** Process a single job, then exit (`--once`). */
+  once?: boolean
+  /** Process all available jobs, then exit gracefully (`--stop-when-empty`). */
+  stopWhenEmpty?: boolean
+  /** Seconds to sleep when no job is available (`--sleep`, default 3). */
+  sleep?: number
+  /** Max attempts before a job is moved to failed_jobs (`--tries`). */
+  tries?: number
+  /** Seconds to wait before retrying a released job (`--backoff`). */
+  backoff?: number
+  /** Seconds a single job may run before the await is abandoned (`--timeout`). */
+  timeout?: number
+  /** Process this many jobs, then exit (`--max-jobs`). */
+  maxJobs?: number
+}
+
 export interface QueueStats {
   waiting:   number
   active:    number
@@ -163,8 +185,9 @@ export interface QueueAdapter {
    */
   readonly supportsBatch?: boolean
 
-  /** Start processing jobs (for self-hosted adapters like BullMQ) — comma-separated queue names */
-  work?(queues?: string): Promise<void>
+  /** Start processing jobs (for self-hosted adapters like BullMQ / database) —
+   *  comma-separated queue names (priority order) + parsed worker options. */
+  work?(queues?: string, options?: WorkerOptions): Promise<void>
 
   /**
    * For cloud adapters (Inngest etc.): returns the serve handler for the
@@ -324,6 +347,32 @@ export interface QueueConfig {
   connections: Record<string, QueueConnectionConfig>
 }
 
+// ─── queue:work argument parsing ───────────────────────────
+
+/**
+ * Split `queue:work` args into the positional queue list and parsed
+ * {@link WorkerOptions} flags. The first non-flag token is the comma-separated
+ * queue names (priority order); `--flag` / `--flag=value` tokens populate options.
+ */
+export function parseWorkerArgs(args: string[]): { queues: string; options: WorkerOptions } {
+  const positional: string[] = []
+  const options: WorkerOptions = {}
+  for (const arg of args) {
+    if (!arg.startsWith('--')) { positional.push(arg); continue }
+    const [flag, raw] = arg.slice(2).split('=')
+    switch (flag) {
+      case 'once':            options.once = true; break
+      case 'stop-when-empty': options.stopWhenEmpty = true; break
+      case 'sleep':           options.sleep   = Number(raw); break
+      case 'tries':           options.tries   = Number(raw); break
+      case 'backoff':         options.backoff = Number(raw); break
+      case 'timeout':         options.timeout = Number(raw); break
+      case 'max-jobs':        options.maxJobs = Number(raw); break
+    }
+  }
+  return { queues: positional[0] ?? 'default', options }
+}
+
 // ─── Service Provider Factory ──────────────────────────────
 
 /**
@@ -351,6 +400,11 @@ export class QueueProvider extends ServiceProvider {
 
       if (driver === 'sync') {
         adapter = new SyncAdapter()
+      } else if (driver === 'database') {
+        // In-package native driver — no optional peer. It reaches the ORM
+        // lazily (resolveOptionalPeer) so this import stays dependency-free.
+        const { database } = await import('./native/index.js')
+        adapter = database(connectionConfig).create()
       } else if (driver === 'inngest') {
         const { inngest } = await resolveOptionalPeer<{ inngest: (c: unknown) => QueueAdapterProvider }>('@rudderjs/queue-inngest')
         adapter = inngest(connectionConfig).create()
@@ -358,7 +412,7 @@ export class QueueProvider extends ServiceProvider {
         const { bullmq } = await resolveOptionalPeer<{ bullmq: (c: unknown) => QueueAdapterProvider }>('@rudderjs/queue-bullmq')
         adapter = bullmq(connectionConfig).create()
       } else {
-        throw new Error(`[RudderJS Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
+        throw new Error(`[RudderJS Queue] Unknown driver "${driver}". Available: sync, database, inngest, bullmq`)
       }
 
       QueueRegistry.set(adapter)
@@ -381,11 +435,22 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:work', async (args) => {
         const a = currentAdapter()
         if (typeof a.work !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
+          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support workers. Switch to "bullmq" or "database" in config/queue.ts.`)
         }
-        const queues = args[0] ?? 'default'
-        await a.work(queues)
-      }).description('Start a queue worker — pnpm rudder queue:work [queues=default]')
+        const { queues, options } = parseWorkerArgs(args)
+        await a.work(queues, options)
+      }).description('Start a queue worker — pnpm rudder queue:work [queues=default] [--once --sleep=3 --tries=3 --backoff=0 --timeout=60 --max-jobs=N --stop-when-empty]')
+
+      rudder.command('queue:table', async () => {
+        const { writeQueueMigrations } = await import('./native/table-command.js')
+        const cfg2  = config<QueueConfig>('queue')
+        const conn: QueueConnectionConfig = cfg2.connections[cfg2.default] ?? { driver: 'database' }
+        const table = (conn['table'] as string | undefined) ?? 'jobs'
+        const failedTable = (conn['failedTable'] as string | undefined) ?? 'failed_jobs'
+        const written = await writeQueueMigrations(process.cwd(), table, failedTable)
+        for (const p of written) console.log(`  ✓ ${p}`)
+        console.log('\nRun `pnpm rudder migrate` to create the tables.')
+      }).description('Stub the jobs + failed_jobs migrations — pnpm rudder queue:table')
 
       rudder.command('queue:status', async (args) => {
         const a = currentAdapter()

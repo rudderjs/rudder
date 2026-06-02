@@ -276,6 +276,22 @@ export interface QueryBuilder<T> {
    */
   whereRelationExists(predicate: RelationExistencePredicate): this
   /**
+   * Add a pessimistic `FOR UPDATE` row lock to the SELECT (`SELECT … FOR UPDATE`).
+   * Concurrent transactions block on the locked rows until this transaction
+   * commits — the primitive behind a database-backed job queue's atomic
+   * reservation. Only meaningful inside a `transaction()`.
+   *
+   * Optional capability. Engines without row-level pessimistic locking (e.g.
+   * SQLite, whose write transaction already serializes) implement it as a no-op;
+   * adapters that can't express it omit the method entirely.
+   */
+  lockForUpdate?(): this
+  /**
+   * Add a shared `FOR SHARE` row lock to the SELECT — readers may proceed but
+   * writers block until commit. Same optionality as {@link lockForUpdate}.
+   */
+  sharedLock?(): this
+  /**
    * Eager-load `relation` constrained to rows matching `constraintWheres`.
    * Adapters that don't support a constrained include (Drizzle today) may
    * apply the filter in JS or throw a clear "not yet supported" error.

@@ -68,6 +68,10 @@ export interface NativeQueryState {
   /** Aggregate subselect requests from `withAggregate` (`withCount`/`withSum`/…).
    *  Each becomes a `(subselect) AS alias` column in the SELECT list. */
   aggregates?: AggregateRequest[]
+  /** Pessimistic row lock from `lockForUpdate()` / `sharedLock()`. Emitted as
+   *  the dialect's `FOR UPDATE` / `FOR SHARE` suffix after ORDER BY / LIMIT
+   *  (no-op on SQLite). `null`/absent = no lock. */
+  lock?: 'update' | 'shared' | null
 }
 
 /** A compiled statement: parameterized SQL + the positional bindings. */
@@ -291,6 +295,10 @@ export function compileSelect(
     if (limit === null || limit === undefined) sql += ` LIMIT -1`
     sql += ` OFFSET ${asInt(state.offsetN)}`
   }
+
+  // Pessimistic lock trails everything (standard SQL puts the locking clause
+  // last). dialect.lockSql returns '' on engines without row locks (SQLite).
+  if (state.lock) sql += dialect.lockSql(state.lock)
 
   return { sql, bindings: b.values }
 }

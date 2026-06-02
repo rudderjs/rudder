@@ -16,6 +16,9 @@ node_modules/
 .turbo/
 *.log
 dev.db
+queue.db
+queue.db-shm
+queue.db-wal
 .telescope.db
 .telescope.db-shm
 .telescope.db-wal

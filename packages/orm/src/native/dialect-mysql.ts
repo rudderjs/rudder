@@ -48,6 +48,12 @@ export class MysqlDialect implements Dialect {
     return value ? '1' : '0'
   }
 
+  // MySQL 8 row-level locking — suffix trails ORDER BY / LIMIT. `FOR SHARE`
+  // replaced the legacy `LOCK IN SHARE MODE` in 8.0.1 and is the form used here.
+  lockSql(mode: 'update' | 'shared'): string {
+    return mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+  }
+
   // MySQL has no ON CONFLICT target — it keys off whatever unique index the row
   // collides with, so `uniqueBy` is ignored. `VALUES(col)` references the would-be
   // inserted value (deprecated in 8.0.20+ but still supported and the widely

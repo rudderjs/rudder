@@ -11,6 +11,24 @@ export default {
       driver: 'sync',
     },
 
+    // Persistent, zero-infrastructure driver backed by the native ORM engine.
+    // `engine`/`url` give the queue its OWN dedicated SQLite store (independent
+    // of the app's Prisma DB) — the `jobs` / `failed_jobs` tables are created
+    // automatically on first use. No Redis, no migration step.
+    //
+    //   QUEUE_CONNECTION=database pnpm rudder queue:demo        # dispatch a few jobs
+    //   QUEUE_CONNECTION=database pnpm rudder queue:work --stop-when-empty
+    database: {
+      driver:     'database',
+      engine:     'sqlite',
+      url:        Env.get('QUEUE_DB_URL', './queue.db'),
+      table:      'jobs',
+      queue:      'default',
+      retryAfter: 90,
+      // Job classes the worker can reconstruct + run.
+      jobs: [WelcomeUserJob, FailingJob],
+    },
+
     inngest: {
       driver:     'inngest',
       appId:      Env.get('INNGEST_APP_ID',      'rudderjs-app'),

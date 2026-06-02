@@ -42,6 +42,12 @@ export class PgDialect implements Dialect {
     return value ? 'true' : 'false'
   }
 
+  // Real row-level pessimistic locking — the suffix trails ORDER BY / LIMIT.
+  // `FOR UPDATE` blocks concurrent writers; `FOR SHARE` blocks only writers.
+  lockSql(mode: 'update' | 'shared'): string {
+    return mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+  }
+
   // Postgres shares SQLite's `ON CONFLICT (target) DO UPDATE`/`DO NOTHING` form,
   // referencing the rejected row via the `excluded` pseudo-table.
   upsertClause(uniqueBy: readonly string[], update: readonly string[]): string {
