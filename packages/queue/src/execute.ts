@@ -25,6 +25,15 @@ import { isUniqueJob, isUniqueUntilProcessing, releaseUniqueLock } from './uniqu
 export interface ExecuteJobContext {
   /** Serialized request-context payload (from `@rudderjs/context`). */
   __context?: Record<string, unknown> | undefined
+  /**
+   * Whether to invoke the job's `failed()` hook when `handle()` throws. Defaults
+   * to `true` (the historical behavior for the sync/BullMQ/Inngest drivers, which
+   * call `executeJob` once per attempt). Drivers that own retry scheduling
+   * themselves — the native `database` driver — pass `false` so they can invoke
+   * `failed()` exactly once, on terminal failure, after attempts are exhausted
+   * (Laravel parity). The ShouldBeUnique lock release still fires regardless.
+   */
+  invokeFailedHook?: boolean
 }
 
 /**
@@ -53,13 +62,16 @@ export async function executeJob<T extends Job>(
     hadError = true
     captured = err
     // failed() is best-effort — if it throws, log + let the original error
-    // propagate so observers see the real cause.
-    try { await instance.failed?.(err) }
-    catch (hookErr) {
-      console.error(
-        `[RudderJS Queue] job.failed() hook threw for "${instance.constructor.name}":`,
-        hookErr,
-      )
+    // propagate so observers see the real cause. Skipped when the driver opted
+    // to own terminal-failure semantics (`invokeFailedHook: false`).
+    if (ctx.invokeFailedHook !== false) {
+      try { await instance.failed?.(err) }
+      catch (hookErr) {
+        console.error(
+          `[RudderJS Queue] job.failed() hook threw for "${instance.constructor.name}":`,
+          hookErr,
+        )
+      }
     }
   } finally {
     if (isUniqueJob(instance) && !isUniqueUntilProcessing(instance)) {
