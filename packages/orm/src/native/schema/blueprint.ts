@@ -159,6 +159,28 @@ export class Blueprint {
     return this.timestamp(name).nullable()
   }
 
+  /**
+   * Polymorphic relation columns (Laravel `morphs`): a `{name}Id` (unsigned big
+   * integer) + `{name}Type` (string) pair plus a composite index over both. The
+   * columns use the engine's **camelCase** morph convention (`commentableId` /
+   * `commentableType`) — the same columns `morphTo` / `morphMany` read/write —
+   * not Laravel's snake_case. The index covers `[{name}Type, {name}Id]` (type
+   * first, matching Laravel), defaulting to `{table}_{name}Type_{name}Id_index`;
+   * pass `indexName` to override (pair with the same name in {@link dropMorphs}).
+   */
+  morphs(name: string, indexName?: string): void {
+    this.bigInteger(`${name}Id`).unsigned()
+    this.string(`${name}Type`)
+    this.index([`${name}Type`, `${name}Id`], indexName)
+  }
+  /** Nullable variant of {@link morphs} — both columns allow NULL (the relation
+   *  is optional). Same `[{name}Type, {name}Id]` composite index. */
+  nullableMorphs(name: string, indexName?: string): void {
+    this.bigInteger(`${name}Id`).unsigned().nullable()
+    this.string(`${name}Type`).nullable()
+    this.index([`${name}Type`, `${name}Id`], indexName)
+  }
+
   // ── Table-level constraints ──
   /** Composite (or named single) primary key. */
   primary(columns: string | string[]): void {

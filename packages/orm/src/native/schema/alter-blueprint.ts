@@ -53,4 +53,16 @@ export class AlterBlueprint extends Blueprint {
   dropForeign(target: string | string[]): void {
     this.droppedForeignKeys.push(target)
   }
+
+  /**
+   * Reverse a {@link Blueprint.morphs} / `nullableMorphs`: drop the composite
+   * index, then the `{name}Type` + `{name}Id` columns. The index name defaults to
+   * `{table}_{name}Type_{name}Id_index` (mirrors the DDL compiler's default index
+   * name) — pass the same `indexName` you passed to `morphs(...)` if you overrode
+   * it. The compiler emits the `DROP INDEX` before the `DROP COLUMN`s.
+   */
+  dropMorphs(name: string, indexName?: string): void {
+    this.dropIndex(indexName ?? `${this.table}_${name}Type_${name}Id_index`)
+    this.dropColumn(`${name}Type`, `${name}Id`)
+  }
 }
