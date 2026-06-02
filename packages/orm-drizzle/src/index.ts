@@ -302,12 +302,24 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
 
-  // Drizzle relational queries require pre-defined relation schemas. We don't
-  // yet thread a relations object into the adapter, so eager-loading via .with()
-  // is not implemented. Calls are silently dropped to keep the QueryBuilder
-  // contract compatible across adapters; use Drizzle's relational query API
-  // directly when you need eager loading.
-  with(..._relations: string[]): this { return this }
+  // Direct-relation eager loading isn't implemented on the Drizzle adapter yet:
+  // Drizzle's relational query API needs pre-defined `relations()` schemas the
+  // adapter doesn't hold (it only has table schemas via DrizzleTableRegistry),
+  // and the ORM's relation metadata isn't threaded down here. This used to
+  // SILENTLY return the rows with the relation unloaded — so `with()` looked
+  // like it worked while loading nothing. Throw instead, so a missing relation
+  // can't masquerade as success. (Polymorphic relations are eager-loaded in the
+  // ORM's Model layer and never reach this method, so they keep working.)
+  with(...relations: string[]): this {
+    if (relations.length === 0) return this
+    throw new Error(
+      `[RudderJS ORM Drizzle] Eager loading via .with(${relations.map((r) => `'${r}'`).join(', ')}) ` +
+        `is not implemented on the Drizzle adapter (it previously dropped silently, loading nothing). ` +
+        `Load the relation explicitly with the related() accessor (e.g. \`await parent.related('${relations[0]}').get()\`) ` +
+        `or Drizzle's relational query API. For filtering by a relation's existence only, use whereHas('${relations[0]}') ` +
+        `instead of withWhereHas (withWhereHas implies eager loading, which routes here).`,
+    )
+  }
 
   // No-op at the adapter level — pivot column projection is handled in the
   // ORM's deferred-QB closure (see `_belongsToManyDeferredQb` and morph
