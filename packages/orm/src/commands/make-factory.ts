@@ -52,6 +52,12 @@ export class ${className} extends ModelFactory<any> {
   //   }
   // }
 }
+
+// Wire \`${modelName}.factory()\` (the Laravel-style entry point) by adding
+// \`static factoryClass = ${className}\` to App/Models/${modelName}.ts. Then:
+//   await ${modelName}.factory().create()
+//   await ${modelName}.factory().has(Post.factory(), 3).create()   // hasMany/hasOne children
+//   await Post.factory().for(${modelName}.factory()).create()      // belongsTo parent
 `
   },
 }
