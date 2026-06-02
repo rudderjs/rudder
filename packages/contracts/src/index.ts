@@ -394,6 +394,35 @@ export interface QueryBuilder<T> {
   _aggregate(fn: AggregateFn, column?: string): Promise<unknown>
 }
 
+/**
+ * The sub-builder handed to the callback form of a `join(...)`:
+ * `join('posts', (j) => j.on('posts.userId', '=', 'users.id'))`.
+ *
+ * `on` / `orOn` add **column-vs-column** comparisons (both sides are
+ * identifiers, quoted per dialect). `where` / `orWhere` add **column-vs-value**
+ * predicates (the value is bound) — useful for `LEFT JOIN … ON a = b AND c = ?`.
+ *
+ * Standalone type, deliberately NOT a member of {@link QueryBuilder}: joins are
+ * implemented on the concrete adapter query builders (native = real SQL;
+ * Drizzle / Prisma throw and point at the `DB` facade), so adding the methods to
+ * the contract would force every hand-rolled QB stub to implement them. The ORM
+ * surfaces them through `HydratingQueryBuilder` instead.
+ */
+export interface JoinClause {
+  /** Column-vs-column ON condition. Two-arg form is equality; three-arg carries the operator. */
+  on(left: string, right: string): this
+  on(left: string, operator: WhereOperator, right: string): this
+  /** OR-rooted {@link on}. */
+  orOn(left: string, right: string): this
+  orOn(left: string, operator: WhereOperator, right: string): this
+  /** Column-vs-value ON predicate (the value binds). Two-arg form is equality. */
+  where(column: string, value: unknown): this
+  where(column: string, operator: WhereOperator, value: unknown): this
+  /** OR-rooted {@link JoinClause.where}. */
+  orWhere(column: string, value: unknown): this
+  orWhere(column: string, operator: WhereOperator, value: unknown): this
+}
+
 export interface PaginatedResult<T> {
   data:        T[]
   total:       number

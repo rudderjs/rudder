@@ -78,4 +78,30 @@ describe('Prisma adapter — raw expressions throw with a DB-facade pointer', ()
     const base = { relation: 'posts', exists: true, relatedTable: 'post', parentColumn: 'id', relatedColumn: 'userId', constraintWheres: [] }
     assert.throws(() => q.whereRelationExists({ ...base, boolean: 'OR' }), /OR-rooted relation existence\) is not supported/)
   })
+
+  it('joins + select() throw with a native-engine / DB-facade pointer', async () => {
+    const q = await qb() as unknown as {
+      select(...c: string[]): unknown
+      join(t: string, f: string, o?: string, s?: string): unknown
+      leftJoin(t: string, f: string, o?: string, s?: string): unknown
+      rightJoin(t: string, f: string, o?: string, s?: string): unknown
+      crossJoin(t: string): unknown
+    }
+    assert.throws(() => q.select('id', 'name'),                       /select\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.join('posts', 'posts.userId', '=', 'id'),  /join\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.leftJoin('posts', 'posts.userId', '=', 'id'),  /leftJoin\(\) is not supported/)
+    assert.throws(() => q.rightJoin('posts', 'posts.userId', '=', 'id'), /rightJoin\(\) is not supported/)
+    assert.throws(() => q.crossJoin('posts'),                        /crossJoin\(\) is not supported/)
+  })
+
+  it('groupBy + having throw with a native-engine / DB-facade pointer', async () => {
+    const q = await qb() as unknown as {
+      groupBy(...c: string[]): unknown
+      having(c: string, o: string, v?: unknown): unknown
+      havingRaw(s: string, b?: unknown[]): unknown
+    }
+    assert.throws(() => q.groupBy('userId'),               /groupBy\(\) is not supported.*native engine.*DB\.select/s)
+    assert.throws(() => q.having('total', '>', 2),         /having\(\) is not supported/)
+    assert.throws(() => q.havingRaw('COUNT(*) > ?', [3]),  /havingRaw\(\) is not supported/)
+  })
 })

@@ -258,6 +258,26 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   whereColumn(_left: string, _operatorOrRight: string, _right?: string): this { this._rawUnsupported('whereColumn()') }
   orWhereColumn(_left: string, _operatorOrRight: string, _right?: string): this { this._rawUnsupported('orWhereColumn()') }
 
+  // Joins + structured projection have no Prisma equivalent — its delegate API
+  // returns whole-model records, not an arbitrary join/column shape. Throw with
+  // a pointer to the native engine / DB facade rather than silently dropping them.
+  private _builderUnsupported(method: string): never {
+    throw new Error(
+      `[RudderJS ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client has no SQL join/projection builder. ` +
+        `Use the native engine (@rudderjs/orm/native) for joins, or run the query via the DB facade: DB.select(sql, bindings).`,
+    )
+  }
+  select(..._columns: string[]): this { this._builderUnsupported('select()') }
+  join(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('join()') }
+  leftJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('leftJoin()') }
+  rightJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('rightJoin()') }
+  crossJoin(_table: string): this { this._builderUnsupported('crossJoin()') }
+  groupBy(..._columns: string[]): this { this._builderUnsupported('groupBy()') }
+  having(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('having()') }
+  orHaving(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('orHaving()') }
+  havingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('havingRaw()') }
+  orHavingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('orHavingRaw()') }
+
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
   with(...relations: string[]): this { this._withs.push(...relations); return this }
