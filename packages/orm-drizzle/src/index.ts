@@ -17,6 +17,7 @@ import type {
   OrderClause,
   PaginatedResult,
   RelationExistencePredicate,
+  JoinClause,
   Row,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
@@ -52,6 +53,10 @@ function rawToSql(fragment: string, bindings: readonly unknown[]): SQL {
 // We capture only the subset this adapter uses so we don't import driver-specific types.
 type DrizzleQB = {
   where(cond: SQL): DrizzleQB
+  innerJoin(table: unknown, on: SQL): DrizzleQB
+  leftJoin(table: unknown, on: SQL): DrizzleQB
+  rightJoin(table: unknown, on: SQL): DrizzleQB
+  crossJoin(table: unknown): DrizzleQB
   orderBy(...cols: SQL[]): DrizzleQB
   limit(n: number): DrizzleQB
   offset(n: number): DrizzleQB
@@ -242,6 +247,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   /** Aggregate eager-load requests. Each becomes one correlated subselect in
    *  the SELECT list of the main query (run once per terminal call). */
   private _aggregates: AggregateRequest[] = []
+  /** JOIN clauses — `{ kind, table (drizzle obj), on (null for cross) }`. Applied
+   *  after `.from()` in every read terminal. */
+  private _joins: Array<{ kind: 'inner' | 'left' | 'right' | 'cross'; table: unknown; on: SQL | null }> = []
+  /** Structured projection from `select(...)` — qualified names; replaces `*`. */
+  private _selectCols: string[] = []
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
 
@@ -378,16 +388,82 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   // engine / DB facade rather than silently returning the wrong shape.
   private _builderUnsupported(method: string): never {
     throw new Error(
-      `[RudderJS ORM Drizzle] ${method} is not supported — Drizzle's typed select can't map a join/projection result back to hydrated models. ` +
-        `Use the native engine (@rudderjs/orm/native) for joins, or run the query via the DB facade: DB.select(sql, bindings).`,
+      `[RudderJS ORM Drizzle] ${method} is not supported — Drizzle's typed select can't map this result shape back to hydrated models. ` +
+        `Use the native engine (@rudderjs/orm/native), or run the query via the DB facade: DB.select(sql, bindings).`,
     )
   }
-  select(..._columns: string[]): this { this._builderUnsupported('select()') }
+
+  // ── joins + structured projection ────────────────────────
+  // Real Drizzle joins. The referenced tables must be registered (via `tables:`
+  // config or DrizzleTableRegistry) — same requirement as whereHas. With a join
+  // and no explicit `select(...)`, the projection defaults to the BASE table's
+  // columns so each row still hydrates as the base model (the join filters/fans
+  // out rows but the shape stays flat). `select(...)` overrides the projection.
+
+  select(...columns: string[]): this {
+    this._selectCols.push(...columns)
+    return this
+  }
+
+  join(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('inner', table, first, operator, second)
+  }
+
+  leftJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('left', table, first, operator, second)
+  }
+
+  rightJoin(table: string, first: string | ((join: JoinClause) => void), operator?: WhereOperator, second?: string): this {
+    return this._addJoin('right', table, first, operator, second)
+  }
+
+  crossJoin(table: string): this {
+    const tbl = this.resolveTable(table)
+    if (!tbl) throw new Error(`[RudderJS ORM Drizzle] crossJoin("${table}") — table not registered (pass tables: { ${table}: ... }).`)
+    this._joins.push({ kind: 'cross', table: tbl, on: null })
+    return this
+  }
+
+  private _addJoin(
+    kind: 'inner' | 'left' | 'right',
+    table: string,
+    first: string | ((join: JoinClause) => void),
+    operator?: WhereOperator,
+    second?: string,
+  ): this {
+    const tbl = this.resolveTable(table)
+    if (!tbl) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] join("${table}") — table not registered. Pass tables: { ${table}: myTable } in drizzle() config or call DrizzleTableRegistry.register("${table}", myTable).`,
+      )
+    }
+    let on: SQL
+    if (typeof first === 'function') {
+      const jc = new DrizzleJoinClause(this)
+      first(jc)
+      on = jc.build()
+    } else {
+      // Two-arg ON (`join(t, 'a', 'b')`) is equality; three-arg carries the operator.
+      const op    = (second === undefined ? '=' : operator) as WhereOperator
+      const right = second === undefined ? (operator as string) : second
+      on = this._joinOnExpr(first, op, right)
+    }
+    this._joins.push({ kind, table: tbl, on })
+    return this
+  }
+
+  /** @internal — chain the accumulated joins onto a built select query. */
+  private _applyJoins(q: DrizzleQB): DrizzleQB {
+    for (const j of this._joins) {
+      if (j.kind === 'cross') q = q.crossJoin(j.table)
+      else if (j.kind === 'inner') q = q.innerJoin(j.table, j.on as SQL)
+      else if (j.kind === 'left')  q = q.leftJoin(j.table, j.on as SQL)
+      else                         q = q.rightJoin(j.table, j.on as SQL)
+    }
+    return q
+  }
+
   distinct(): this { this._builderUnsupported('distinct()') }
-  join(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('join()') }
-  leftJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('leftJoin()') }
-  rightJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('rightJoin()') }
-  crossJoin(_table: string): this { this._builderUnsupported('crossJoin()') }
   groupBy(..._columns: string[]): this { this._builderUnsupported('groupBy()') }
   having(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('having()') }
   orHaving(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('orHaving()') }
@@ -454,22 +530,57 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (clause.value instanceof Expression) {
       return sql`${col} ${sql.raw(clause.operator)} ${sql.raw(String(clause.value.getValue()))}` as SQL
     }
-    switch (clause.operator) {
-      case '=':      return eq(col, clause.value) as SQL
-      case '!=':     return ne(col, clause.value) as SQL
-      case '>':      return gt(col, clause.value) as SQL
-      case '>=':     return gte(col, clause.value) as SQL
-      case '<':      return lt(col, clause.value) as SQL
-      case '<=':     return lte(col, clause.value) as SQL
-      case 'LIKE':     return like(col, clause.value as string) as SQL
-      case 'NOT LIKE': return notLike(col, clause.value as string) as SQL
-      case 'IN':       return inArray(col, clause.value as unknown[]) as SQL
-      case 'NOT IN': return notInArray(col, clause.value as unknown[]) as SQL
+    return this._compareValue(col, clause.operator, clause.value)
+  }
+
+  /** @internal — column-vs-value comparison → a Drizzle SQL expression. Shared by
+   *  `clauseToExprOn` and the join-clause `where()`. */
+  private _compareValue(col: Column, operator: WhereOperator, value: unknown): SQL {
+    switch (operator) {
+      case '=':      return eq(col, value) as SQL
+      case '!=':     return ne(col, value) as SQL
+      case '>':      return gt(col, value) as SQL
+      case '>=':     return gte(col, value) as SQL
+      case '<':      return lt(col, value) as SQL
+      case '<=':     return lte(col, value) as SQL
+      case 'LIKE':     return like(col, value as string) as SQL
+      case 'NOT LIKE': return notLike(col, value as string) as SQL
+      case 'IN':       return inArray(col, value as unknown[]) as SQL
+      case 'NOT IN': return notInArray(col, value as unknown[]) as SQL
       default: {
-        const _exhaustive: never = clause.operator
+        const _exhaustive: never = operator
         throw new Error(`[RudderJS ORM Drizzle] Unsupported operator: ${String(_exhaustive)}`)
       }
     }
+  }
+
+  /** @internal — resolve a (possibly qualified `table.col`) name to a Drizzle
+   *  column. Bare names resolve on the base table; `posts.userId` resolves the
+   *  `posts` table via the registry (same requirement as whereHas). */
+  private resolveColumn(name: string): Column {
+    const dot = name.indexOf('.')
+    if (dot === -1) return this.col(name) as Column
+    const tableName = name.slice(0, dot)
+    const colName   = name.slice(dot + 1)
+    const tbl = this.resolveTable(tableName)
+    if (!tbl) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] join references table "${tableName}" which isn't registered. ` +
+        `Pass tables: { ${tableName}: myTable } in drizzle() config or call DrizzleTableRegistry.register("${tableName}", myTable).`,
+      )
+    }
+    return this.colOf(tbl, colName)
+  }
+
+  /** @internal — column-vs-column ON expression for a join clause. Operator text
+   *  is spliced raw (it IS its own SQL), both columns are resolved + bound. */
+  _joinOnExpr(left: string, operator: WhereOperator, right: string): SQL {
+    return sql`${this.resolveColumn(left)} ${sql.raw(operator)} ${this.resolveColumn(right)}` as SQL
+  }
+
+  /** @internal — column-vs-value predicate inside a join's ON clause. */
+  _joinWhereExpr(column: string, operator: WhereOperator, value: unknown): SQL {
+    return this._compareValue(this.resolveColumn(column), operator, value)
   }
 
   whereVectorSimilarTo(
@@ -711,17 +822,33 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
-  /** @internal — returns the SELECT-list fields object when aggregates are
-   *  present, or `null` to signal "default *-select." Mixing the two forms
-   *  is what lets `db.select(<fields>)` inject named aggregate columns
-   *  alongside the original table columns. */
-  private buildAggregateSelectFields(): Record<string, unknown> | null {
-    if (this._aggregates.length === 0) return null
-    const cols = getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>
-    const fields: Record<string, unknown> = { ...cols }
-    for (const req of this._aggregates) {
-      fields[req.alias] = this._aggregateSubquery(req)
+  /** @internal — the SELECT-list fields object, or `null` for a default `*`.
+   *  Combines three projection sources:
+   *  - `select(...)` → a flat map keyed by each column's last segment (so a
+   *    qualified `users.name` lands under `name` and hydrates onto the model);
+   *  - a join with NO explicit select → the BASE table's columns (keeps rows
+   *    flat + model-shaped while the join filters/fans out rows);
+   *  - aggregate eager-loads (`withCount`/…) → their named subselect columns.
+   *  `null` only when none apply (plain `db.select().from(...)`). */
+  private buildSelectFields(): Record<string, unknown> | null {
+    const hasSelect = this._selectCols.length > 0
+    const hasJoins  = this._joins.length > 0
+    const hasAgg    = this._aggregates.length > 0
+    if (!hasSelect && !hasJoins && !hasAgg) return null
+
+    let fields: Record<string, unknown>
+    if (hasSelect) {
+      fields = {}
+      for (const name of this._selectCols) {
+        const dot = name.lastIndexOf('.')
+        const key = dot === -1 ? name : name.slice(dot + 1)
+        fields[key] = this.resolveColumn(name)
+      }
+    } else {
+      // joins-default / aggregates-only → project the base table's columns.
+      fields = { ...(getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>) }
     }
+    for (const req of this._aggregates) fields[req.alias] = this._aggregateSubquery(req)
     return fields
   }
 
@@ -785,9 +912,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildAggregateSelectFields()
+    const fields  = this.buildSelectFields()
 
     let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    q = this._applyJoins(q)
     if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
@@ -806,9 +934,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     // cross tenants.
     const accumulated = this.buildConditions()
     const cond = accumulated ? and(pkExpr, accumulated) as SQL : pkExpr
-    const fields = this.buildAggregateSelectFields()
+    const fields = this.buildSelectFields()
 
-    const sel = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    const base = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    const sel = this._applyJoins(base)
     const result = await exec<T[]>(sel.where(cond).limit(1))
     return result[0] ?? null
   }
@@ -818,9 +947,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (this._vectorClause !== null) return this._getViaVector() as Promise<T[]>
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildAggregateSelectFields()
+    const fields  = this.buildSelectFields()
 
     let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    q = this._applyJoins(q)
     if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
@@ -844,6 +974,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond = this.buildConditions()
 
     let q = this.db.select({ value: sqlCount() }).from(this.table)
+    q = this._applyJoins(q)
     if (cond) q = q.where(cond)
 
     const result = await exec<Array<{ value: number | string | bigint }>>(q)
@@ -1141,10 +1272,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildAggregateSelectFields()
+    const fields  = this.buildSelectFields()
 
     let pageQ = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
     let cntQ  = this.db.select({ value: sqlCount() }).from(this.table)
+    pageQ = this._applyJoins(pageQ)
+    cntQ  = this._applyJoins(cntQ)
 
     if (cond) {
       pageQ = pageQ.where(cond)
@@ -1170,6 +1303,59 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       from: (page - 1) * perPage + 1,
       to:   Math.min(page * perPage, total),
     }
+  }
+}
+
+/**
+ * The sub-builder passed to the callback form of `join(...)` on the Drizzle
+ * adapter. Collects ON conditions (column-vs-column `on`/`orOn`, column-vs-value
+ * `where`/`orWhere`) and folds them into a single Drizzle `SQL` ON expression,
+ * combining left-to-right by each condition's boolean (mirrors the native ON).
+ */
+class DrizzleJoinClause implements JoinClause {
+  private readonly parts: Array<{ boolean: 'AND' | 'OR'; expr: SQL }> = []
+
+  constructor(private readonly qb: DrizzleQueryBuilder<unknown>) {}
+
+  on(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    const operator = (right === undefined ? '=' : operatorOrRight) as WhereOperator
+    const rightCol = right === undefined ? operatorOrRight as string : right
+    this.parts.push({ boolean: 'AND', expr: this.qb._joinOnExpr(left, operator, rightCol) })
+    return this
+  }
+
+  orOn(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    const operator = (right === undefined ? '=' : operatorOrRight) as WhereOperator
+    const rightCol = right === undefined ? operatorOrRight as string : right
+    this.parts.push({ boolean: 'OR', expr: this.qb._joinOnExpr(left, operator, rightCol) })
+    return this
+  }
+
+  where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const val      = value === undefined ? operatorOrValue : value
+    this.parts.push({ boolean: 'AND', expr: this.qb._joinWhereExpr(column, operator, val) })
+    return this
+  }
+
+  orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const val      = value === undefined ? operatorOrValue : value
+    this.parts.push({ boolean: 'OR', expr: this.qb._joinWhereExpr(column, operator, val) })
+    return this
+  }
+
+  /** @internal — fold the collected conditions into one ON expression. */
+  build(): SQL {
+    if (this.parts.length === 0) {
+      throw new Error('[RudderJS ORM Drizzle] join callback added no ON conditions — call on()/where() inside it.')
+    }
+    let result = this.parts[0]!.expr
+    for (let i = 1; i < this.parts.length; i++) {
+      const p = this.parts[i]!
+      result = (p.boolean === 'OR' ? or(result, p.expr) : and(result, p.expr)) as SQL
+    }
+    return result
   }
 }
 
