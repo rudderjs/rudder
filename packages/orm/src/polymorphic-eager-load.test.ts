@@ -154,12 +154,27 @@ describe('partitionEagerLoads', () => {
     const r = partitionEagerLoads(TestPost, ['author', 'comments', 'tags', 'unknown'])
     assert.deepStrictEqual(r.adapter,     ['author', 'unknown'])
     assert.deepStrictEqual(r.polymorphic, ['comments', 'tags'])
+    assert.deepStrictEqual(r.direct,      [])
+  })
+
+  it('on a model-layer adapter, direct + unknown route to direct (not adapter)', () => {
+    class TestPost extends Model {
+      static override relations = {
+        comments: { type: 'morphMany' as const, model: () => Comment, morphName: 'commentable' },
+        tags:     { type: 'morphToMany' as const, model: () => Tag, pivotTable: 'taggable', morphName: 'taggable' },
+        author:   { type: 'belongsTo' as const, model: () => Comment },
+      }
+    }
+    const r = partitionEagerLoads(TestPost, ['author', 'comments', 'tags', 'unknown'], 'model-layer')
+    assert.deepStrictEqual(r.adapter,     [])
+    assert.deepStrictEqual(r.polymorphic, ['comments', 'tags'])
+    assert.deepStrictEqual(r.direct,      ['author', 'unknown'])
   })
 
   it('returns empty arrays for empty input', () => {
     class Empty extends Model {}
     const r = partitionEagerLoads(Empty, [])
-    assert.deepStrictEqual(r, { adapter: [], polymorphic: [] })
+    assert.deepStrictEqual(r, { adapter: [], polymorphic: [], direct: [] })
   })
 })
 

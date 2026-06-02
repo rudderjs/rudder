@@ -302,22 +302,23 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
 
-  // Direct-relation eager loading isn't implemented on the Drizzle adapter yet:
-  // Drizzle's relational query API needs pre-defined `relations()` schemas the
-  // adapter doesn't hold (it only has table schemas via DrizzleTableRegistry),
-  // and the ORM's relation metadata isn't threaded down here. This used to
-  // SILENTLY return the rows with the relation unloaded — so `with()` looked
-  // like it worked while loading nothing. Throw instead, so a missing relation
-  // can't masquerade as success. (Polymorphic relations are eager-loaded in the
-  // ORM's Model layer and never reach this method, so they keep working.)
+  // A normal `Model.with('relation')` no longer reaches this method: the
+  // adapter advertises `eagerLoadStrategy = 'model-layer'`, so the ORM resolves
+  // direct relations in its Model layer (batched WHERE-IN, stitched onto the
+  // parents) instead of forwarding the name here. This QB-level `with()` is now
+  // only hit by the `withWhereHas` constrained-eager fallback (`q.with(rel)`),
+  // which Drizzle still can't satisfy — its relational query API needs
+  // pre-declared `relations()` schemas the adapter doesn't hold. Throw there so
+  // a constrained eager-load can't masquerade as success.
   with(...relations: string[]): this {
     if (relations.length === 0) return this
     throw new Error(
-      `[RudderJS ORM Drizzle] Eager loading via .with(${relations.map((r) => `'${r}'`).join(', ')}) ` +
-        `is not implemented on the Drizzle adapter (it previously dropped silently, loading nothing). ` +
-        `Load the relation explicitly with the related() accessor (e.g. \`await parent.related('${relations[0]}').get()\`) ` +
-        `or Drizzle's relational query API. For filtering by a relation's existence only, use whereHas('${relations[0]}') ` +
-        `instead of withWhereHas (withWhereHas implies eager loading, which routes here).`,
+      `[RudderJS ORM Drizzle] Constrained eager loading via withWhereHas(${relations.map((r) => `'${r}'`).join(', ')}) ` +
+        `is not implemented on the Drizzle adapter. ` +
+        `Plain eager loading (\`Model.with('${relations[0]}')\`) IS supported. ` +
+        `For filtering by a relation's existence only, use whereHas('${relations[0]}') ` +
+        `(it never eager-loads). To load related rows under a constraint, load them explicitly with ` +
+        `the related() accessor (e.g. \`await parent.related('${relations[0]}').where(...).get()\`).`,
     )
   }
 
@@ -1065,6 +1066,17 @@ function cacheDrizzleClient(entry: DrizzleClientCacheEntry): void {
 // ─── Drizzle Adapter ───────────────────────────────────────
 
 export class DrizzleAdapter implements OrmAdapter {
+  /**
+   * Drizzle's relational query API needs pre-declared `relations()` schemas the
+   * adapter doesn't hold (it has only table schemas via `DrizzleTableRegistry`),
+   * so it can't resolve a direct relation from a name alone. Opt into the ORM's
+   * Model-layer batched eager-loader (`attachDirectRelations`) — it reads the
+   * relation's FK/direction off `static relations` and stitches results on. The
+   * QB-level `with()` below therefore never runs for a normal `Model.with(...)`;
+   * it stays a guard for the `withWhereHas` constrained-eager fallback.
+   */
+  readonly eagerLoadStrategy = 'model-layer' as const
+
   private constructor(
     readonly db:                 DrizzleDb,
     private readonly tables:     Record<string, unknown>,

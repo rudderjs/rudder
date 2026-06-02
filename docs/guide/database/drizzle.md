@@ -149,18 +149,26 @@ const table = DrizzleTableRegistry.get('user')
 
 ## What's supported
 
-The Drizzle adapter implements the same `OrmAdapter` interface as Prisma. The full Model API works — `where`, `orderBy`, `limit`, `paginate`, `create`, `update`, `delete`, `count`, `find`, `first`, `all`. **One feature differs: `with(relation)` is a no-op.**
+The Drizzle adapter implements the same `OrmAdapter` interface as Prisma. The full Model API works — `where`, `orderBy`, `limit`, `paginate`, `create`, `update`, `delete`, `count`, `find`, `first`, `all`, **and eager loading via `with(relation)`**.
 
-For relation loading, drop down to raw Drizzle queries — see the [drizzle-orm docs](https://orm.drizzle.team/docs/rqb).
+`Model.with('posts')` works for the direct relation types (`hasOne`, `hasMany`, `belongsTo`, `belongsToMany`): the ORM resolves them in its Model layer with one batched `WHERE … IN` query per relation, so you don't need to declare a Drizzle `relations()` graph. Make sure any related table (and pivot table) is registered via `tables: { ... }` or `DrizzleTableRegistry.register(name, table)`.
+
+```ts
+const users = await User.query().with('posts', 'profile', 'roles').get()
+users[0].posts   // Post[]  — eagerly loaded
+```
 
 | Method | Notes |
 |---|---|
-| `with(relation)` | No-op — use raw Drizzle |
+| `with(relation)` | Supported for `hasOne` / `hasMany` / `belongsTo` / `belongsToMany` (Model-layer batched load) |
 | `connect()` | No-op — Drizzle connects lazily |
 | `disconnect()` | PostgreSQL only — closes the pool |
+
+For nested eager loads (`'a.b'`) or constrained eager loading (`withWhereHas`), drop down to raw Drizzle queries or the `related()` accessor — see the [drizzle-orm docs](https://orm.drizzle.team/docs/rqb).
 
 ## Pitfalls
 
 - **`static table` mismatch.** It must match the key in `tables: {}`, not the SQL table name. `tables: { user: users }` → `static table = 'user'` (even though the SQL table is `users`).
-- **`with()` silently doing nothing.** Drizzle relation loading isn't implemented in the adapter — `Post.with('author').get()` returns posts with no author attached. Use raw Drizzle (`db.query.posts.findMany({ with: { author: true } })`) when you need relations.
+- **Eager loading needs the related table registered.** `User.with('posts')` fires a query against the `posts` table — register it via `tables: { posts }` or `DrizzleTableRegistry.register('posts', posts)`, or you'll get a clear "No table schema registered" error. (This is the same registry `whereHas` uses.)
+- **`withWhereHas` still throws on Drizzle.** Plain `with()` works, but the *constrained*-eager variant (`withWhereHas`) routes through a code path Drizzle can't satisfy. Use `whereHas(relation)` to filter (it never eager-loads) and load the constrained children explicitly via `parent.related(relation).where(...).get()`.
 - **MySQL not supported.** Use Prisma for MySQL apps.

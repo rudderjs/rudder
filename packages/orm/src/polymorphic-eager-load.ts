@@ -44,30 +44,51 @@ export function isPolymorphic(def: RelationDefinition | undefined): boolean {
 // ─── Partition ─────────────────────────────────────────────────────────────
 
 export interface PartitionedEagerLoads {
-  /** Names the adapter handles natively (direct relations). */
+  /** Names the adapter handles natively (direct relations on a `'native'`
+   *  adapter, plus unknown names that the adapter surfaces its own error for). */
   adapter:     string[]
-  /** Names the Model layer resolves via batched IN-queries. */
+  /** Polymorphic names — always resolved in the Model layer via batched
+   *  IN-queries (`attachPolymorphicRelations`). */
   polymorphic: string[]
+  /** Direct relations (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) the
+   *  Model layer resolves via batched IN-queries (`attachDirectRelations`).
+   *  Populated only when the active adapter's `eagerLoadStrategy` is
+   *  `'model-layer'` (e.g. Drizzle); empty for `'native'` adapters (Prisma),
+   *  whose direct relations go to {@link PartitionedEagerLoads.adapter}. */
+  direct:      string[]
 }
 
+/**
+ * Split requested eager-load names into the three resolution lanes.
+ *
+ * `strategy` is the active adapter's {@link OrmAdapter.eagerLoadStrategy}:
+ * `'native'` (default) sends direct relations to the adapter; `'model-layer'`
+ * routes them into the Model-layer batched loader alongside polymorphic ones.
+ */
 export function partitionEagerLoads(
   ParentClass: typeof Model,
   names:       readonly string[],
+  strategy:    'native' | 'model-layer' = 'native',
 ): PartitionedEagerLoads {
   const adapter:     string[] = []
   const polymorphic: string[] = []
+  const direct:      string[] = []
   for (const name of names) {
     const def = ParentClass.relations[name]
     if (isPolymorphic(def)) {
       polymorphic.push(name)
+    } else if (strategy === 'model-layer') {
+      // Drizzle-style adapters can't resolve direct relations from schema
+      // metadata, so the Model layer batches them. Unknown names land here too
+      // and `attachDirectRelations` throws a clear "no relation declared" error.
+      direct.push(name)
     } else {
-      // Unknown relations also forward to the adapter — preserves the
-      // existing behavior (Prisma surfaces its own clear error for unknown
-      // relations).
+      // Native adapters resolve direct relations themselves; unknown relations
+      // also forward (Prisma surfaces its own clear error for unknown names).
       adapter.push(name)
     }
   }
-  return { adapter, polymorphic }
+  return { adapter, polymorphic, direct }
 }
 
 // ─── Attach (after terminal call returns hydrated instances) ────────────────
@@ -325,7 +346,9 @@ async function attachMorphedByMany(
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function collectIds(parents: ReadonlyArray<Model>, key: string): unknown[] {
+/** @internal — distinct, non-null values of `key` across the parent set.
+ *  Shared with `attachDirectRelations`. */
+export function collectIds(parents: ReadonlyArray<Model>, key: string): unknown[] {
   const seen = new Set<unknown>()
   const out:  unknown[] = []
   for (const p of parents) {
@@ -338,7 +361,8 @@ function collectIds(parents: ReadonlyArray<Model>, key: string): unknown[] {
   return out
 }
 
-function uniq<T>(xs: ReadonlyArray<T>): T[] {
+/** @internal — order-preserving dedupe. Shared with `attachDirectRelations`. */
+export function uniq<T>(xs: ReadonlyArray<T>): T[] {
   const seen = new Set<T>()
   const out:  T[] = []
   for (const v of xs) {
@@ -349,7 +373,9 @@ function uniq<T>(xs: ReadonlyArray<T>): T[] {
   return out
 }
 
-function setDefault(parents: ReadonlyArray<Model>, name: string, cardinality: 'one' | 'many'): void {
+/** @internal — assign the empty default (`[]` for many, `null` for one) to
+ *  every parent. Shared with `attachDirectRelations`. */
+export function setDefault(parents: ReadonlyArray<Model>, name: string, cardinality: 'one' | 'many'): void {
   const v = cardinality === 'many' ? [] : null
   for (const p of parents) (p as unknown as Record<string, unknown>)[name] = v
 }

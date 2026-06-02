@@ -421,6 +421,27 @@ export interface OrmAdapter {
    * of rows affected. Optional, mirroring {@link OrmAdapter.selectRaw}.
    */
   affectingStatement?(sql: string, bindings: readonly unknown[]): Promise<number>
+
+  /**
+   * How the adapter resolves *direct* relations (`hasOne` / `hasMany` /
+   * `belongsTo` / `belongsToMany`) passed to `QueryBuilder.with(...)`.
+   *
+   * - `'native'` (default when omitted) — the adapter's own `with()` resolves
+   *   the relation from schema-level metadata it already holds (Prisma's
+   *   `include`). The ORM forwards relation names to `QueryBuilder.with(...)`
+   *   unchanged.
+   * - `'model-layer'` — the adapter has no schema-level relation graph, so the
+   *   ORM resolves direct relations itself: it reads `static relations` for the
+   *   foreign key / direction, fires one batched `WHERE … IN` query per relation
+   *   against the related model, and stitches the results onto each parent
+   *   (the same machinery polymorphic relations already use). The Drizzle
+   *   adapter sets this — Drizzle's relational query API needs pre-declared
+   *   `relations()` schemas the adapter doesn't hold.
+   *
+   * Polymorphic relations are always resolved in the model layer regardless of
+   * this setting; it governs only the direct-relation routing.
+   */
+  eagerLoadStrategy?: 'native' | 'model-layer'
 }
 
 export interface OrmAdapterProvider {

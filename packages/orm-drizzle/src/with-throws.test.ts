@@ -1,12 +1,13 @@
-// ─── Drizzle adapter: .with() eager-load throws instead of silently dropping ──
+// ─── Drizzle adapter QB: .with() guards the constrained-eager fallback ────────
 //
-// Direct-relation eager loading isn't implemented on the Drizzle adapter (the
-// relational query API needs pre-defined relation schemas the adapter doesn't
-// hold). It USED to silently return rows with the relation unloaded, so `.with()`
-// looked like it succeeded while loading nothing — a missing relation
-// masquerading as success. These tests pin the new behavior: `.with(relation)`
-// throws an actionable error, while the relation-existence FILTER path
-// (`whereHas`, which never calls `.with()`) keeps working.
+// A normal `Model.with('relation')` no longer reaches the adapter QB — the
+// Drizzle adapter advertises `eagerLoadStrategy = 'model-layer'`, so the ORM
+// resolves direct relations in its Model layer (see `eager-with.test.ts`). The
+// QB-level `.with()` is now only reachable via the `withWhereHas` constrained-
+// eager fallback (`q.with(relation)`), which Drizzle still can't satisfy. These
+// tests pin that guard: calling the QB `.with(relation)` directly throws an
+// actionable error, while the relation-existence FILTER path (`whereHas`, which
+// never calls `.with()`) keeps working.
 
 import { describe, it, before, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
@@ -39,32 +40,37 @@ async function makeAdapter(): Promise<DrizzleAdapter> {
   return drizzle(cfg).create() as Promise<DrizzleAdapter>
 }
 
-describe('DrizzleQueryBuilder.with — throws instead of silently dropping', () => {
+describe('DrizzleQueryBuilder.with — guards the constrained-eager fallback', () => {
   before(async () => { adapter = await makeAdapter() })
   beforeEach(async () => { adapter = await makeAdapter() })
+
+  it('advertises the model-layer eager-load strategy', () => {
+    assert.equal(adapter.eagerLoadStrategy, 'model-layer')
+  })
 
   it('throws on a single relation', () => {
     assert.throws(
       () => adapter.query<Post>('posts').with('author'),
-      /Eager loading via \.with\('author'\) is not implemented on the Drizzle adapter/,
+      /Constrained eager loading via withWhereHas\('author'\) is not implemented on the Drizzle adapter/,
     )
   })
 
   it('throws on multiple relations and names them all', () => {
     assert.throws(
       () => adapter.query<Post>('posts').with('author', 'comments'),
-      /\.with\('author', 'comments'\)/,
+      /withWhereHas\('author', 'comments'\)/,
     )
   })
 
-  it('error points at the related() accessor and the whereHas filter-only path', () => {
+  it('error notes that plain eager loading works and points at whereHas / related()', () => {
     try {
       adapter.query<Post>('posts').with('author')
       assert.fail('expected with() to throw')
     } catch (err) {
       const msg = (err as Error).message
-      assert.match(msg, /related\('author'\)/, 'suggests the related() accessor')
+      assert.match(msg, /Plain eager loading .* IS supported/, 'clarifies Model.with() works')
       assert.match(msg, /whereHas\('author'\)/, 'suggests whereHas for filter-only use')
+      assert.match(msg, /related\('author'\)/, 'suggests the related() accessor for constrained loads')
     }
   })
 
@@ -77,7 +83,7 @@ describe('DrizzleQueryBuilder.with — throws instead of silently dropping', () 
     await qb.create({ title: 'a', userId: 1 })
     await qb.create({ title: 'b', userId: 2 })
     // A plain where filter (the same primitive whereHas compiles to) executes
-    // fine — only eager *loading* throws, not filtering.
+    // fine — only constrained eager *loading* throws, not filtering.
     const rows = await adapter.query<Post>('posts').where('userId', 1).get()
     assert.equal(rows.length, 1)
     assert.equal(rows[0]?.title, 'a')
