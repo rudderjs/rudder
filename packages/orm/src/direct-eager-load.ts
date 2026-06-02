@@ -16,7 +16,9 @@
  * results onto each parent. Foreign-key conventions match the lazy
  * `instance.related()` accessor exactly, so eager and lazy loads agree.
  *
- * Covered: `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`. Polymorphic
+ * Covered: `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `hasOneThrough`,
+ * `hasManyThrough` (the last two always route here regardless of adapter
+ * strategy — see `isThrough` in the partition). Polymorphic
  * relations never reach here (the partition sends them to
  * `attachPolymorphicRelations`). Nested names (`'a.b'`) and undeclared relations
  * throw a clear error — nested eager loading is deferred to a later pass.
@@ -27,6 +29,7 @@ import { Model, ModelRegistry, type RelationDefinition } from './index.js'
 import { camelHead } from './utils.js'
 import { resolveBelongsToManyMeta } from './relations/pivot-meta.js'
 import { collectIds, uniq, setDefault } from './polymorphic-eager-load.js'
+import { attachHasThrough } from './relations/has-through.js'
 
 /**
  * For each direct relation in `names`, batch-load the related rows and attach
@@ -64,6 +67,10 @@ export async function attachDirectRelations(
         break
       case 'belongsToMany':
         await attachBelongsToMany(ParentClass, parents, name, def)
+        break
+      case 'hasOneThrough':
+      case 'hasManyThrough':
+        await attachHasThrough(ParentClass, parents, name, def)
         break
       default:
         // Polymorphic types are routed to attachPolymorphicRelations by the

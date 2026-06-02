@@ -142,6 +142,15 @@ export function buildAggregateJoinShape(
   relation: string,
   def:      Exclude<RelationDefinition, { type: 'morphTo' | 'belongsTo' }>,
 ): AggregateJoinShape {
+  if (def.type === 'hasOneThrough' || def.type === 'hasManyThrough') {
+    // Aggregating across a two-hop through relation isn't expressible by the
+    // single-join aggregate shape. Deferred — load the relation and count in app.
+    throw new Error(
+      `[RudderJS ORM] withCount / withAggregate on a through relation ("${relation}" on ${Parent.name}) is not supported yet. ` +
+      `Eager-load it with \`${Parent.name}.with('${relation}')\` and aggregate in application code.`,
+    )
+  }
+
   const Related = def.model() as typeof Model
   const softDeletes = Related.softDeletes
 
@@ -220,8 +229,11 @@ export function buildAggregateJoinShape(
   }
 
   // hasOne / hasMany — related table holds the FK pointing back to Parent.
-  const fk       = def.foreignKey ?? `${camelHead(Parent.name)}Id`
-  const localCol = def.localKey   ?? Parent.primaryKey
+  // (`through` is rejected at the top; narrow positively — TS keeps the
+  // two-literal member otherwise.)
+  const simpleDef = def as Extract<RelationDefinition, { type: 'hasOne' | 'hasMany' | 'belongsTo' }>
+  const fk       = simpleDef.foreignKey ?? `${camelHead(Parent.name)}Id`
+  const localCol = simpleDef.localKey   ?? Parent.primaryKey
   return {
     relatedTable:  Related.getTable(),
     parentColumn:  localCol,
