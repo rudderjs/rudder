@@ -83,21 +83,11 @@ describe('Drizzle raw expressions', () => {
     assert.throws(() => User.query().selectRaw('count(*) as total'), /not supported.*DB\.select/s)
   })
 
-  it('joins + select() throw with a native-engine / DB-facade pointer', () => {
-    const q = User.query() as unknown as {
-      select(...c: string[]): unknown
-      distinct(): unknown
-      join(t: string, f: string, o?: string, s?: string): unknown
-      leftJoin(t: string, f: string, o?: string, s?: string): unknown
-      rightJoin(t: string, f: string, o?: string, s?: string): unknown
-      crossJoin(t: string): unknown
-    }
-    assert.throws(() => q.select('id', 'name'),                      /select\(\) is not supported.*native engine.*DB\.select/s)
-    assert.throws(() => q.distinct(),                                /distinct\(\) is not supported/)
-    assert.throws(() => q.join('posts', 'posts.userId', '=', 'id'), /join\(\) is not supported.*native engine.*DB\.select/s)
-    assert.throws(() => q.leftJoin('posts', 'posts.userId', '=', 'id'),  /leftJoin\(\) is not supported/)
-    assert.throws(() => q.rightJoin('posts', 'posts.userId', '=', 'id'), /rightJoin\(\) is not supported/)
-    assert.throws(() => q.crossJoin('posts'),                       /crossJoin\(\) is not supported/)
+  // joins + select() are implemented on Drizzle (see drizzle-joins.test.ts).
+  // distinct() remains unsupported (a separate follow-up).
+  it('distinct() still throws with a native-engine pointer', () => {
+    const q = User.query() as unknown as { distinct(): unknown }
+    assert.throws(() => q.distinct(), /distinct\(\) is not supported.*native engine/s)
   })
 
   it('groupBy + having throw with a native-engine / DB-facade pointer', () => {
