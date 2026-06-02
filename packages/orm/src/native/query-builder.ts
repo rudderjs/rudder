@@ -127,6 +127,29 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
+  whereColumn(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    this._pushColumn('AND', left, operatorOrRight, right)
+    return this
+  }
+
+  orWhereColumn(left: string, operatorOrRight: WhereOperator | string, right?: string): this {
+    this._pushColumn('OR', left, operatorOrRight, right)
+    return this
+  }
+
+  private _pushColumn(
+    boolean: 'AND' | 'OR',
+    left: string,
+    operatorOrRight: WhereOperator | string,
+    right?: string,
+  ): void {
+    // Two-arg form (`whereColumn('a', 'b')`) means equality; three-arg carries
+    // the operator in the middle.
+    const operator = (right === undefined ? '=' : operatorOrRight) as WhereOperator
+    const rightCol = right === undefined ? operatorOrRight : right
+    this._conditions.push({ kind: 'column', boolean, left, operator, right: rightCol })
+  }
+
   whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
     this._addGroup('AND', fn)
     return this

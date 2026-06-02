@@ -8,6 +8,7 @@
 
 import type {
   WhereClause,
+  WhereOperator,
   OrderClause,
   RelationExistencePredicate,
   AggregateRequest,
@@ -35,6 +36,7 @@ export type ConditionNode =
   | { kind: 'clause'; boolean: 'AND' | 'OR'; clause: WhereClause }
   | { kind: 'group';  boolean: 'AND' | 'OR'; children: ConditionNode[] }
   | { kind: 'raw';    boolean: 'AND' | 'OR'; raw: RawFragment }
+  | { kind: 'column'; boolean: 'AND' | 'OR'; left: string; operator: WhereOperator; right: string }
 
 /**
  * A single ORDER BY entry — either a structured `column direction` clause or a
@@ -184,6 +186,13 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       frag = compileClause(node.clause, dialect, b)
     } else if (node.kind === 'raw') {
       frag = compileRaw(node.raw, b)
+    } else if (node.kind === 'column') {
+      // Column-vs-column (`whereColumn`) — both sides are identifiers, quoted
+      // per dialect; nothing is bound. This is exactly why whereColumn can't
+      // ride on whereRaw, which leaves identifiers un-quoted.
+      const op = OPERATOR_SQL[node.operator]
+      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      frag = `${dialect.quoteId(node.left)} ${op} ${dialect.quoteId(node.right)}`
     } else {
       const inner = compileNodes(node.children, dialect, b)
       // An empty group contributes nothing — skip it entirely so it doesn't
@@ -209,23 +218,40 @@ function compileWhere(state: NativeQueryState, dialect: Dialect, b: Bindings): s
   // top-level AND-ed components (soft-delete, EXISTS).
   const userExpr = compileNodes(state.conditions, dialect, b)
 
-  const others: string[] = []
   const softExpr = compileSoftDelete(state, dialect)
-  if (softExpr) others.push(softExpr)
-  // whereHas / whereDoesntHave — correlated EXISTS, AND-ed at the top level.
-  for (const pred of state.relationExists ?? []) {
-    others.push(compileExists(state.table, pred, dialect, b))
+  // Compile the existence predicates in order (shares the positional Bindings).
+  const existsParts = (state.relationExists ?? []).map(pred => ({
+    boolean: pred.boolean ?? 'AND',
+    sql:     compileExists(state.table, pred, dialect, b),
+  }))
+  const hasOr = existsParts.some(p => p.boolean === 'OR')
+
+  if (!hasOr) {
+    // ── all-AND path (unchanged text) — whereHas/whereDoesntHave AND-ed at the
+    // top level alongside soft-delete. Preserved verbatim so existing SQL holds.
+    const others: string[] = []
+    if (softExpr) others.push(softExpr)
+    for (const part of existsParts) others.push(part.sql)
+
+    if (!userExpr) return others.join(' AND ')
+    if (others.length === 0) return userExpr
+
+    // Parenthesize the user predicate when it has more than one top-level clause
+    // so an inner top-level OR can't escape the AND. A single clause needs none.
+    const wrapped = state.conditions.length > 1 ? `(${userExpr})` : userExpr
+    return [wrapped, ...others].join(' AND ')
   }
 
-  if (!userExpr) return others.join(' AND ')
-  if (others.length === 0) return userExpr
-
-  // There's something to AND the user predicate against. Parenthesize it when
-  // it has more than one top-level clause so an inner top-level OR can't escape
-  // the AND (e.g. `(a OR b) AND deletedAt IS NULL`). A single clause needs no
-  // parens.
-  const wrapped = state.conditions.length > 1 ? `(${userExpr})` : userExpr
-  return [wrapped, ...others].join(' AND ')
+  // ── OR-rooted existence predicate present ──
+  // Fold the user clauses and the existence predicates into ONE predicate by
+  // their booleans, then AND the soft-delete scope around the whole group so an
+  // `orWhereHas` can't leak past the soft-delete filter.
+  let predicate = userExpr
+  for (const part of existsParts) {
+    predicate = predicate === '' ? part.sql : `${predicate} ${part.boolean} ${part.sql}`
+  }
+  if (!softExpr) return predicate
+  return `${softExpr} AND (${predicate})`
 }
 
 /** The `deletedAt IS [NOT] NULL` fragment, or `''` when not scoping. */
@@ -563,8 +589,12 @@ export function compileExists(
   dialect: Dialect,
   b: Bindings,
 ): string {
-  const keyword = predicate.exists ? 'EXISTS' : 'NOT EXISTS'
   const related = predicate.relatedTable
+
+  // The subquery's FROM table + WHERE body — shared by the EXISTS and the
+  // `COUNT(*) op N` wrappers below.
+  let fromTable: string
+  let whereBody: string
 
   if (predicate.through) {
     const pivot = predicate.through.pivotTable
@@ -582,17 +612,29 @@ export function compileExists(
     ]
     const innerExists = `EXISTS (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(innerExprs)})`
 
-    const pivotExprs = [pivotKeyExpr, ...extraExprs, innerExists]
-    return `${keyword} (SELECT 1 FROM ${dialect.quoteId(pivot)} WHERE ${andAll(pivotExprs)})`
+    fromTable = pivot
+    whereBody = andAll([pivotKeyExpr, ...extraExprs, innerExists])
+  } else {
+    // Direct: one correlated subquery on the related table.
+    fromTable = related
+    whereBody = andAll([
+      `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
+      ...extraEqualsOn(related, predicate.extraEquals, dialect, b),
+      ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+    ])
   }
 
-  // Direct: one correlated subquery on the related table.
-  const exprs = [
-    `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
-    ...extraEqualsOn(related, predicate.extraEquals, dialect, b),
-    ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
-  ]
-  return `${keyword} (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(exprs)})`
+  // `has(relation, op, n)` — count the matching rows instead of testing
+  // existence. The integer is validated + inlined (not bound) so it can't shift
+  // the surrounding WHERE's positional bindings.
+  if (predicate.count) {
+    const op = OPERATOR_SQL[predicate.count.operator]
+    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
+    return `(SELECT COUNT(*) FROM ${dialect.quoteId(fromTable)} WHERE ${whereBody}) ${op} ${asInt(predicate.count.value)}`
+  }
+
+  const keyword = predicate.exists ? 'EXISTS' : 'NOT EXISTS'
+  return `${keyword} (SELECT 1 FROM ${dialect.quoteId(fromTable)} WHERE ${whereBody})`
 }
 
 /** Render each `extraEquals` entry as a bound `"table"."k" = ?` fragment. */

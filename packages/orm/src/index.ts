@@ -637,6 +637,18 @@ export function Cast(type: CastDefinition) {
 export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   whereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
   whereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  /** OR-rooted {@link whereHas} — `... OR EXISTS(relation)`. */
+  orWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  /** OR-rooted {@link whereDoesntHave}. */
+  orWhereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  /**
+   * Count comparison on a relation — `has('posts', '>=', 3)` keeps rows whose
+   * `posts` count satisfies the operator. Defaults to `>= 1` (≡ `whereHas`).
+   * Native only; throws on Drizzle/Prisma (no count-filter in their query APIs).
+   */
+  has(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: QueryBuilder<Model>) => void): this
+  /** OR-rooted {@link has}. */
+  orHas(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: QueryBuilder<Model>) => void): this
   withWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
   whereBelongsTo(parent: Model, relation?: string): this
   withCount(arg: string | readonly string[] | Record<string, AggregateConstraint>): this
@@ -671,6 +683,17 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   orWhereBetween(column: string, range: readonly [unknown, unknown]): this
   /** OR-rooted `NOT BETWEEN`. */
   orWhereNotBetween(column: string, range: readonly [unknown, unknown]): this
+  /**
+   * Compare two columns — `WHERE "a" = "b"`, both sides identifier-quoted per
+   * dialect (unlike {@link whereRaw}, which is verbatim). Two-arg form is
+   * equality; three-arg carries the operator. Throws on the Prisma adapter
+   * (no column-vs-column in its query API) — use `whereRaw`/`DB.select` there.
+   */
+  whereColumn(left: string, right: string): this
+  whereColumn(left: string, operator: WhereOperator, right: string): this
+  /** OR-rooted {@link whereColumn}. */
+  orWhereColumn(left: string, right: string): this
+  orWhereColumn(left: string, operator: WhereOperator, right: string): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -1331,6 +1354,25 @@ export abstract class Model {
             return proxy
           }
         }
+        if (prop === 'orWhereHas') {
+          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain, { boolean: 'OR' })
+            return proxy
+          }
+        }
+        if (prop === 'orWhereDoesntHave') {
+          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain, { boolean: 'OR' })
+            return proxy
+          }
+        }
+        if (prop === 'has' || prop === 'orHas') {
+          const boolean = prop === 'orHas' ? 'OR' : 'AND'
+          return (relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain, { boolean, count: { operator, value: count } })
+            return proxy
+          }
+        }
         if (prop === 'withWhereHas') {
           return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
             attachWithWhereHas(ModelClass, target as QueryBuilder<Model>, relation, constrain)
@@ -1708,6 +1750,13 @@ export abstract class Model {
   static whereNotBetween<T extends typeof Model>(this: T, column: string, range: readonly [unknown, unknown]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).whereNotBetween(column, range)
   }
+  static whereColumn<T extends typeof Model>(this: T, left: string, right: string): HydratingQueryBuilder<InstanceType<T>>
+  static whereColumn<T extends typeof Model>(this: T, left: string, operator: WhereOperator, right: string): HydratingQueryBuilder<InstanceType<T>>
+  static whereColumn<T extends typeof Model>(this: T, left: string, operatorOrRight: WhereOperator | string, right?: string): HydratingQueryBuilder<InstanceType<T>> {
+    return (right === undefined
+      ? Model._q(this).whereColumn(left, operatorOrRight)
+      : Model._q(this).whereColumn(left, operatorOrRight as WhereOperator, right))
+  }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)
   }
@@ -1797,6 +1846,29 @@ export abstract class Model {
     constrain?: (q: QueryBuilder<Model>) => void,
   ): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /** OR-rooted {@link Model.whereHas}. */
+  static orWhereHas<T extends typeof Model>(this: T, relation: string, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { boolean: 'OR' }) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /** OR-rooted {@link Model.whereDoesntHave}. */
+  static orWhereDoesntHave<T extends typeof Model>(this: T, relation: string, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain, { boolean: 'OR' }) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /**
+   * Count comparison on a relation — `Post.has('comments', '>=', 3)`. Defaults
+   * to `>= 1` (≡ {@link Model.whereHas}). Native only; Drizzle/Prisma throw.
+   */
+  static has<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { count: { operator, value: count } }) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /** OR-rooted {@link Model.has}. */
+  static orHas<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { boolean: 'OR', count: { operator, value: count } }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**

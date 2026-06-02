@@ -347,6 +347,26 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
+  // ── column-vs-column (whereColumn) ───────────────────────
+  // Both sides render as Drizzle column refs (quoted per dialect), so unlike
+  // whereRaw nothing is verbatim. Two-arg form is equality; three-arg carries
+  // the operator (injected raw, like clauseToExprOn does for value operators).
+  whereColumn(left: string, operatorOrRight: string, right?: string): this {
+    this._extraExprs.push(this._columnExpr(left, operatorOrRight, right))
+    return this
+  }
+
+  orWhereColumn(left: string, operatorOrRight: string, right?: string): this {
+    this._orExtraExprs.push(this._columnExpr(left, operatorOrRight, right))
+    return this
+  }
+
+  private _columnExpr(left: string, operatorOrRight: string, right?: string): SQL {
+    const operator = right === undefined ? '=' : operatorOrRight
+    const rightCol = right === undefined ? operatorOrRight : right
+    return sql`${this.col(left) as Column} ${sql.raw(operator)} ${this.col(rightCol) as Column}` as SQL
+  }
+
   orderByRaw(rawSql: string, bindings: readonly unknown[] = []): this {
     this._orders.push({ rawSql: rawToSql(rawSql, bindings) })
     return this
@@ -462,6 +482,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   whereRelationExists(p: RelationExistencePredicate): this {
+    if (p.count) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] has("${p.relation}", …) count comparison is not implemented on the Drizzle adapter. Use whereHas() for existence, or load the related rows via related() and count in app code.`,
+      )
+    }
+    if (p.boolean === 'OR') {
+      throw new Error(
+        `[RudderJS ORM Drizzle] orWhereHas("${p.relation}") (OR-rooted relation existence) is not implemented on the Drizzle adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
+      )
+    }
     const Related = this.resolveTable(p.relatedTable)
     if (!Related) {
       throw new Error(
