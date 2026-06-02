@@ -149,16 +149,20 @@ jobs:
       #   4. Bounded retry WITH BACKOFF (#792 + #798) — handles mode A: a retry
       #      replays turbo's cache and re-spawns only the crashed package in ~ms,
       #      hitting the still-exhausted desktop heap, so an INSTANT retry fails
-      #      3x in ~70ms; sleeping 30s/60s lets the OS reclaim handles first.
+      #      again in ~ms; sleeping 30s before the retry lets the OS reclaim
+      #      handles first. Capped at 2 attempts: the desktop-heap exhaustion is
+      #      sticky to the runner, so a 3rd in-job retry rarely helps — exhaust
+      #      fast and (on a pure-flake signature) exit non-blocking, rather than
+      #      grinding ~27m. Re-run the job on a FRESH runner to actually clear it.
       #   5. PER-ATTEMPT TIMEOUT — handles mode B, which #4 is structurally blind
       #      to: the retry only inspects the exit code, so a process that never
       #      exits just blocks the loop until the job timeout. Each attempt now
-      #      runs in a child pwsh we kill (whole tree) if it exceeds 8m (healthy
+      #      runs in a child pwsh we kill (whole tree) if it exceeds 6m (healthy
       #      is ~3m), turning a 25m cancel into kill→backoff→retry. On timeout we
       #      dump the live node/pnpm/turbo/tsc processes so the next hang is
       #      finally diagnosable instead of opaque.
       #
-      # A REAL failure (crash or hang) is deterministic — fails all 3 attempts
+      # A REAL failure (crash or hang) is deterministic — fails both attempts
       # and still goes red — so the retry can't mask a true break.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
@@ -180,12 +184,12 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
 
-      # Windows: serialise + stream + retry up to 3x, with a PER-ATTEMPT TIMEOUT.
+      # Windows: serialise + stream + retry up to 2x, with a PER-ATTEMPT TIMEOUT.
       # Each attempt runs the turbo command in a child pwsh we wait on with a
       # deadline (WaitForExit) and kill (whole process tree) if it wedges — so a
       # crash (mode A, fast non-zero exit) AND a hang (mode B, no exit) both route
       # into the same backoff+retry. On timeout we dump the live build processes
-      # for diagnostics. A real failure fails all 3 attempts and still goes red.
+      # for diagnostics. A real failure fails both attempts and still goes red.
       # (Inlined per step rather than shared — self-contained plain pwsh is easier
       # to read and reason about than an interpolated function.)
       - name: Build (windows — retry + per-attempt timeout for the DLL crash/hang flakes)
@@ -195,8 +199,8 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          $max = 3
-          $attemptTimeoutSec = 480   # 8m; healthy build is ~3m
+          $max = 2
+          $attemptTimeoutSec = 360   # 6m; healthy build is ~3m
           # Known Windows flake exit codes: 124 = our wedge-timeout (mode B);
           # -1073741502 / 3221225794 = 0xC0000142 STATUS_DLL_INIT_FAILED (mode A).
           # If EVERY failed attempt is one of these, it's the environmental flake
@@ -226,7 +230,7 @@ jobs:
             if ($code -eq 0) { exit 0 }
             if ($flakeCodes -notcontains $code) { $allFlake = $false }
             if ($i -lt $max) {
-              $delay = 30 * $i   # 30s, then 60s — let the OS reclaim handles (mode A)
+              $delay = 30 * $i   # 30s before the single retry — let the OS reclaim handles (mode A)
               Write-Host "::warning::Build attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
@@ -246,8 +250,8 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          $max = 3
-          $attemptTimeoutSec = 480   # 8m; healthy test is ~3m
+          $max = 2
+          $attemptTimeoutSec = 360   # 6m; healthy test is ~3m
           # See the Build step for the flake-code rationale. Flake-only failures
           # are non-blocking (Ubuntu gates); a real failing test (exit 1) blocks.
           $flakeCodes = @(124, -1073741502, 3221225794)
