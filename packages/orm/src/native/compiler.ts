@@ -104,6 +104,10 @@ export interface NativeQueryState {
   /** `HAVING` predicates from `having`/`havingRaw`, emitted after GROUP BY.
    *  Their bound values follow the WHERE's and precede ORDER BY's. */
   having?:    HavingNode[]
+  /** `UNION` / `UNION ALL` members from `union(...)`/`unionAll(...)`. Each member's
+   *  own ORDER BY / LIMIT / OFFSET / lock are ignored — the BASE query's apply to
+   *  the whole combined result. Member bindings follow the base body's in order. */
+  unions?:    Array<{ all: boolean; state: NativeQueryState }>
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
@@ -399,6 +403,53 @@ export function compileSelect(
   } = {},
 ): CompiledQuery {
   const b = new Bindings(dialect)
+
+  // Base SELECT body (projection → HAVING; no ORDER BY / LIMIT / lock — those
+  // apply to the whole result, after any UNION). `overrides` only touch the base.
+  let sql = compileSelectBody(state, dialect, b, overrides)
+
+  // UNION / UNION ALL members. Each member's body shares the same `Bindings`, so
+  // its parameters land positionally after the base body's. Member ORDER BY /
+  // LIMIT are intentionally dropped (compileSelectBody emits neither).
+  for (const u of state.unions ?? []) {
+    sql += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
+  }
+
+  // ORDER BY / LIMIT / OFFSET / lock come from the BASE state and apply to the
+  // combined result. Binds after every union member's parameters (SQL text order).
+  const orderBy = compileOrderBy(state.orders, dialect, b)
+  if (orderBy) sql += ` ORDER BY ${orderBy}`
+
+  const limit = overrides.limit !== undefined ? overrides.limit : state.limitN
+  if (limit !== null && limit !== undefined) sql += ` LIMIT ${asInt(limit)}`
+
+  if (state.offsetN !== null) {
+    // SQLite requires a LIMIT before OFFSET; supply -1 (unbounded) when the
+    // caller set an offset without a limit.
+    if (limit === null || limit === undefined) sql += ` LIMIT -1`
+    sql += ` OFFSET ${asInt(state.offsetN)}`
+  }
+
+  // Pessimistic lock trails everything (standard SQL puts the locking clause
+  // last). dialect.lockSql returns '' on engines without row locks (SQLite).
+  if (state.lock) sql += dialect.lockSql(state.lock)
+
+  return { sql, bindings: b.values }
+}
+
+/**
+ * The SELECT body up to and including HAVING — projection, FROM, JOINs, WHERE,
+ * GROUP BY, HAVING — with NO ORDER BY / LIMIT / OFFSET / lock. Shared by
+ * {@link compileSelect} (which appends those) and the UNION members + the
+ * wrapped {@link compileCount}. Uses the caller's {@link Bindings} so positional
+ * parameters stay aligned across the whole (possibly unioned) statement.
+ */
+function compileSelectBody(
+  state: NativeQueryState,
+  dialect: Dialect,
+  b: Bindings,
+  overrides: { selectColumns?: string; extraConditions?: ConditionNode[] } = {},
+): string {
   const table = dialect.quoteId(state.table)
 
   // `select(...)` / `selectRaw` REPLACE the default `*` projection (Laravel
@@ -433,24 +484,7 @@ export function compileSelect(
   const having = compileHaving(state.having ?? [], dialect, b)
   if (having) sql += ` HAVING ${having}`
 
-  const orderBy = compileOrderBy(state.orders, dialect, b)
-  if (orderBy) sql += ` ORDER BY ${orderBy}`
-
-  const limit = overrides.limit !== undefined ? overrides.limit : state.limitN
-  if (limit !== null && limit !== undefined) sql += ` LIMIT ${asInt(limit)}`
-
-  if (state.offsetN !== null) {
-    // SQLite requires a LIMIT before OFFSET; supply -1 (unbounded) when the
-    // caller set an offset without a limit.
-    if (limit === null || limit === undefined) sql += ` LIMIT -1`
-    sql += ` OFFSET ${asInt(state.offsetN)}`
-  }
-
-  // Pessimistic lock trails everything (standard SQL puts the locking clause
-  // last). dialect.lockSql returns '' on engines without row locks (SQLite).
-  if (state.lock) sql += dialect.lockSql(state.lock)
-
-  return { sql, bindings: b.values }
+  return sql
 }
 
 /** Compile `SELECT COUNT(*) AS count FROM ... WHERE ...` for `count()` /
@@ -459,6 +493,18 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   const b = new Bindings(dialect)
   const table = dialect.quoteId(state.table)
   const countCol = dialect.quoteId('count')
+
+  // A UNION counts the rows of the COMBINED result — wrap the whole union body
+  // (each member carries its own GROUP BY/HAVING). Takes precedence over the
+  // GROUP BY wrap below; member ORDER BY/LIMIT are irrelevant to a count.
+  const unions = state.unions ?? []
+  if (unions.length > 0) {
+    let inner = compileSelectBody(state, dialect, b)
+    for (const u of unions) inner += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
+    const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
+    return { sql, bindings: b.values }
+  }
+
   const joins = compileJoins(state.joins ?? [], dialect, b)
   const where = compileWhere(state, dialect, b)
   const groupBy = state.groupBy ?? []
