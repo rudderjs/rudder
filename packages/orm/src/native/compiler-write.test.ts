@@ -71,6 +71,38 @@ describe('native compiler — INSERT', () => {
     assert.throws(() => compileInsert(baseState(), dialect, []), /no rows/)
   })
 
+  // ── upsert (ON CONFLICT) ──────────────────────────────────
+  it('sqlite upsert → ON CONFLICT (...) DO UPDATE SET col = excluded.col', () => {
+    const { sql, bindings } = compileInsert(
+      baseState(), dialect, [{ email: 'a@x.com', name: 'Ada' }],
+      { returning: true, upsert: { uniqueBy: ['email'], update: ['name'] } },
+    )
+    assert.strictEqual(
+      sql,
+      'INSERT INTO "users" ("email", "name") VALUES (?, ?) ON CONFLICT ("email") DO UPDATE SET "name" = excluded."name" RETURNING *',
+    )
+    assert.deepStrictEqual(bindings, ['a@x.com', 'Ada'])
+  })
+
+  it('empty update set → ON CONFLICT (...) DO NOTHING', () => {
+    const { sql } = compileInsert(
+      baseState(), dialect, [{ email: 'a@x.com' }],
+      { upsert: { uniqueBy: ['email'], update: [] } },
+    )
+    assert.strictEqual(sql, 'INSERT INTO "users" ("email") VALUES (?) ON CONFLICT ("email") DO NOTHING')
+  })
+
+  it('composite uniqueBy quotes every target column', () => {
+    const { sql } = compileInsert(
+      baseState(), dialect, [{ a: 1, b: 2, c: 3 }],
+      { upsert: { uniqueBy: ['a', 'b'], update: ['c'] } },
+    )
+    assert.strictEqual(
+      sql,
+      'INSERT INTO "users" ("a", "b", "c") VALUES (?, ?, ?) ON CONFLICT ("a", "b") DO UPDATE SET "c" = excluded."c"',
+    )
+  })
+
   it('rejects an invalid column identifier', () => {
     assert.throws(() => compileInsert(baseState(), dialect, [{ 'name); DROP': 1 }]), NativeIdentifierError)
   })

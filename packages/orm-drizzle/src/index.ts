@@ -923,6 +923,49 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     await exec<void>(this.db.insert(this.table).values(rows))
   }
 
+  /** @internal — build the conflict `set` map: each update column references the
+   *  would-be-inserted value (`excluded.<col>` on sqlite/pg, `values(<col>)` on
+   *  mysql). Uses the real DB column name so a schema-mapped key (JS `userId` →
+   *  SQL `user_id`) resolves correctly. */
+  private _upsertSet(columns: string[], mysql: boolean): Record<string, SQL> {
+    const set: Record<string, SQL> = {}
+    for (const c of columns) {
+      const dbName = (this.col(c) as Column).name
+      set[c] = mysql
+        ? sql`values(${sql.identifier(dbName)})`
+        : sql`excluded.${sql.identifier(dbName)}`
+    }
+    return set
+  }
+
+  async upsert(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<number> {
+    this._assertNotSubBuilder()
+    if (rows.length === 0) return 0
+
+    if (this.dialect === 'mysql') {
+      // MySQL keys off existing unique indexes — no conflict target. An empty
+      // `update` degrades to a no-op self-assignment on the first uniqueBy column.
+      const cols = update.length > 0 ? update : uniqueBy.slice(0, 1)
+      const q = (this.db.insert(this.table).values(rows) as unknown as {
+        onDuplicateKeyUpdate: (cfg: { set: Record<string, SQL> }) => unknown
+      }).onDuplicateKeyUpdate({ set: this._upsertSet(cols, true) })
+      return affectedRowCount(q, this.dialect)
+    }
+
+    // SQLite / Postgres — ON CONFLICT (target) DO UPDATE / DO NOTHING, with
+    // RETURNING so we can count affected rows in one round-trip.
+    const target = uniqueBy.map(c => this.col(c) as Column)
+    const insert = this.db.insert(this.table).values(rows) as unknown as {
+      onConflictDoNothing: (cfg: { target: Column[] }) => { returning: () => Promise<unknown[]> }
+      onConflictDoUpdate: (cfg: { target: Column[]; set: Record<string, SQL> }) => { returning: () => Promise<unknown[]> }
+    }
+    const q = update.length === 0
+      ? insert.onConflictDoNothing({ target })
+      : insert.onConflictDoUpdate({ target, set: this._upsertSet(update, false) })
+    const out = await exec<unknown[]>(q.returning())
+    return out.length
+  }
+
   async deleteAll(): Promise<number> {
     this._assertNotSubBuilder()
     const cond = this.buildConditions()

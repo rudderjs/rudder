@@ -62,6 +62,24 @@ export interface Dialect {
    * This is the only spot in `defaultLiteral` that diverges per dialect.
    */
   booleanLiteral(value: boolean): string
+
+  /**
+   * The conflict-resolution suffix appended to an `INSERT … VALUES …` for an
+   * upsert (before any `RETURNING`). Diverges sharply per dialect:
+   *
+   * - SQLite / Postgres: `ON CONFLICT (<uniqueBy>) DO UPDATE SET col = excluded.col, …`
+   *   (or `… DO NOTHING` when `update` is empty). The conflict target is the
+   *   `uniqueBy` columns; a matching unique index/constraint must exist.
+   * - MySQL: `ON DUPLICATE KEY UPDATE col = VALUES(col), …`. MySQL keys off any
+   *   existing unique index, so `uniqueBy` is ignored here (the caller still
+   *   needs the unique constraint to exist). An empty `update` degrades to a
+   *   no-op assignment on the first `uniqueBy` column so the row is left intact.
+   *
+   * `uniqueBy` and `update` are already-resolved, validated column-name arrays
+   * (the Model layer computes the default `update` set). Values are never
+   * interpolated here — only identifiers, quoted via {@link quoteId}.
+   */
+  upsertClause(uniqueBy: readonly string[], update: readonly string[]): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -106,6 +124,15 @@ export class SqliteDialect implements Dialect {
   // boolean default renders as the matching integer literal.
   booleanLiteral(value: boolean): string {
     return value ? '1' : '0'
+  }
+
+  // SQLite + Postgres share the ON CONFLICT (target) DO UPDATE / DO NOTHING form,
+  // referencing the rejected row's values via the `excluded` pseudo-table.
+  upsertClause(uniqueBy: readonly string[], update: readonly string[]): string {
+    const target = uniqueBy.map(c => this.quoteId(c)).join(', ')
+    if (update.length === 0) return `ON CONFLICT (${target}) DO NOTHING`
+    const sets = update.map(c => `${this.quoteId(c)} = excluded.${this.quoteId(c)}`).join(', ')
+    return `ON CONFLICT (${target}) DO UPDATE SET ${sets}`
   }
 
   // SQLite has a small set of storage classes and no real type checking, so the

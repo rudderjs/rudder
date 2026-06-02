@@ -48,6 +48,17 @@ export class MysqlDialect implements Dialect {
     return value ? '1' : '0'
   }
 
+  // MySQL has no ON CONFLICT target — it keys off whatever unique index the row
+  // collides with, so `uniqueBy` is ignored. `VALUES(col)` references the would-be
+  // inserted value (deprecated in 8.0.20+ but still supported and the widely
+  // compatible form). An empty `update` degrades to a no-op self-assignment on the
+  // first uniqueBy column so a conflicting row is left untouched (insert-or-ignore).
+  upsertClause(uniqueBy: readonly string[], update: readonly string[]): string {
+    const cols = update.length > 0 ? update : uniqueBy.slice(0, 1)
+    const sets = cols.map(c => `${this.quoteId(c)} = VALUES(${this.quoteId(c)})`).join(', ')
+    return `ON DUPLICATE KEY UPDATE ${sets}`
+  }
+
   columnTypeSql(column: ColumnDefinition): string {
     if (column.autoIncrement) {
       // MySQL requires an AUTO_INCREMENT column to be a key; bundling PRIMARY KEY

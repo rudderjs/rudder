@@ -408,6 +408,28 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     await this.executor.execute(sql, bindings)
   }
 
+  async upsert(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<number> {
+    this._assertNotSubBuilder()
+    if (rows.length === 0) return 0
+    const upsert = { uniqueBy, update }
+    // SQLite/Postgres: one statement with RETURNING — affected = rows returned.
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileInsert(
+        this._state(), this.dialect, rows as Record<string, unknown>[], { returning: true, upsert },
+      )
+      const out = await this.executor.execute(sql, bindings)
+      return out.length
+    }
+    // MySQL: no RETURNING — read affectedRows off the driver metadata. (MySQL
+    // counts 1 per inserted row and 2 per row updated via ON DUPLICATE KEY, so
+    // this is rows-touched, not rows-distinct — a documented MySQL quirk.)
+    const { sql, bindings } = compileInsert(
+      this._state(), this.dialect, rows as Record<string, unknown>[], { returning: false, upsert },
+    )
+    const { affectedRows } = await this._affecting(sql, bindings)
+    return affectedRows
+  }
+
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
     if (this.dialect.supportsReturning) {

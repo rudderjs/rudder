@@ -12,6 +12,11 @@ type PrismaModelDelegate = {
   groupBy?(args: Record<string, unknown>): Promise<unknown[]>
   create(args: Record<string, unknown>): Promise<unknown>
   createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }>
+  /** Single-row insert-or-update. The adapter's bulk `upsert` calls this once per
+   *  row (Prisma has no portable bulk ON CONFLICT) and batches them in one
+   *  `$transaction`. Optional on the structural type so existing fixtures don't
+   *  have to stub it. */
+  upsert?(args: { where: Record<string, unknown>; create: Record<string, unknown>; update: Record<string, unknown> }): Promise<unknown>
   update(args: Record<string, unknown>): Promise<unknown>
   updateMany(args: { where?: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>
   delete(args: Record<string, unknown>): Promise<unknown>
@@ -1043,6 +1048,33 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     if (rows.length === 0) return
     await this.delegate.createMany({ data: rows as Record<string, unknown>[] })
+  }
+
+  async upsert(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<number> {
+    this._assertNotSubBuilder()
+    if (rows.length === 0) return 0
+    const delegateUpsert = this.delegate.upsert
+    if (typeof delegateUpsert !== 'function') {
+      throw new Error('[RudderJS ORM Prisma] The Prisma client delegate has no upsert() — cannot perform Model.upsert().')
+    }
+    // Prisma has no portable bulk ON CONFLICT, so map each row to a single-row
+    // upsert. `where` is a unique selector: one column → `{ col: val }`; a
+    // composite uniqueBy → Prisma's compound-unique input `{ a_b: { a, b } }`
+    // (a matching `@@unique([a, b])` must exist, exactly as ON CONFLICT requires).
+    const ops = (rows as Record<string, unknown>[]).map((row) => {
+      const where = uniqueBy.length === 1
+        ? { [uniqueBy[0]!]: row[uniqueBy[0]!] }
+        : { [uniqueBy.join('_')]: Object.fromEntries(uniqueBy.map((c) => [c, row[c]])) }
+      const updateData: Record<string, unknown> = {}
+      for (const c of update) updateData[c] = row[c]
+      return delegateUpsert.call(this.delegate, { where, create: row, update: updateData })
+    })
+    // Batch atomically via the array form of $transaction when available; a fake
+    // client without it just runs the operations as already-issued promises.
+    const tx = (this.prisma as unknown as { $transaction?: (p: unknown[]) => Promise<unknown[]> }).$transaction
+    if (typeof tx === 'function') await tx.call(this.prisma, ops)
+    else await Promise.all(ops)
+    return rows.length
   }
 
   async deleteAll(): Promise<number> {

@@ -147,6 +147,18 @@ describe('PgDialect — drop & rename', () => {
   })
 })
 
+describe('PgDialect — upsertClause', () => {
+  it('builds ON CONFLICT (...) DO UPDATE with excluded refs', () => {
+    assert.strictEqual(
+      dialect.upsertClause(['email'], ['name', 'visits']),
+      'ON CONFLICT ("email") DO UPDATE SET "name" = excluded."name", "visits" = excluded."visits"',
+    )
+  })
+  it('empty update → DO NOTHING', () => {
+    assert.strictEqual(dialect.upsertClause(['email'], []), 'ON CONFLICT ("email") DO NOTHING')
+  })
+})
+
 describe('PgDialect — guards', () => {
   it('throws NATIVE_DDL_EMPTY_TABLE on a table with no columns', () => {
     assert.throws(

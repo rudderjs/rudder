@@ -188,6 +188,27 @@ export interface QueryBuilder<T> {
    */
   insertMany(rows: Partial<T>[]): Promise<void>
   /**
+   * Bulk insert-or-update. For each row, insert it; on a unique-key conflict
+   * (the columns named in `uniqueBy`), update the `update` columns from the
+   * incoming values instead of failing. Resolves to the number of rows
+   * affected/processed.
+   *
+   * Mirrors Laravel's `upsert($values, $uniqueBy, $update)`. The Model layer
+   * (`Model.upsert`) normalizes `uniqueBy` to an array and computes the default
+   * `update` set (every inserted column except `uniqueBy`), so adapters always
+   * receive concrete arrays. An empty `update` means insert-or-ignore.
+   *
+   * Each backend maps to its native clause: native/Drizzle emit a single
+   * `ON CONFLICT … DO UPDATE` (SQLite/Postgres) / `ON DUPLICATE KEY UPDATE`
+   * (MySQL) statement; the Prisma adapter falls back to a per-row `upsert`
+   * batched in one transaction (no portable bulk ON CONFLICT). A matching unique
+   * constraint on `uniqueBy` must exist, exactly as the SQL clause requires.
+   *
+   * **Optional capability.** Adapters that don't implement it omit it; the Model
+   * layer throws an adapter-named error if `Model.upsert()` is called against one.
+   */
+  upsert?(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<number>
+  /**
    * Delete every row matching the chained `where`/`orWhere` clauses.
    * Returns the number of rows deleted. Bypasses soft deletes — call
    * `withTrashed()` first if you need to scope including trashed rows
