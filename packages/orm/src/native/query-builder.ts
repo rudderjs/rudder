@@ -22,7 +22,7 @@ import type {
   AggregateFn,
 } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
-import type { Executor, Row } from './driver.js'
+import type { Executor, Row, AffectingExecutor } from './driver.js'
 import {
   compileSelect,
   compileCount,
@@ -273,34 +273,97 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     return { ...this._state(), conditions: [], softDelete: 'with' }
   }
 
+  // ── no-RETURNING write path (MySQL) ──────────────────────
+  //
+  // SQLite/Postgres read written rows back via `RETURNING *`. MySQL has none, so
+  // the write terminals below branch on `dialect.supportsReturning`: they run the
+  // bare INSERT/UPDATE/DELETE and read the result from the driver's metadata
+  // ({@link AffectingExecutor}) — `insertId` for `create`, `affectedRows` for the
+  // bulk terminals — then re-SELECT by primary key for terminals that must return
+  // the row. SQLite/Postgres keep their exact existing RETURNING path untouched.
+
+  /** @internal — run a write and read its `insertId` / `affectedRows`. Throws if
+   *  the active driver can't report write metadata (an internal invariant: every
+   *  no-RETURNING dialect driver implements `AffectingExecutor`). */
+  private async _affecting(sql: string, bindings: readonly unknown[]): Promise<{ insertId: number | null; affectedRows: number }> {
+    const ex = this.executor as Partial<AffectingExecutor>
+    if (typeof ex.affectingExecute !== 'function') {
+      throw new Error(
+        '[RudderJS ORM native] The active driver cannot run writes without RETURNING ' +
+        '(no affectingExecute). Every non-RETURNING dialect driver must implement AffectingExecutor.',
+      )
+    }
+    return ex.affectingExecute(sql, bindings)
+  }
+
+  /** @internal — re-SELECT a row by primary key after a no-RETURNING write. Runs
+   *  on `this.executor`, so inside a transaction it stays on the txn connection. */
+  private async _reselect(id: number | string): Promise<T | null> {
+    const { sql, bindings } = compileSelect(this._idState(), this.dialect, { limit: 1, extraConditions: this._pkCondition(id) })
+    const rows = await this.executor.execute(sql, bindings)
+    return (rows[0] as T | undefined) ?? null
+  }
+
   async create(data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileInsert(
+        this._state(), this.dialect, [data as Record<string, unknown>], { returning: true },
+      )
+      const rows = await this.executor.execute(sql, bindings)
+      if (!rows[0]) throw new Error('[RudderJS ORM native] create() returned no rows.')
+      return rows[0] as T
+    }
+    // No RETURNING (MySQL): INSERT, then synthesize the row from the input + the
+    // generated auto-increment id. Matches Eloquent's MySQL `create()` semantics —
+    // DB-applied defaults for omitted columns aren't reflected until a refresh.
     const { sql, bindings } = compileInsert(
-      this._state(), this.dialect, [data as Record<string, unknown>], { returning: true },
+      this._state(), this.dialect, [data as Record<string, unknown>], { returning: false },
     )
-    const rows = await this.executor.execute(sql, bindings)
-    if (!rows[0]) throw new Error('[RudderJS ORM native] create() returned no rows.')
-    return rows[0] as T
+    const { insertId } = await this._affecting(sql, bindings)
+    const created: Record<string, unknown> = { ...(data as Record<string, unknown>) }
+    if (insertId !== null && created[this.primaryKey] === undefined) {
+      created[this.primaryKey] = insertId
+    }
+    return created as T
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileUpdate(
+        this._idState(), this.dialect, data as Record<string, unknown>,
+        { extraConditions: this._pkCondition(id), returning: true },
+      )
+      const rows = await this.executor.execute(sql, bindings)
+      if (!rows[0]) throw new Error('[RudderJS ORM native] update() returned no rows.')
+      return rows[0] as T
+    }
+    // No RETURNING (MySQL): UPDATE, then re-SELECT the row by primary key.
     const { sql, bindings } = compileUpdate(
       this._idState(), this.dialect, data as Record<string, unknown>,
-      { extraConditions: this._pkCondition(id), returning: true },
+      { extraConditions: this._pkCondition(id), returning: false },
     )
-    const rows = await this.executor.execute(sql, bindings)
-    if (!rows[0]) throw new Error('[RudderJS ORM native] update() returned no rows.')
-    return rows[0] as T
+    await this.executor.execute(sql, bindings)
+    const row = await this._reselect(id)
+    if (!row) throw new Error('[RudderJS ORM native] update() target row not found.')
+    return row
   }
 
   async updateAll(data: Partial<T>): Promise<number> {
     this._assertNotSubBuilder()
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileUpdate(
+        this._state(), this.dialect, data as Record<string, unknown>, { returning: true },
+      )
+      const rows = await this.executor.execute(sql, bindings)
+      return rows.length
+    }
     const { sql, bindings } = compileUpdate(
-      this._state(), this.dialect, data as Record<string, unknown>, { returning: true },
+      this._state(), this.dialect, data as Record<string, unknown>, { returning: false },
     )
-    const rows = await this.executor.execute(sql, bindings)
-    return rows.length
+    const { affectedRows } = await this._affecting(sql, bindings)
+    return affectedRows
   }
 
   async delete(id: number | string): Promise<void> {
@@ -326,9 +389,14 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     // Uses the full current predicate INCLUDING soft-delete scope (call
     // withTrashed() first to bulk-delete trashed rows too) — matches orm-drizzle.
-    const { sql, bindings } = compileDelete(this._state(), this.dialect, { returning: true })
-    const rows = await this.executor.execute(sql, bindings)
-    return rows.length
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileDelete(this._state(), this.dialect, { returning: true })
+      const rows = await this.executor.execute(sql, bindings)
+      return rows.length
+    }
+    const { sql, bindings } = compileDelete(this._state(), this.dialect, { returning: false })
+    const { affectedRows } = await this._affecting(sql, bindings)
+    return affectedRows
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
@@ -342,12 +410,21 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileUpdate(
+        this._idState(), this.dialect, { deletedAt: null },
+        { extraConditions: this._pkCondition(id), returning: true },
+      )
+      const rows = await this.executor.execute(sql, bindings)
+      return rows[0] as T
+    }
+    // No RETURNING (MySQL): clear deletedAt, then re-SELECT the restored row.
     const { sql, bindings } = compileUpdate(
       this._idState(), this.dialect, { deletedAt: null },
-      { extraConditions: this._pkCondition(id), returning: true },
+      { extraConditions: this._pkCondition(id), returning: false },
     )
-    const rows = await this.executor.execute(sql, bindings)
-    return rows[0] as T
+    await this.executor.execute(sql, bindings)
+    return (await this._reselect(id)) as T
   }
 
   async forceDelete(id: number | string): Promise<void> {
@@ -373,13 +450,24 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     id: number | string, column: string, delta: number, extra: Record<string, unknown>,
   ): Promise<T> {
     this._assertNotSubBuilder()
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings } = compileIncrement(
+        this._idState(), this.dialect, column, delta, extra,
+        { extraConditions: this._pkCondition(id), returning: true },
+      )
+      const rows = await this.executor.execute(sql, bindings)
+      if (!rows[0]) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
+      return rows[0] as T
+    }
+    // No RETURNING (MySQL): atomic UPDATE, then re-SELECT the updated row.
     const { sql, bindings } = compileIncrement(
       this._idState(), this.dialect, column, delta, extra,
-      { extraConditions: this._pkCondition(id), returning: true },
+      { extraConditions: this._pkCondition(id), returning: false },
     )
-    const rows = await this.executor.execute(sql, bindings)
-    if (!rows[0]) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
-    return rows[0] as T
+    await this.executor.execute(sql, bindings)
+    const row = await this._reselect(id)
+    if (!row) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
+    return row
   }
 
   // ── relations + aggregates (Phase 3) ─────────────────────

@@ -9,9 +9,9 @@
 //      `readColumns` feed the `.d.ts` emitter on every dialect.
 //
 // `readTables` / `readColumns` branch on `dialect.name`: SQLite via PRAGMA +
-// `sqlite_master`, Postgres via `information_schema` (7.7). The rebuild-only
-// helpers below (`readIndexSql`, `isAutoincrement`) stay SQLite-specific — the
-// rebuild dance is a SQLite workaround pg/mysql don't need. MySQL: 7.8.
+// `sqlite_master`, Postgres (7.7) and MySQL (7.8) via `information_schema`. The
+// rebuild-only helpers below (`readIndexSql`, `isAutoincrement`) stay
+// SQLite-specific — the rebuild dance is a SQLite workaround pg/mysql don't need.
 
 import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
@@ -44,6 +44,17 @@ export async function readTables(executor: Executor, dialect: Dialect): Promise<
     )
     return rows.map((r) => String(r['name']))
   }
+  if (dialect.name === 'mysql') {
+    // MySQL information_schema scoped to the connection's current database
+    // (`DATABASE()`); same migrations-table exclusion as pg.
+    const rows = await executor.execute(
+      `SELECT table_name AS name FROM information_schema.tables ` +
+      `WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' AND table_name != 'migrations' ` +
+      `ORDER BY table_name`,
+      [],
+    )
+    return rows.map((r) => String(r['name']))
+  }
   const rows = await executor.execute(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'migrations' ORDER BY name`,
     [],
@@ -69,6 +80,27 @@ export async function readColumns(executor: Executor, dialect: Dialect, table: s
       type:    String(r['data_type'] ?? ''),
       notNull: String(r['is_nullable']).toUpperCase() === 'NO',
       dflt:    r['column_default'] == null ? null : String(r['column_default']),
+      pk:      0,
+    }))
+  }
+  if (dialect.name === 'mysql') {
+    // MySQL's information_schema column names come back lowercased here (the
+    // server is case-insensitive on the query side). `data_type` is the base
+    // type WITHOUT length/precision (e.g. `tinyint`, not `tinyint(1)`), so the
+    // type generator's `tinyint → number` mapping is correct and a `boolean`
+    // cast refines it. `pk` stays 0 — `notNull` drives the nullability rule.
+    const rows = await executor.execute(
+      `SELECT column_name, data_type, is_nullable, column_default ` +
+      `FROM information_schema.columns ` +
+      `WHERE table_schema = DATABASE() AND table_name = ${dialect.placeholder(0)} ` +
+      `ORDER BY ordinal_position`,
+      [table],
+    )
+    return rows.map((r) => ({
+      name:    String(r['column_name'] ?? r['COLUMN_NAME']),
+      type:    String(r['data_type'] ?? r['DATA_TYPE'] ?? ''),
+      notNull: String(r['is_nullable'] ?? r['IS_NULLABLE']).toUpperCase() === 'NO',
+      dflt:    (r['column_default'] ?? r['COLUMN_DEFAULT']) == null ? null : String(r['column_default'] ?? r['COLUMN_DEFAULT']),
       pk:      0,
     }))
   }

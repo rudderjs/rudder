@@ -2,8 +2,9 @@
 //
 // Boots the provider against a `config('database')` fixture and asserts the
 // config-gated activation: it wires a NativeAdapter ONLY when the default
-// connection sets `engine: 'native'`, stays inert otherwise, and rejects a
-// non-sqlite driver. The inert path is the collision guard that lets
+// connection sets `engine: 'native'`, stays inert otherwise, accepts the three
+// native drivers (sqlite/pg/mysql), and rejects an unknown driver. The inert
+// path is the collision guard that lets
 // `@rudderjs/orm` (installed in every app) be auto-discovered without clobbering
 // a prisma/drizzle adapter.
 
@@ -91,13 +92,30 @@ describe('NativeDatabaseProvider — activation', () => {
     assert.strictEqual(ModelRegistry.get(), null)
   })
 
-  it('rejects a non-sqlite driver under engine:native', async () => {
-    setDbConfig({ default: 'main', connections: { main: { engine: 'native', driver: 'postgresql' } } })
+  it('rejects an unknown driver under engine:native', async () => {
+    setDbConfig({ default: 'main', connections: { main: { engine: 'native', driver: 'oracle' } } })
     await assert.rejects(
       new NativeDatabaseProvider(fakeApp().app).boot(),
-      /supports the `sqlite` driver only/,
+      /Unknown native driver `oracle`/,
     )
     assert.strictEqual(ModelRegistry.get(), null)
+  })
+
+  it('accepts pg/mysql under engine:native (gate passes; fails later at connect)', async () => {
+    // The gate no longer blocks pg/mysql — validation passes, so the error comes
+    // from NativeAdapter.make trying to load the optional peer / connect, NOT
+    // from the provider's driver allow-list. (`postgresql` is the prisma/drizzle
+    // spelling — native uses `pg` — so it would still be rejected as unknown.)
+    for (const driver of ['pg', 'mysql']) {
+      const url = `${driver === 'pg' ? 'postgres' : 'mysql'}://localhost:1/none`
+      setDbConfig({ default: 'main', connections: { main: { engine: 'native', driver, url } } })
+      await assert.rejects(
+        new NativeDatabaseProvider(fakeApp().app).boot(),
+        (e: unknown) => e instanceof Error && !/Unknown native driver/.test(e.message),
+        `${driver} should pass the gate and fail downstream, not at the allow-list`,
+      )
+      assert.strictEqual(ModelRegistry.get(), null)
+    }
   })
 
   it('nativeDatabase() returns the provider class for explicit wiring', () => {

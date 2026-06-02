@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path'
 import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
 import { readTables, readColumns } from './introspect.js'
-import { buildTableTypes, emitRegistryDts, sqliteTypeToTs, pgTypeToTs, type TableTypes } from './types-generator.js'
+import { buildTableTypes, emitRegistryDts, sqliteTypeToTs, pgTypeToTs, mysqlTypeToTs, type TableTypes } from './types-generator.js'
 
 /** A model's contribution to type resolution: its table name + declared casts. */
 export interface ModelCastInfo {
@@ -32,9 +32,13 @@ export async function collectSchemaTypes(
   models: ModelCastInfo[] = [],
 ): Promise<TableTypes[]> {
   const castsByTable = new Map(models.map((m) => [m.table, m.casts]))
-  // Per-dialect storage→TS mapper: Postgres data types differ from SQLite's
-  // fuzzy affinities (e.g. `jsonb`, `timestamptz`, `numeric`-as-string).
-  const typeToTs = dialect.name === 'pg' ? pgTypeToTs : sqliteTypeToTs
+  // Per-dialect storage→TS mapper: Postgres / MySQL data types differ from
+  // SQLite's fuzzy affinities (e.g. `jsonb`, `timestamptz`, `numeric`/`decimal`
+  // as string, `tinyint`→number).
+  const typeToTs =
+    dialect.name === 'pg'    ? pgTypeToTs :
+    dialect.name === 'mysql' ? mysqlTypeToTs :
+    sqliteTypeToTs
   const tables = await readTables(executor, dialect)
   const out: TableTypes[] = []
   for (const table of tables) {
