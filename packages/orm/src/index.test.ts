@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Model, ModelRegistry, ModelNotFoundError, type QueryBuilder, type OrmAdapter, type BelongsToManyAccessor } from './index.js'
+import { Model, ModelRegistry, ModelNotFoundError, CursorPaginator, encodeCursor, decodeCursor, type QueryBuilder, type OrmAdapter, type BelongsToManyAccessor } from './index.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2473,5 +2473,242 @@ describe('Model.belongsToMany — attach / detach / sync', () => {
     const accessor = (u as unknown as UserWithRoles).roles()
     await accessor.attach([1, 2])
     assert.strictEqual(rows('role_user').filter(r => r['userId'] === 5).length, 2)
+  })
+})
+
+// ─── cursorPaginate (keyset pagination) ─────────────────────────────────────
+
+// A real (tiny) in-memory QueryBuilder so keyset paging is verified end-to-end
+// against actual filtering + sorting, not a spy. Supports exactly the surface
+// cursorPaginate composes: where(2/3-arg), whereGroup/orWhereGroup, orderBy,
+// limit, get.
+type MemRow = Record<string, unknown>
+
+function memCmp(op: string, a: unknown, b: unknown): boolean {
+  switch (op) {
+    case '=':  return a === b
+    case '!=': return a !== b
+    case '>':  return (a as number) >  (b as number)
+    case '<':  return (a as number) <  (b as number)
+    case '>=': return (a as number) >= (b as number)
+    case '<=': return (a as number) <= (b as number)
+    default: throw new Error(`memCmp: unsupported operator ${op}`)
+  }
+}
+
+function makeClauseBuilder(): { builder: Record<string, unknown>; evalRow: (r: MemRow) => boolean } {
+  const conds: { connector: 'and' | 'or'; test: (r: MemRow) => boolean }[] = []
+  const pushWhere = (connector: 'and' | 'or', col: string, a: unknown, b?: unknown): void => {
+    const op  = b === undefined ? '=' : (a as string)
+    const val = b === undefined ? a   : b
+    conds.push({ connector, test: (r) => memCmp(op, r[col], val) })
+  }
+  const builder: Record<string, unknown> = {}
+  builder['where']        = (col: string, a: unknown, b?: unknown) => { pushWhere('and', col, a, b); return builder }
+  builder['orWhere']      = (col: string, a: unknown, b?: unknown) => { pushWhere('or',  col, a, b); return builder }
+  builder['whereGroup']   = (fn: (q: unknown) => void) => { const c = makeClauseBuilder(); fn(c.builder); conds.push({ connector: 'and', test: c.evalRow }); return builder }
+  builder['orWhereGroup'] = (fn: (q: unknown) => void) => { const c = makeClauseBuilder(); fn(c.builder); conds.push({ connector: 'or',  test: c.evalRow }); return builder }
+  const evalRow = (r: MemRow): boolean => {
+    if (conds.length === 0) return true
+    let acc = conds[0]!.test(r)
+    for (let i = 1; i < conds.length; i++) {
+      const c = conds[i]!
+      acc = c.connector === 'or' ? (acc || c.test(r)) : (acc && c.test(r))
+    }
+    return acc
+  }
+  return { builder, evalRow }
+}
+
+function makeMemoryQb(rows: MemRow[]): QueryBuilder<unknown> {
+  const base = makeClauseBuilder()
+  const orders: { column: string; dir: 'ASC' | 'DESC' }[] = []
+  let limitN: number | null = null
+  const qb = base.builder
+  qb['orderBy'] = (col: string, dir: 'ASC' | 'DESC' = 'ASC') => { orders.push({ column: col, dir }); return qb }
+  qb['limit']   = (n: number) => { limitN = n; return qb }
+  qb['offset']  = () => qb
+  qb['with']    = () => qb
+  qb['get']     = async () => {
+    let out = rows.filter(base.evalRow).slice().sort((a, b) => {
+      for (const o of orders) {
+        const av = a[o.column], bv = b[o.column]
+        if (av === bv) continue
+        const res = (av as number) < (bv as number) ? -1 : 1
+        return o.dir === 'DESC' ? -res : res
+      }
+      return 0
+    })
+    if (limitN != null) out = out.slice(0, limitN)
+    return out
+  }
+  qb['all']   = qb['get']
+  qb['first'] = async () => ((await (qb['get'] as () => Promise<MemRow[]>)())[0]) ?? null
+  qb['count'] = async () => rows.filter(base.evalRow).length
+  return qb as unknown as QueryBuilder<unknown>
+}
+
+describe('CursorPaginator encode/decode', () => {
+  it('round-trips an object cursor', () => {
+    const c = encodeCursor({ id: 42, score: 7 })
+    assert.deepStrictEqual(decodeCursor(c), { id: 42, score: 7 })
+  })
+
+  it('produces a URL-safe string (no +, /, =)', () => {
+    const c = encodeCursor({ name: 'a/b+c==', id: 1 })
+    assert.ok(!/[+/=]/.test(c), `cursor should be url-safe, got: ${c}`)
+    assert.deepStrictEqual(decodeCursor(c), { name: 'a/b+c==', id: 1 })
+  })
+
+  it('throws on a malformed cursor', () => {
+    assert.throws(() => decodeCursor('not!!base64!!'), /malformed cursor/)
+  })
+
+  it('throws when the decoded value is not an object', () => {
+    assert.throws(() => decodeCursor(encodeCursor([1, 2] as unknown as Record<string, unknown>)), /not an object/)
+  })
+})
+
+describe('Model.cursorPaginate()', () => {
+  it('throws when no orderBy is set', async () => {
+    ModelRegistry.set(makeAdapter(makeMemoryQb([{ id: 1 }])))
+    class Post extends Model {}
+    await assert.rejects(
+      () => Post.query().cursorPaginate(2),
+      /requires at least one orderBy/,
+    )
+  })
+
+  it('pages forward with a single order column', async () => {
+    const rows = [1, 2, 3, 4, 5].map((id) => ({ id }))
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+
+    const p1 = await Post.query().orderBy('id').cursorPaginate(2)
+    assert.ok(p1 instanceof CursorPaginator)
+    assert.deepStrictEqual(p1.data.map((r) => (r as unknown as { id: number }).id), [1, 2])
+    assert.equal(p1.hasMore, true)
+    assert.equal(p1.prevCursor, null)
+    assert.ok(p1.nextCursor)
+    assert.ok(p1.data[0] instanceof Post)
+
+    const p2 = await Post.query().orderBy('id').cursorPaginate(2, p1.nextCursor)
+    assert.deepStrictEqual(p2.data.map((r) => (r as unknown as { id: number }).id), [3, 4])
+    assert.equal(p2.hasMore, true)
+
+    const p3 = await Post.query().orderBy('id').cursorPaginate(2, p2.nextCursor)
+    assert.deepStrictEqual(p3.data.map((r) => (r as unknown as { id: number }).id), [5])
+    assert.equal(p3.hasMore, false)
+    assert.equal(p3.nextCursor, null)
+  })
+
+  it('pages forward with a DESC order column', async () => {
+    const rows = [1, 2, 3, 4, 5].map((id) => ({ id }))
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+
+    const p1 = await Post.query().orderBy('id', 'DESC').cursorPaginate(2)
+    assert.deepStrictEqual(p1.data.map((r) => (r as unknown as { id: number }).id), [5, 4])
+    const p2 = await Post.query().orderBy('id', 'DESC').cursorPaginate(2, p1.nextCursor)
+    assert.deepStrictEqual(p2.data.map((r) => (r as unknown as { id: number }).id), [3, 2])
+    const p3 = await Post.query().orderBy('id', 'DESC').cursorPaginate(2, p2.nextCursor)
+    assert.deepStrictEqual(p3.data.map((r) => (r as unknown as { id: number }).id), [1])
+    assert.equal(p3.hasMore, false)
+  })
+
+  it('appends the primary key as a tiebreaker for a non-unique order (compound keyset)', async () => {
+    // Two rows share score=10 and two share score=5 — paging across those ties
+    // must be stable, which only holds once `id` is appended to the sort.
+    const rows = [
+      { id: 1, score: 10 },
+      { id: 2, score: 10 },
+      { id: 3, score: 5 },
+      { id: 4, score: 5 },
+      { id: 5, score: 1 },
+    ]
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+
+    const seen: number[] = []
+    let cursor: string | null = null
+    for (let guard = 0; guard < 10; guard++) {
+      const page: CursorPaginator<InstanceType<typeof Post>> =
+        await Post.query().orderBy('score', 'DESC').cursorPaginate(2, cursor)
+      seen.push(...page.data.map((r) => (r as unknown as { id: number }).id))
+      if (!page.hasMore) break
+      cursor = page.nextCursor
+    }
+    // score DESC, id ASC tiebreaker → 1,2 (score10) then 3,4 (score5) then 5.
+    assert.deepStrictEqual(seen, [1, 2, 3, 4, 5])
+  })
+
+  it('supports an explicit compound orderBy', async () => {
+    const rows = [
+      { id: 1, score: 10 },
+      { id: 2, score: 10 },
+      { id: 3, score: 5 },
+      { id: 4, score: 5 },
+      { id: 5, score: 1 },
+    ]
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+
+    const p1 = await Post.query().orderBy('score', 'DESC').orderBy('id', 'ASC').cursorPaginate(2)
+    assert.deepStrictEqual(p1.data.map((r) => (r as unknown as { id: number }).id), [1, 2])
+    const p2 = await Post.query().orderBy('score', 'DESC').orderBy('id', 'ASC').cursorPaginate(2, p1.nextCursor)
+    assert.deepStrictEqual(p2.data.map((r) => (r as unknown as { id: number }).id), [3, 4])
+  })
+
+  it('composes the keyset filter with pre-existing where clauses', async () => {
+    const rows = [
+      { id: 1, active: true },
+      { id: 2, active: false },
+      { id: 3, active: true },
+      { id: 4, active: true },
+      { id: 5, active: false },
+    ]
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+
+    const p1 = await Post.where('active', true).orderBy('id').cursorPaginate(2)
+    assert.deepStrictEqual(p1.data.map((r) => (r as unknown as { id: number }).id), [1, 3])
+    assert.equal(p1.hasMore, true)
+    const p2 = await Post.where('active', true).orderBy('id').cursorPaginate(2, p1.nextCursor)
+    assert.deepStrictEqual(p2.data.map((r) => (r as unknown as { id: number }).id), [4])
+    assert.equal(p2.hasMore, false)
+  })
+
+  it('throws when the cursor was generated for a different order set', async () => {
+    const rows = [1, 2, 3].map((id) => ({ id, score: id }))
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+    const stale = encodeCursor({ score: 2 }) // no `id` key
+    await assert.rejects(
+      () => Post.query().orderBy('id').cursorPaginate(2, stale),
+      /missing order column "id"/,
+    )
+  })
+
+  it('static cursorPaginate() orders by the primary key by default', async () => {
+    const rows = [3, 1, 2].map((id) => ({ id }))
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Post extends Model {}
+    const page = await Post.cursorPaginate(2)
+    assert.deepStrictEqual(page.data.map((r) => (r as unknown as { id: number }).id), [1, 2])
+    assert.equal(page.hasMore, true)
+  })
+
+  it('honors a non-default primary key in the tiebreaker', async () => {
+    const rows = [
+      { uuid: 'a', score: 5 },
+      { uuid: 'b', score: 5 },
+      { uuid: 'c', score: 1 },
+    ]
+    ModelRegistry.set(makeAdapter(makeMemoryQb(rows)))
+    class Doc extends Model { static override primaryKey = 'uuid' }
+    const p1 = await Doc.query().orderBy('score', 'DESC').cursorPaginate(2)
+    assert.deepStrictEqual(p1.data.map((r) => (r as unknown as { uuid: string }).uuid), ['a', 'b'])
+    const p2 = await Doc.query().orderBy('score', 'DESC').cursorPaginate(2, p1.nextCursor)
+    assert.deepStrictEqual(p2.data.map((r) => (r as unknown as { uuid: string }).uuid), ['c'])
   })
 })

@@ -60,6 +60,16 @@ import {
   attachPolymorphicRelations,
 } from './polymorphic-eager-load.js'
 import { attachDirectRelations } from './direct-eager-load.js'
+import {
+  CursorPaginator,
+  encodeCursor,
+  decodeCursor,
+  resolveCursorOrders,
+  cursorValuesFor,
+  applyKeysetFilter,
+  type CursorOrder,
+  type KeysetBuilder,
+} from './cursor-paginator.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
@@ -79,6 +89,8 @@ export { AggregateConstraintBuilder, AGGREGATES_SYMBOL }    from './aggregate.js
 export type { AggregateConstraint, AggregateSumSpec } from './aggregate.js'
 export { pruneModels }                              from './prune.js'
 export type { PruneOptions, PruneReport }           from './prune.js'
+export { CursorPaginator, encodeCursor, decodeCursor } from './cursor-paginator.js'
+export type { CursorOrder }                         from './cursor-paginator.js'
 export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
@@ -657,6 +669,12 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * Same sort caveat as `chunk` — add an `orderBy` for stable paging.
    */
   lazy(size?: number): AsyncGenerator<T, void, undefined>
+  /**
+   * Keyset (cursor) pagination. Requires at least one `orderBy()` — throws
+   * otherwise. Returns a {@link CursorPaginator} page; pass its `nextCursor`
+   * back in to fetch the next page. Forward-only in v1 (`prevCursor` is null).
+   */
+  cursorPaginate(perPage?: number, cursor?: string | null): Promise<CursorPaginator<T>>
 }
 
 // ─── Generated schema registry (GATE 7-types) ──────────────
@@ -1154,6 +1172,11 @@ export abstract class Model {
      *  they're forwarded to the adapter's native `with()` in the same call. */
     const polymorphicWiths: string[] = []
     const directWiths:      string[] = []
+    /** Order terms recorded as `orderBy()` is called on this proxy, in call
+     *  order. The adapter QB exposes no public getter for its recorded sort, so
+     *  `cursorPaginate` reads this to build the keyset WHERE. Each call is still
+     *  forwarded to the underlying QB unchanged. */
+    const recordedOrders: CursorOrder[] = []
     /** Adapter eager-load strategy. `'native'` (Prisma, or no adapter on a
      *  detached sub-builder) forwards direct relations to the adapter;
      *  `'model-layer'` (Drizzle) batches them here. */
@@ -1192,6 +1215,50 @@ export abstract class Model {
         // ORM-side chainables that don't exist on the adapter QB itself —
         // intercept before the existence check below, since `whereHas` etc.
         // are added by this proxy, not by the adapter.
+        // Keyset (cursor) pagination — an ORM-only terminal that isn't on the
+        // adapter QB (built entirely on where/orderBy/limit/get at the Model
+        // layer), so it must be intercepted before the `typeof value` guard
+        // below. Forward-only in v1: nextCursor advances, prevCursor is always
+        // null. See ./cursor-paginator.ts.
+        if (prop === 'cursorPaginate') {
+          return async (perPage = 15, cursor?: string | null): Promise<CursorPaginator<InstanceType<T>>> => {
+            try {
+              const { orders, appendedPrimaryKey } = resolveCursorOrders(recordedOrders, ModelClass.primaryKey)
+              // The PK tiebreaker, when appended, must also land on the actual
+              // query so the SQL sort matches the keyset predicate's column set.
+              if (appendedPrimaryKey) (target as QueryBuilder<InstanceType<T>>).orderBy(ModelClass.primaryKey, 'ASC')
+              if (cursor != null && cursor !== '') {
+                const boundary = decodeCursor(cursor)
+                for (const o of orders) {
+                  if (!(o.column in boundary)) {
+                    throw new Error(`[RudderJS ORM] cursorPaginate(): cursor is missing order column "${o.column}" — it was generated for a different orderBy() set.`)
+                  }
+                }
+                applyKeysetFilter(target as unknown as KeysetBuilder, orders, boundary)
+              }
+              ;(target as QueryBuilder<InstanceType<T>>).limit(perPage + 1)
+              const rows = (await (target as QueryBuilder<InstanceType<T>>).get()) as unknown[]
+              const hasMore = rows.length > perPage
+              const pageRows = hasMore ? rows.slice(0, perPage) : rows
+              const data = wrapMany(pageRows)
+              ormTraceTerminal(ModelClass, 'cursorPaginate', data.length, _traceAdapter)
+              await attachPoly(data)
+              const last = pageRows[pageRows.length - 1] as Record<string, unknown> | undefined
+              const nextCursor = hasMore && last ? encodeCursor(cursorValuesFor(last, orders)) : null
+              return new CursorPaginator<InstanceType<T>>(data, perPage, nextCursor, null, hasMore)
+            } catch (e) { ormTraceThrew(ModelClass, 'cursorPaginate', e, _traceAdapter); throw e }
+          }
+        }
+        // Record order terms so `cursorPaginate` can build a keyset WHERE — the
+        // adapter QB has no public getter for its recorded sort. Still forwarded
+        // to the underlying QB so every other terminal sorts identically.
+        if (prop === 'orderBy') {
+          return (column: string, direction?: 'ASC' | 'DESC'): QueryBuilder<InstanceType<T>> => {
+            recordedOrders.push({ column, direction: direction === 'DESC' ? 'desc' : 'asc' })
+            ;(target as QueryBuilder<InstanceType<T>>).orderBy(column, direction)
+            return proxy
+          }
+        }
         if (prop === 'whereHas') {
           return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain)
@@ -1527,6 +1594,20 @@ export abstract class Model {
 
   static where<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).where(column, value)
+  }
+
+  /**
+   * Keyset (cursor) pagination, Laravel-style. The bare static call orders by
+   * the primary key so it has a deterministic sort; chain `.orderBy(...)` for a
+   * custom sort (`Model.query().orderBy('createdAt', 'desc').cursorPaginate(...)`).
+   * Returns a {@link CursorPaginator} — pass `result.nextCursor` back in to walk
+   * forward. Forward-only in v1 (`prevCursor` is always null).
+   */
+  static async cursorPaginate<T extends typeof Model>(this: T, perPage = 15, cursor: string | null = null): Promise<CursorPaginator<InstanceType<T>>> {
+    const self = this as typeof Model
+    const result = await Model._q(this).orderBy(self.primaryKey, 'ASC').cursorPaginate(perPage, cursor)
+    for (const r of result.data) await self._fireEvent('retrieved', r as Record<string, unknown>)
+    return result
   }
 
   /**
