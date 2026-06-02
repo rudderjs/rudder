@@ -15,12 +15,12 @@ import type {
   QueryBuilder,
   WhereClause,
   WhereOperator,
-  OrderClause,
   PaginatedResult,
   RelationExistencePredicate,
   AggregateRequest,
   AggregateFn,
 } from '@rudderjs/contracts'
+import { Expression } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 import type { Executor, Row, AffectingExecutor } from './driver.js'
 import {
@@ -32,6 +32,8 @@ import {
   compileDelete,
   compileScalarAggregate,
   type ConditionNode,
+  type OrderItem,
+  type RawFragment,
   type NativeQueryState,
 } from './compiler.js'
 
@@ -42,7 +44,8 @@ const _warnedWith = new Set<string>()
 
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _conditions: ConditionNode[] = []
-  private readonly _orders:     OrderClause[]   = []
+  private readonly _orders:     OrderItem[]     = []
+  private readonly _rawSelects: RawFragment[]   = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
   private _limitN:  number | null = null
@@ -88,6 +91,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       deletedAtColumn: 'deletedAt',
       relationExists:  this._relationExists,
       aggregates:      this._aggregates,
+      rawSelects:      this._rawSelects,
     }
   }
 
@@ -139,8 +143,34 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     this._conditions.push({ kind: 'group', boolean, children: sub._conditions })
   }
 
-  orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): this {
-    this._orders.push({ column, direction })
+  orderBy(column: string | Expression, direction: 'ASC' | 'DESC' = 'ASC'): this {
+    if (column instanceof Expression) {
+      this._orders.push({ kind: 'raw', raw: { sql: String(column.getValue()), bindings: [] } })
+    } else {
+      this._orders.push({ column, direction })
+    }
+    return this
+  }
+
+  // ── raw-SQL escape hatch ─────────────────────────────────
+
+  selectRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._rawSelects.push({ sql, bindings })
+    return this
+  }
+
+  whereRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._conditions.push({ kind: 'raw', boolean: 'AND', raw: { sql, bindings } })
+    return this
+  }
+
+  orWhereRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._conditions.push({ kind: 'raw', boolean: 'OR', raw: { sql, bindings } })
+    return this
+  }
+
+  orderByRaw(sql: string, bindings: readonly unknown[] = []): this {
+    this._orders.push({ kind: 'raw', raw: { sql, bindings } })
     return this
   }
 

@@ -1,5 +1,27 @@
 # Laravel 13.x ↔ RudderJS — Database/ORM Feature-Gap Analysis
 
+> **Re-baselined 2026-06-02 (after Phase 1).** The §8 query-builder list is now
+> essentially closed. Phase-1 PR → status map:
+>
+> | # | PR | Status |
+> |---|---|---|
+> | 1 | `@rudderjs/database` scaffold + `DB` facade + raw-exec seam | ✅ #823 |
+> | 2 | Cross-adapter `transaction()` (prisma + drizzle) | ✅ #824 |
+> | 3 | Drizzle eager `with()` — throw (#826) then real model-layer load | ✅ #826 → #829 |
+> | 4 | `upsert()` (native + drizzle + prisma) | ✅ #832 |
+> | 5 | `chunk()` / `lazy()` | ✅ #833 |
+> | 6 | `cursorPaginate()` + base64 cursor | 🔄 #834 (open, conflict-resolve) |
+> | 7 | Raw expressions — `selectRaw`/`whereRaw`/`orWhereRaw`/`orderByRaw` + `DB.raw(...)` | 🔄 #835 (open, this PR) |
+> | — | Factory relationship building + `Model.factory()` + unguard-on-seed | ✅ #831 |
+> | — | Native engine pg/mysql + migrations + scaffolder default | ✅ #794–#830 (separate arc) |
+>
+> **Remaining DB/QB gaps** (none "high-priority correctness" anymore — all ergonomic or net-new surface):
+> the named `whereX` sugar family (PR8 — `whereIn`/`whereNull`/`whereBetween`/`whereColumn`/`when`/`unless`/`pluck`/`value`/aggregate terminals);
+> joins/unions/`groupBy`/locking; multi-connection + read/write split; `morphs()` migration helper;
+> `whereHas` OR/count operators; the Redis facade. See §3 (unchanged) for the full medium/low list.
+>
+> ---
+>
 > Date: 2026-06-01. Method: a multi-agent audit — one agent per Laravel 13.x doc
 > page fetched the page, enumerated its feature surface, mapped each feature
 > against the RudderJS codebase (`@rudderjs/orm` + `/native` engine, `orm-prisma`,
@@ -22,52 +44,57 @@ soft deletes, observers/events, mutators & casts, dirty tracking, scopes, route
 binding, polymorphic relations, eager-aggregates, mass-assignment enforcement,
 pruning, and serialization (hidden/visible/appends) are present and mostly 1:1.
 
-Parity breaks at two seams:
+Parity broke at two seams, **both largely closed in Phase 1 (2026-06-02)**:
 
-1. **DB / query-builder layer.** No public `DB` facade, no raw-expression escape
-   hatch, no `chunk`/`lazy`/`cursor` streaming, no `upsert`, no joins/unions/
-   `groupBy`/locking, no `whereIn`/`whereBetween`/`whereNull`/date-helper sugar —
-   the ORM is model-centric with no standalone fluent query API.
-2. **Uneven adapter coverage.** `transaction()`, `onQuery`, and eager `with()`
-   work on the native (SQLite) engine but are missing or stubbed on Prisma/Drizzle
-   — which is where most production apps actually run.
+1. **DB / query-builder layer.** ~~No public `DB` facade, no raw-expression escape
+   hatch, no `chunk`/`lazy`/`cursor` streaming, no `upsert`~~ — all now shipped: a
+   `DB` facade (`@rudderjs/database`, #823), raw expressions (#835), `chunk`/`lazy`
+   (#833), `upsert` (#832), cursor pagination (#834, in review). Still missing:
+   joins/unions/`groupBy`/locking and the named `whereX`/date-helper **sugar**
+   (PR8 — ergonomic, mostly expressible via `where(col, op, val)` today).
+2. **Uneven adapter coverage.** ~~`transaction()` and eager `with()` work on the
+   native engine but are stubbed on Prisma/Drizzle~~ — cross-adapter `transaction()`
+   shipped on both (#824) and Drizzle eager `with()` is real (#829). `onQuery`/`DB::listen`
+   remains Prisma-only with no app-facing registration.
 
-Headline gaps worth closing: cross-adapter `transaction()`, `chunk`/`lazy`
-iteration, `upsert`, cursor pagination, and a raw-SQL escape hatch. Migrations and
-seeding are solid on the native engine but thin on flags (`--step`, `--seed`
-combos, `--class`) and on the `morphs()` schema helper. Factories are the weakest
-sub-area — no relationship building (`has`/`for`/`hasAttached`), no
-`Model.factory()` entry point, and mass-assignment is *not* disabled during
-seeding (the opposite of Laravel).
+Headline correctness gaps are closed. **What remains is net-new surface, not
+correctness:** the `whereX` sugar (PR8), joins/unions/locking, multi-connection +
+read/write split, the Redis facade, and the deliberate `@rudderjs/database`
+extraction (Phase 2). Migrations and seeding are solid on the native engine but
+thin on flags (`--step`, `--seed` combos, `--class`) and on the `morphs()` schema
+helper. **Factories were the weakest sub-area; #831 closed the headline factory
+gaps** — relationship building (`has`/`for`), `Model.factory()` entry point, and
+unguard-during-seed are all now in.
 
 ---
 
 ## 2. High-priority gaps
 
-Deduped, ordered by leverage for a Laravel dev landing in RudderJS.
+Deduped, ordered by leverage for a Laravel dev landing in RudderJS. **Status column re-baselined 2026-06-02** — most rows shipped in Phase 1.
 
 | Feature | Area | Status | What Laravel has | RudderJS today | Recommendation |
 |---|---|---|---|---|---|
-| Cross-adapter `transaction()` | db-connection | partial | `DB::transaction(fn)` everywhere | Native-only (ALS-scoped + SAVEPOINTs in `native/adapter.ts`); Prisma/Drizzle throw "adapter does not support transactions" | **Top priority.** Implement on orm-prisma + orm-drizzle. Most prod apps run these; correctness gap, not sugar. (Known carry-over.) |
-| `chunk()` / `chunkById()` | db-query-builder | missing | Memory-bounded batch iteration | None public; `model:prune` re-implements its own loop | Wrap the existing prune chunk loop into a public QB method. |
-| `lazy()` / `lazyById()` | db-query-builder | missing | Streamed `LazyCollection` | None | Async-generator fits TS; pairs with `chunk` as the large-dataset pattern. |
-| `upsert()` (bulk, ON CONFLICT) | db-query-builder / orm | missing | Atomic bulk upsert w/ `uniqueBy` | `updateOrCreate`/`firstOrCreate` (single-row, select-then-write); `insertMany` has no conflict clause | High value for sync/import; native SQLite/PG + Prisma/Drizzle all support ON CONFLICT. |
-| `cursorPaginate()` + CursorPaginator | pagination | missing | Keyset pagination, base64 cursor | Only offset `paginate()` | Highest-value pagination gap for API/infinite-scroll; order-by infra exists to build on. |
-| Raw expressions (`DB::raw`/`selectRaw`/`whereRaw`/`orderByRaw`/…) | db-query-builder | missing | Raw SQL fragments in any clause | No escape hatch on the ORM QB | Add a `raw()` wrapper threaded through the compiler. |
-| Public `DB` facade (raw select/insert/update/delete/statement) | db-query-builder / db-connection | partial | `DB::select/insert/update/delete/statement` | Internal `Executor.execute(sql, bindings)` seam exists (`native/driver.ts`); Prisma uses `$queryRawUnsafe`; no public ergonomic facade | Surface the existing seam as a public `DB`-style API. Cheap given the plumbing exists. |
-| Eager `with()` on Drizzle | orm | partial | `with('rel')` everywhere | Prisma `include` works; **Drizzle `with()` is a no-op stub** (`orm-drizzle/src/index.ts:303`) | Real footgun — silent no-op = missing relations, not an error. Wire it or throw. |
-| Factory relationship building (`has`/`hasMany`/`for`/`hasAttached`) | seeding | missing | Fluent related-graph creation | None on `ModelFactory`; FKs wired by hand | Biggest factory gap; likely needs a `Model.factory()` entry point first. |
-| Mass-assignment auto-disabled during seeding/factories | seeding | missing | Guard off while seeding | Factory `create()` → `Model.create()` **enforces** fillable/guarded → silently drops guarded keys | Surprising inversion of Laravel. Route factory create through a `forceFill`/unguarded path. |
-| `morphs()` / `nullableMorphs()` migration helper | db-schema-migrations | missing | Scaffolds `{name}_type` + `{name}_id` | Morph relations are first-class, but no migration-side helper | Cheap to add to `blueprint.ts`; high value given morphs are first-class. |
-| `whereHas` OR / count operators (`orWhereHas`, `has('rel','>=',3)`) | orm / db-query-builder | partial | Full existence-query family | `whereHas`/`whereDoesntHave` w/ constraint present; nested throws; no OR/count forms | Extend the existing `compileExistsSubquery` path. |
+| Cross-adapter `transaction()` | db-connection | ✅ #824 | `DB::transaction(fn)` everywhere | Now on all three: native (ALS + SAVEPOINTs), Prisma (`$transaction`), Drizzle (`db.transaction`) + `DB.transaction()` | **Done.** Top correctness gap closed. |
+| `chunk()` / `chunkById()` | db-query-builder | ✅ #833 | Memory-bounded batch iteration | `chunk(size, cb)` on the Model-layer QB + static; offset-pages via existing primitives | **Done** (`chunkById` not separately needed — offset paging covers it). |
+| `lazy()` / `lazyById()` | db-query-builder | ✅ #833 | Streamed `LazyCollection` | `lazy(size?)` async generator (default 1000) | **Done.** |
+| `upsert()` (bulk, ON CONFLICT) | db-query-builder / orm | ✅ #832 | Atomic bulk upsert w/ `uniqueBy` | `Model.upsert(rows, uniqueBy, update?)` — native+drizzle one statement, prisma per-row `$transaction` | **Done.** |
+| `cursorPaginate()` + CursorPaginator | pagination | 🔄 #834 | Keyset pagination, base64 cursor | Model-layer keyset paginator (open PR, conflict-resolve) | **In review.** |
+| Raw expressions (`DB::raw`/`selectRaw`/`whereRaw`/`orderByRaw`/…) | db-query-builder | 🔄 #835 | Raw SQL fragments in any clause | `selectRaw`/`whereRaw`/`orWhereRaw`/`orderByRaw` + `raw(...)`; native full, drizzle where/order, prisma throws→DB facade | **In review** (this PR). |
+| Public `DB` facade (raw select/insert/update/delete/statement) | db-query-builder / db-connection | ✅ #823 | `DB::select/insert/update/delete/statement` | `@rudderjs/database` `DB` facade over the `OrmAdapter` raw-exec seam; `DB.raw()` + `DB.transaction()` | **Done** (named-connection switching still future — see §3). |
+| Eager `with()` on Drizzle | orm | ✅ #829 | `with('rel')` everywhere | Real model-layer batched load (was throw #826, now real); Prisma `include` unchanged | **Done.** |
+| Factory relationship building (`has`/`hasMany`/`for`/`hasAttached`) | seeding | ✅ #831 | Fluent related-graph creation | `Model.factory()` + `has`/`for` relationship building | **Done.** |
+| Mass-assignment auto-disabled during seeding/factories | seeding | ✅ #831 | Guard off while seeding | Factory create routes through the unguarded path | **Done.** |
+| `morphs()` / `nullableMorphs()` migration helper | db-schema-migrations | ⬜ open | Scaffolds `{name}_type` + `{name}_id` | Morph relations are first-class, but no migration-side helper | Cheap to add to `blueprint.ts`; native-engine track. Still open. |
+| `whereHas` OR / count operators (`orWhereHas`, `has('rel','>=',3)`) | orm / db-query-builder | ⬜ open | Full existence-query family | `whereHas`/`whereDoesntHave` w/ constraint present; nested throws; no OR/count forms | Extend the existing `compileExistsSubquery` path. Still open. |
 
 ---
 
 ## 3. Medium / low gaps
 
 **db-query-builder (sugar & ergonomics — mostly cheap)**
+> _Re-baseline note (2026-06-02): `chunk`/`lazy` (#833), `upsert` (#832), raw expressions + `selectRaw` (#835), and cursor pagination (#834, in review) are now DONE and removed from this list. The **named `whereX` sugar + conditional/`pluck`/`value`/aggregate-terminal cluster below is the next batch (PR8)** — it's the remaining cheap, high-touch ergonomics for Laravel devs._
 - `value()`, `pluck()`, `Model.sum()/max()/min()/avg()`, `exists()/doesntExist()` terminals (`_aggregate` plumbing exists — only convenience methods missing).
-- `select()`/`addSelect()`/`distinct()` projection; ORM is row-oriented.
+- `select()`/`addSelect()`/`distinct()` projection; ORM is row-oriented. (`selectRaw` shipped #835; structured `select()` still missing.)
 - Named `whereIn`/`whereNotIn`, `whereBetween`/`whereNotBetween`, `whereNull`/`whereNotNull`, `whereColumn`, `whereNot`, date helpers (`whereDate`/`whereMonth`/`wherePast`/…), `whereLike` w/ caseSensitive (most expressible via `where(col,'IN'|'LIKE',…)` today but unnamed).
 - `when()`/`unless()` conditional clauses.
 - Joins (`join`/`leftJoin`/`joinSub`/lateral), unions, `groupBy`/`having`, pessimistic locking (`sharedLock`/`lockForUpdate`), `truncate`, `insertOrIgnore`, `incrementEach`/`decrementEach`, `latest`/`oldest`/`inRandomOrder`/`reorder`, `tap`/`pipe`, `dd`/`dump`/`toSql`.
@@ -207,14 +234,21 @@ planned step, not a prerequisite.
 
 ---
 
-## 8. Suggested first PRs (Phase 1)
+## 8. Suggested first PRs (Phase 1) — **COMPLETE (2026-06-02)**
 
-Independent, shippable, high-leverage — roughly in order:
+Independent, shippable, high-leverage — all shipped except cursor pagination (in review):
 
-1. **Cross-adapter `transaction()`** on `orm-prisma` + `orm-drizzle` (Prisma `$transaction`, Drizzle `db.transaction`) — closes the top correctness gap.
-2. **Drizzle eager `with()`** — implement or throw (kill the silent no-op).
-3. **Factory correctness** — disable mass-assignment during factory `create()`; closure attributes receive sibling attrs; `Model.factory()` entry point; then relationship building (`has`/`for`).
-4. **`upsert()`** across native + Prisma + Drizzle (ON CONFLICT / `$transaction`-free bulk).
-5. **`chunk()` / `lazy()`** — promote the `model:prune` loop to a public QB method + an async-generator `lazy()`.
-6. **`cursorPaginate()`** — keyset paginator on top of the existing order-by infra.
-7. **Raw expressions + `DB` facade subpath** — surface `Executor.execute` as `DB.select/insert/update/delete/statement` + a `raw()` wrapper threaded through the compiler. (This is the seed of the eventual `@rudderjs/database` extraction.)
+1. ✅ **Cross-adapter `transaction()`** on `orm-prisma` + `orm-drizzle` — #824.
+2. ✅ **Drizzle eager `with()`** — throw first (#826), then real model-layer load (#829).
+3. ✅ **Factory correctness** — unguard-during-seed + `Model.factory()` + `has`/`for` relationship building — #831.
+4. ✅ **`upsert()`** across native + Prisma + Drizzle — #832.
+5. ✅ **`chunk()` / `lazy()`** — Model-layer QB methods + statics — #833.
+6. 🔄 **`cursorPaginate()`** — keyset paginator — #834 (open, conflict-resolve).
+7. 🔄 **Raw expressions + `DB` facade subpath** — `DB` facade shipped #823; raw expressions (`selectRaw`/`whereRaw`/`orWhereRaw`/`orderByRaw` + `raw(...)`) #835 (this PR, open).
+
+### Next (Phase 1.5 / Phase 2)
+
+- **PR8 — `whereX` sugar family** (next, cheap): named `whereIn`/`whereNotIn`/`whereBetween`/`whereNull`/`whereColumn`/`whereNot`/`whereLike` + `when()`/`unless()` + `pluck()`/`value()` + `sum/max/min/avg`/`exists` terminals + structured `select()`/`distinct()`. Pure ergonomics — most expressible via `where(col, op, val)` today, so this is high-touch DX, not new capability.
+- **Bigger QB surface** (net-new, larger): joins/unions/`groupBy`/`having`/locking; JSON-path where; multi-connection + read/write split; `onQuery`/`DB::listen` on native+drizzle.
+- **`morphs()` migration helper** + **`whereHas` OR/count operators** — the two ⬜ rows left in §2.
+- **Phase 2 — deliberate `@rudderjs/database` extraction**: the boundary + `DB` facade + `ORM → DB` dep direction are already established (#823); the native engine internals (`orm/src/native/{compiler,dialect,driver,query-builder,schema}`) still physically live in `@rudderjs/orm` and get relocated in a dedicated engine-migration step once the surface has proven out.

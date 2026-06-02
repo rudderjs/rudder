@@ -19,9 +19,32 @@ import type {
   RelationExistencePredicate,
   Row,
 } from '@rudderjs/contracts'
+import { Expression } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter.
 import '@rudderjs/orm/db-bridge'
+
+/**
+ * Turn a raw SQL fragment with `?` placeholders + a positional `bindings` array
+ * into a Drizzle `SQL` chunk, parameterizing each value (so it's bound, not
+ * interpolated) while splicing the surrounding text verbatim. Mirrors the native
+ * engine's `compileRaw`. `?` count must equal `bindings.length`.
+ */
+function rawToSql(fragment: string, bindings: readonly unknown[]): SQL {
+  const parts = fragment.split('?')
+  const holes = parts.length - 1
+  if (holes !== bindings.length) {
+    throw new Error(
+      `[RudderJS ORM Drizzle] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${bindings.length}: ${fragment}`,
+    )
+  }
+  const chunks: SQL[] = []
+  parts.forEach((part, i) => {
+    if (part) chunks.push(sql.raw(part) as SQL)
+    if (i < holes) chunks.push(sql`${bindings[i]}` as SQL)
+  })
+  return (chunks.length ? sql.join(chunks) : sql.raw('')) as SQL
+}
 
 // ─── Minimal Drizzle DB interface ──────────────────────────
 
@@ -200,7 +223,10 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
 class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _wheres:      WhereClause[] = []
   private _orWheres:    WhereClause[] = []
-  private _orders:      OrderClause[] = []
+  /** Ordered list of ORDER BY entries — structured `{column,direction}` or a
+   *  raw `{ rawSql }` fragment (`orderByRaw` / `orderBy(raw(...))`). One list so
+   *  structured and raw orders keep their interleaved insertion order. */
+  private _orders:      Array<OrderClause | { rawSql: SQL }> = []
   private _limitN:      number | null = null
   private _offsetN:     number | null = null
   private _withTrashed  = false
@@ -294,8 +320,35 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): this {
-    this._orders.push({ column, direction })
+  orderBy(column: string | Expression, direction: 'ASC' | 'DESC' = 'ASC'): this {
+    if (column instanceof Expression) {
+      this._orders.push({ rawSql: sql.raw(String(column.getValue())) as SQL })
+    } else {
+      this._orders.push({ column, direction })
+    }
+    return this
+  }
+
+  // ── raw-SQL escape hatch ─────────────────────────────────
+
+  selectRaw(_sql: string, _bindings: readonly unknown[] = []): this {
+    throw new Error(
+      '[RudderJS ORM Drizzle] selectRaw() is not supported — Drizzle\'s typed select can\'t map an arbitrary raw projection back to hydrated models. Run the raw query via the DB facade: DB.select(sql, bindings).',
+    )
+  }
+
+  whereRaw(rawSql: string, bindings: readonly unknown[] = []): this {
+    this._extraExprs.push(rawToSql(rawSql, bindings))
+    return this
+  }
+
+  orWhereRaw(rawSql: string, bindings: readonly unknown[] = []): this {
+    this._orExtraExprs.push(rawToSql(rawSql, bindings))
+    return this
+  }
+
+  orderByRaw(rawSql: string, bindings: readonly unknown[] = []): this {
+    this._orders.push({ rawSql: rawToSql(rawSql, bindings) })
     return this
   }
 
@@ -352,6 +405,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  used to AND constraint clauses into a whereHas inner subquery. */
   private clauseToExprOn(table: unknown, clause: WhereClause): SQL {
     const col = this.colOf(table, clause.column)
+    // `where(col, op, raw('NOW()'))` — splice the expression verbatim, no bind.
+    // The WhereOperator string IS its SQL text, so reuse it directly.
+    if (clause.value instanceof Expression) {
+      return sql`${col} ${sql.raw(clause.operator)} ${sql.raw(String(clause.value.getValue()))}` as SQL
+    }
     switch (clause.operator) {
       case '=':      return eq(col, clause.value) as SQL
       case '!=':     return ne(col, clause.value) as SQL
@@ -653,6 +711,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   private buildOrderBy(): SQL[] {
     return this._orders.map(o => {
+      if ('rawSql' in o) return o.rawSql
       const col = this.col(o.column) as Column
       return o.direction === 'DESC' ? desc(col) : asc(col)
     })

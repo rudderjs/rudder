@@ -12,7 +12,14 @@ import type {
   RelationExistencePredicate,
   AggregateRequest,
 } from '@rudderjs/contracts'
+import { Expression } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
+
+/** A raw SQL fragment + its `?`-placeholder bindings, threaded through a clause. */
+export interface RawFragment {
+  sql:      string
+  bindings: readonly unknown[]
+}
 
 /**
  * A node in the WHERE condition tree.
@@ -27,6 +34,15 @@ import type { Dialect } from './dialect.js'
 export type ConditionNode =
   | { kind: 'clause'; boolean: 'AND' | 'OR'; clause: WhereClause }
   | { kind: 'group';  boolean: 'AND' | 'OR'; children: ConditionNode[] }
+  | { kind: 'raw';    boolean: 'AND' | 'OR'; raw: RawFragment }
+
+/**
+ * A single ORDER BY entry — either a structured `column direction` clause or a
+ * raw SQL fragment from `orderByRaw` / `orderBy(raw(...))`.
+ */
+export type OrderItem =
+  | OrderClause
+  | { kind: 'raw'; raw: RawFragment }
 
 /**
  * Everything the read compiler needs from a query. The `NativeQueryBuilder`
@@ -36,9 +52,12 @@ export interface NativeQueryState {
   table:      string
   primaryKey: string
   conditions: ConditionNode[]
-  orders:     OrderClause[]
+  orders:     OrderItem[]
   limitN:     number | null
   offsetN:    number | null
+  /** Raw projection fragments from `selectRaw`. When present they REPLACE the
+   *  default `*` (Laravel semantics — `selectRaw` is a projection, not additive). */
+  rawSelects?: RawFragment[]
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
@@ -86,6 +105,29 @@ class Bindings {
 }
 
 /**
+ * Splice a raw SQL fragment, rebinding its `?` placeholders to the dialect's
+ * form via the shared {@link Bindings} (so `$n` indices stay correct on
+ * Postgres and the values land in positional order across the whole statement).
+ * The fragment's identifiers are NOT quoted — raw means raw, the caller owns it.
+ * `?` count must equal `bindings.length` or we throw (a silent off-by-one would
+ * misalign every subsequent placeholder).
+ */
+function compileRaw(frag: RawFragment, b: Bindings): string {
+  const parts = frag.sql.split('?')
+  const holes = parts.length - 1
+  if (holes !== frag.bindings.length) {
+    throw new Error(
+      `[RudderJS ORM native] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${frag.bindings.length}: ${frag.sql}`,
+    )
+  }
+  let out = parts[0] ?? ''
+  for (let i = 0; i < holes; i++) {
+    out += b.add(frag.bindings[i]) + (parts[i + 1] ?? '')
+  }
+  return out
+}
+
+/**
  * Render one `WhereClause` to SQL. Null values route through `IS NULL` /
  * `IS NOT NULL` (a `= NULL` never matches in SQL); `IN`/`NOT IN` expand to a
  * parenthesized placeholder list (empty list → constant false/true).
@@ -93,6 +135,13 @@ class Bindings {
 function compileClause(clause: WhereClause, dialect: Dialect, b: Bindings): string {
   const col = dialect.quoteId(clause.column)
   const { operator, value } = clause
+
+  // `where(col, op, raw('NOW()'))` — splice the expression verbatim, no binding.
+  if (value instanceof Expression) {
+    const op = OPERATOR_SQL[operator]
+    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
+    return `${col} ${op} ${value.getValue()}`
+  }
 
   if (operator === 'IN' || operator === 'NOT IN') {
     const arr = Array.isArray(value) ? value : [value]
@@ -129,6 +178,8 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
     let frag: string
     if (node.kind === 'clause') {
       frag = compileClause(node.clause, dialect, b)
+    } else if (node.kind === 'raw') {
+      frag = compileRaw(node.raw, b)
     } else {
       const inner = compileNodes(node.children, dialect, b)
       // An empty group contributes nothing — skip it entirely so it doesn't
@@ -180,10 +231,12 @@ function compileSoftDelete(state: NativeQueryState, dialect: Dialect): string {
   return state.softDelete === 'only' ? `${col} IS NOT NULL` : `${col} IS NULL`
 }
 
-/** ORDER BY fragment (without the keyword), or `''` when no orders. */
-function compileOrderBy(orders: OrderClause[], dialect: Dialect): string {
+/** ORDER BY fragment (without the keyword), or `''` when no orders. Raw order
+ *  items splice verbatim (and may carry bindings — ORDER BY follows WHERE in the
+ *  SQL text, so its placeholders bind after the WHERE's via the shared `b`). */
+function compileOrderBy(orders: OrderItem[], dialect: Dialect, b: Bindings): string {
   return orders
-    .map(o => `${dialect.quoteId(o.column)} ${o.direction === 'DESC' ? 'DESC' : 'ASC'}`)
+    .map(o => ('kind' in o ? compileRaw(o.raw, b) : `${dialect.quoteId(o.column)} ${o.direction === 'DESC' ? 'DESC' : 'ASC'}`))
     .join(', ')
 }
 
@@ -206,8 +259,14 @@ export function compileSelect(
   } = {},
 ): CompiledQuery {
   const b = new Bindings(dialect)
-  const baseSelect = overrides.selectColumns ?? '*'
   const table = dialect.quoteId(state.table)
+
+  // `selectRaw` REPLACES the default `*` projection (Laravel semantics). Compiled
+  // first so any of its `?` bindings land first — SQL text order (SELECT precedes
+  // WHERE). `overrides.selectColumns` (terminal-injected) still wins when set.
+  const rawSelects = state.rawSelects ?? []
+  const baseSelect = overrides.selectColumns
+    ?? (rawSelects.length > 0 ? rawSelects.map(frag => compileRaw(frag, b)).join(', ') : '*')
 
   // Aggregate subselects (withCount/withSum/…) join the SELECT list. They're
   // compiled BEFORE the WHERE so their bindings land first — matching the SQL
@@ -220,7 +279,7 @@ export function compileSelect(
   const where = compileWhereWithExtra(state, dialect, b, overrides.extraConditions)
   if (where) sql += ` WHERE ${where}`
 
-  const orderBy = compileOrderBy(state.orders, dialect)
+  const orderBy = compileOrderBy(state.orders, dialect, b)
   if (orderBy) sql += ` ORDER BY ${orderBy}`
 
   const limit = overrides.limit !== undefined ? overrides.limit : state.limitN
