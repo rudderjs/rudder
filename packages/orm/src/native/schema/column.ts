@@ -90,16 +90,29 @@ export type ColumnType =
   | 'increments'   // auto-incrementing integer primary key
   | 'integer'
   | 'bigInteger'
+  | 'tinyInteger'
+  | 'smallInteger'
+  | 'mediumInteger'
   | 'string'       // varchar(length) on pg/mysql; TEXT on sqlite
+  | 'char'         // char(length) on pg/mysql; TEXT on sqlite
   | 'text'
+  | 'mediumText'   // mediumtext on mysql; text on pg/sqlite
+  | 'longText'     // longtext on mysql; text on pg/sqlite
   | 'boolean'
+  | 'date'
+  | 'time'         // time(precision?) on pg/mysql; TEXT on sqlite
   | 'dateTime'
   | 'timestamp'
   | 'json'
+  | 'jsonb'        // jsonb on pg; json on mysql; TEXT on sqlite
   | 'uuid'
+  | 'ulid'         // char(26) on pg/mysql; TEXT on sqlite
   | 'decimal'
   | 'float'
+  | 'double'
   | 'binary'
+  | 'enum'         // enum(...) on mysql; varchar+CHECK on pg/sqlite
+  | 'set'          // set(...) on mysql; NotImplemented on pg/sqlite
 
 /**
  * The recorded shape of one column. Built by {@link ColumnBuilder}; consumed by
@@ -111,9 +124,14 @@ export interface ColumnDefinition {
   type:          ColumnType
   /** `string(name, length)` — kept for pg/mysql `varchar(N)`; SQLite ignores it. */
   length?:       number
-  /** `decimal(name, precision, scale)`. */
+  /** `decimal(name, precision, scale)`; also the fractional-seconds precision
+   *  for `time(name, precision)`. */
   precision?:    number
   scale?:        number
+  /** Allowed values for `enum(name, [...])` / `set(name, [...])`. Rendered as a
+   *  quoted literal list (mysql `enum(...)`/`set(...)`) or a `CHECK (... IN ...)`
+   *  constraint (pg/sqlite `enum`). Migration-author supplied — quoted, never bound. */
+  enumValues?:   string[]
   nullable:      boolean
   /** Whether a DEFAULT was set (distinguishes `default(null)` from "no default"). */
   hasDefault:    boolean
@@ -124,6 +142,16 @@ export interface ColumnDefinition {
   default?:      unknown
   /** `useCurrent()` — `DEFAULT CURRENT_TIMESTAMP`. Takes precedence over `default`. */
   useCurrent:    boolean
+  /** `useCurrentOnUpdate()` — `ON UPDATE CURRENT_TIMESTAMP`. MySQL-only (Laravel
+   *  grammar parity); silently ignored on pg/sqlite, which have no inline form. */
+  useCurrentOnUpdate: boolean
+  /** `comment(text)` — a column comment. Rendered inline (`COMMENT '…'`) on MySQL,
+   *  as a separate `COMMENT ON COLUMN` statement on pg, and ignored on sqlite. */
+  comment?:      string
+  /** `after(column)` — position an added column after another (MySQL ALTER only). */
+  after?:        string
+  /** `first()` — position an added column first (MySQL ALTER only). */
+  first?:        boolean
   /** Single-column inline `PRIMARY KEY`. Composite PKs go through `Blueprint.primary`. */
   primary:       boolean
   /** Emit a `CREATE UNIQUE INDEX` for this column (Laravel-style separate index). */
@@ -169,6 +197,33 @@ export class ColumnBuilder {
   /** Default this timestamp/dateTime column to `CURRENT_TIMESTAMP`. */
   useCurrent(): this {
     this.def.useCurrent = true
+    return this
+  }
+
+  /** Refresh this timestamp on UPDATE (`ON UPDATE CURRENT_TIMESTAMP`). MySQL-only;
+   *  a no-op on pg/sqlite (recorded for portability, ignored by their grammar). */
+  useCurrentOnUpdate(): this {
+    this.def.useCurrentOnUpdate = true
+    return this
+  }
+
+  /** Attach a column comment. Inline on MySQL, a separate `COMMENT ON COLUMN`
+   *  statement on pg, ignored on sqlite (no column comments). */
+  comment(text: string): this {
+    this.def.comment = text
+    return this
+  }
+
+  /** Position this (added) column after another. MySQL ALTER only — ignored
+   *  elsewhere, matching Laravel. */
+  after(column: string): this {
+    this.def.after = column
+    return this
+  }
+
+  /** Position this (added) column first. MySQL ALTER only — ignored elsewhere. */
+  first(): this {
+    this.def.first = true
     return this
   }
 
@@ -243,6 +298,16 @@ export class ColumnBuilder {
     return this
   }
 
+  // ── Referential-action shorthands (Laravel parity) ──
+  /** `onDelete('cascade')`. */
+  cascadeOnDelete(): this { return this.onDelete('cascade') }
+  /** `onDelete('restrict')`. */
+  restrictOnDelete(): this { return this.onDelete('restrict') }
+  /** `onDelete('set null')` — pair with a `.nullable()` column. */
+  nullOnDelete(): this { return this.onDelete('set null') }
+  /** `onUpdate('cascade')`. */
+  cascadeOnUpdate(): this { return this.onUpdate('cascade') }
+
   /** Lazily create the FK intent on first FK-method call, then return it for
    *  incremental building (`.references().on().onDelete()`). */
   private foreignKey(): ForeignKeyDefinition {
@@ -262,6 +327,7 @@ export function makeColumn(
     nullable:      false,
     hasDefault:    false,
     useCurrent:    false,
+    useCurrentOnUpdate: false,
     primary:       false,
     unique:        false,
     index:         false,

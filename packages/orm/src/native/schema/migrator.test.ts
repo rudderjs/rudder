@@ -217,6 +217,61 @@ describe('Migrator — transactional batches', () => {
   })
 })
 
+describe('Migrator — run --step / --pretend (flag parity)', () => {
+  it('--step records each migration in its own batch', async () => {
+    await migrator.run([users(), posts()], undefined, { step: true })
+    const status = await migrator.status([users(), posts()])
+    assert.deepStrictEqual(status.map(s => s.batch), [1, 2])
+  })
+
+  it('without --step the whole run shares one batch', async () => {
+    await migrator.run([users(), posts()])
+    const status = await migrator.status([users(), posts()])
+    assert.deepStrictEqual(status.map(s => s.batch), [1, 1])
+  })
+
+  it('--pretend captures SQL without executing or recording state', async () => {
+    const result = await migrator.run([users(), posts()], undefined, { pretend: true })
+    // Nothing applied, nothing recorded, tables not created.
+    assert.deepStrictEqual(result.applied, [])
+    assert.strictEqual(await migrator.installed(), false)
+    assert.strictEqual(await adapter.schemaBuilder().hasTable('users'), false)
+    // Captured DDL per migration.
+    assert.strictEqual(result.pretended?.length, 2)
+    assert.match(result.pretended?.[0]?.statements.join('\n') ?? '', /CREATE TABLE "users"/)
+    assert.match(result.pretended?.[1]?.statements.join('\n') ?? '', /CREATE TABLE "posts"/)
+  })
+
+  it('a real run after a --pretend still applies everything', async () => {
+    await migrator.run([users()], undefined, { pretend: true })
+    const result = await migrator.run([users()])
+    assert.deepStrictEqual(result.applied, ['2026_01_01_000000_create_users'])
+  })
+})
+
+describe('Migrator — rollback --step / --batch (flag parity)', () => {
+  it('--step=1 reverts only the single most-recent migration across batches', async () => {
+    await migrator.run([users(), posts()]) // both batch 1
+    const result = await migrator.rollback([users(), posts()], undefined, { step: 1 })
+    assert.deepStrictEqual(result.reverted, ['2026_01_02_000000_create_posts'])
+    assert.deepStrictEqual(await migrator.ran(), ['2026_01_01_000000_create_users'])
+  })
+
+  it('--batch=N reverts every migration in that batch', async () => {
+    await migrator.run([users()])           // batch 1
+    await migrator.run([users(), posts()])  // batch 2 → posts
+    const result = await migrator.rollback([users(), posts()], undefined, { batch: 1 })
+    assert.strictEqual(result.batch, 1)
+    assert.deepStrictEqual(result.reverted, ['2026_01_01_000000_create_users'])
+    // posts (batch 2) survives.
+    assert.deepStrictEqual(await migrator.ran(), ['2026_01_02_000000_create_posts'])
+  })
+
+  it('--step on an empty database is a no-op', async () => {
+    assert.deepStrictEqual(await migrator.rollback([users()], undefined, { step: 3 }), { batch: 0, reverted: [] })
+  })
+})
+
 describe('Migrator — dropAllTables', () => {
   it('drops every user table including the migrations state table', async () => {
     await migrator.run([users(), posts()])

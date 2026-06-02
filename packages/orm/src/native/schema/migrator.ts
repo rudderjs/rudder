@@ -37,6 +37,12 @@ export interface MigratorAdapter {
    * native adapter that also exposes `schemaBuilder()`.
    */
   transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T>
+  /**
+   * A recording {@link SchemaBuilder} for `migrate --pretend`: statements are
+   * captured (via `record`) instead of executed. Optional — an adapter without it
+   * makes `--pretend` throw a clear error rather than silently executing.
+   */
+  pretendSchemaBuilder?(record: (sql: string, bindings: readonly unknown[]) => void): SchemaBuilder
 }
 
 /** The transaction-scoped adapter the migrator drives inside a batch — an
@@ -56,17 +62,46 @@ export interface MigrationStatus {
   batch: number | null
 }
 
+/** The SQL a single migration's `up()` would emit, captured under `--pretend`. */
+export interface PretendedMigration {
+  name:       string
+  statements: string[]
+}
+
 /** Outcome of a `run()`. */
 export interface RunResult {
   batch:   number
   applied: string[]
+  /** Present only under `{ pretend: true }` — the captured (un-executed) SQL per
+   *  pending migration. `applied` is empty in that case (nothing ran). */
+  pretended?: PretendedMigration[]
+}
+
+/** Knobs for {@link Migrator.run} (Laravel `migrate` flag parity). */
+export interface RunOptions {
+  /** `--step`: record each pending migration in its OWN batch (so they roll back
+   *  one at a time) instead of grouping the whole run into a single batch. */
+  step?:    boolean
+  /** `--pretend`: capture the SQL each pending migration would emit without
+   *  executing anything or writing the `migrations` state table. */
+  pretend?: boolean
 }
 
 /** Outcome of a `rollback()`. */
 export interface RollbackResult {
-  /** The batch number that was rolled back (`0` if nothing to roll back). */
+  /** The batch number that was rolled back (`0` if nothing to roll back). For a
+   *  `--step`/`--batch` rollback this is the highest batch touched. */
   batch:    number
   reverted: string[]
+}
+
+/** Knobs for {@link Migrator.rollback} (Laravel `migrate:rollback` flag parity). */
+export interface RollbackOptions {
+  /** `--step=N`: roll back the last N applied migrations (across batches), each
+   *  reverted in reverse apply order. */
+  step?:  number
+  /** `--batch=N`: roll back every migration recorded in batch N. */
+  batch?: number
 }
 
 interface MigrationRow {
@@ -118,27 +153,61 @@ export class Migrator {
    * batch. `onApply` streams progress to the caller (the CLI prints it). Returns
    * the batch number and the applied names.
    */
-  async run(migrations: LoadedMigration[], onApply?: (name: string) => void): Promise<RunResult> {
+  async run(
+    migrations: LoadedMigration[],
+    onApply?: (name: string) => void,
+    opts: RunOptions = {},
+  ): Promise<RunResult> {
+    // --pretend: capture each pending migration's SQL without touching the DB or
+    // the state table. Doesn't need (or create) the migrations table.
+    if (opts.pretend) return this.pretend(migrations)
+
     await this.ensureTable()
     const done = new Set(await this.ran())
     const pending = migrations.filter(m => !done.has(m.name))
-    const batch = await this.nextBatch()
-    if (pending.length === 0) return { batch, applied: [] }
+    const startBatch = await this.nextBatch()
+    if (pending.length === 0) return { batch: startBatch, applied: [] }
 
-    // One transaction per batch: if any up() throws, the whole batch — DDL and
-    // the `migrations` rows recorded so far — rolls back atomically. Use the
-    // TX-scoped adapter for both the schema builder and the state-table writes.
+    // One transaction for the whole run: if any up() throws, every DDL change and
+    // `migrations` row recorded so far rolls back atomically. Use the TX-scoped
+    // adapter for both the schema builder and the state-table writes. Under
+    // --step each migration takes its own incrementing batch number (so it can be
+    // rolled back individually); otherwise they share `startBatch`.
     await this.adapter.transaction(async (txAdapter) => {
       const tx = txAdapter as ScopedMigratorAdapter
       const schema = tx.schemaBuilder()
+      let offset = 0
       for (const { name, migration } of pending) {
+        const batch = opts.step ? startBatch + offset : startBatch
         await withSchema(schema, () => migration.up())
         await tx.query<MigrationRow>(TABLE).create({ migration: name, batch })
         onApply?.(name)
+        offset++
       }
     })
 
-    return { batch, applied: pending.map(m => m.name) }
+    return { batch: startBatch, applied: pending.map(m => m.name) }
+  }
+
+  /** Dry-run: bind each pending migration's `up()` to a recording schema builder
+   *  and collect the DDL it would emit. No transaction, no state-table writes. */
+  private async pretend(migrations: LoadedMigration[]): Promise<RunResult> {
+    if (!this.adapter.pretendSchemaBuilder) {
+      throw new NativeOrmError(
+        'NATIVE_PRETEND_UNSUPPORTED',
+        `[RudderJS ORM native] --pretend is not supported by this adapter (no pretendSchemaBuilder()).`,
+      )
+    }
+    const done = new Set(await this.ran())
+    const pending = migrations.filter(m => !done.has(m.name))
+    const pretended: PretendedMigration[] = []
+    for (const { name, migration } of pending) {
+      const statements: string[] = []
+      const schema = this.adapter.pretendSchemaBuilder((sql) => statements.push(sql))
+      await withSchema(schema, () => migration.up())
+      pretended.push({ name, statements })
+    }
+    return { batch: await this.nextBatch(), applied: [], pretended }
   }
 
   /** ran/pending state for every known migration, plus its batch when applied. */
@@ -174,7 +243,27 @@ export class Migrator {
    * Returns the rolled-back batch number and the reverted names. A no-op (batch
    * `0`) when nothing has been applied.
    */
-  async rollback(migrations: LoadedMigration[], onRevert?: (name: string) => void): Promise<RollbackResult> {
+  async rollback(
+    migrations: LoadedMigration[],
+    onRevert?: (name: string) => void,
+    opts: RollbackOptions = {},
+  ): Promise<RollbackResult> {
+    // --batch=N: revert every migration recorded in that batch.
+    if (opts.batch !== undefined) {
+      const rows = await this.migrationsInBatch(opts.batch)
+      const reverted = await this.revertRows(rows, migrations, onRevert)
+      return { batch: opts.batch, reverted }
+    }
+    // --step=N: revert the last N applied migrations, across batches, newest first.
+    if (opts.step !== undefined && opts.step > 0) {
+      if (!(await this.installed())) return { batch: 0, reverted: [] }
+      const all = await this.adapter.query<MigrationRow>(TABLE).orderBy('id', 'DESC').get()
+      const rows = all.slice(0, opts.step)
+      const batch = rows.reduce((max, r) => Math.max(max, r.batch), 0)
+      const reverted = await this.revertRows(rows, migrations, onRevert)
+      return { batch, reverted }
+    }
+    // Default: revert the last batch.
     const batch = await this.lastBatch()
     if (batch === 0) return { batch: 0, reverted: [] }
     const rows = await this.migrationsInBatch(batch)

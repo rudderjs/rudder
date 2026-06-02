@@ -166,6 +166,23 @@ export class NativeAdapter implements OrmAdapter {
   }
 
   /**
+   * A {@link SchemaBuilder} bound to a *recording* executor: every statement it
+   * would run is handed to `record` instead of touching the database. Powers
+   * `migrate --pretend` — the migrator binds this to a migration's `up()` and
+   * collects the DDL it would emit. Catalog reads (`hasTable`/`hasColumn`)
+   * resolve to "absent" (empty rows), which is the correct dry-run default.
+   */
+  pretendSchemaBuilder(record: (sql: string, bindings: readonly unknown[]) => void): SchemaBuilder {
+    const recordingExecutor: Executor = {
+      async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+        record(sql, bindings)
+        return []
+      },
+    }
+    return new SchemaBuilder(recordingExecutor, this.dialect)
+  }
+
+  /**
    * Generate `app/Models/__schema/registry.d.ts` from THIS connection's live
    * schema (GATE 7-types) — introspect every table, fold in each model's
    * declared `casts`, and (re)write the registry. Node-only; the fs-writing

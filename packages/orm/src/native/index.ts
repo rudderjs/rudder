@@ -68,7 +68,10 @@ export type { ModelCastInfo } from './schema/schema-types.js'
 export { Migration } from './schema/migration.js'
 export { Schema, withSchema } from './schema/schema-facade.js'
 export { Migrator, discoverMigrations } from './schema/migrator.js'
-export type { MigratorAdapter, LoadedMigration, MigrationStatus, RunResult } from './schema/migrator.js'
+export type {
+  MigratorAdapter, LoadedMigration, MigrationStatus,
+  RunResult, RunOptions, RollbackResult, RollbackOptions, PretendedMigration,
+} from './schema/migrator.js'
 
 // Errors.
 export {

@@ -8,8 +8,9 @@ import {
   detectORM, buildArgs, assertSafeName, findSeederFile, hasPrismaSeedConfig, runSeeder,
   buildVectorMigrationSql, buildPrismaSchemaSnippet, parseVectorFlag,
   writeVectorMigration, runNativeMigrate, runNativeStatus,
-  runNativeRollback, runNativeRefresh, runNativeFresh,
+  runNativeRollback, runNativeReset, runNativeRefresh, runNativeFresh,
   buildNativeMigrationStub, writeNativeMigration,
+  hasFlag, flagNumber, rollbackStep,
 } from './migrate.js'
 import { NativeAdapter } from '../native/adapter.js'
 import { BetterSqlite3Driver } from '../native/drivers/better-sqlite3.js'
@@ -163,6 +164,29 @@ describe('migrate — buildArgs()', () => {
   it('drizzle db:generate returns empty (no-op)', () => {
     const args = buildArgs('drizzle', 'db:generate')
     assert.deepEqual(args, [])
+  })
+})
+
+describe('migrate — CLI flag parsing', () => {
+  it('hasFlag detects --name and --name=value forms', () => {
+    assert.equal(hasFlag(['--step'], 'step'), true)
+    assert.equal(hasFlag(['--step=3'], 'step'), true)
+    assert.equal(hasFlag(['--pretend'], 'step'), false)
+    assert.equal(hasFlag([], 'step'), false)
+  })
+
+  it('flagNumber reads --name=N and --name N', () => {
+    assert.equal(flagNumber(['--batch=2'], 'batch'), 2)
+    assert.equal(flagNumber(['--batch', '5'], 'batch'), 5)
+    assert.equal(flagNumber(['--batch'], 'batch'), undefined)       // bare flag, no value
+    assert.equal(flagNumber(['--batch', '--other'], 'batch'), undefined)
+    assert.equal(flagNumber([], 'batch'), undefined)
+  })
+
+  it('rollbackStep is the value, or 1 for a bare --step, or undefined when absent', () => {
+    assert.equal(rollbackStep(['--step=4']), 4)
+    assert.equal(rollbackStep(['--step']), 1)
+    assert.equal(rollbackStep([]), undefined)
   })
 })
 
@@ -555,6 +579,40 @@ describe('migrate — native rollback/refresh/fresh command layer', () => {
     const count = await runNativeFresh(adapter, cwd)
     assert.equal(count, 2)
     assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
+  })
+
+  it('runNativeMigrate --step records each migration in its own batch', async () => {
+    await runNativeMigrate(adapter, cwd, { step: true })
+    const { Migrator, discoverMigrations } = await import('../native/index.js')
+    const migrations = await discoverMigrations(nodePath.join(cwd, 'database', 'migrations'))
+    const status = await new Migrator(adapter).status(migrations)
+    assert.deepEqual(status.map(s => s.batch), [1, 2])
+  })
+
+  it('runNativeMigrate --pretend prints SQL and applies nothing', async () => {
+    const lines: string[] = []
+    console.log = (s?: unknown) => { lines.push(String(s)) }
+    const count = await runNativeMigrate(adapter, cwd, { pretend: true })
+    console.log = () => {}
+    assert.equal(count, 0)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), false)
+    assert.ok(lines.some(l => /CREATE TABLE "users"/.test(l)))
+  })
+
+  it('runNativeRollback --step=1 reverts only the most recent migration', async () => {
+    await runNativeMigrate(adapter, cwd) // both batch 1
+    const count = await runNativeRollback(adapter, cwd, { step: 1 })
+    assert.equal(count, 1)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), false)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), true)
+  })
+
+  it('runNativeReset rolls back everything', async () => {
+    await runNativeMigrate(adapter, cwd)
+    const count = await runNativeReset(adapter, cwd)
+    assert.equal(count, 2)
+    assert.equal(await adapter.schemaBuilder().hasTable('users'), false)
+    assert.equal(await adapter.schemaBuilder().hasTable('posts'), false)
   })
 })
 
