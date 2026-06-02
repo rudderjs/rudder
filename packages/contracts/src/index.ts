@@ -1,5 +1,10 @@
 // ─── ORM Types ─────────────────────────────────────────────
 
+// Raw SQL expression wrapper (`raw(...)` / `DB.raw(...)`). Lives here, not in
+// @rudderjs/database, so the query builder's raw methods stay client-safe.
+import { Expression } from './expression.js'
+export { Expression, raw } from './expression.js'
+
 export type WhereOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'NOT LIKE' | 'IN' | 'NOT IN'
 
 export interface WhereClause {
@@ -153,7 +158,30 @@ export interface QueryBuilder<T> {
   whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this
   /** OR-rooted variant of {@link whereGroup}. */
   orWhereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this
-  orderBy(column: string, direction?: 'ASC' | 'DESC'): this
+  orderBy(column: string | Expression, direction?: 'ASC' | 'DESC'): this
+  /**
+   * Raw-SQL escape hatch for any clause where the structured builder is too
+   * narrow. The fragment is spliced verbatim (identifiers are NOT quoted — the
+   * caller owns correctness); values must travel as `?` placeholders with a
+   * matching `bindings` array (rebound to the dialect's placeholder form, e.g.
+   * `$n` on Postgres). Mirrors Laravel's `selectRaw`/`whereRaw`/`orderByRaw`.
+   *
+   * Caveat: a literal `?` inside a string literal in the fragment is counted as
+   * a placeholder — same limitation as Laravel. Prefer a bound value.
+   *
+   * Not every adapter can splice raw SQL: the structured Prisma client throws
+   * with a pointer to the `DB` facade (`DB.select(sql, bindings)`); the native
+   * engine and Drizzle support it directly.
+   *
+   * @example
+   *   q.whereRaw('age > ? and active = ?', [18, true])
+   *   q.orderByRaw('field(status, ?, ?)', ['urgent', 'high'])
+   *   q.selectRaw('count(*) as total, max(created_at) as latest')
+   */
+  selectRaw(sql: string, bindings?: readonly unknown[]): this
+  whereRaw(sql: string, bindings?: readonly unknown[]): this
+  orWhereRaw(sql: string, bindings?: readonly unknown[]): this
+  orderByRaw(sql: string, bindings?: readonly unknown[]): this
   limit(n: number): this
   offset(n: number): this
   with(...relations: string[]): this

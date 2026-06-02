@@ -94,6 +94,7 @@ import type {
   RelationExistencePredicate,
   Row,
 } from '@rudderjs/contracts'
+import { Expression } from '@rudderjs/contracts'
 import {
   MissingEmbedderError,
   VectorStorageUnsupportedError,
@@ -216,10 +217,28 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): this {
-    this._orders.push({ column, direction })
+  orderBy(column: string | Expression, direction: 'ASC' | 'DESC' = 'ASC'): this {
+    if (column instanceof Expression) this._rawUnsupported('orderBy(raw(...))')
+    this._orders.push({ column: column as string, direction })
     return this
   }
+
+  // ── raw-SQL escape hatch ─────────────────────────────────
+  //
+  // Prisma's structured client can't splice arbitrary raw SQL fragments into a
+  // `findMany` projection / where / orderBy. Rather than silently dropping them,
+  // throw and point at the `DB` facade (which runs raw SQL via `$queryRawUnsafe`
+  // under the hood). The native engine and Drizzle support these directly.
+  private _rawUnsupported(method: string): never {
+    throw new Error(
+      `[RudderJS ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client can't splice raw SQL. Run the raw query via the DB facade: DB.select(sql, bindings) / DB.statement(sql, bindings).`,
+    )
+  }
+
+  selectRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('selectRaw()') }
+  whereRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('whereRaw()') }
+  orWhereRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('orWhereRaw()') }
+  orderByRaw(_sql: string, _bindings: readonly unknown[] = []): this { this._rawUnsupported('orderByRaw()') }
 
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }

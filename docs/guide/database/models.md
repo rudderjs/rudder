@@ -114,6 +114,7 @@ await User.upsert(
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
 | `upsert(rows, uniqueBy, update?)` | Bulk insert-or-update (atomic ON CONFLICT) |
 | `chunk(size, cb)` / `lazy(size?)` | Memory-bounded iteration over large result sets |
+| `selectRaw(sql, b?)` / `whereRaw(sql, b?)` / `orWhereRaw(sql, b?)` / `orderByRaw(sql, b?)` | Raw-SQL escape hatch (see below) |
 | `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
 
@@ -137,6 +138,30 @@ for await (const user of User.query().where('active', true).orderBy('id').lazy()
 - **Add an `orderBy`** (ideally on a unique column such as the primary key) — offset paging relies on a consistent sort, or rows can overlap/skip between pages. Same caveat as Laravel's `chunk`.
 - `chunk` resolves `true` if it ran to completion, `false` if the callback bailed. `lazy(size?)` returns an async generator, so `break` stops fetching.
 - They override any `limit`/`offset` already on the query.
+
+### Raw SQL — `selectRaw` / `whereRaw` / `orderByRaw` + `DB.raw(...)`
+
+When the structured builder is too narrow, drop to raw SQL. Bound values travel as `?` placeholders + a positional `bindings` array (rebound to the dialect's form — `$n` on Postgres):
+
+```ts
+// Bound — the value is parameterized, never interpolated.
+const adults = await User.query().whereRaw('age > ?', [18]).get()
+
+// Composes with structured wheres; orWhereRaw adds an OR alternative.
+await User.query().where('active', true).orWhereRaw('age > ?', [65]).get()
+
+// Raw ORDER BY and a raw projection.
+await User.query().orderByRaw('field(status, ?, ?)', ['urgent', 'high']).get()
+await User.query().selectRaw('count(*) as total, max(createdAt) as latest').get()
+
+// DB.raw(...) splices a fragment verbatim as a where value or an order column.
+import { DB } from '@rudderjs/database'
+await User.query().where('createdAt', '>', DB.raw('NOW()')).orderBy(DB.raw('age asc')).get()
+```
+
+- **Adapter support:** the **native engine** supports all of the above. **Drizzle** supports `whereRaw`/`orWhereRaw`/`orderByRaw` + `orderBy(DB.raw(...))` + a raw value, but **`selectRaw` throws** (its typed select can't map an arbitrary projection back to a model — run such queries via the `DB` facade: `DB.select(sql, bindings)`). **Prisma** throws on every raw method — its structured client can't splice raw SQL; use `DB.select(sql, bindings)` instead.
+- **`?` count must match `bindings.length`** or the call throws. A literal `?` inside a string literal in the fragment is counted as a placeholder (same limitation as Laravel) — prefer a bound value.
+- Raw SQL is spliced **verbatim** — identifiers are not quoted and values in the fragment text are not escaped. Always pass user input through `?` bindings, never string-concatenate it into the fragment.
 
 ### Precedence in mixed `where` + `orWhere` chains
 
