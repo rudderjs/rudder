@@ -41,6 +41,12 @@ export function isPolymorphic(def: RelationDefinition | undefined): boolean {
   return def !== undefined && POLY_TYPES.has(def.type)
 }
 
+/** `hasOneThrough` / `hasManyThrough` — always Model-layer resolved (no adapter
+ *  can express the two-hop walk natively), regardless of eager strategy. */
+export function isThrough(def: RelationDefinition | undefined): boolean {
+  return def !== undefined && (def.type === 'hasOneThrough' || def.type === 'hasManyThrough')
+}
+
 // ─── Partition ─────────────────────────────────────────────────────────────
 
 export interface PartitionedEagerLoads {
@@ -77,6 +83,11 @@ export function partitionEagerLoads(
     const def = ParentClass.relations[name]
     if (isPolymorphic(def)) {
       polymorphic.push(name)
+    } else if (isThrough(def)) {
+      // Through relations can't be resolved by any adapter's native eager loader
+      // (they're a two-hop walk), so they always go to the Model-layer batched
+      // loader — `attachDirectRelations` dispatches them to `attachHasThrough`.
+      direct.push(name)
     } else if (strategy === 'model-layer') {
       // Drizzle-style adapters can't resolve direct relations from schema
       // metadata, so the Model layer batches them. Unknown names land here too

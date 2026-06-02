@@ -45,7 +45,9 @@ import {
   belongsToManyDeferredQb,
   morphToManyDeferredQb,
   morphedByManyDeferredQb,
+  hasThroughDeferredQb,
 } from './relations/pivot-deferred.js'
+import { resolveHasThroughMeta } from './relations/has-through.js'
 import {
   makeBelongsToManyAccessor,
   makeMorphToManyAccessor,
@@ -467,6 +469,27 @@ export type RelationDefinition =
       parentKey?:       string
       /** Column on the related model joined against `relatedPivotKey`. Default: `Related.primaryKey`. */
       relatedKey?:      string
+    }
+  | {
+      /**
+       * Reach a distant relation *through* an intermediate model.
+       * `Country → hasManyThrough(Post, User)` walks `countries.id = users.countryId`
+       * then `users.id = posts.userId`. `hasOneThrough` is the same join with a
+       * single-row result.
+       */
+      type:            'hasOneThrough' | 'hasManyThrough'
+      /** Lazy reference to the far/related model class (`Post`). */
+      model:           () => typeof Model
+      /** Lazy reference to the intermediate model class (`User`). */
+      through:         () => typeof Model
+      /** FK on the *through* table pointing at the parent. Default: `${camelCase(Parent)}Id` (`countryId`). */
+      firstKey?:       string
+      /** FK on the *related* table pointing at the through row. Default: `${camelCase(Through)}Id` (`userId`). */
+      secondKey?:      string
+      /** Local key on the parent joined against `firstKey`. Default: `Parent.primaryKey` (`id`). */
+      localKey?:       string
+      /** Local key on the through model joined against `secondKey`. Default: `Through.primaryKey` (`id`). */
+      secondLocalKey?: string
     }
   | {
       type:       'morphMany'
@@ -2930,6 +2953,15 @@ export abstract class Model {
       return morphedByManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
 
+    if (def.type === 'hasOneThrough' || def.type === 'hasManyThrough') {
+      const meta = resolveHasThroughMeta(ctor, def)
+      const localVal = readField(this, meta.localKey)
+      if (localVal === undefined || localVal === null) {
+        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.localKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+      }
+      return hasThroughDeferredQb(meta, localVal)
+    }
+
     if (def.type === 'belongsTo') {
       // This model holds the FK; query the related model's PK.
       const fk        = def.foreignKey ?? `${fkCamel(Related.name)}Id`
@@ -2942,8 +2974,11 @@ export abstract class Model {
     }
 
     // hasOne / hasMany — related model holds the FK pointing back to us.
-    const fk       = def.foreignKey ?? `${fkCamel(ctor.name)}Id`
-    const localCol = def.localKey   ?? ctor.primaryKey
+    // (TS can't drop the two-literal `through` member via the early return above,
+    // so narrow positively to the simple has/belongsTo shape.)
+    const simpleDef = def as Extract<RelationDefinition, { type: 'hasOne' | 'hasMany' | 'belongsTo' }>
+    const fk       = simpleDef.foreignKey ?? `${fkCamel(ctor.name)}Id`
+    const localCol = simpleDef.localKey   ?? ctor.primaryKey
     const localVal = readField(this, localCol)
     if (localVal === undefined || localVal === null) {
       throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)

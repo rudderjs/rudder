@@ -9,6 +9,7 @@ import type {
   MorphedByManyDef,
   MorphedByManyMeta,
 } from './pivot-meta.js'
+import type { HasThroughMeta } from './has-through.js'
 
 // ─── morphMany / morphOne read query ───────────────────────
 
@@ -112,7 +113,7 @@ function looksLikeUnsupportedChainMethod(name: string): boolean {
 function makeDeferredProxy(
   buildResolved: () => Promise<ResolvedQuery>,
   recorded:      Array<[string, unknown[]]>,
-  relationKind:  'belongsToMany' | 'morphToMany' | 'morphedByMany',
+  relationKind:  'belongsToMany' | 'morphToMany' | 'morphedByMany' | 'hasOneThrough' | 'hasManyThrough',
   hooks:         DeferredProxyHooks = {},
 ): QueryBuilder<Model> {
   const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
@@ -321,4 +322,32 @@ export function morphedByManyDeferredQb(
       return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
   })
+}
+
+// ─── hasOneThrough / hasManyThrough ────────────────────────
+
+/**
+ * Deferred QB for a `hasOneThrough` / `hasManyThrough` lazy read. Two hops on
+ * terminal evaluation: (1) the through rows whose `firstKey` matches the
+ * parent, collecting their `secondLocalKey` values; (2) the related rows whose
+ * `secondKey` is in that set. Chain methods are replayed against the second-hop
+ * query. No pivot columns — through relations don't surface intermediate data.
+ */
+export function hasThroughDeferredQb(
+  meta:      HasThroughMeta,
+  parentVal: unknown,
+): QueryBuilder<Model> {
+  const recorded: Array<[string, unknown[]]> = []
+
+  const buildResolved = async (): Promise<ResolvedQuery> => {
+    const throughRows = await (meta.Through.query() as unknown as QueryBuilder<Record<string, unknown>>)
+      .where(meta.firstKey, parentVal)
+      .get()
+    const throughKeys = throughRows.map(r => r[meta.secondLocalKey])
+    const q = (meta.Related.query() as unknown as QueryBuilder<Model>)
+      .where(meta.secondKey, 'IN', throughKeys.length === 0 ? [] : throughKeys)
+    return { q: replayChain(q, recorded), pivotRows: [] }
+  }
+
+  return makeDeferredProxy(buildResolved, recorded, meta.one ? 'hasOneThrough' : 'hasManyThrough')
 }

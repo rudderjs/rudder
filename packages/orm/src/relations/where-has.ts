@@ -21,7 +21,7 @@ import {
  */
 export type HasOrBelongsToDef = Exclude<
   RelationDefinition,
-  { type: 'belongsToMany' | 'morphMany' | 'morphOne' | 'morphTo' | 'morphToMany' | 'morphedByMany' }
+  { type: 'belongsToMany' | 'morphMany' | 'morphOne' | 'morphTo' | 'morphToMany' | 'morphedByMany' | 'hasOneThrough' | 'hasManyThrough' }
 >
 
 // ─── Constraint capture ────────────────────────────────────
@@ -136,6 +136,15 @@ export function buildRelationPredicate(
   exists:           boolean,
   constraintWheres: WhereClause[],
 ): RelationExistencePredicate {
+  if (def.type === 'hasOneThrough' || def.type === 'hasManyThrough') {
+    // Through relations would need a two-level EXISTS (parent → through →
+    // related); not expressible by the current single-hop predicate. Deferred.
+    throw new Error(
+      `[RudderJS ORM] whereHas / has on a through relation ("${relation}" on ${Parent.name}) is not supported yet. ` +
+      `Filter via the related model directly, or load it with \`${Parent.name}.with('${relation}')\` / \`.related('${relation}')\`.`,
+    )
+  }
+
   const Related = def.model() as typeof Model
 
   if (def.type === 'belongsToMany') {
@@ -221,8 +230,11 @@ export function buildRelationPredicate(
   }
 
   // hasOne / hasMany — related table holds the FK pointing back to Parent.
-  const fk       = def.foreignKey ?? `${camelHead(Parent.name)}Id`
-  const localCol = def.localKey   ?? Parent.primaryKey
+  // (`through` is rejected at the top; narrow positively for TS — a two-literal
+  // discriminant member isn't dropped by the guard above.)
+  const simpleDef = def as Extract<RelationDefinition, { type: 'hasOne' | 'hasMany' | 'belongsTo' }>
+  const fk       = simpleDef.foreignKey ?? `${camelHead(Parent.name)}Id`
+  const localCol = simpleDef.localKey   ?? Parent.primaryKey
   return {
     relation,
     exists,
