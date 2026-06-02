@@ -61,6 +61,11 @@ test('parseFlags — orm=none', () => {
   assert.strictEqual(r.partial.orm, false)
 })
 
+test('parseFlags — orm=native', () => {
+  const r = parseFlags(['my-app', '--orm=native'])
+  assert.strictEqual(r.partial.orm, 'native')
+})
+
 test('parseFlags — packages list', () => {
   const r = parseFlags(['my-app', '--orm=prisma', '--packages=auth,queue'])
   assert.strictEqual(r.partial.packages?.auth, true)
@@ -130,6 +135,20 @@ test('validateJsonMode — orm=false skips --db', () => {
   const missing = validateJsonMode('app', { orm: false })
   assert.ok(!missing.includes('--db'))
   assert.ok(missing.includes('--packages'))
+})
+
+test('validateJsonMode — orm=native skips --db (sqlite-only)', () => {
+  const missing = validateJsonMode('app', { orm: 'native' })
+  assert.ok(!missing.includes('--db'))
+})
+
+test('resolveJsonAnswers — orm=native coerces db to sqlite', () => {
+  const answers = resolveJsonAnswers('app', {
+    orm: 'native', packages: packagesFromList(['auth'], 'native'),
+    frameworks: ['react'], tailwind: false, install: false,
+  })
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db, 'sqlite')
 })
 
 test('validateJsonMode — single framework skips --primary-framework', () => {

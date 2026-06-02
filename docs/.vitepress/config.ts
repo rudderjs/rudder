@@ -119,6 +119,7 @@ export default defineConfig({
             { text: 'Getting Started', link: '/guide/database' },
             { text: 'Models', link: '/guide/database/models' },
             { text: 'Migrations', link: '/guide/database/migrations' },
+            { text: 'Native Engine', link: '/guide/database/native' },
             { text: 'Prisma Adapter', link: '/guide/database/prisma' },
             { text: 'Drizzle Adapter', link: '/guide/database/drizzle' },
           ],

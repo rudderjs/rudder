@@ -1,7 +1,7 @@
 import type { TemplateContext } from './templates.js'
 
 export type Frameworks = ('react' | 'vue' | 'solid')[]
-export type Orm        = 'prisma' | 'drizzle' | false
+export type Orm        = 'prisma' | 'drizzle' | 'native' | false
 export type Db         = 'sqlite' | 'postgresql' | 'mysql'
 export type Recipe     = 'web-app' | 'saas' | 'api-service' | 'realtime' | 'minimal' | 'custom'
 export type Styling    = 'tailwind+shadcn' | 'tailwind' | 'plain'
@@ -103,8 +103,8 @@ export function parseFlags(argv: string[]): ParsedFlags {
   if (flags['orm']) {
     const v = flags['orm']
     if (v === 'none') partial.orm = false
-    else if (v === 'prisma' || v === 'drizzle') partial.orm = v
-    else throw new FlagError(`--orm must be one of: prisma, drizzle, none (got "${v}")`)
+    else if (v === 'prisma' || v === 'drizzle' || v === 'native') partial.orm = v
+    else throw new FlagError(`--orm must be one of: prisma, drizzle, native, none (got "${v}")`)
   }
   if (flags['db']) {
     const v = flags['db']
@@ -212,7 +212,8 @@ export function validateJsonMode(name: string | undefined, p: PartialAnswers): s
 
   // Legacy explicit path
   if (p.orm === undefined)        missing.push('--orm')
-  if (p.orm !== false && !p.db)   missing.push('--db')
+  // native forces sqlite (its only supported driver), so --db is never required
+  if (p.orm !== false && p.orm !== 'native' && !p.db) missing.push('--db')
   if (p.packages === undefined)   missing.push('--packages')
   if (!p.frameworks)              missing.push('--frameworks')
   if (p.frameworks && p.frameworks.length > 1 && !p.primary) missing.push('--primary-framework')
@@ -232,7 +233,8 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
     const orm: Orm = p.orm !== undefined
       ? p.orm
       : (preset?.needsOrm ? 'prisma' : false)
-    const db: Db = (orm === false ? 'sqlite' : (p.db ?? 'sqlite')) as Db
+    // native + no-orm both pin to sqlite; native supports no other driver yet
+    const db: Db = (orm === false || orm === 'native' ? 'sqlite' : (p.db ?? 'sqlite')) as Db
 
     const packages = recipe === 'custom'
       ? p.packages!
@@ -262,7 +264,7 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
 
   // Legacy explicit path (pre-recipe)
   const orm        = p.orm!
-  const db         = (orm === false ? 'sqlite' : p.db!) as Db
+  const db         = (orm === false || orm === 'native' ? 'sqlite' : p.db!) as Db
   const packages   = p.packages!
   const frameworks = p.frameworks!
   const primary    = p.primary ?? frameworks[0]!

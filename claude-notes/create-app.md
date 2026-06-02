@@ -9,8 +9,8 @@
 
 1. Project name — skipped if passed as argv
 2. **What are you building?** — `web-app` (default) · `saas` · `api-service` · `realtime` · `minimal` · `custom`. Single-select recipe picker that drives the next prompts.
-3. Database ORM — Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`)
-4. Database driver — SQLite (default) · PostgreSQL · MySQL — only when ORM is selected
+3. Database ORM — **Native** (default, pre-highlighted) · Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`). Native is the built-in engine (`@rudderjs/orm/native`) — SQLite-only today.
+4. Database driver — SQLite (default) · PostgreSQL · MySQL — only when ORM is Prisma/Drizzle. **Skipped for Native** (forced to `sqlite`; the native provider throws for other drivers).
 5. **Packages** — categorized multiselect (8 sections, 25 visible rows, Authentication pre-checked). **Only shown for recipe = `custom`.** When ORM=None, the three DB-gated rows (Authentication, Sanctum, Passport) are hidden — Socialite stays.
 6. Frontend framework — single select: React (default) · Vue · Solid · None. Skipped for recipe = `api-service` or `minimal`. Multi-framework picks live behind the legacy `--frameworks` flag only.
 7. Styling — single select: Tailwind+shadcn (default for React) · Tailwind · Plain CSS. Skipped when no framework / API service / Minimal. shadcn row only shown for React.
@@ -55,8 +55,8 @@ Package-specific scaffolded behavior:
 
 When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:discover`, the scaffolder also runs:
 
-1. `pnpm rudder db:generate` — always when ORM is selected (no-op for Drizzle)
-2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed)
+1. `pnpm rudder db:generate` — when ORM is Prisma/Drizzle (no-op for Drizzle). **Skipped for Native** (no client to generate; db:generate/db:push throw for native).
+2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed). **For Native, runs `pnpm rudder migrate` instead** — applies the scaffolded `database/migrations/*` (creates dev.db + the typed `app/Models/__schema/registry.d.ts`). `dbPushOk` carries the migrate result.
 3. `pnpm rudder vendor:publish --tag=auth-views-<framework>` — only when auth was selected AND `fs.cp` couldn't vendor the views
 4. `pnpm rudder passport:keys` — only when passport selected
 5. `git init` + `git add . && git commit -m "Initial commit (create-rudder)"` — controlled by `--git=true|false`, default true
@@ -165,6 +165,8 @@ Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmIn
 templates/
 ├── package-managers.ts    package-json.ts    tsconfig.ts    vite.ts    env.ts    server.ts
 ├── prisma/                # base, auth, notification, passport, modules
+├── native/                # native-engine scaffolds (create-users-migration) —
+│                          #   only emitted for orm=native + auth
 ├── css/                   # index dispatcher + tailwind + plain variants
 ├── bootstrap/             # app, providers
 ├── configs/               # one file per config (app, server, log, hash, database, queue, mail, …)
@@ -225,6 +227,7 @@ node dist/index.js                          # launches the full interactive CLI
 
 pnpm test                                   # template tests + snapshot baseline
 pnpm smoke                                  # default profile (web-app — Prisma + auth + react)
+pnpm smoke --profile=native                 # built-in native engine (SQLite) + auth + react — runs `rudder migrate`
 pnpm smoke --profile=minimal                # no packages, no ORM, no frontend (vanilla welcome)
 pnpm smoke --profile=saas                   # web-app + queue + mail + notifications
 pnpm smoke --profile=api-service            # auth + http, no frontend

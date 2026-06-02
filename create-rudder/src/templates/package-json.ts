@@ -102,6 +102,11 @@ export function packageJson(ctx: TemplateContext): string {
   } else if (ctx.orm === 'drizzle') {
     deps['@rudderjs/orm']         = 'latest'
     deps['@rudderjs/orm-drizzle'] = 'latest'
+  } else if (ctx.orm === 'native') {
+    // The native engine ships inside @rudderjs/orm at the ./native subpath — no
+    // separate adapter package. better-sqlite3 (its only driver peer) is added
+    // via dbDeps[sqlite], since native forces the sqlite driver.
+    deps['@rudderjs/orm'] = 'latest'
   }
 
   // Tier A — always installed silently. Required by default bootstrap (cache for
