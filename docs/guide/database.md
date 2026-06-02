@@ -18,7 +18,7 @@ All three are first-party and feature-equivalent at the model layer. The choice 
 | | Native (built-in) | Prisma | Drizzle |
 |---|---|---|---|
 | Install | `@rudderjs/orm` + `better-sqlite3` | `@rudderjs/orm-prisma` | `@rudderjs/orm-drizzle` |
-| Schema / migrations | **Bring your own** (no native migrations yet) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
+| Schema / migrations | **Built-in** (`Schema` builder + `migrate`) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
 | Drivers | SQLite | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
 | `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
 | Relations via `Model.with()` | Polymorphic only | Supported | Supported (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) |
@@ -47,7 +47,7 @@ pnpm add better-sqlite3   # the only peer; lazy-loaded, never in a client bundle
 That's the whole setup — Models, relations, `whereHas`/aggregates, soft deletes, and [transactions](#transactions) all work. The `@rudderjs/orm` main entry stays client-bundle-safe; the native driver and provider live only under the `./native` subpath and are never reachable from a browser graph.
 
 ::: tip Native migrations (SQLite)
-The native engine ships its own Laravel-style schema builder + migration runner — `Schema.create` / `Schema.table`, `make:migration`, `migrate`, `migrate:rollback` / `migrate:refresh` / `migrate:fresh`, foreign keys, and transactional batches — for **SQLite** today. Postgres/MySQL DDL are in progress; until they land, `create-rudder` still scaffolds Prisma/Drizzle by default and native remains an opt-in engine. See [Typed models from migrations](#typed-models-from-migrations-schema-types) for the headline feature: column types generated from your migrations.
+The native engine ships its own Laravel-style schema builder + migration runner — `Schema.create` / `Schema.table`, `make:migration`, `migrate`, `migrate:rollback` / `migrate:refresh` / `migrate:fresh`, foreign keys, and transactional batches — for **SQLite** today. Postgres/MySQL DDL are in progress; until they land, use Prisma/Drizzle for those drivers. Native is the **default engine scaffolded by `create-rudder`**. See the dedicated [Native Engine](/guide/database/native) guide, and [Typed models from migrations](#typed-models-from-migrations-schema-types) for the headline feature: column types generated from your migrations.
 :::
 
 ### Typed models from migrations (`schema:types`)

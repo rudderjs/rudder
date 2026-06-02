@@ -70,21 +70,28 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
       message: 'Database',
       options: recipe === 'minimal' || recipe === 'custom'
         ? [
+            { value: 'native',  label: 'Native',  hint: 'built-in — zero-config SQLite, no extra ORM dep' },
             { value: 'prisma',  label: 'Prisma'  },
             { value: 'drizzle', label: 'Drizzle' },
             { value: 'none',    label: 'None',    hint: 'no database' },
           ]
         : [
+            { value: 'native',  label: 'Native',  hint: 'built-in — zero-config SQLite, no extra ORM dep' },
             { value: 'prisma',  label: 'Prisma'  },
             { value: 'drizzle', label: 'Drizzle' },
           ],
+      initialValue: 'native',
     })
     if (isCancel(ormAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    orm = ormAnswer === 'none' ? false : ormAnswer as 'prisma' | 'drizzle'
+    orm = ormAnswer === 'none' ? false : ormAnswer as 'prisma' | 'drizzle' | 'native'
   }
 
   let db: Db = p.db ?? 'sqlite'
-  if (orm && p.db === undefined) {
+  if (orm === 'native') {
+    // The native engine supports the sqlite driver only today — skip the driver
+    // prompt and pin it. Postgres/MySQL still need Prisma or Drizzle.
+    db = 'sqlite'
+  } else if (orm && p.db === undefined) {
     const dbAnswer = await select({
       message: 'Database driver',
       options: [
@@ -375,23 +382,36 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
         : `providers:discover failed — run \`${pmRun(pm, 'rudder')} providers:discover\` manually`)
 
       // ── Auto-cascade — only when install + providers:discover both succeed ──
-      if (discoverOk && answers.orm) {
+      if (discoverOk && answers.orm === 'native') {
+        // Native engine: no client to generate, and db:push is prisma/drizzle-only.
+        // `migrate` creates the SQLite file, applies the scaffolded migrations, and
+        // writes the typed schema (app/Models/__schema/registry.d.ts). dbPushOk
+        // carries the result through to the manual-steps panel below.
         const s4 = quiet ? null : spinner()
-        s4?.start('Generating database client...')
-        dbGenerateOk = await runRudder(pm, 'db:generate', target, logFile)
-        s4?.stop(dbGenerateOk
-          ? (answers.orm === 'prisma' ? 'Prisma client generated' : 'Client step skipped (Drizzle)')
-          : `db:generate failed — run \`${pmRun(pm, 'rudder')} db:generate\` manually`)
-      }
+        s4?.start('Applying migrations...')
+        dbPushOk = await runRudder(pm, 'migrate', target, logFile)
+        s4?.stop(dbPushOk
+          ? 'Migrations applied'
+          : `migrate failed — run \`${pmRun(pm, 'rudder')} migrate\` manually`)
+      } else {
+        if (discoverOk && answers.orm) {
+          const s4 = quiet ? null : spinner()
+          s4?.start('Generating database client...')
+          dbGenerateOk = await runRudder(pm, 'db:generate', target, logFile)
+          s4?.stop(dbGenerateOk
+            ? (answers.orm === 'prisma' ? 'Prisma client generated' : 'Client step skipped (Drizzle)')
+            : `db:generate failed — run \`${pmRun(pm, 'rudder')} db:generate\` manually`)
+        }
 
-      if (discoverOk && answers.orm && answers.dbReady) {
-        const s5 = quiet ? null : spinner()
-        s5?.start('Pushing schema to database...')
-        dbPushOk = await runRudder(pm, 'db:push', target, logFile)
-        const niceDb = answers.db === 'sqlite' ? 'dev.db ready' : 'schema pushed'
-        s5?.stop(dbPushOk
-          ? niceDb
-          : `db:push failed — start your database and run \`${pmRun(pm, 'rudder')} db:push\``)
+        if (discoverOk && answers.orm && answers.dbReady) {
+          const s5 = quiet ? null : spinner()
+          s5?.start('Pushing schema to database...')
+          dbPushOk = await runRudder(pm, 'db:push', target, logFile)
+          const niceDb = answers.db === 'sqlite' ? 'dev.db ready' : 'schema pushed'
+          s5?.stop(dbPushOk
+            ? niceDb
+            : `db:push failed — start your database and run \`${pmRun(pm, 'rudder')} db:push\``)
+        }
       }
 
       if (discoverOk && answers.packages.auth && !authViewsCopied) {
@@ -611,10 +631,18 @@ async function main(): Promise<void> {
     manual.push(`  ${pmInstall(pm)}`)
     manual.push(`  ${pmRun(pm, 'rudder')} providers:discover`)
   }
-  if (answers.orm && (result.dbGenerateOk === false || (result.dbGenerateOk === null && !answers.install))) {
+  // Native has no client-generate step — db:generate is prisma/drizzle-only.
+  if (answers.orm && answers.orm !== 'native' && (result.dbGenerateOk === false || (result.dbGenerateOk === null && !answers.install))) {
     manual.push(`  ${pmRun(pm, 'rudder')} db:generate`)
   }
-  if (answers.orm && result.dbPushOk !== true) {
+  if (answers.orm === 'native') {
+    // Native uses `migrate` instead of db:push. dbPushOk carries the migrate result.
+    if (result.dbPushOk === false) {
+      manual.push(`  ${pmRun(pm, 'rudder')} migrate   # retry`)
+    } else if (result.dbPushOk === null && !answers.install) {
+      manual.push(`  ${pmRun(pm, 'rudder')} migrate`)
+    }
+  } else if (answers.orm && result.dbPushOk !== true) {
     // dbPushOk is null when we deliberately skipped (e.g. user said DB not running)
     if (result.dbPushOk === null && !answers.dbReady) {
       manual.push(`  ${pmRun(pm, 'rudder')} db:push   ${result.installOk ? '# once your database is running' : ''}`)

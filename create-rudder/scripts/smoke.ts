@@ -133,6 +133,14 @@ const profiles: Record<string, TemplateContext> = {
     packages: { ...emptyPackages(), auth: true },
   }),
 
+  // `native` — the built-in engine (SQLite). Same shape as web-app but with the
+  // zero-dependency native adapter + a scaffolded migration applied via
+  // `rudder migrate` (no prisma client, no db:push).
+  native: baseProfile({
+    orm:      'native',
+    packages: { ...emptyPackages(), auth: true },
+  }),
+
   // `saas` recipe — auth + queue + mail + notifications + ORM + frontend.
   saas: baseProfile({
     packages: { ...emptyPackages(), auth: true, queue: true, mail: true, notifications: true },
@@ -624,6 +632,16 @@ async function main(): Promise<void> {
       const dbPush = scriptArgs(PM_FLAG, 'rudder', 'db:push')
       const done4b = step('rudder db:push (skip-boot)')
       done4b(await run(dbPush.cmd, dbPush.args, target, { timeoutMs: 60_000 }))
+    }
+
+    // Native engine: no prisma client / db:push — `rudder migrate` creates the
+    // SQLite file, applies the scaffolded migration, and writes the typed schema
+    // registry (app/Models/__schema/registry.d.ts). Mirrors the create-rudder
+    // auto-cascade for native.
+    if (ctx.orm === 'native') {
+      const migrate = scriptArgs(PM_FLAG, 'rudder', 'migrate')
+      const done4n = step('rudder migrate (native)')
+      done4n(await run(migrate.cmd, migrate.args, target, { timeoutMs: 60_000 }))
     }
 
     // command:list does a full bootApp() — boots every provider with real config.

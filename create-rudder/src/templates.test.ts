@@ -632,6 +632,74 @@ describe('getTemplates() — package checklist', () => {
   })
 })
 
+// ─── native engine ─────────────────────────────────────────
+
+describe('getTemplates() — native engine', () => {
+  const nativeCtx = (pkgs = defaultPkgs) => ctx({ orm: 'native', db: 'sqlite', packages: pkgs })
+
+  it('config/database.ts selects the native engine (engine: native + sqlite)', () => {
+    const cfg = getTemplates(nativeCtx())['config/database.ts']!
+    assert.ok(cfg.includes("engine: 'native' as const"))
+    assert.ok(cfg.includes("driver: 'sqlite' as const"))
+    assert.ok(cfg.includes("Env.get('DATABASE_URL', 'file:./dev.db')"))
+  })
+
+  it('adds @rudderjs/orm + better-sqlite3, but no adapter package / prisma', () => {
+    const pkg = JSON.parse(getTemplates(nativeCtx())['package.json']!)
+    assert.ok('@rudderjs/orm' in pkg.dependencies)
+    assert.ok('better-sqlite3' in pkg.dependencies)
+    assert.ok(!('@rudderjs/orm-prisma' in pkg.dependencies))
+    assert.ok(!('@rudderjs/orm-drizzle' in pkg.dependencies))
+    assert.ok(!('@prisma/client' in pkg.dependencies))
+    assert.ok(!('prisma' in pkg.devDependencies))
+  })
+
+  it('scaffolds no prisma schema files', () => {
+    const files = getTemplates(nativeCtx())
+    assert.ok(!('prisma.config.ts' in files))
+    assert.ok(!('prisma/schema/base.prisma' in files))
+    assert.ok(!('prisma/schema/auth.prisma' in files))
+  })
+
+  it('auth selected → scaffolds a starter users migration', () => {
+    const files = getTemplates(nativeCtx({ ...noPkgs, auth: true }))
+    const path = 'database/migrations/0001_01_01_000000_create_users_table.ts'
+    assert.ok(path in files)
+    const mig = files[path]!
+    assert.ok(mig.includes("from '@rudderjs/orm/native'"))
+    assert.ok(mig.includes("Schema.create('users'"))
+    assert.ok(mig.includes("t.string('email').unique()"))
+    assert.ok(mig.includes("Schema.create('password_reset_tokens'"))
+    assert.ok(mig.includes("Schema.dropIfExists('users')"))
+  })
+
+  it('no auth → no migration scaffolded', () => {
+    const files = getTemplates(nativeCtx({ ...noPkgs }))
+    assert.ok(!('database/migrations/0001_01_01_000000_create_users_table.ts' in files))
+  })
+
+  it('User model uses the SQL table name + integer id', () => {
+    const model = getTemplates(nativeCtx({ ...noPkgs, auth: true }))['app/Models/User.ts']!
+    assert.ok(model.includes("static table = 'users'"))
+    assert.ok(model.includes('id!:              number'))
+  })
+
+  it('migrate scripts present (migrate / db:seed)', () => {
+    const pkg = JSON.parse(getTemplates(nativeCtx())['package.json']!)
+    assert.ok('migrate' in pkg.scripts)
+    assert.ok('db:seed' in pkg.scripts)
+  })
+
+  it('.env carries the sqlite DATABASE_URL', () => {
+    assert.ok(getTemplates(nativeCtx())['.env']!.includes('DATABASE_URL="file:./dev.db"'))
+  })
+
+  it('providers.ts still delegates to defaultProviders() (native provider auto-discovered)', () => {
+    const providers = getTemplates(nativeCtx())['bootstrap/providers.ts']!
+    assert.ok(providers.includes('defaultProviders'))
+  })
+})
+
 // ─── +server.ts + vike-photon removal ─────────────────────
 
 describe('getTemplates() — +server.ts and vike-photon removal', () => {

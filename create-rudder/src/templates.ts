@@ -33,6 +33,7 @@ import { serverTs } from './templates/server.js'
 import { bootstrapApp } from './templates/bootstrap/app.js'
 import { bootstrapProviders } from './templates/bootstrap/providers.js'
 import { userModel } from './templates/app/user-model.js'
+import { nativeCreateUsersMigration } from './templates/native/create-users-migration.js'
 import { appServiceProvider } from './templates/app/service-provider.js'
 import { mcpEchoServer } from './templates/app/mcp-echo-server.js'
 import { mcpEchoTool } from './templates/app/mcp-echo-tool.js'
@@ -57,7 +58,7 @@ export type { PackageManager }
 export interface TemplateContext {
   name:       string
   db:         'sqlite' | 'postgresql' | 'mysql'
-  orm:        'prisma' | 'drizzle' | false
+  orm:        'prisma' | 'drizzle' | 'native' | false
   authSecret: string
   /** Random base64-encoded 32-byte key for @rudderjs/crypt's APP_KEY. */
   appKey:     string
@@ -119,6 +120,14 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files['prisma/schema/modules.prisma'] = modulesPrisma(ctx)
   }
 
+  // Native engine: hand-authored migrations live in database/migrations/. When
+  // auth is selected, scaffold a working users table so the app is fully migrated
+  // + typed out of the box (applied via `rudder migrate`). Other engines bring
+  // their schema from prisma/schema or a drizzle schema file.
+  if (ctx.orm === 'native' && ctx.packages.auth) {
+    files['database/migrations/0001_01_01_000000_create_users_table.ts'] = nativeCreateUsersMigration()
+  }
+
   files['src/index.css'] = indexCss(ctx)
 
   files['bootstrap/app.ts']       = bootstrapApp(ctx)
@@ -153,7 +162,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()
 
-  if (ctx.packages.auth && ctx.orm) files['app/Models/User.ts'] = userModel()
+  if (ctx.packages.auth && ctx.orm) files['app/Models/User.ts'] = userModel(ctx.orm)
   if (ctx.packages.auth) files['app/Http/Controllers/AuthController.ts'] = authController()
   files['app/Providers/AppServiceProvider.ts']  = appServiceProvider(ctx)
 
