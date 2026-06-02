@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Model, ModelRegistry, type QueryBuilder, type OrmAdapter } from './index.js'
+import { Model, ModelRegistry, type QueryBuilder, type OrmAdapter, type PivotQueryBuilder } from './index.js'
 
 // ─── In-memory adapter (mirrors morph-many-to-many.test.ts; supports
 // IN, real insertMany / deleteAll / updateAll, no soft deletes) ────────
@@ -17,23 +17,36 @@ function memoryAdapter(): {
     return tables.get(table)!
   }
 
-  const matches = (row: Record<string, unknown>, wheres: ReadonlyArray<Where>): boolean => {
-    for (const [col, op, val] of wheres) {
-      const v = row[col]
-      switch (op) {
-        case '=':  if (v !== val) return false; break
-        case '!=': if (v === val) return false; break
-        case 'IN':
-          if (!Array.isArray(val) || !(val as unknown[]).includes(v)) return false
-          break
-        default: throw new Error(`memoryAdapter: unsupported op ${op}`)
-      }
+  const single = (row: Record<string, unknown>, [col, op, val]: Where): boolean => {
+    const v = row[col]
+    switch (op) {
+      case '=':  return v === val
+      case '!=': return v !== val
+      case '>':  return (v as number) >  (val as number)
+      case '>=': return (v as number) >= (val as number)
+      case '<':  return (v as number) <  (val as number)
+      case '<=': return (v as number) <= (val as number)
+      case 'IN':     return Array.isArray(val) && (val as unknown[]).includes(v)
+      case 'NOT IN': return Array.isArray(val) && !(val as unknown[]).includes(v)
+      default: throw new Error(`memoryAdapter: unsupported op ${op}`)
     }
-    return true
+  }
+
+  // `(every AND clause) OR (any OR clause)` — flat, matching Laravel's
+  // un-parenthesised orWhere precedence for the single-level cases tested here.
+  const matches = (
+    row:      Record<string, unknown>,
+    wheres:   ReadonlyArray<Where>,
+    orWheres: ReadonlyArray<Where> = [],
+  ): boolean => {
+    const andOk = wheres.every(w => single(row, w))
+    if (orWheres.length === 0) return andOk
+    return andOk || orWheres.some(w => single(row, w))
   }
 
   const makeQbFor = <T,>(table: string): QueryBuilder<T> => {
-    const wheres: Where[] = []
+    const wheres:   Where[] = []
+    const orWheres: Where[] = []
     const qb: QueryBuilder<T> = {
       where: ((col: string, opOrVal: unknown, maybeVal?: unknown) => {
         const op  = maybeVal === undefined ? '=' : String(opOrVal)
@@ -41,7 +54,12 @@ function memoryAdapter(): {
         wheres.push([col, op, val])
         return qb
       }) as QueryBuilder<T>['where'],
-      orWhere: () => qb,
+      orWhere: ((col: string, opOrVal: unknown, maybeVal?: unknown) => {
+        const op  = maybeVal === undefined ? '=' : String(opOrVal)
+        const val = maybeVal === undefined ? opOrVal : maybeVal
+        orWheres.push([col, op, val])
+        return qb
+      }) as QueryBuilder<T>['orWhere'],
       selectRaw: () => qb,
       whereRaw: () => qb,
       orWhereRaw: () => qb,
@@ -53,11 +71,11 @@ function memoryAdapter(): {
       withPivot: () => qb,
       withTrashed: () => qb,
       onlyTrashed: () => qb,
-      first: async () => (ensure(table).find(r => matches(r, wheres)) ?? null) as T | null,
+      first: async () => (ensure(table).find(r => matches(r, wheres, orWheres)) ?? null) as T | null,
       find:  async (id) => (ensure(table).find(r => r['id'] === id) ?? null) as T | null,
-      get:   async () => ensure(table).filter(r => matches(r, wheres)) as T[],
+      get:   async () => ensure(table).filter(r => matches(r, wheres, orWheres)) as T[],
       all:   async () => [...ensure(table)] as T[],
-      count: async () => ensure(table).filter(r => matches(r, wheres)).length,
+      count: async () => ensure(table).filter(r => matches(r, wheres, orWheres)).length,
       create: async (data) => {
         const data2 = data as Record<string, unknown>
         const row = { id: data2['id'] ?? ensure(table).length + 1, ...data2 }
@@ -465,5 +483,163 @@ describe('morphedByMany — withPivot / updatePivot / sync(map)', () => {
     const byId = new Map(rows('taggable').map(r => [r['taggableId'], r['addedBy']]))
     assert.strictEqual(byId.get(1), 'system')
     assert.strictEqual(byId.get(2), 'admin')
+  })
+})
+
+// ─── wherePivot — filter the relation by pivot columns ──────────────────────
+
+describe('belongsToMany — wherePivot family', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  function setup(): { rows: (t: string) => Record<string, unknown>[]; User: typeof Model } {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model { id!: number; name!: string }
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    return { rows, User }
+  }
+
+  // `related('roles')` is typed as the plain QueryBuilder; the pivot-filter
+  // surface is `PivotQueryBuilder`. Narrow it here the way a typed app would.
+  const pivot = (user: Model): PivotQueryBuilder =>
+    user.related('roles') as unknown as PivotQueryBuilder
+
+  function seed(rows: (t: string) => Record<string, unknown>[]): void {
+    rows('roles').push(
+      { id: 1, name: 'admin'  },
+      { id: 2, name: 'editor' },
+      { id: 3, name: 'viewer' },
+    )
+    rows('role_user').push(
+      { userId: 7, roleId: 1, active: 1, level: 5 },
+      { userId: 7, roleId: 2, active: 0, level: 3 },
+      { userId: 7, roleId: 3, active: 1, level: 1 },
+      { userId: 8, roleId: 1, active: 1, level: 9 }, // different parent — never selected
+    )
+  }
+
+  it('wherePivot(column, value) — equality filter on the pivot table', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivot('active', 1).get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [1, 3])
+  })
+
+  it('wherePivot(column, operator, value) — comparison filter', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivot('level', '>=', 3).get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [1, 2])
+  })
+
+  it('wherePivot composes with where() on the related rows', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user)
+      .wherePivot('active', 1)
+      .where('name', 'admin')
+      .get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']), [1])
+  })
+
+  it('wherePivot stacks with withPivot() projection', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user)
+      .wherePivot('active', 1)
+      .withPivot('level')
+      .get() as unknown as Array<Record<string, unknown>>
+    const byId = new Map(result.map(r => [r['id'], r['pivot']]))
+    assert.deepStrictEqual(byId.get(1), { level: 5 })
+    assert.deepStrictEqual(byId.get(3), { level: 1 })
+    assert.ok(!byId.has(2))
+  })
+
+  it('wherePivotIn(column, values)', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivotIn('level', [3, 5]).get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [1, 2])
+  })
+
+  it('wherePivotNotIn(column, values)', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivotNotIn('level', [3, 5]).get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [3])
+  })
+
+  it('wherePivotBetween(column, [min, max])', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivotBetween('level', [3, 5]).get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [1, 2])
+  })
+
+  it('orWherePivot broadens the pivot filter', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    const user = User.hydrate({ id: 7 })!
+    // active = 1 (roles 1, 3) OR level = 3 (role 2) → all three of user 7's roles
+    const result = await pivot(user)
+      .wherePivot('active', 1)
+      .orWherePivot('level', 3)
+      .get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']).sort(), [1, 2, 3])
+  })
+
+  it('never selects another parent’s pivot rows', async () => {
+    const { rows, User } = setup()
+    seed(rows)
+    // user 8 also has role 1 with active=1; filtering user 7 must not pull it in.
+    const user = User.hydrate({ id: 7 })!
+    const result = await pivot(user).wherePivot('active', 1).get() as unknown as Array<Record<string, unknown>>
+    assert.ok(result.every(r => [1, 3].includes(r['id'] as number)))
+  })
+})
+
+// ─── wherePivot — morphToMany parity ────────────────────────────────────────
+
+describe('morphToMany — wherePivot', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  function setup(): { rows: (t: string) => Record<string, unknown>[]; Post: typeof Model } {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Tag  extends Model { id!: number; name!: string }
+    class Post extends Model {
+      static override relations = {
+        tags: { type: 'morphToMany' as const, model: () => Tag, pivotTable: 'taggable', morphName: 'taggable' },
+      }
+      id!: number
+    }
+    return { rows, Post }
+  }
+
+  it('filters by a pivot column while keeping the morph discriminator', async () => {
+    const { rows, Post } = setup()
+    rows('tags').push({ id: 10, name: 'red' }, { id: 11, name: 'blue' })
+    rows('taggable').push(
+      { tagId: 10, taggableId: 1, taggableType: 'Post',  active: 1 },
+      { tagId: 11, taggableId: 1, taggableType: 'Post',  active: 0 },
+      { tagId: 10, taggableId: 1, taggableType: 'Video', active: 1 }, // wrong discriminator
+    )
+    const post = Post.hydrate({ id: 1 })!
+    const result = await (post.related('tags') as unknown as PivotQueryBuilder)
+      .wherePivot('active', 1)
+      .get() as unknown as Array<Record<string, unknown>>
+    assert.deepStrictEqual(result.map(r => r['id']), [10])
   })
 })
