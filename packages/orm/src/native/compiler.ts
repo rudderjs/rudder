@@ -108,6 +108,8 @@ export interface NativeQueryState {
    *  own ORDER BY / LIMIT / OFFSET / lock are ignored — the BASE query's apply to
    *  the whole combined result. Member bindings follow the base body's in order. */
   unions?:    Array<{ all: boolean; state: NativeQueryState }>
+  /** `SELECT DISTINCT` from `distinct()` — de-duplicates the projected rows. */
+  distinct?:  boolean
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
@@ -468,7 +470,7 @@ function compileSelectBody(
   const aggParts = (state.aggregates ?? []).map(req => compileAggregateSubselect(state.table, req, dialect, b))
   const selectList = aggParts.length > 0 ? [baseSelect, ...aggParts].join(', ') : baseSelect
 
-  let sql = `SELECT ${selectList} FROM ${table}`
+  let sql = `SELECT ${state.distinct ? 'DISTINCT ' : ''}${selectList} FROM ${table}`
 
   // JOINs sit between FROM and WHERE; their `where`-condition bindings (if any)
   // land after the SELECT-list bindings and before the WHERE's — SQL text order.
@@ -501,6 +503,14 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   if (unions.length > 0) {
     let inner = compileSelectBody(state, dialect, b)
     for (const u of unions) inner += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
+    const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
+    return { sql, bindings: b.values }
+  }
+
+  // DISTINCT counts the number of DISTINCT projected rows — wrap the SELECT
+  // DISTINCT body (a bare `COUNT(DISTINCT *)` isn't valid SQL).
+  if (state.distinct) {
+    const inner = compileSelectBody(state, dialect, b)
     const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
     return { sql, bindings: b.values }
   }

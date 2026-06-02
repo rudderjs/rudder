@@ -268,6 +268,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     )
   }
   select(..._columns: string[]): this { this._builderUnsupported('select()') }
+  distinct(): this { this._builderUnsupported('distinct()') }
   join(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('join()') }
   leftJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('leftJoin()') }
   rightJoin(_table: string, _first: unknown, _operator?: unknown, _second?: unknown): this { this._builderUnsupported('rightJoin()') }

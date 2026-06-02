@@ -64,6 +64,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _rawSelects: RawFragment[]   = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
+  private _distinct = false
   private _limitN:  number | null = null
   private _offsetN: number | null = null
   private _softDeletes  = false
@@ -114,6 +115,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       groupBy:         this._groupBy,
       having:          this._having,
       unions:          this._unions,
+      distinct:        this._distinct,
       lock:            this._lock,
     }
   }
@@ -227,6 +229,12 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
    *  `*`. Accumulates with `selectRaw` (structured first, then raw). */
   select(...columns: string[]): this {
     this._selects.push(...columns)
+    return this
+  }
+
+  /** `SELECT DISTINCT` — de-duplicate the projected rows. */
+  distinct(): this {
+    this._distinct = true
     return this
   }
 
