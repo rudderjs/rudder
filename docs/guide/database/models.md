@@ -114,6 +114,11 @@ await User.upsert(
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
 | `upsert(rows, uniqueBy, update?)` | Bulk insert-or-update (atomic ON CONFLICT) |
 | `chunk(size, cb)` / `lazy(size?)` | Memory-bounded iteration over large result sets |
+| `whereIn`/`whereNotIn`/`whereNull`/`whereNotNull`/`whereBetween`/`whereNotBetween` (+ `orWhere*`) | Named `where` sugar (see below) |
+| `when(v, cb, else?)` / `unless(...)` | Conditional clauses |
+| `latest(col?)` / `oldest(col?)` | `ORDER BY col DESC`/`ASC` (default `createdAt`) |
+| `pluck(col)` / `value(col)` | One column → array / first row's value |
+| `sum`/`max`/`min`/`avg`/`exists`/`doesntExist` | Scalar terminals |
 | `selectRaw(sql, b?)` / `whereRaw(sql, b?)` / `orWhereRaw(sql, b?)` / `orderByRaw(sql, b?)` | Raw-SQL escape hatch (see below) |
 | `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
@@ -138,6 +143,35 @@ for await (const user of User.query().where('active', true).orderBy('id').lazy()
 - **Add an `orderBy`** (ideally on a unique column such as the primary key) — offset paging relies on a consistent sort, or rows can overlap/skip between pages. Same caveat as Laravel's `chunk`.
 - `chunk` resolves `true` if it ran to completion, `false` if the callback bailed. `lazy(size?)` returns an async generator, so `break` stops fetching.
 - They override any `limit`/`offset` already on the query.
+
+### Query sugar — named `where`s, conditionals, and terminals
+
+Laravel's everyday query-builder shortcuts. Each is also a `Model` static entry point (`User.whereIn(...)`, `User.sum(...)`, …).
+
+```ts
+// Named where variants (+ orWhere* forms).
+await User.query().whereIn('role', ['admin', 'editor']).get()
+await User.query().whereNotNull('verifiedAt').whereBetween('age', [18, 65]).get()
+await User.query().whereNull('deletedAt').get()
+
+// Conditional clauses — build queries without if-ladders.
+await User.query().when(role, (q, r) => q.where('role', r)).get()
+await User.query().unless(includeArchived, (q) => q.whereNull('deletedAt')).get()
+
+// Ordering shortcuts.
+await User.query().latest('createdAt').limit(10).get()   // ORDER BY createdAt DESC
+await User.query().oldest().get()                         // defaults to the createdAt column
+
+// Terminals.
+const emails = await User.query().where('active', true).pluck('email')   // string[]
+const name   = await User.query().latest().value('name')                 // first row's column, or undefined
+const total  = await User.query().where('role', 'admin').sum('credits')  // also max/min/avg
+if (await User.query().where('email', e).exists()) { /* … */ }            // + doesntExist()
+```
+
+- `whereBetween` is inclusive (`>= a AND <= b`); `whereNotBetween` is `< a OR > b`. `whereNull`/`whereNotNull` map to `IS [NOT] NULL`.
+- `when`/`unless` pass `(queryBuilder, value)` to the callback and only run it on a truthy/falsy `value`; both take an optional `otherwise` callback.
+- These live entirely at the Model layer (composed from the core `where`/`orderBy`/aggregate primitives), so they work identically on the native, Drizzle, and Prisma adapters.
 
 ### Raw SQL — `selectRaw` / `whereRaw` / `orderByRaw` + `DB.raw(...)`
 
