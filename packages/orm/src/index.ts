@@ -39,6 +39,7 @@ import {
   attachWhereHas,
   attachWithWhereHas,
   attachWhereBelongsTo,
+  relationConstrain,
 } from './relations/where-has.js'
 import {
   morphParentQuery,
@@ -680,6 +681,17 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   /** OR-rooted {@link has}. */
   orHas(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: QueryBuilder<Model>) => void): this
   withWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  /**
+   * Filter by a single column on a related row — shorthand for
+   * `whereHas(relation, q => q.where(column, …))` (Laravel's `whereRelation`).
+   * Two-arg `whereRelation(rel, col, value)` compares with `=`; three-arg
+   * `whereRelation(rel, col, operator, value)` uses the operator.
+   */
+  whereRelation(relation: string, column: string, value: unknown): this
+  whereRelation(relation: string, column: string, operator: WhereOperator, value: unknown): this
+  /** OR-rooted {@link whereRelation} — `... OR EXISTS(relation WHERE column …)`. */
+  orWhereRelation(relation: string, column: string, value: unknown): this
+  orWhereRelation(relation: string, column: string, operator: WhereOperator, value: unknown): this
   whereBelongsTo(parent: Model, relation?: string): this
   withCount(arg: string | readonly string[] | Record<string, AggregateConstraint>): this
   withExists(arg: string | readonly string[]): this
@@ -1491,6 +1503,22 @@ export abstract class Model {
             return proxy
           }
         }
+        if (prop === 'whereRelation' || prop === 'orWhereRelation') {
+          const boolean = prop === 'orWhereRelation' ? 'OR' : 'AND'
+          return (
+            relation: string,
+            column: string,
+            operatorOrValue: unknown,
+            value?: unknown,
+          ): QueryBuilder<InstanceType<T>> => {
+            attachWhereHas(
+              ModelClass, target as QueryBuilder<Model>, relation, true,
+              relationConstrain(column, operatorOrValue, value),
+              boolean === 'OR' ? { boolean: 'OR' } : undefined,
+            )
+            return proxy
+          }
+        }
         if (prop === 'whereBelongsTo') {
           return (parent: Model, relation?: string): QueryBuilder<InstanceType<T>> => {
             attachWhereBelongsTo(ModelClass, target as QueryBuilder<Model>, parent, relation)
@@ -2028,6 +2056,27 @@ export abstract class Model {
     constrain?: (q: QueryBuilder<Model>) => void,
   ): HydratingQueryBuilder<InstanceType<T>> {
     return attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /**
+   * Filter by a single column on a related row — shorthand for
+   * `whereHas(relation, q => q.where(column, …))` (Laravel's `whereRelation`).
+   *
+   * @example
+   * await User.whereRelation('posts', 'published', true).get()
+   * await User.whereRelation('posts', 'views', '>=', 100).get()
+   */
+  static whereRelation<T extends typeof Model>(this: T, relation: string, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static whereRelation<T extends typeof Model>(this: T, relation: string, column: string, operator: WhereOperator, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static whereRelation<T extends typeof Model>(this: T, relation: string, column: string, operatorOrValue: unknown, value?: unknown): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, relationConstrain(column, operatorOrValue, value)) as HydratingQueryBuilder<InstanceType<T>>
+  }
+
+  /** OR-rooted {@link Model.whereRelation}. */
+  static orWhereRelation<T extends typeof Model>(this: T, relation: string, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static orWhereRelation<T extends typeof Model>(this: T, relation: string, column: string, operator: WhereOperator, value: unknown): HydratingQueryBuilder<InstanceType<T>>
+  static orWhereRelation<T extends typeof Model>(this: T, relation: string, column: string, operatorOrValue: unknown, value?: unknown): HydratingQueryBuilder<InstanceType<T>> {
+    return attachWhereHas(this as typeof Model, Model._q(this), relation, true, relationConstrain(column, operatorOrValue, value), { boolean: 'OR' }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /**
