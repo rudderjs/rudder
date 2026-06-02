@@ -391,12 +391,29 @@ export async function runNativeSchemaTypes(adapter: NativeAdapterLike, cwd: stri
   console.log(`  Schema types written to ${path.replace(cwd + '/', '')} (${tableCount} table${tableCount === 1 ? '' : 's'}).`)
 }
 
-/** Apply pending native migrations. Returns the count applied. */
-export async function runNativeMigrate(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+/**
+ * Apply pending native migrations. Returns the count applied. With
+ * `{ pretend: true }` it prints the SQL each pending migration would emit
+ * (executing nothing) and returns 0; `{ step: true }` records each pending
+ * migration in its own batch.
+ */
+export async function runNativeMigrate(
+  adapter: NativeAdapterLike,
+  cwd: string,
+  opts: { step?: boolean; pretend?: boolean } = {},
+): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
   const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
-  const { applied } = await new Migrator(adapter).run(migrations, (name) => console.log(`  ✓ ${name}`))
-  return applied.length
+  const result = await new Migrator(adapter).run(migrations, (name) => console.log(`  ✓ ${name}`), opts)
+  if (result.pretended) {
+    if (result.pretended.length === 0) console.log('  Nothing to migrate.')
+    for (const m of result.pretended) {
+      console.log(`  -- ${m.name}`)
+      for (const sql of m.statements) console.log(`  ${sql};`)
+    }
+    return 0
+  }
+  return result.applied.length
 }
 
 /** Print native migration status (ran / pending per migration). */
@@ -413,22 +430,44 @@ export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string): 
   }
 }
 
-/** Roll back the last batch of native migrations. Returns the count reverted. */
-export async function runNativeRollback(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+/**
+ * Roll back native migrations. With no opts: the last batch. `{ step: N }`: the
+ * last N applied migrations across batches. `{ batch: N }`: every migration in
+ * batch N. Returns the count reverted.
+ */
+export async function runNativeRollback(
+  adapter: NativeAdapterLike,
+  cwd: string,
+  opts: { step?: number; batch?: number } = {},
+): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
   const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
-  const { reverted } = await new Migrator(adapter).rollback(migrations, (name) => console.log(`  ✓ rolled back ${name}`))
+  const { reverted } = await new Migrator(adapter).rollback(migrations, (name) => console.log(`  ✓ rolled back ${name}`), opts)
+  return reverted.length
+}
+
+/** Roll back EVERY native migration (Laravel `migrate:reset`). Returns the count
+ *  reverted. */
+export async function runNativeReset(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+  const { Migrator, discoverMigrations } = await import('../native/index.js')
+  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const reverted = await new Migrator(adapter).rollbackAll(migrations)
+  for (const name of reverted) console.log(`  ✓ rolled back ${name}`)
   return reverted.length
 }
 
 /** Roll back every native migration, then re-run them all. Returns the count
- *  re-applied. */
-export async function runNativeRefresh(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+ *  re-applied. `{ step: true }` re-applies each migration in its own batch. */
+export async function runNativeRefresh(
+  adapter: NativeAdapterLike,
+  cwd: string,
+  opts: { step?: boolean } = {},
+): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
   const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
   const migrator = new Migrator(adapter)
   await migrator.rollbackAll(migrations)
-  const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`))
+  const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`), opts)
   return applied.length
 }
 
@@ -523,6 +562,36 @@ export async function writeNativeMigration(
   return { filePath, contents }
 }
 
+// ─── CLI flag parsing (Laravel migrate flag parity) ──────
+
+/** Whether a `--name` (or `--name=…`) flag is present. */
+export function hasFlag(args: readonly string[], name: string): boolean {
+  return args.some(a => a === `--${name}` || a.startsWith(`--${name}=`))
+}
+
+/** Parse the numeric value of a `--name=N` or `--name N` flag. Returns undefined
+ *  when the flag is absent or carries no numeric value (e.g. a bare `--name`). */
+export function flagNumber(args: readonly string[], name: string): number | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === `--${name}`) {
+      const next = args[i + 1]
+      return next !== undefined && /^\d+$/.test(next) ? Number(next) : undefined
+    }
+    if (a.startsWith(`--${name}=`)) {
+      const v = a.slice(name.length + 3)
+      return /^\d+$/.test(v) ? Number(v) : undefined
+    }
+  }
+  return undefined
+}
+
+/** Resolve the `--step` flag for rollback: its numeric value, or 1 for a bare
+ *  `--step`, or undefined when absent. */
+export function rollbackStep(args: readonly string[]): number | undefined {
+  return hasFlag(args, 'step') ? (flagNumber(args, 'step') ?? 1) : undefined
+}
+
 // ─── Command Registration ─────────────────────────────────
 
 /**
@@ -571,11 +640,17 @@ export function registerMigrateCommands(
   }
 
   // ── migrate ───────────────────────────────────────────
-  rudder.command('migrate', async () => {
+  // Flags (native engine): --step (each migration its own batch), --pretend
+  // (print SQL, run nothing), --force (accepted; we never prompt, so a no-op).
+  rudder.command('migrate', async (args: string[]) => {
     const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
-      const count = await runNativeMigrate(native, cwd)
+      if (hasFlag(args, 'pretend')) {
+        await runNativeMigrate(native, cwd, { pretend: true })
+        return // dry run — schema unchanged, skip type regen
+      }
+      const count = await runNativeMigrate(native, cwd, { step: hasFlag(args, 'step') })
       console.log(count === 0 ? '  Nothing to migrate.' : `  Migrations complete (${count} applied).`)
       await runNativeSchemaTypes(native, cwd)
       return
@@ -584,30 +659,36 @@ export function registerMigrateCommands(
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate')
     console.log('  Migrations complete.')
-  }).description('Run pending database migrations')
+  }).description('Run pending database migrations — flags: --step, --pretend, --force (native)')
 
   // ── migrate:fresh ─────────────────────────────────────
-  rudder.command('migrate:fresh', async () => {
+  rudder.command('migrate:fresh', async (args: string[]) => {
     const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
       const count = await runNativeFresh(native, cwd)
       console.log(`  Database reset complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
       await runNativeSchemaTypes(native, cwd)
+      if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate:fresh')
     console.log('  Database reset complete.')
-  }).description('Drop all tables and re-run all migrations')
+  }).description('Drop all tables and re-run all migrations — flag: --seed (native)')
 
   // ── migrate:rollback ──────────────────────────────────
-  rudder.command('migrate:rollback', async () => {
+  // Flags (native): --step[=N] (last N migrations across batches), --batch=N
+  // (every migration in batch N). Default: the last batch.
+  rudder.command('migrate:rollback', async (args: string[]) => {
     const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
-      const count = await runNativeRollback(native, cwd)
+      const batch = flagNumber(args, 'batch')
+      const step  = rollbackStep(args)
+      const opts = batch !== undefined ? { batch } : step !== undefined ? { step } : {}
+      const count = await runNativeRollback(native, cwd, opts)
       console.log(count === 0 ? '  Nothing to roll back.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
       await runNativeSchemaTypes(native, cwd)
       return
@@ -620,16 +701,36 @@ export function registerMigrateCommands(
       `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
       1,
     )
-  }).description('Roll back the last batch of migrations (native engine only)')
+  }).description('Roll back migrations — flags: --step[=N], --batch=N (native engine only)')
 
-  // ── migrate:refresh ───────────────────────────────────
-  rudder.command('migrate:refresh', async () => {
+  // ── migrate:reset ─────────────────────────────────────
+  rudder.command('migrate:reset', async () => {
     const native = await resolveNative()
     if (native) {
       console.log('  ORM: native')
-      const count = await runNativeRefresh(native, cwd)
+      const count = await runNativeReset(native, cwd)
+      console.log(count === 0 ? '  Nothing to reset.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
+      await runNativeSchemaTypes(native, cwd)
+      return
+    }
+    const orm = requireORM()
+    throw new CliError(
+      `migrate:reset is only supported on the native engine. ${orm} migrations are forward-only — ` +
+      `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
+      1,
+    )
+  }).description('Roll back all migrations (native engine only)')
+
+  // ── migrate:refresh ───────────────────────────────────
+  // Flags (native): --step (re-apply each migration in its own batch), --seed.
+  rudder.command('migrate:refresh', async (args: string[]) => {
+    const native = await resolveNative()
+    if (native) {
+      console.log('  ORM: native')
+      const count = await runNativeRefresh(native, cwd, { step: hasFlag(args, 'step') })
       console.log(`  Refresh complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
       await runNativeSchemaTypes(native, cwd)
+      if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }
     const orm = requireORM()
@@ -638,7 +739,7 @@ export function registerMigrateCommands(
       `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
       1,
     )
-  }).description('Roll back all migrations and re-run them (native engine only)')
+  }).description('Roll back all migrations and re-run them — flags: --step, --seed (native engine only)')
 
   // ── migrate:status ────────────────────────────────────
   rudder.command('migrate:status', async () => {
