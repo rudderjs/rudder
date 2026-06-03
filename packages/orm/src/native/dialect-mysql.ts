@@ -15,7 +15,7 @@
 //     boolean default renders as `1`/`0` (same as SQLite).
 
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, quoteValueList, type Dialect } from './dialect.js'
+import { validateIdentifier, quoteValueList, type Dialect, type DatePart } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
@@ -46,6 +46,19 @@ export class MysqlDialect implements Dialect {
   // `boolean` cast reads `0`/`1` back), same as SQLite.
   booleanLiteral(value: boolean): string {
     return value ? '1' : '0'
+  }
+
+  // MySQL ships dedicated extraction functions: DATE()/TIME() return date/time
+  // values that compare against bound 'YYYY-MM-DD' / 'HH:MM:SS' text, and
+  // DAY()/MONTH()/YEAR() return integers.
+  dateExtract(part: DatePart, column: string): string {
+    switch (part) {
+      case 'date':  return `DATE(${column})`
+      case 'time':  return `TIME(${column})`
+      case 'day':   return `DAY(${column})`
+      case 'month': return `MONTH(${column})`
+      case 'year':  return `YEAR(${column})`
+    }
   }
 
   // MySQL 8 row-level locking — suffix trails ORDER BY / LIMIT. `FOR SHARE`

@@ -22,7 +22,7 @@ import type {
   JoinClause,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import type { Dialect } from './dialect.js'
+import type { Dialect, DatePart } from './dialect.js'
 import type { Executor, Row, AffectingExecutor } from './driver.js'
 import {
   compileSelect,
@@ -173,6 +173,76 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     this._conditions.push({ kind: 'column', boolean, left, operator, right: rightCol })
   }
 
+  // ── date-component predicates (whereDate / whereTime / whereDay / …) ──
+
+  whereDate(column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): this {
+    this._pushDatePart('AND', 'date', column, operatorOrValue, value)
+    return this
+  }
+
+  orWhereDate(column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): this {
+    this._pushDatePart('OR', 'date', column, operatorOrValue, value)
+    return this
+  }
+
+  whereTime(column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): this {
+    this._pushDatePart('AND', 'time', column, operatorOrValue, value)
+    return this
+  }
+
+  orWhereTime(column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): this {
+    this._pushDatePart('OR', 'time', column, operatorOrValue, value)
+    return this
+  }
+
+  whereDay(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('AND', 'day', column, operatorOrValue, value)
+    return this
+  }
+
+  orWhereDay(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('OR', 'day', column, operatorOrValue, value)
+    return this
+  }
+
+  whereMonth(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('AND', 'month', column, operatorOrValue, value)
+    return this
+  }
+
+  orWhereMonth(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('OR', 'month', column, operatorOrValue, value)
+    return this
+  }
+
+  whereYear(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('AND', 'year', column, operatorOrValue, value)
+    return this
+  }
+
+  orWhereYear(column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): this {
+    this._pushDatePart('OR', 'year', column, operatorOrValue, value)
+    return this
+  }
+
+  private _pushDatePart(
+    boolean: 'AND' | 'OR',
+    part: DatePart,
+    column: string,
+    operatorOrValue: WhereOperator | unknown,
+    value?: unknown,
+  ): void {
+    // Two-arg form (`whereDate('createdAt', '2026-01-01')`) means equality;
+    // three-arg carries the operator in the middle (Laravel semantics).
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const rawValue = value === undefined ? operatorOrValue : value
+    this._conditions.push({
+      kind: 'date', boolean, part, column,
+      operator,
+      value: normalizeDatePartValue(part, rawValue),
+    })
+  }
+
   whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
     this._addGroup('AND', fn)
     return this
@@ -183,12 +253,29 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  private _addGroup(boolean: 'AND' | 'OR', fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): void {
+  /** Negated group — `NOT (…)` around the callback's conditions (Laravel's
+   *  `whereNot`). An empty callback is a no-op, same as `whereGroup`. */
+  whereNot(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    this._addGroup('AND', fn, true)
+    return this
+  }
+
+  /** OR-rooted {@link whereNot} — `… OR NOT (…)`. */
+  orWhereNot(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    this._addGroup('OR', fn, true)
+    return this
+  }
+
+  private _addGroup(boolean: 'AND' | 'OR', fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void, negated = false): void {
     const sub = new NativeQueryBuilder<T>(this.executor, this.dialect, this.table, this.primaryKey)
       ._markSubBuilder()
     fn(sub)
     if (sub._conditions.length === 0) return // empty group is a no-op
-    this._conditions.push({ kind: 'group', boolean, children: sub._conditions })
+    this._conditions.push(
+      negated
+        ? { kind: 'group', boolean, children: sub._conditions, negated: true }
+        : { kind: 'group', boolean, children: sub._conditions },
+    )
   }
 
   orderBy(column: string | Expression, direction: 'ASC' | 'DESC' = 'ASC'): this {
@@ -783,4 +870,32 @@ export class NativeJoinClause implements JoinClause {
     this.conditions.push({ kind: 'where', boolean, clause: { column, operator, value: val } })
     return this
   }
+}
+
+/**
+ * Normalize a date-helper comparison value for binding (Laravel accepts a
+ * `DateTimeInterface` everywhere; the JS analogue is `Date`):
+ *
+ * - `Date` → the matching component, **UTC-based** (`'YYYY-MM-DD'` for `date`,
+ *   `'HH:MM:SS'` for `time`, integers for `day`/`month`/`year`) — consistent
+ *   with the ORM storing ISO-8601/UTC timestamps.
+ * - numeric strings on `day`/`month`/`year` → `Number`, so a `'05'` compares
+ *   against the dialect's INTEGER extraction (SQLite never equates TEXT with
+ *   INTEGER; pg/mysql would have to coerce).
+ * - everything else passes through and binds as-is.
+ */
+function normalizeDatePartValue(part: DatePart, value: unknown): unknown {
+  if (value instanceof Date) {
+    switch (part) {
+      case 'date':  return value.toISOString().slice(0, 10)
+      case 'time':  return value.toISOString().slice(11, 19)
+      case 'day':   return value.getUTCDate()
+      case 'month': return value.getUTCMonth() + 1
+      case 'year':  return value.getUTCFullYear()
+    }
+  }
+  if ((part === 'day' || part === 'month' || part === 'year') && typeof value === 'string' && /^\d+$/.test(value)) {
+    return Number(value)
+  }
+  return value
 }

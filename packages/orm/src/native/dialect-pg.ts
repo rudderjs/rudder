@@ -10,7 +10,7 @@
 // validated through the shared {@link validateIdentifier} security gate.
 
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, quoteValueList, type Dialect } from './dialect.js'
+import { validateIdentifier, quoteValueList, type Dialect, type DatePart } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
@@ -40,6 +40,21 @@ export class PgDialect implements Dialect {
   // `true`/`false` keyword.
   booleanLiteral(value: boolean): string {
     return value ? 'true' : 'false'
+  }
+
+  // Postgres date-component extraction: `::date`/`::time` casts compare against
+  // a bound text value (the planner types the parameter from context), and
+  // `EXTRACT(... )::int` yields a real integer for `day`/`month`/`year`
+  // (EXTRACT alone returns `numeric`, which compares fine, but `::int` keeps
+  // the driver-returned value an int for any projection reuse).
+  dateExtract(part: DatePart, column: string): string {
+    switch (part) {
+      case 'date':  return `${column}::date`
+      case 'time':  return `${column}::time`
+      case 'day':   return `EXTRACT(DAY FROM ${column})::int`
+      case 'month': return `EXTRACT(MONTH FROM ${column})::int`
+      case 'year':  return `EXTRACT(YEAR FROM ${column})::int`
+    }
   }
 
   // Real row-level pessimistic locking — the suffix trails ORDER BY / LIMIT.
