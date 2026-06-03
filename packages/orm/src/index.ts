@@ -65,6 +65,7 @@ import {
   attachPolymorphicRelations,
 } from './polymorphic-eager-load.js'
 import { attachDirectRelations } from './direct-eager-load.js'
+import { ConnectionManager } from './connection-manager.js'
 import {
   CursorPaginator,
   encodeCursor,
@@ -94,6 +95,8 @@ export { AggregateConstraintBuilder, AGGREGATES_SYMBOL }    from './aggregate.js
 export type { AggregateConstraint, AggregateSumSpec } from './aggregate.js'
 export { pruneModels }                              from './prune.js'
 export type { PruneOptions, PruneReport }           from './prune.js'
+export { ConnectionManager }                        from './connection-manager.js'
+export type { ConnectionFactory }                   from './connection-manager.js'
 export { CursorPaginator, encodeCursor, decodeCursor } from './cursor-paginator.js'
 export type { CursorOrder }                         from './cursor-paginator.js'
 export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
@@ -117,13 +120,16 @@ interface OrmRegistryStore {
   models:    Map<string, typeof Model>
   listeners: Set<(name: string, ModelClass: typeof Model) => void>
   /**
-   * Holds the transaction-scoped adapter for the duration of a
-   * `Model.transaction()` callback (see {@link ensureTxStorage}). Lazily created
+   * Holds the transaction-scoped adapters for the duration of a
+   * `Model.transaction()` callback (see {@link ensureTxStorage}), keyed by
+   * connection name so a transaction on a *named* connection never captures
+   * default-connection queries (and vice versa) — `transaction(fn,
+   * { connection: 'reporting' })` scopes only `'reporting'`. Lazily created
    * on first use so `node:async_hooks` is never imported at module-eval time —
    * keeping the main entry client-bundle-safe. `null` until the first
    * transaction (and in non-Node runtimes that never call `transaction()`).
    */
-  txStorage: AsyncLocalStorage<OrmAdapter> | null
+  txStorage: AsyncLocalStorage<ReadonlyMap<string, OrmAdapter>> | null
 }
 
 const _g = globalThis as Record<string, unknown>
@@ -147,12 +153,23 @@ _store.txStorage ??= null
  * `transaction()`, so the main entry's eval graph stays free of `node:` imports
  * (Client Bundle Smoke gate). Idempotent and shared via `_store`.
  */
-async function ensureTxStorage(): Promise<AsyncLocalStorage<OrmAdapter>> {
+async function ensureTxStorage(): Promise<AsyncLocalStorage<ReadonlyMap<string, OrmAdapter>>> {
   if (_store.txStorage) return _store.txStorage
   const { AsyncLocalStorage } = await import('node:async_hooks')
   // Re-check after the await — a concurrent caller may have set it.
-  _store.txStorage ??= new AsyncLocalStorage<OrmAdapter>()
+  _store.txStorage ??= new AsyncLocalStorage<ReadonlyMap<string, OrmAdapter>>()
   return _store.txStorage
+}
+
+/**
+ * The transaction-ALS key for a connection. Named connections key by their
+ * config name; the default connection keys by `config('database.default')`
+ * when a provider pushed it ({@link ConnectionManager.setDefaultName}), or a
+ * fixed sentinel for standalone ORM use (no framework boot — there is only
+ * one connection, so any stable key works).
+ */
+function _connKey(name?: string): string {
+  return name ?? ConnectionManager.defaultName() ?? '__default__'
 }
 
 /**
@@ -173,8 +190,15 @@ async function ensureTxStorage(): Promise<AsyncLocalStorage<OrmAdapter>> {
  * @throws if the active adapter doesn't implement `transaction()` (capability is
  *   optional on the contract; the native engine supports it).
  */
-export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
-  const adapter = ModelRegistry.getAdapter()
+export async function transaction<T>(fn: () => Promise<T>, opts?: { connection?: string }): Promise<T> {
+  // Named connection → the outer tx-scoped adapter when nested (so nesting
+  // opens a SAVEPOINT, mirroring the default path's ALS lookup), else resolve
+  // through the ConnectionManager (opens lazily on first use). Default → the
+  // registry adapter, exactly as before — `getAdapter()` already prefers the
+  // scoped map, so a nested default transaction SAVEPOINTs too.
+  const adapter = opts?.connection !== undefined
+    ? ModelRegistry.getScopedAdapter(opts.connection) ?? await ConnectionManager.ensure(opts.connection)
+    : ModelRegistry.getAdapter()
   if (typeof adapter.transaction !== 'function') {
     throw new Error(
       '[RudderJS ORM] The active database adapter does not support transactions. ' +
@@ -182,8 +206,16 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
       'adapters do not expose `transaction()` yet.',
     )
   }
+  const key = _connKey(opts?.connection)
   const storage = await ensureTxStorage()
-  return adapter.transaction((txAdapter) => storage.run(txAdapter, fn))
+  return adapter.transaction((txAdapter) => {
+    // Layer this connection's tx scope over any outer scopes — a transaction
+    // on 'reporting' inside a default-connection transaction leaves the
+    // default's scope intact (per-connection isolation, Laravel parity).
+    const next = new Map(storage.getStore() ?? [])
+    next.set(key, txAdapter)
+    return storage.run(next, fn)
+  })
 }
 
 // ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
@@ -263,17 +295,38 @@ export class ModelRegistry {
     return _store.adapter
   }
 
-  static getAdapter(): OrmAdapter {
+  static getAdapter(name?: string): OrmAdapter {
     // Inside a `transaction()` callback, return the transaction-scoped adapter so
-    // every query joins the open transaction. `getStore()` is sync and cheap;
-    // it's `undefined` outside a transaction (and `txStorage` is `null` until the
-    // first transaction ever runs), so the normal path is unaffected.
-    const scoped = _store.txStorage?.getStore()
+    // every query joins the open transaction — looked up by connection name, so a
+    // named-connection transaction never captures default queries. `getStore()`
+    // is sync and cheap; it's `undefined` outside a transaction (and `txStorage`
+    // is `null` until the first transaction ever runs), so the normal path is
+    // unaffected.
+    const scoped = _store.txStorage?.getStore()?.get(_connKey(name))
     if (scoped) return scoped
+    // Named connection outside any transaction → must already be open (the
+    // async open lives in ConnectionManager.ensure / the deferred QB path).
+    if (name !== undefined && name !== ConnectionManager.defaultName()) {
+      const opened = ConnectionManager.peek(name)
+      if (opened) return opened
+      throw new Error(
+        `[RudderJS ORM] Database connection '${name}' is not open. Open it first ` +
+          `(e.g. \`await DB.connection('${name}').select(...)\` or ` +
+          `\`await ConnectionManager.ensure('${name}')\`).`,
+      )
+    }
     if (!_store.adapter) {
       throw new Error('[RudderJS ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
     }
     return _store.adapter
+  }
+
+  /** The transaction-scoped adapter for a connection when the caller is inside
+   *  a `transaction()` callback on it — else `null`. Sync and allocation-free;
+   *  used by the DB facade bridge and the named-connection query path so both
+   *  transparently join an open transaction. */
+  static getScopedAdapter(name?: string): OrmAdapter | null {
+    return _store.txStorage?.getStore()?.get(_connKey(name)) ?? null
   }
 
   /**

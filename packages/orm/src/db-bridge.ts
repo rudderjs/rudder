@@ -17,8 +17,20 @@
 // runner so `DB.transaction(fn)` reuses the ORM's `AsyncLocalStorage` scoping —
 // every `Model.*` AND `DB.*` call inside `fn` joins the one open transaction.
 
-import { registerAdapterResolver, registerTransactionRunner } from '@rudderjs/database'
-import { ModelRegistry, transaction } from './index.js'
+import {
+  registerAdapterResolver,
+  registerTransactionRunner,
+  registerConnectionResolver,
+  registerNamedTransactionRunner,
+} from '@rudderjs/database'
+import { ModelRegistry, ConnectionManager, transaction } from './index.js'
 
 registerAdapterResolver(() => ModelRegistry.getAdapter())
 registerTransactionRunner(transaction)
+// Named connections: prefer the transaction-scoped adapter (so a
+// `DB.connection(name).select()` inside `transaction(fn, { connection: name })`
+// joins that open transaction), else open-or-reuse via the ConnectionManager.
+registerConnectionResolver(
+  async (name) => ModelRegistry.getScopedAdapter(name) ?? ConnectionManager.ensure(name),
+)
+registerNamedTransactionRunner((name, fn) => transaction(fn, { connection: name }))

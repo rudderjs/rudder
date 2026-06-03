@@ -19,7 +19,7 @@
 // affect the client-bundle gate.
 
 import { ServiceProvider, config } from '@rudderjs/core'
-import { ModelRegistry } from '../index.js'
+import { ModelRegistry, ConnectionManager } from '../index.js'
 import { NativeAdapter } from './adapter.js'
 import type { NativeDriverName } from './adapter.js'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter and
@@ -54,6 +54,23 @@ export interface NativeDatabaseConfig {
   connections: Record<string, NativeDatabaseConnectionConfig>
 }
 
+/** Native ships three drivers: sqlite (better-sqlite3), pg (postgres), and
+ *  mysql (mysql2). Validate the configured name (runs inside the connection
+ *  factory, so a typo on a NAMED connection surfaces at first use; the default
+ *  connection's factory runs eagerly at boot) — `NativeAdapter.make` then
+ *  lazy-loads the matching optional peer and surfaces a clear install /
+ *  connection error if it's missing or the URL is unreachable. */
+function validateDriver(driver: string, connection: string): NativeDriverName {
+  const KNOWN: readonly NativeDriverName[] = ['sqlite', 'pg', 'mysql']
+  if (!KNOWN.includes(driver as NativeDriverName)) {
+    throw new Error(
+      `[RudderJS ORM native] Unknown native driver \`${driver}\` (connection '${connection}') — supported drivers ` +
+      `are ${KNOWN.map((d) => `\`${d}\``).join(', ')}. (Postgres uses \`pg\`, MySQL uses \`mysql\`.)`,
+    )
+  }
+  return driver as NativeDriverName
+}
+
 /**
  * Auto-discovered (via `rudderjs.providerSubpath: './native/provider'`) service provider
  * that boots a `NativeAdapter` from `config('database')` — but only when the
@@ -66,30 +83,39 @@ export class NativeDatabaseProvider extends ServiceProvider {
 
   async boot(): Promise<void> {
     const cfg = config<NativeDatabaseConfig | undefined>('database', undefined)
-    const conn = cfg?.connections[cfg.default]
+    if (!cfg) return
 
-    // Inert unless this app explicitly selected the native engine. This is the
-    // collision guard: prisma/drizzle apps discover this provider but skip here.
-    if (!conn || conn.engine !== 'native') return
-
-    // Native ships three drivers: sqlite (better-sqlite3), pg (postgres), and
-    // mysql (mysql2). Validate the configured name here — `NativeAdapter.make`
-    // then lazy-loads the matching optional peer and surfaces a clear install /
-    // connection error if it's missing or the URL is unreachable.
-    const driver = conn.driver ?? 'sqlite'
-    const KNOWN: readonly NativeDriverName[] = ['sqlite', 'pg', 'mysql']
-    if (!KNOWN.includes(driver as NativeDriverName)) {
-      throw new Error(
-        `[RudderJS ORM native] Unknown native driver \`${driver}\` — supported drivers ` +
-        `are ${KNOWN.map((d) => `\`${d}\``).join(', ')}. (Postgres uses \`pg\`, MySQL uses \`mysql\`.)`,
+    // Register a LAZY factory for every connection that selects the native
+    // engine — named connections (`DB.connection('reporting')`, per-model
+    // `static connection`) open on first use. Registering does no I/O and no
+    // driver import, so `connections` keeps its menu semantics: an entry
+    // nobody uses never opens (or even imports its optional-peer driver).
+    // Other connection shapes (prisma/drizzle) are skipped here; their own
+    // providers register those.
+    for (const [name, conn] of Object.entries(cfg.connections)) {
+      if (conn?.engine !== 'native') continue
+      ConnectionManager.register(name, () =>
+        NativeAdapter.make({
+          driver: validateDriver(conn.driver ?? 'sqlite', name),
+          connectionName: name,
+          ...(conn.url !== undefined && { url: conn.url }),
+          ...(conn.primaryKey !== undefined && { primaryKey: conn.primaryKey }),
+        }),
       )
     }
+    ConnectionManager.setDefaultName(cfg.default)
 
-    const adapter = await NativeAdapter.make({
-      driver: driver as NativeDriverName,
-      ...(conn.url !== undefined && { url: conn.url }),
-      ...(conn.primaryKey !== undefined && { primaryKey: conn.primaryKey }),
-    })
+    const conn = cfg.connections[cfg.default]
+
+    // Inert unless this app explicitly selected the native engine as the
+    // DEFAULT. This is the collision guard: prisma/drizzle apps discover this
+    // provider but skip here (any `engine: 'native'` NAMED connections they
+    // declare were still registered above — lazily, so they stay dormant).
+    if (!conn || conn.engine !== 'native') return
+
+    // Eager default boot — resolved through the same ConnectionManager entry
+    // so `DB.connection(cfg.default)` and the Models share ONE adapter/driver.
+    const adapter = await ConnectionManager.ensure(cfg.default)
 
     ModelRegistry.set(adapter)
     this.app.instance('db', adapter)

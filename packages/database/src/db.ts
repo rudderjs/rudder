@@ -12,7 +12,12 @@
 // throws a clear error naming that adapter.
 
 import type { OrmAdapter, QueryListener, Row } from '@rudderjs/contracts'
-import { resolveAdapter, resolveTransactionRunner } from './registry-bridge.js'
+import {
+  resolveAdapter,
+  resolveTransactionRunner,
+  resolveConnectionResolver,
+  resolveNamedTransactionRunner,
+} from './registry-bridge.js'
 import { Expression, raw } from './expression.js'
 
 function adapterName(adapter: OrmAdapter): string {
@@ -47,6 +52,23 @@ function requireOnQuery(adapter: OrmAdapter): NonNullable<OrmAdapter['onQuery']>
     )
   }
   return adapter.onQuery.bind(adapter)
+}
+
+/**
+ * A scoped facade over one NAMED connection — what `DB.connection('reporting')`
+ * returns. Same raw-SQL surface as `DB`, resolved against that connection's
+ * adapter (opened lazily on first use). One divergence from the root facade:
+ * `listen()` is async here, because attaching the listener may first open the
+ * connection.
+ */
+export interface DBConnection {
+  select(sql: string, bindings?: readonly unknown[]): Promise<Row[]>
+  insert(sql: string, bindings?: readonly unknown[]): Promise<number>
+  update(sql: string, bindings?: readonly unknown[]): Promise<number>
+  delete(sql: string, bindings?: readonly unknown[]): Promise<number>
+  statement(sql: string, bindings?: readonly unknown[]): Promise<number>
+  transaction<T>(fn: () => Promise<T>): Promise<T>
+  listen(listener: QueryListener): Promise<void>
 }
 
 /**
@@ -119,5 +141,44 @@ export const DB = {
   /** Wrap a literal SQL fragment so the query layer splices it verbatim. */
   raw(value: string | number): Expression {
     return raw(value)
+  },
+
+  /**
+   * A facade scoped to a NAMED connection from `config/database.ts`'s
+   * `connections` map, mirroring Laravel's `DB::connection('name')`. The
+   * connection opens lazily on the first executed call (cheap to call this
+   * method itself — it resolves nothing). Inside a `transaction(fn,
+   * { connection: name })` callback, calls on the matching scoped facade join
+   * that open transaction.
+   *
+   * @example
+   * const rows = await DB.connection('reporting').select('select * from stats')
+   * await DB.connection('reporting').transaction(async () => { ... })
+   */
+  connection(name: string): DBConnection {
+    const adapterFor = async (): Promise<OrmAdapter> => resolveConnectionResolver()(name)
+    return {
+      async select(sql, bindings = []) {
+        return requireSelectRaw(await adapterFor())(sql, bindings)
+      },
+      async insert(sql, bindings = []) {
+        return requireAffecting(await adapterFor())(sql, bindings)
+      },
+      async update(sql, bindings = []) {
+        return requireAffecting(await adapterFor())(sql, bindings)
+      },
+      async delete(sql, bindings = []) {
+        return requireAffecting(await adapterFor())(sql, bindings)
+      },
+      async statement(sql, bindings = []) {
+        return requireAffecting(await adapterFor())(sql, bindings)
+      },
+      async transaction(fn) {
+        return resolveNamedTransactionRunner()(name, fn)
+      },
+      async listen(listener) {
+        requireOnQuery(await adapterFor())(listener)
+      },
+    }
   },
 } as const
