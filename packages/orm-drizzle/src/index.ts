@@ -1774,25 +1774,47 @@ interface DrizzleClientCacheEntry {
 }
 const DRIZZLE_CLIENT_CACHE_KEY = '__rudderjs_drizzle_client__'
 
-/**
- * Return the cached drizzle client when its connection signature is unchanged.
- * On a signature change, dispose the superseded driver (fire-and-forget — the
- * new client doesn't wait on the old one closing) and report a miss.
- */
-function reusableDrizzleClient(signature: string): { db: DrizzleDb; dialect: DrizzleDialect } | undefined {
+// One cache entry PER CONNECTION (multi-connection support): named connections
+// key by their config name so each holds its own client and a config edit
+// disposes/reopens only that connection; unnamed standalone make() calls key
+// by the signature itself (no supersede semantics — standalone use has no dev
+// re-boot loop). Mirrors @rudderjs/orm's native client cache.
+function drizzleClientCache(): Map<string, DrizzleClientCacheEntry> {
   const g = globalThis as Record<string, unknown>
-  const cached = g[DRIZZLE_CLIENT_CACHE_KEY] as DrizzleClientCacheEntry | undefined
+  let cache = g[DRIZZLE_CLIENT_CACHE_KEY]
+  if (!(cache instanceof Map)) {
+    const map = new Map<string, DrizzleClientCacheEntry>()
+    // Pre-map single-entry shape from an older bundle of this module (dev
+    // re-boot across a version edit) — keep the live client, keyed by its
+    // signature so an unnamed lookup still reuses it.
+    const legacy = cache as DrizzleClientCacheEntry | undefined
+    if (legacy && typeof legacy.signature === 'string') map.set(legacy.signature, legacy)
+    g[DRIZZLE_CLIENT_CACHE_KEY] = map
+    cache = map
+  }
+  return cache as Map<string, DrizzleClientCacheEntry>
+}
+
+/**
+ * Return the cached drizzle client when this connection's signature is
+ * unchanged. On a signature change, dispose the superseded driver
+ * (fire-and-forget — the new client doesn't wait on the old one closing) and
+ * report a miss.
+ */
+function reusableDrizzleClient(cacheKey: string, signature: string): { db: DrizzleDb; dialect: DrizzleDialect } | undefined {
+  const cache = drizzleClientCache()
+  const cached = cache.get(cacheKey)
   if (!cached) return undefined
   if (cached.signature === signature) return { db: cached.db, dialect: cached.dialect }
   void Promise.resolve()
     .then(() => cached.dispose())
     .catch(() => { /* best effort — releasing a superseded connection */ })
-  delete g[DRIZZLE_CLIENT_CACHE_KEY]
+  cache.delete(cacheKey)
   return undefined
 }
 
-function cacheDrizzleClient(entry: DrizzleClientCacheEntry): void {
-  ;(globalThis as Record<string, unknown>)[DRIZZLE_CLIENT_CACHE_KEY] = entry
+function cacheDrizzleClient(cacheKey: string, entry: DrizzleClientCacheEntry): void {
+  drizzleClientCache().set(cacheKey, entry)
 }
 
 // ─── Drizzle Adapter ───────────────────────────────────────
@@ -1831,7 +1853,8 @@ export class DrizzleAdapter implements OrmAdapter {
       // Reuse the live client across dev re-boots when driver + url are unchanged;
       // a changed signature disposes the superseded driver. See reusableDrizzleClient().
       const signature = `${driver}::${url}`
-      const reused = reusableDrizzleClient(signature)
+      const cacheKey = config.connectionName ?? signature
+      const reused = reusableDrizzleClient(cacheKey, signature)
       if (reused) {
         db = reused.db
         resolvedDialect ??= reused.dialect
@@ -1876,7 +1899,7 @@ export class DrizzleAdapter implements OrmAdapter {
           resolvedDialect ??= 'sqlite'
         }
 
-        cacheDrizzleClient({ signature, db, dialect: resolvedDialect ?? 'sqlite', dispose })
+        cacheDrizzleClient(cacheKey, { signature, db, dialect: resolvedDialect ?? 'sqlite', dispose })
       }
     }
 
@@ -2051,6 +2074,11 @@ export interface DrizzleConfig {
   tables?: Record<string, unknown>
   /** Primary key column name. Defaults to 'id' */
   primaryKey?: string
+  /** The `config/database.ts` connection name this adapter serves (passed by
+   *  the provider / ConnectionManager factory). Keys the dev-HMR client cache
+   *  so each named connection holds its own client and a config edit disposes
+   *  only that connection's superseded one. Omitted for standalone use. */
+  connectionName?: string
   /**
    * SQL dialect — drives capability branching for batch updates and
    * counter operations. MySQL has no `RETURNING`, so increment/decrement
@@ -2104,6 +2132,7 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
 import { ServiceProvider, config as appConfig } from '@rudderjs/core'
 import {
   ModelRegistry,
+  ConnectionManager,
   MissingEmbedderError,
   VectorStorageUnsupportedError,
 } from '@rudderjs/orm'
@@ -2115,6 +2144,14 @@ export interface DatabaseConnectionConfig {
    *  `client` whose driver name doesn't map cleanly (e.g. planetscale
    *  serverless → 'mysql', neon serverless → 'pg'). */
   dialect?: DrizzleDialect
+  /** Engine discriminator — connections claiming another engine (e.g.
+   *  `'native'`) are skipped by this provider. */
+  engine?:  string
+  /** Read/write split is not implemented on the Drizzle adapter yet —
+   *  configuring these throws at boot (the native engine supports them). */
+  read?:    unknown
+  write?:   unknown
+  sticky?:  boolean
 }
 
 /**
@@ -2149,20 +2186,48 @@ export class DatabaseProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg = appConfig<DatabaseConfig | undefined>('database', undefined)
 
-    const drizzleConfig: DrizzleConfig = {}
-
     if (cfg) {
-      const conn = cfg.connections[cfg.default]
-      if (conn) {
-        drizzleConfig.driver = conn.driver
-        if (conn.url !== undefined) drizzleConfig.url = conn.url
-        if (conn.dialect !== undefined) drizzleConfig.dialect = conn.dialect
+      // Register a LAZY factory for every connection this adapter claims —
+      // connections selecting another engine (the native engine's
+      // `engine: 'native'`) are skipped; their own provider registers those.
+      // Named connections (`DB.connection('reporting')`, per-model
+      // `static connection`) open on first use; registering does no I/O and
+      // no driver import. `tables` is adapter-global (a schema describes
+      // shape, not location) so every factory shares it; a pre-built
+      // `cfg.client` applies to the DEFAULT connection only.
+      for (const [name, conn] of Object.entries(cfg.connections)) {
+        if (conn?.engine !== undefined && conn.engine !== 'drizzle') continue
+        // Read/write split is not implemented on the Drizzle adapter yet — a
+        // silent ignore would silently serve every read from the writer, so
+        // fail loudly at boot. (The native engine supports read/write/sticky.)
+        if (conn.read !== undefined || conn.write !== undefined) {
+          throw new Error(
+            `[RudderJS ORM Drizzle] Connection '${name}': read/write splitting is not implemented ` +
+              `on the Drizzle adapter yet — the native engine (engine: 'native') supports ` +
+              `read/write/sticky natively.`,
+          )
+        }
+        ConnectionManager.register(name, () =>
+          DrizzleAdapter.make({
+            driver: conn.driver,
+            connectionName: name,
+            ...(conn.url !== undefined && { url: conn.url }),
+            ...(conn.dialect !== undefined && { dialect: conn.dialect }),
+            ...(cfg.tables && { tables: cfg.tables }),
+            ...(cfg.client && name === cfg.default ? { client: cfg.client } : {}),
+          }),
+        )
       }
-      if (cfg.tables) drizzleConfig.tables = cfg.tables
-      if (cfg.client) drizzleConfig.client = cfg.client
+      ConnectionManager.setDefaultName(cfg.default)
     }
 
-    const adapter = await DrizzleAdapter.make(drizzleConfig)
+    // Eager default boot — resolved through the same ConnectionManager entry
+    // (when the config declares it) so `DB.connection(cfg.default)` and the
+    // Models share ONE adapter/client. The no-config fallback keeps the
+    // historical zero-config behavior.
+    const adapter = cfg && ConnectionManager.has(cfg.default)
+      ? await ConnectionManager.ensure(cfg.default) as DrizzleAdapter
+      : await DrizzleAdapter.make({})
     await adapter.connect()
 
     ModelRegistry.set(adapter)

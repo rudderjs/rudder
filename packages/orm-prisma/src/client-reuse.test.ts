@@ -58,8 +58,13 @@ describe('PrismaAdapter.make — dev HMR client reuse', () => {
   it('builds a fresh client and disconnects the superseded one when the signature changes', async () => {
     const { FakeClient, built } = fakePrismaClientClass()
 
-    const a1 = await makeAdapter({ driver: 'sqlite', url: ':memory:', PrismaClient: FakeClient })
-    const a2 = await makeAdapter({ driver: 'sqlite', url: 'file:./other.db', PrismaClient: FakeClient })
+    // The provider always passes the connection NAME (multi-connection: the
+    // cache keys per name so a config edit disposes only that connection's
+    // superseded client — the leak-fix lifecycle this test pins lives on the
+    // named/provider path). Unnamed standalone make() keys by signature and
+    // has no supersede semantics — see connections.test.ts.
+    const a1 = await makeAdapter({ driver: 'sqlite', url: ':memory:', connectionName: 'main', PrismaClient: FakeClient })
+    const a2 = await makeAdapter({ driver: 'sqlite', url: 'file:./other.db', connectionName: 'main', PrismaClient: FakeClient })
     await settle() // the superseded $disconnect() is fire-and-forget on a microtask
 
     assert.equal(built.length, 2, 'a changed connection url builds a new client')
