@@ -22,7 +22,7 @@ import type {
   JoinClause,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import type { Dialect, DatePart } from './dialect.js'
+import { parseJsonPath, type Dialect, type DatePart } from './dialect.js'
 import type { Executor, Row, AffectingExecutor } from './driver.js'
 import {
   compileSelect,
@@ -137,6 +137,14 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   private _pushClause(boolean: 'AND' | 'OR', column: string, operator: WhereOperator, value: unknown): void {
+    // Arrow column (`meta->prefs->lang`) = a JSON-path predicate, Laravel-style.
+    // Detection here covers where/orWhere AND everything composed from them:
+    // group callbacks, whereNot, and the whereIn/whereNull/whereBetween sugar.
+    if (column.includes('->')) {
+      const { column: col, segments } = parseJsonPath(column)
+      this._conditions.push({ kind: 'json', boolean, column: col, segments, operator, value })
+      return
+    }
     const clause: WhereClause = { column, operator, value }
     this._conditions.push({ kind: 'clause', boolean, clause })
   }
@@ -252,6 +260,76 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       operator,
       value: normalizeDatePartValue(part, rawValue),
     })
+  }
+
+  // ── JSON predicates (whereJsonContains / whereJsonLength) ──
+
+  /** `whereJsonContains('meta->tags', 'php')` — JSON containment at an arrow
+   *  path (or the whole column when no `->`). `value` may be a scalar or an
+   *  array (every element contained). pg `@>`, mysql `JSON_CONTAINS`, sqlite
+   *  emulated via `json_each` EXISTS (scalars only there). */
+  whereJsonContains(column: string, value: unknown): this {
+    this._pushJsonContains('AND', column, value, false)
+    return this
+  }
+
+  /** OR-rooted {@link whereJsonContains}. */
+  orWhereJsonContains(column: string, value: unknown): this {
+    this._pushJsonContains('OR', column, value, false)
+    return this
+  }
+
+  /** Negated {@link whereJsonContains} — `NOT (…)` around the containment. */
+  whereJsonDoesntContain(column: string, value: unknown): this {
+    this._pushJsonContains('AND', column, value, true)
+    return this
+  }
+
+  /** OR-rooted {@link whereJsonDoesntContain}. */
+  orWhereJsonDoesntContain(column: string, value: unknown): this {
+    this._pushJsonContains('OR', column, value, true)
+    return this
+  }
+
+  /** `whereJsonLength('meta->tags', '>', 2)` — compare a JSON array's length.
+   *  Two-arg form (`(column, n)`) is equality. sqlite/pg `json(b)_array_length`,
+   *  mysql `JSON_LENGTH`. */
+  whereJsonLength(column: string, operatorOrValue: WhereOperator | number, value?: number): this {
+    this._pushJsonLength('AND', column, operatorOrValue, value)
+    return this
+  }
+
+  /** OR-rooted {@link whereJsonLength}. */
+  orWhereJsonLength(column: string, operatorOrValue: WhereOperator | number, value?: number): this {
+    this._pushJsonLength('OR', column, operatorOrValue, value)
+    return this
+  }
+
+  private _pushJsonContains(boolean: 'AND' | 'OR', column: string, value: unknown, negated: boolean): void {
+    const target = this._jsonTarget(column)
+    this._conditions.push({ kind: 'jsonContains', boolean, ...target, value, negated })
+  }
+
+  private _pushJsonLength(
+    boolean: 'AND' | 'OR',
+    column: string,
+    operatorOrValue: WhereOperator | number,
+    value?: number,
+  ): void {
+    // Two-arg form (`whereJsonLength('meta->tags', 2)`) means equality;
+    // three-arg carries the operator in the middle (Laravel semantics).
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const count    = value === undefined ? (operatorOrValue as number) : value
+    if (!Number.isInteger(count)) {
+      throw new Error(`[RudderJS ORM native] whereJsonLength expects an integer length, got ${String(count)}.`)
+    }
+    const target = this._jsonTarget(column)
+    this._conditions.push({ kind: 'jsonLength', boolean, ...target, operator, value: count })
+  }
+
+  /** Column-or-arrow-path → `{ column, segments }` ( `[]` segments = whole column). */
+  private _jsonTarget(column: string): { column: string; segments: readonly (string | number)[] } {
+    return column.includes('->') ? parseJsonPath(column) : { column, segments: [] }
   }
 
   whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {

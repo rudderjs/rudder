@@ -724,15 +724,21 @@ export function Cast(type: CastDefinition) {
  *  to cross the node-only/client-reachable module boundary. */
 const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
 
-/** The date-component predicate methods (adapter-implemented SQL, not pure
- *  Model-layer sugar). The hydrating proxy forwards each to the adapter QB when
- *  present, and otherwise throws via {@link adapterMethodUnsupported}. */
-const DATE_PART_METHODS = new Set([
+/** Adapter-implemented predicate methods that are NOT pure Model-layer sugar
+ *  (they need real per-dialect SQL): the date-component helpers and the JSON
+ *  predicates. The hydrating proxy forwards each to the adapter QB when
+ *  present, and otherwise throws via {@link adapterMethodUnsupported} — so an
+ *  adapter without the method (Prisma/Drizzle until their follow-ups) gives a
+ *  clear error instead of a bare `... is not a function` TypeError. */
+const FORWARDED_QB_METHODS = new Set([
   'whereDate', 'orWhereDate',
   'whereTime', 'orWhereTime',
   'whereDay',  'orWhereDay',
   'whereMonth', 'orWhereMonth',
   'whereYear', 'orWhereYear',
+  'whereJsonContains',     'orWhereJsonContains',
+  'whereJsonDoesntContain', 'orWhereJsonDoesntContain',
+  'whereJsonLength',       'orWhereJsonLength',
 ])
 
 /** Clear error for a QB method the active adapter doesn't implement — thrown by
@@ -869,6 +875,37 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   /** OR-rooted {@link whereYear}. */
   orWhereYear(column: string, value: number | string | Date): this
   orWhereYear(column: string, operator: WhereOperator, value: number | string | Date): this
+
+  // ── JSON predicates (adapter SQL, not sugar) ──
+  //
+  // Arrow paths in plain `where()` (`where('meta->prefs->lang', 'en')`) need
+  // no extra surface — the native QB detects `->` in the column. The named
+  // predicates below cover containment and array length.
+  /**
+   * JSON containment — `whereJsonContains('meta->tags', 'php')` keeps rows
+   * whose JSON array/document at the arrow path (or the whole column) contains
+   * `value`. An array value requires EVERY element contained. pg `@>`, mysql
+   * `JSON_CONTAINS`, sqlite emulated via `json_each` (scalar values only
+   * there). **Native engine only for now** — throws a clear unsupported error
+   * on adapters without the method.
+   */
+  whereJsonContains(column: string, value: unknown): this
+  /** OR-rooted {@link whereJsonContains}. */
+  orWhereJsonContains(column: string, value: unknown): this
+  /** Negated {@link whereJsonContains} — `NOT (…)` around the containment. */
+  whereJsonDoesntContain(column: string, value: unknown): this
+  /** OR-rooted {@link whereJsonDoesntContain}. */
+  orWhereJsonDoesntContain(column: string, value: unknown): this
+  /**
+   * Compare a JSON array's length — `whereJsonLength('meta->tags', '>', 2)`
+   * (two-arg form is equality). sqlite/pg `json(b)_array_length`, mysql
+   * `JSON_LENGTH`. Same adapter support as {@link whereJsonContains}.
+   */
+  whereJsonLength(column: string, value: number): this
+  whereJsonLength(column: string, operator: WhereOperator, value: number): this
+  /** OR-rooted {@link whereJsonLength}. */
+  orWhereJsonLength(column: string, value: number): this
+  orWhereJsonLength(column: string, operator: WhereOperator, value: number): this
   /**
    * Negated group — `WHERE NOT (…)` around the callback's conditions, mirroring
    * Laravel's `whereNot`. The callback receives a hydrating sub-builder, so the
@@ -1799,12 +1836,12 @@ export abstract class Model {
             return proxy
           }
         }
-        // Date-component predicates (whereDate/whereTime/whereDay/whereMonth/
-        // whereYear + or* forms) — adapter-implemented SQL (per-dialect date
-        // extraction), NOT pure sugar. Forward when the adapter QB has the
-        // method; otherwise throw a clear unsupported error instead of letting
-        // the call site hit a bare `... is not a function` TypeError.
-        if (typeof prop === 'string' && DATE_PART_METHODS.has(prop)) {
+        // Adapter-implemented predicates (date-component helpers + JSON
+        // predicates) — per-dialect SQL, NOT pure sugar. Forward when the
+        // adapter QB has the method; otherwise throw a clear unsupported error
+        // instead of letting the call site hit a bare `... is not a function`
+        // TypeError.
+        if (typeof prop === 'string' && FORWARDED_QB_METHODS.has(prop)) {
           const impl = (target as Record<string, unknown>)[prop]
           if (typeof impl !== 'function') {
             return () => { throw adapterMethodUnsupported(prop) }
@@ -2204,6 +2241,19 @@ export abstract class Model {
     return (value === undefined
       ? Model._q(this).whereYear(column, operatorOrValue as number | string | Date)
       : Model._q(this).whereYear(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereJsonContains<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereJsonContains(column, value)
+  }
+  static whereJsonDoesntContain<T extends typeof Model>(this: T, column: string, value: unknown): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereJsonDoesntContain(column, value)
+  }
+  static whereJsonLength<T extends typeof Model>(this: T, column: string, value: number): HydratingQueryBuilder<InstanceType<T>>
+  static whereJsonLength<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: number): HydratingQueryBuilder<InstanceType<T>>
+  static whereJsonLength<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | number, value?: number): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereJsonLength(column, operatorOrValue as number)
+      : Model._q(this).whereJsonLength(column, operatorOrValue as WhereOperator, value))
   }
   static whereNot<T extends typeof Model>(this: T, fn: (q: HydratingQueryBuilder<InstanceType<T>>) => void): HydratingQueryBuilder<InstanceType<T>> {
     const q = Model._q(this)

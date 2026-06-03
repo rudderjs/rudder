@@ -14,7 +14,7 @@ import type {
   AggregateRequest,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import type { Dialect, DatePart } from './dialect.js'
+import type { Dialect, DatePart, JsonPathSegment } from './dialect.js'
 
 /** A raw SQL fragment + its `?`-placeholder bindings, threaded through a clause. */
 export interface RawFragment {
@@ -32,6 +32,11 @@ export interface RawFragment {
  * - `date`   — a date-component predicate (`whereDate`/`whereTime`/`whereDay`/
  *   `whereMonth`/`whereYear`): the column runs through the dialect's
  *   `dateExtract` seam, the value binds.
+ * - `json`   — a JSON-path comparison (`where('meta->prefs->lang', …)`): the
+ *   column + validated segments run through the dialect's `jsonExtract` seam,
+ *   the value binds (booleans normalized via `jsonBoolean`).
+ * - `jsonContains` / `jsonLength` — `whereJsonContains` / `whereJsonLength`
+ *   predicates through the matching dialect seams.
  *
  * Each node carries `boolean: 'AND' | 'OR'` recording how it joins to the
  * predicate *before* it at the same level. The first node's boolean is ignored.
@@ -42,6 +47,9 @@ export type ConditionNode =
   | { kind: 'raw';    boolean: 'AND' | 'OR'; raw: RawFragment }
   | { kind: 'column'; boolean: 'AND' | 'OR'; left: string; operator: WhereOperator; right: string }
   | { kind: 'date';   boolean: 'AND' | 'OR'; part: DatePart; column: string; operator: WhereOperator; value: unknown }
+  | { kind: 'json';         boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; operator: WhereOperator; value: unknown }
+  | { kind: 'jsonContains'; boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; value: unknown; negated: boolean }
+  | { kind: 'jsonLength';   boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; operator: WhereOperator; value: number }
 
 /**
  * A single ORDER BY entry — either a structured `column direction` clause or a
@@ -194,14 +202,21 @@ function compileRaw(frag: RawFragment, b: Bindings): string {
  * parenthesized placeholder list (empty list → constant false/true).
  */
 function compileClause(clause: WhereClause, dialect: Dialect, b: Bindings): string {
-  const col = dialect.quoteId(clause.column)
-  const { operator, value } = clause
+  return compileComparison(dialect.quoteId(clause.column), clause.operator, clause.value, b)
+}
 
+/**
+ * Render `<lhs> <op> <value>` for an already-built left-hand expression — the
+ * shared comparison tail of `compileClause` and the `json` condition kind.
+ * Handles the `Expression` splice, `IN`/`NOT IN` list expansion, and
+ * `IS [NOT] NULL` semantics; everything else binds positionally.
+ */
+function compileComparison(lhs: string, operator: WhereOperator, value: unknown, b: Bindings): string {
   // `where(col, op, raw('NOW()'))` — splice the expression verbatim, no binding.
   if (value instanceof Expression) {
     const op = OPERATOR_SQL[operator]
     if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
-    return `${col} ${op} ${value.getValue()}`
+    return `${lhs} ${op} ${value.getValue()}`
   }
 
   if (operator === 'IN' || operator === 'NOT IN') {
@@ -211,12 +226,12 @@ function compileClause(clause: WhereClause, dialect: Dialect, b: Bindings): stri
       return operator === 'IN' ? '1 = 0' : '1 = 1'
     }
     const list = arr.map(v => b.add(v)).join(', ')
-    return `${col} ${operator} (${list})`
+    return `${lhs} ${operator} (${list})`
   }
 
   // Null equality/inequality must use IS [NOT] NULL semantics.
   if (value === null && (operator === '=' || operator === '!=')) {
-    return `${col} IS ${operator === '=' ? '' : 'NOT '}NULL`
+    return `${lhs} IS ${operator === '=' ? '' : 'NOT '}NULL`
   }
 
   const op = OPERATOR_SQL[operator]
@@ -225,7 +240,7 @@ function compileClause(clause: WhereClause, dialect: Dialect, b: Bindings): stri
     // honest if the contract grows an operator the native engine hasn't mapped.
     throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
   }
-  return `${col} ${op} ${b.add(value)}`
+  return `${lhs} ${op} ${b.add(value)}`
 }
 
 /**
@@ -255,6 +270,32 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       const op = OPERATOR_SQL[node.operator]
       if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.dateExtract(node.part, dialect.quoteId(node.column))} ${op} ${b.add(node.value)}`
+    } else if (node.kind === 'json') {
+      // JSON arrow-path comparison (`where('meta->prefs->lang', …)`). The
+      // value's JS type picks the extraction shape (pg casts; mysql booleans
+      // skip UNQUOTE), and booleans normalize per dialect via the jsonBoolean
+      // seam. `IN` probes its first element so a list of numbers compares
+      // against the typed extraction. Comparison semantics (Expression / IN /
+      // IS NULL) ride the shared compileComparison tail.
+      const probe = (node.operator === 'IN' || node.operator === 'NOT IN') && Array.isArray(node.value)
+        ? node.value[0]
+        : node.value
+      const valueKind = typeof probe === 'number' ? 'number' : typeof probe === 'boolean' ? 'boolean' : 'text'
+      const norm = (v: unknown): unknown => (typeof v === 'boolean' ? dialect.jsonBoolean(v) : v)
+      const value = Array.isArray(node.value) ? node.value.map(norm) : norm(node.value)
+      const expr = dialect.jsonExtract(dialect.quoteId(node.column), node.segments, valueKind)
+      frag = compileComparison(expr, node.operator, value, b)
+    } else if (node.kind === 'jsonContains') {
+      // whereJsonContains / whereJsonDoesntContain — the dialect seam owns the
+      // whole predicate (pg @>, mysql JSON_CONTAINS, sqlite json_each EXISTS)
+      // and binds through the shared Bindings via the callback.
+      const expr = dialect.jsonContains(dialect.quoteId(node.column), node.segments, node.value, v => b.add(v))
+      frag = node.negated ? `NOT (${expr})` : expr
+    } else if (node.kind === 'jsonLength') {
+      // whereJsonLength — array length via the dialect seam, the count binds.
+      const op = OPERATOR_SQL[node.operator]
+      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      frag = `${dialect.jsonLength(dialect.quoteId(node.column), node.segments)} ${op} ${b.add(node.value)}`
     } else {
       const inner = compileNodes(node.children, dialect, b)
       // An empty group contributes nothing — skip it entirely so it doesn't

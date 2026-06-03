@@ -19,6 +19,21 @@ import type { ColumnDefinition } from './schema/column.js'
 export type DatePart = 'date' | 'time' | 'day' | 'month' | 'year'
 
 /**
+ * One step of a JSON arrow path (`meta->prefs->lang`, `meta->items->0`): a
+ * validated object key, or a number for an array index (`$[0]` / pg `->0`).
+ */
+export type JsonPathSegment = string | number
+
+/**
+ * The JS type of a JSON comparison value, hinting the dialect's extraction
+ * shape: pg casts its text extraction (`::numeric` / `::boolean`) so operators
+ * compare typed values; mysql compares booleans against the raw
+ * `JSON_EXTRACT` (no `JSON_UNQUOTE`); sqlite ignores the hint (`json_extract`
+ * already returns typed values).
+ */
+export type JsonValueKind = 'text' | 'number' | 'boolean'
+
+/**
  * A SQL dialect: the knobs that change the emitted SQL text between databases.
  * `SqliteDialect` is the first concrete impl; `PgDialect` / `MysqlDialect`
  * plug in here later.
@@ -102,6 +117,54 @@ export interface Dialect {
   dateExtract(part: DatePart, column: string): string
 
   /**
+   * The SQL expression extracting a JSON path from a column for a scalar
+   * comparison — the per-dialect half of `where('meta->prefs->lang', …)`.
+   * `column` arrives ALREADY QUOTED (the compiler runs it through
+   * {@link quoteId} first); `segments` are validated by {@link parseJsonPath}
+   * (quote/backslash/control characters rejected), so the dialect only splices
+   * them into its path syntax. `valueKind` hints the comparison value's JS
+   * type — see {@link JsonValueKind} for what each dialect does with it.
+   */
+  jsonExtract(column: string, segments: readonly JsonPathSegment[], valueKind: JsonValueKind): string
+
+  /**
+   * Normalize a boolean JSON comparison value for binding, paired with
+   * {@link jsonExtract}'s `'boolean'` shape: sqlite `1`/`0` (json_extract
+   * yields integers for json booleans), mysql `'true'`/`'false'` (compared
+   * against the raw JSON_EXTRACT — MySQL coerces the string via
+   * `CAST(… AS JSON)`), pg the boolean itself (the extraction is `::boolean`-cast).
+   */
+  jsonBoolean(value: boolean): unknown
+
+  /**
+   * The containment predicate for `whereJsonContains(column, value)`. `column`
+   * arrives quoted; `segments` (possibly empty — a whole-column check)
+   * validated. `value` may be a scalar or an array (array = every element
+   * contained, matching pg `@>` / mysql `JSON_CONTAINS`). Values are never
+   * interpolated — the dialect binds through the `bind` callback (which
+   * returns the placeholder for the value it's handed), keeping positional
+   * order correct across the statement.
+   *
+   * - pg: `(col->'a')::jsonb @> $n::jsonb` (value bound as JSON text).
+   * - mysql: `JSON_CONTAINS(col, ?, '$."a"')` (value bound as JSON text).
+   * - sqlite: emulated via `EXISTS (SELECT 1 FROM json_each(col, '$."a"')
+   *   WHERE json_each.value = ?)` per element (AND-joined for arrays) —
+   *   scalar elements only; object values throw.
+   *
+   * The compiler wraps the returned expression in `NOT (…)` for
+   * `whereJsonDoesntContain`, so multi-part emulations must self-parenthesize.
+   */
+  jsonContains(column: string, segments: readonly JsonPathSegment[], value: unknown, bind: (v: unknown) => string): string
+
+  /**
+   * The array-length expression for `whereJsonLength(column, op, n)` — the
+   * comparison value binds in the compiler. sqlite `json_array_length(col,
+   * '$."a"')`, pg `jsonb_array_length((col->'a')::jsonb)`, mysql
+   * `JSON_LENGTH(col, '$."a"')`. `segments` may be empty (whole column).
+   */
+  jsonLength(column: string, segments: readonly JsonPathSegment[]): string
+
+  /**
    * The pessimistic-locking suffix appended to a `SELECT` (after ORDER BY /
    * LIMIT), or `''` when the dialect has no row-level locking. Powers
    * `QueryBuilder.lockForUpdate()` / `sharedLock()`:
@@ -153,6 +216,53 @@ export function validateIdentifier(identifier: string): string[] {
   return segments
 }
 
+// JSON path segments are user-supplied strings spliced into the SQL text (as
+// quoted keys inside a path literal or pg `->'key'` operands), so they're the
+// second identifier-like security boundary after `validateIdentifier`. Unlike
+// column names they may legitimately contain spaces/dots (`$."a b"` quoting
+// handles those), so instead of an allowlist we REJECT the characters that
+// could escape the quoting: quotes, backticks, backslashes, and control chars.
+// eslint-disable-next-line no-control-regex -- control characters are exactly what we reject
+const JSON_SEGMENT_REJECT = /['"`\\\x00-\x1f]/
+
+/**
+ * Split a `column->path->to->key` arrow column into the base column and its
+ * validated JSON path segments. The column half goes through the normal
+ * {@link validateIdentifier} gate at quote time; each path segment is checked
+ * against {@link JSON_SEGMENT_REJECT} here. All-digit segments become numeric
+ * array indexes (`meta->items->0` → `$[0]` / pg `->0`).
+ */
+export function parseJsonPath(path: string): { column: string; segments: JsonPathSegment[] } {
+  const [column, ...rawSegments] = path.split('->')
+  if (!column || rawSegments.length === 0 || rawSegments.some(s => s.length === 0)) {
+    throw new NativeOrmError(
+      'NATIVE_JSON_PATH_INVALID',
+      `[RudderJS ORM native] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
+    )
+  }
+  const segments = rawSegments.map((seg): JsonPathSegment => {
+    if (JSON_SEGMENT_REJECT.test(seg)) {
+      throw new NativeOrmError(
+        'NATIVE_JSON_PATH_SEGMENT',
+        `[RudderJS ORM native] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, backslash, backtick, or control character — not allowed (path segments are spliced into SQL text).`,
+      )
+    }
+    return /^\d+$/.test(seg) ? Number(seg) : seg
+  })
+  return { column, segments }
+}
+
+/**
+ * Render validated segments as a single-quoted SQL JSON-path literal —
+ * `'$."a"."b"[0]'`. Keys are double-quoted inside the path so spaces/dots
+ * survive; safe to inline because {@link parseJsonPath} rejected every
+ * character that could escape either quoting layer. Shared by the sqlite and
+ * mysql dialects (pg uses `->` operator chains instead).
+ */
+export function jsonPathLiteral(segments: readonly JsonPathSegment[]): string {
+  return `'$${segments.map(s => (typeof s === 'number' ? `[${s}]` : `."${s}"`)).join('')}'`
+}
+
 /** SQLite dialect — `"`-quoted identifiers, `?` placeholders, RETURNING since
  *  3.35. Also the dialect used by libsql/Turso (Phase 6). */
 export class SqliteDialect implements Dialect {
@@ -188,6 +298,49 @@ export class SqliteDialect implements Dialect {
       case 'month': return `CAST(strftime('%m', ${column}) AS INTEGER)`
       case 'year':  return `CAST(strftime('%Y', ${column}) AS INTEGER)`
     }
+  }
+
+  // `json_extract` returns typed values (TEXT for strings, INTEGER/REAL for
+  // numbers, 1/0 for json booleans, NULL for json null AND missing keys), so
+  // the bound value compares directly — no cast, the valueKind hint is unused.
+  jsonExtract(column: string, segments: readonly JsonPathSegment[], _valueKind: JsonValueKind): string {
+    return `json_extract(${column}, ${jsonPathLiteral(segments)})`
+  }
+
+  // json_extract yields INTEGER 1/0 for json true/false — bind the matching int.
+  jsonBoolean(value: boolean): unknown {
+    return value ? 1 : 0
+  }
+
+  // SQLite has no containment operator — emulate per element via json_each:
+  // EXISTS (SELECT 1 FROM json_each(col, path) WHERE json_each.value = ?).
+  // Array values AND one EXISTS per element (matching pg @> / mysql
+  // JSON_CONTAINS "every element contained" semantics). Scalars only — a
+  // nested object/array element has no reliable text-equality form here.
+  jsonContains(column: string, segments: readonly JsonPathSegment[], value: unknown, bind: (v: unknown) => string): string {
+    const target = segments.length === 0 ? column : `${column}, ${jsonPathLiteral(segments)}`
+    const elements = Array.isArray(value) ? value : [value]
+    const parts = elements.map(v => {
+      if (v !== null && typeof v === 'object') {
+        throw new NativeOrmError(
+          'NATIVE_JSON_CONTAINS_UNSUPPORTED',
+          '[RudderJS ORM native] whereJsonContains on SQLite supports scalar values (and arrays of scalars) only — object containment has no json_each equality form. Use whereRaw(...) for structural checks.',
+        )
+      }
+      // json null elements surface as SQL NULL in json_each.value — match on
+      // the row's declared type instead (`= NULL` never matches in SQL).
+      if (v === null) return `EXISTS (SELECT 1 FROM json_each(${target}) WHERE "json_each"."type" = 'null')`
+      const bound = typeof v === 'boolean' ? (v ? 1 : 0) : v
+      return `EXISTS (SELECT 1 FROM json_each(${target}) WHERE "json_each"."value" = ${bind(bound)})`
+    })
+    return parts.length === 1 ? (parts[0] as string) : `(${parts.join(' AND ')})`
+  }
+
+  // json_array_length takes the path directly as its second argument.
+  jsonLength(column: string, segments: readonly JsonPathSegment[]): string {
+    return segments.length === 0
+      ? `json_array_length(${column})`
+      : `json_array_length(${column}, ${jsonPathLiteral(segments)})`
   }
 
   // SQLite has no row-level pessimistic lock — a write transaction (BEGIN
