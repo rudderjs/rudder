@@ -473,3 +473,72 @@ describe('Chainable whereHas via QueryBuilder', () => {
     assert.equal(rec.predicates[0]!.relation, 'posts')
   })
 })
+
+// ─── whereRelation — column-on-relation sugar ────────────────────────────────
+
+describe('whereRelation / orWhereRelation', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('static, two-arg: whereHas(rel, q => q.where(col, value)) with `=`', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereRelation('posts', 'published', true).get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.relation, 'posts')
+    assert.equal(p.exists, true)
+    assert.equal(p.boolean, undefined) // AND-rooted
+    assert.deepEqual(p.constraintWheres, [{ column: 'published', operator: '=', value: true }])
+  })
+
+  it('static, three-arg: carries the operator', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereRelation('posts', 'authorId', '>=', 5).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'authorId', operator: '>=', value: 5 },
+    ])
+  })
+
+  it('orWhereRelation is OR-rooted', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.orWhereRelation('posts', 'published', true).get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.boolean, 'OR')
+    assert.deepEqual(p.constraintWheres, [{ column: 'published', operator: '=', value: true }])
+  })
+
+  it('works on a belongsToMany relation (predicate keeps the through-block)', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereRelation('roles', 'name', 'admin').get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.relation, 'roles')
+    assert.ok(p.through)
+    assert.equal(p.through!.pivotTable, 'role_user')
+    assert.deepEqual(p.constraintWheres, [{ column: 'name', operator: '=', value: 'admin' }])
+  })
+
+  it('chainable: User.where(...).whereRelation(...).get() routes through the proxy', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.where('teamId', 7).whereRelation('posts', 'published', true).orWhereRelation('posts', 'authorId', '>', 0).get()
+
+    const rec = latest()
+    assert.deepEqual(rec.wheres, [['teamId', '=', 7]])
+    assert.equal(rec.predicates.length, 2)
+    assert.equal(rec.predicates[0]!.boolean, undefined)
+    assert.deepEqual(rec.predicates[0]!.constraintWheres, [{ column: 'published', operator: '=', value: true }])
+    assert.equal(rec.predicates[1]!.boolean, 'OR')
+    assert.deepEqual(rec.predicates[1]!.constraintWheres, [{ column: 'authorId', operator: '>', value: 0 }])
+  })
+})

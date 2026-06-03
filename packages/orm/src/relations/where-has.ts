@@ -79,6 +79,23 @@ export function captureConstraintWheres(
   return wheres
 }
 
+/**
+ * Build a `whereHas` constrain callback for the `whereRelation` sugar — a
+ * single `where(column, …)` on the related rows. Mirrors `where()`'s 2-arg
+ * (`=`) vs 3-arg (operator) parsing: when `value` is omitted, `operatorOrValue`
+ * is the compared value and the operator is `=`.
+ */
+export function relationConstrain(
+  column:          string,
+  operatorOrValue: unknown,
+  value:           unknown,
+): (q: QueryBuilder<Model>) => void {
+  return (q): void => {
+    if (value === undefined) q.where(column, operatorOrValue)
+    else q.where(column, operatorOrValue as WhereOperator, value)
+  }
+}
+
 // ─── belongsTo lookup ──────────────────────────────────────
 
 /**
