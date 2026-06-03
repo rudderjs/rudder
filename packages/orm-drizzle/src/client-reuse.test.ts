@@ -56,10 +56,15 @@ describe('DrizzleAdapter.make — dev HMR client reuse', () => {
   })
 
   it('builds a fresh client and disposes the superseded one when the signature changes', async () => {
-    const a1 = await makeAdapter({ driver: 'sqlite', url: ':memory:' })
+    // The provider always passes the connection NAME (multi-connection: the
+    // cache keys per name so a config edit disposes only that connection's
+    // superseded client — the leak-fix lifecycle this test pins lives on the
+    // named/provider path). Unnamed standalone make() keys by signature and
+    // has no supersede semantics — see connections.test.ts.
+    const a1 = await makeAdapter({ driver: 'sqlite', url: ':memory:', connectionName: 'main' })
     const old = underlying(a1)
 
-    const a2 = await makeAdapter({ driver: 'sqlite', url: tmpDbUrl() })
+    const a2 = await makeAdapter({ driver: 'sqlite', url: tmpDbUrl(), connectionName: 'main' })
     await settle() // the superseded dispose() is fire-and-forget on a microtask
 
     assert.notStrictEqual(a2.db, a1.db, 'a changed connection url builds a new client')

@@ -59,26 +59,47 @@ type PrismaClientWithEvents = PrismaClient & {
 interface PrismaClientCacheEntry { signature: string; client: PrismaClient }
 const PRISMA_CLIENT_CACHE_KEY = '__rudderjs_prisma_client__'
 
+// One cache entry PER CONNECTION (multi-connection support): named connections
+// key by their config name so each holds its own client and a config edit
+// disposes/reopens only that connection; unnamed standalone make() calls key by
+// the signature itself (no supersede semantics — standalone use has no dev
+// re-boot loop, and two coexisting unnamed clients with different URLs are
+// legitimate there). Mirrors @rudderjs/orm's native client cache.
+function prismaClientCache(): Map<string, PrismaClientCacheEntry> {
+  const g = globalThis as Record<string, unknown>
+  let cache = g[PRISMA_CLIENT_CACHE_KEY]
+  if (!(cache instanceof Map)) {
+    const map = new Map<string, PrismaClientCacheEntry>()
+    // Pre-map single-entry shape from an older bundle of this module (dev
+    // re-boot across a version edit) — keep the live client, keyed by its
+    // signature so an unnamed lookup still reuses it.
+    const legacy = cache as PrismaClientCacheEntry | undefined
+    if (legacy && typeof legacy.signature === 'string') map.set(legacy.signature, legacy)
+    g[PRISMA_CLIENT_CACHE_KEY] = map
+    cache = map
+  }
+  return cache as Map<string, PrismaClientCacheEntry>
+}
+
 /**
- * Return the cached PrismaClient when its connection signature is unchanged.
+ * Return the cached PrismaClient when this connection's signature is unchanged.
  * On a signature change, disconnect the superseded client (fire-and-forget —
  * the new client doesn't wait on the old one closing) and report a miss.
  */
-function reusablePrismaClient(signature: string): PrismaClient | undefined {
-  const g = globalThis as Record<string, unknown>
-  const cached = g[PRISMA_CLIENT_CACHE_KEY] as PrismaClientCacheEntry | undefined
+function reusablePrismaClient(cacheKey: string, signature: string): PrismaClient | undefined {
+  const cache = prismaClientCache()
+  const cached = cache.get(cacheKey)
   if (!cached) return undefined
   if (cached.signature === signature) return cached.client
   void Promise.resolve()
     .then(() => cached.client.$disconnect())
     .catch(() => { /* best effort — releasing a superseded connection */ })
-  delete g[PRISMA_CLIENT_CACHE_KEY]
+  cache.delete(cacheKey)
   return undefined
 }
 
-function cachePrismaClient(signature: string, client: PrismaClient): void {
-  ;(globalThis as Record<string, unknown>)[PRISMA_CLIENT_CACHE_KEY] =
-    { signature, client } satisfies PrismaClientCacheEntry
+function cachePrismaClient(cacheKey: string, signature: string, client: PrismaClient): void {
+  prismaClientCache().set(cacheKey, { signature, client })
 }
 
 import type {
@@ -99,6 +120,7 @@ import { Expression } from '@rudderjs/contracts'
 import {
   MissingEmbedderError,
   VectorStorageUnsupportedError,
+  ConnectionManager,
 } from '@rudderjs/orm'
 import { resolveOptionalPeer } from '@rudderjs/support'
 
@@ -1244,6 +1266,9 @@ class PrismaAdapter implements OrmAdapter {
     /** True when bound to an interactive-transaction client (`tx`): nesting maps
      *  to a SAVEPOINT and lifecycle calls are no-ops on the shared connection. */
     private readonly txScoped = false,
+    /** The `config/database.ts` connection name (multi-connection support) —
+     *  reported on query events; falls back to the driver name. */
+    private readonly connectionName?: string,
   ) {
     this._driver = driver ?? 'sqlite'
   }
@@ -1260,9 +1285,10 @@ class PrismaAdapter implements OrmAdapter {
     const driver = config.driver ?? 'sqlite'
     const resolvedUrl = config.url ?? process.env['DATABASE_URL'] ?? (driver === 'sqlite' ? 'file:./dev.db' : '')
     const signature = `${driver}::${resolvedUrl}`
+    const cacheKey = config.connectionName ?? signature
 
-    const reused = reusablePrismaClient(signature)
-    if (reused) return new PrismaAdapter(reused, config.driver)
+    const reused = reusablePrismaClient(cacheKey, signature)
+    if (reused) return new PrismaAdapter(reused, config.driver, false, config.connectionName)
 
     const opts: Record<string, unknown> = {}
 
@@ -1327,8 +1353,8 @@ class PrismaAdapter implements OrmAdapter {
     // Enable query event logging so telescope's QueryCollector can capture queries
     opts['log'] = [{ emit: 'event', level: 'query' }]
     const client = new PC(opts)
-    cachePrismaClient(signature, client)
-    return new PrismaAdapter(client, config.driver)
+    cachePrismaClient(cacheKey, signature, client)
+    return new PrismaAdapter(client, config.driver, false, config.connectionName)
   }
 
   query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
@@ -1368,7 +1394,7 @@ class PrismaAdapter implements OrmAdapter {
       $transaction<R>(fn: (tx: PrismaClient) => Promise<R>): Promise<R>
     }
     return client.$transaction((txClient) => {
-      const scoped = new PrismaAdapter(txClient, this._driver, true)
+      const scoped = new PrismaAdapter(txClient, this._driver, true, this.connectionName)
       return fn(scoped)
     })
   }
@@ -1425,7 +1451,7 @@ class PrismaAdapter implements OrmAdapter {
   onQuery(listener: QueryListener): void {
     const client = this.prisma as Partial<PrismaClientWithEvents>
     if (!client.$on) return
-    const driver = this._driver
+    const driver = this.connectionName ?? this._driver
     client.$on('query', (event: unknown) => {
       const e = event as { query?: string; params?: string; duration?: number }
       let bindings: unknown[] = []
@@ -1457,11 +1483,24 @@ export interface PrismaConfig {
   PrismaClient?: PrismaClientConstructor
   driver?: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
   url?: string
+  /** The `config/database.ts` connection name this adapter serves (passed by
+   *  the provider / ConnectionManager factory). Keys the dev-HMR client cache
+   *  so each named connection holds its own client and a config edit disposes
+   *  only that connection's superseded one. Omitted for standalone use. */
+  connectionName?: string
 }
 
 export interface DatabaseConnectionConfig {
   driver: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
   url?: string
+  /** Engine discriminator — connections claiming another engine (e.g.
+   *  `'native'`) are skipped by this provider. */
+  engine?: string
+  /** Read/write split is NOT supported on the Prisma adapter — configuring
+   *  these throws at boot with a pointer to @prisma/extension-read-replicas. */
+  read?:   unknown
+  write?:  unknown
+  sticky?: boolean
 }
 
 export interface DatabaseConfig {
@@ -1493,15 +1532,43 @@ export class DatabaseProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg = config<DatabaseConfig | undefined>('database', undefined)
 
-    let prismaConfig: PrismaConfig = {}
-
     if (cfg) {
-      const conn = cfg.connections[cfg.default]
-      if (conn) prismaConfig = { driver: conn.driver, ...(conn.url !== undefined && { url: conn.url }) }
-      if (cfg.PrismaClient) prismaConfig.PrismaClient = cfg.PrismaClient
+      // Register a LAZY factory for every connection this adapter claims —
+      // connections selecting another engine (the native engine's
+      // `engine: 'native'`) are skipped; their own provider registers those.
+      // Named connections (`DB.connection('reporting')`, per-model
+      // `static connection`) open on first use; registering does no I/O.
+      for (const [name, conn] of Object.entries(cfg.connections)) {
+        if (conn?.engine !== undefined && conn.engine !== 'prisma') continue
+        // Read/write split is not supported here — the Prisma client owns one
+        // URL. A silent ignore would silently serve every read from the
+        // writer, so fail loudly at boot.
+        if (conn.read !== undefined || conn.write !== undefined) {
+          throw new Error(
+            `[RudderJS ORM] Connection '${name}': read/write splitting is not supported on the ` +
+              `Prisma adapter — use @prisma/extension-read-replicas on your PrismaClient, or the ` +
+              `native engine (engine: 'native'), which supports read/write/sticky natively.`,
+          )
+        }
+        ConnectionManager.register(name, () =>
+          PrismaAdapter.make({
+            driver: conn.driver,
+            connectionName: name,
+            ...(conn.url !== undefined && { url: conn.url }),
+            ...(cfg.PrismaClient && { PrismaClient: cfg.PrismaClient }),
+          }),
+        )
+      }
+      ConnectionManager.setDefaultName(cfg.default)
     }
 
-    const adapter = await PrismaAdapter.make(prismaConfig)
+    // Eager default boot — resolved through the same ConnectionManager entry
+    // (when the config declares it) so `DB.connection(cfg.default)` and the
+    // Models share ONE adapter/client. The no-config fallback keeps the
+    // historical zero-config behavior (sqlite dev.db).
+    const adapter = cfg && ConnectionManager.has(cfg.default)
+      ? await ConnectionManager.ensure(cfg.default) as PrismaAdapter
+      : await PrismaAdapter.make(cfg?.PrismaClient ? { PrismaClient: cfg.PrismaClient } : {})
     // Prisma's `$connect()` is optional — the client connects lazily on first
     // query. Skipping it saves ~20–40 ms cold boot; the trade-off is DB-down
     // surfacing on first query instead of at boot. Apps that need fail-fast at
