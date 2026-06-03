@@ -91,6 +91,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
+  QueryListener,
   RelationExistencePredicate,
   Row,
 } from '@rudderjs/contracts'
@@ -1397,10 +1398,13 @@ class PrismaAdapter implements OrmAdapter {
   }
 
   /**
-   * Register a query listener. Used by telescope's QueryCollector.
-   * Hooks into Prisma's `$on('query', ...)` event if available.
+   * Register a query listener ({@link OrmAdapter.onQuery} — `DB.listen()`,
+   * Telescope's QueryCollector). Hooks into Prisma's `$on('query', ...)` event
+   * if available. The factory-built client enables query event logging
+   * (`log: [{ emit: 'event', level: 'query' }]`); a caller-supplied `client`
+   * must do the same or events never fire.
    */
-  onQuery(listener: (info: { sql: string; bindings: unknown[]; duration: number; connection?: string | undefined; model?: string | undefined }) => void): void {
+  onQuery(listener: QueryListener): void {
     const client = this.prisma as Partial<PrismaClientWithEvents>
     if (!client.$on) return
     const driver = this._driver

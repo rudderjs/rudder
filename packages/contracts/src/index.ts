@@ -485,6 +485,27 @@ export interface Connection extends Transaction {
   close(): Promise<void>
 }
 
+/**
+ * A single executed query, as reported to {@link OrmAdapter.onQuery} listeners.
+ * The shape Telescope's QueryCollector and Pulse's slow-query recorder already
+ * consume, now owned here so every adapter reports the same event.
+ */
+export interface QueryEvent {
+  /** The SQL text as sent to the driver (placeholders, not interpolated values). */
+  sql: string
+  /** Positional binding values, in placeholder order. */
+  bindings: unknown[]
+  /** Wall-clock execution time in milliseconds. */
+  duration: number
+  /** Driver/connection name when the adapter knows it (e.g. `'sqlite'`). */
+  connection?: string | undefined
+  /** Model name when the adapter can infer it from the query. */
+  model?: string | undefined
+}
+
+/** A query listener registered via {@link OrmAdapter.onQuery} / `DB.listen`. */
+export type QueryListener = (event: QueryEvent) => void
+
 export interface OrmAdapter {
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T>
   connect(): Promise<void>
@@ -522,6 +543,17 @@ export interface OrmAdapter {
    * of rows affected. Optional, mirroring {@link OrmAdapter.selectRaw}.
    */
   affectingStatement?(sql: string, bindings: readonly unknown[]): Promise<number>
+
+  /**
+   * Register a query listener — fired once per executed query with the SQL,
+   * bindings, and wall-clock duration. The app-facing entry point is
+   * `DB.listen()` in `@rudderjs/database`; Telescope/Pulse hook in here too.
+   *
+   * **Optional capability.** Adapters that can't observe their driver's query
+   * stream omit it; `DB.listen()` throws an adapter-named error. Listener
+   * errors must never break the query — adapters swallow them.
+   */
+  onQuery?(listener: QueryListener): void
 
   /**
    * How the adapter resolves *direct* relations (`hasOne` / `hasMany` /

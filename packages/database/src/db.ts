@@ -1,16 +1,17 @@
 // ─── DB facade ─────────────────────────────────────────────
 //
 // Laravel-style raw-SQL entry point: `DB.select / insert / update / delete /
-// statement / raw`. It resolves the active ORM adapter (via the registry bridge)
-// and maps onto the adapter's raw-exec seam:
+// statement / raw / listen`. It resolves the active ORM adapter (via the
+// registry bridge) and maps onto the adapter's raw-exec seam:
 //   - reads  (select)                       → adapter.selectRaw  → Row[]
 //   - writes (insert/update/delete/statement) → adapter.affectingStatement → number
+//   - query listening (listen)              → adapter.onQuery
 //
 // One adapter instance is shared with the Models — no second connection. If the
 // active adapter doesn't implement the seam (older/partial adapters), each method
 // throws a clear error naming that adapter.
 
-import type { OrmAdapter, Row } from '@rudderjs/contracts'
+import type { OrmAdapter, QueryListener, Row } from '@rudderjs/contracts'
 import { resolveAdapter, resolveTransactionRunner } from './registry-bridge.js'
 import { Expression, raw } from './expression.js'
 
@@ -36,6 +37,16 @@ function requireAffecting(adapter: OrmAdapter): NonNullable<OrmAdapter['affectin
     )
   }
   return adapter.affectingStatement.bind(adapter)
+}
+
+function requireOnQuery(adapter: OrmAdapter): NonNullable<OrmAdapter['onQuery']> {
+  if (typeof adapter.onQuery !== 'function') {
+    throw new Error(
+      `[RudderJS DB] ${adapterName(adapter)} does not implement onQuery() — ` +
+        'this adapter does not support query listening, so DB.listen() has nothing to hook into.',
+    )
+  }
+  return adapter.onQuery.bind(adapter)
 }
 
 /**
@@ -86,6 +97,23 @@ export const DB = {
    */
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
     return resolveTransactionRunner()(fn)
+  },
+
+  /**
+   * Register a query listener, mirroring Laravel's `DB::listen`. The listener
+   * fires once per executed query with `{ sql, bindings, duration }` (duration
+   * in ms) — use it for app-level query logging or slow-query alerting.
+   * Delegates to the active adapter's `onQuery()` hook; listener errors are
+   * swallowed by the adapter and never break the query.
+   *
+   * Synchronous, unlike the exec methods — registration happens immediately
+   * against the adapter resolved at call time.
+   *
+   * @throws if no adapter is registered, or the active adapter doesn't
+   *   implement query listening (`onQuery`).
+   */
+  listen(listener: QueryListener): void {
+    requireOnQuery(resolveAdapter())(listener)
   },
 
   /** Wrap a literal SQL fragment so the query layer splices it verbatim. */
