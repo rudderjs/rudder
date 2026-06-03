@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/session",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "rudderjs": {
     "provider": "SessionProvider",
     "stage": "infrastructure"

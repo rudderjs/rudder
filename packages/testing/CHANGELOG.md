@@ -1,5 +1,28 @@
 # @rudderjs/testing
 
+## 1.3.0
+
+### Minor Changes
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+### Patch Changes
+
+- Updated dependencies [e199f5e]
+- Updated dependencies [fc97c10]
+- Updated dependencies [7e6dc85]
+- Updated dependencies [ad17e79]
+- Updated dependencies [0b085a6]
+- Updated dependencies [26b7acf]
+- Updated dependencies [b08aa1d]
+- Updated dependencies [c66e195]
+- Updated dependencies [473dfd9]
+- Updated dependencies [a93455e]
+  - @rudderjs/contracts@1.10.0
+  - @rudderjs/core@1.7.0
+
 ## 1.2.0
 
 ### Minor Changes

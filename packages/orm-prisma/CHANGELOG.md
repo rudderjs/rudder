@@ -1,5 +1,252 @@
 # @rudderjs/orm-prisma
 
+## 2.1.0
+
+### Minor Changes
+
+- d472fd3: Pessimistic locking parity across adapters. **Drizzle**: `lockForUpdate()` / `sharedLock()` are now real — rendered via the builder's `.for('update' | 'share')` on pg/mysql, no-op on sqlite (no row locks; matches the native engine), skipped on union'd queries (`FOR UPDATE` isn't valid on a set operation). **Prisma**: both methods now throw a clear error with a raw-transaction pointer instead of failing with a bare `is not a function` — a silent no-op would be a correctness bug for job-queue-style reservations.
+- e199f5e: feat(database): scaffold @rudderjs/database + the DB facade skeleton
+
+  Establishes the data-layer extraction boundary (Phase 2, PR1) — a new
+  `@rudderjs/database` package (1.0.0) owning the public `DB` facade
+  (`DB.select/insert/update/delete/statement/raw`), with the `@rudderjs/orm →
+@rudderjs/database` dependency direction. The native engine internals are not
+  relocated yet (a later step).
+
+  - **@rudderjs/contracts** — promote the model-independent execution types
+    (`Row`, `Executor`, `Transaction`, `Connection`) into the zero-dep foundation
+    beside `OrmAdapter`, and add two optional raw-exec seam methods to `OrmAdapter`:
+    `selectRaw(sql, bindings)` and `affectingStatement(sql, bindings)`. Single
+    import point for every adapter — no flag-day.
+  - **@rudderjs/orm** — depends on `@rudderjs/database`; native adapter implements
+    the raw-exec seam; new node-only `@rudderjs/orm/db-bridge` subpath pushes the
+    `ModelRegistry` adapter accessor into the facade (kept off the client bundle).
+  - **@rudderjs/orm-prisma / @rudderjs/orm-drizzle** — implement `selectRaw` /
+    `affectingStatement` over `$queryRawUnsafe`/`$executeRawUnsafe` and
+    `db.execute(...)` respectively; both register the db-bridge on provider load.
+
+  The new `@rudderjs/database` package publishes at 1.0.0 (new-package policy) and
+  is intentionally omitted from this changeset's version bumps so its first release
+  is exactly 1.0.0 rather than a bumped 1.1.0.
+
+- 0e7db2c: feat(database): cross-adapter transaction() + DB.transaction() facade
+
+  Closes the top correctness gap (gap-analysis §8 #1): `transaction()` now works on
+  every adapter, not just the native engine, and is reachable from the new
+  `@rudderjs/database` `DB` facade. The strategy is "boundary now, fill
+  incrementally" — the `OrmAdapter.transaction?` contract was already in place
+  (PR1), so this PR is pure implementation, no contract-shape change.
+
+  - **@rudderjs/orm-prisma** — implement `transaction(fn)` over Prisma's interactive
+    `$transaction`. The callback's adapter re-binds to Prisma's transaction client,
+    so every `Model.*` / `DB.*` call inside the callback runs on that one
+    connection. Nesting maps to a `SAVEPOINT` / `RELEASE SAVEPOINT` (or
+    `ROLLBACK TO SAVEPOINT` on failure) bracket on the transaction connection,
+    since Prisma's interactive client can't open a nested `$transaction`.
+  - **@rudderjs/orm-drizzle** — implement `transaction(fn)` over `db.transaction`.
+    The scoped adapter re-binds to Drizzle's transaction `db`; because Drizzle's
+    `tx` is itself a `db`, nested `transaction()` opens a real SAVEPOINT for free.
+  - **@rudderjs/orm** — `DB.transaction()` reuses the ORM's `AsyncLocalStorage`
+    scoping: the `db-bridge` now also pushes the ORM `transaction()` free function
+    in as the facade's transaction runner, so `Model.*` AND `DB.*` writes inside a
+    `DB.transaction(fn)` callback join the _same_ open transaction (one connection,
+    not two). The native provider now registers the bridge too, so `DB.*` /
+    `DB.transaction()` work in native-engine apps.
+
+  The `@rudderjs/database` `DB.transaction(fn)` surface ships in that package's
+  first publish (still 1.0.0 — same deferral as PR1; it is intentionally kept off
+  this changeset's version bumps so its initial npm release is exactly 1.0.0).
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+- f17742b: Named database connections on the Prisma and Drizzle adapters (multi-connection PR4a).
+
+  Both providers now register a lazy `ConnectionManager` factory for every connection they claim in `config/database.ts` (connections selecting another engine — e.g. `engine: 'native'` — are skipped), so `DB.connection('reporting')`, `Model.on('reporting')`, and per-model `static connection` work on Prisma/Drizzle apps. The default connection boots eagerly through the same manager entry, sharing one adapter/client with the Models. The dev-HMR client caches are per-connection now (keyed by connection name): each named connection holds its own client, a config edit disposes/reopens only that connection, and a second named connection no longer evicts the first. Prisma query events report the connection name. Read/write-split config (`read:`/`write:`) fails loudly at boot on both adapters — Prisma points at `@prisma/extension-read-replicas` (or the native engine); Drizzle points at the native engine, with real Drizzle routing planned as a follow-up.
+
+- bf1cca0: feat(orm): `distinct()` — SELECT DISTINCT (Laravel parity)
+
+  `Model.query().distinct().get()` de-duplicates the result rows; pair it with `select(...)` to de-duplicate on specific columns. With `distinct()`, `count()` / `paginate()` count the distinct rows.
+
+  Native engine only — on Drizzle and Prisma it throws with a pointer to the native engine / `DB.select(...)`, consistent with joins / groupBy / union.
+
+- 0b085a6: feat(orm): query-builder breadth — joins, structured `select()`, `groupBy` / `having`
+
+  Adds Laravel-style joins, column projection, and grouping to the query builder. The native engine fully supports them:
+
+  - **Joins** — `join` / `leftJoin` / `rightJoin` / `crossJoin`, with column-vs-column `on()` and bound `where()` conditions. Simple form `join('posts', 'posts.userId', '=', 'users.id')` and callback form `join('posts', j => j.on(...).where(...))`.
+  - **Projection** — `select('users.id', 'posts.title')` (quoted, qualified columns; combines with `selectRaw`).
+  - **Grouping** — `groupBy(...columns)` + `having(col, op, value)` / `orHaving` / `havingRaw('COUNT(*) > ?', [3])` / `orHavingRaw`. With a `GROUP BY` present, `count()` / `paginate()` count the number of groups (wrapped subquery), matching Laravel.
+
+  Each is also a `Model` static (`User.join(...)`, `User.select(...)`, `User.groupBy(...)`, `User.having(...)`).
+
+  On the Drizzle and Prisma adapters these throw with a pointer to the native engine or the `DB` facade — their typed clients can't map a join/projection/grouping result back to a single hydrated model (the same reason `selectRaw` throws there). Use `@rudderjs/orm/native`, or `DB.select(sql, bindings)`.
+
+  `JoinClause` (the join-callback sub-builder type) is exported from `@rudderjs/contracts` and re-exported from `@rudderjs/orm`.
+
+- b08aa1d: feat(orm): raw-SQL expressions — `selectRaw` / `whereRaw` / `orWhereRaw` / `orderByRaw` + `DB.raw(...)` everywhere
+
+  Adds Laravel's raw-SQL escape hatch to the query builder for the clauses the
+  structured builder can't express:
+
+  ```ts
+  // Bound `?` placeholders are rebound to the dialect's form ($n on Postgres).
+  const adults = await User.query().whereRaw("age > ?", [18]).get();
+
+  // Compose with structured wheres + OR raw fragments.
+  await User.query().where("active", true).orWhereRaw("age > ?", [65]).get();
+
+  // Raw ORDER BY + raw projection.
+  await User.query()
+    .orderByRaw("field(status, ?, ?)", ["urgent", "high"])
+    .get();
+  await User.query()
+    .selectRaw("count(*) as total, max(created_at) as latest")
+    .get();
+
+  // DB.raw(...) splices verbatim as a where value or order column.
+  import { DB } from "@rudderjs/database";
+  await User.query()
+    .where("created_at", ">", DB.raw("NOW()"))
+    .orderBy(DB.raw("age asc"))
+    .get();
+  ```
+
+  Threaded through the native engine's compiler (a `?`-placeholder rebinder shares
+  the one positional bindings accumulator, so `$n` indices stay correct across the
+  whole statement). The Drizzle adapter implements `whereRaw`/`orWhereRaw`/
+  `orderByRaw` via its `sql` template; `selectRaw` throws there (its typed select
+  can't map an arbitrary raw projection back to hydrated models). The Prisma
+  adapter throws on all four — its structured client can't splice raw SQL — and
+  points you at the `DB` facade (`DB.select(sql, bindings)`) for raw queries.
+
+  The `Expression` wrapper behind `DB.raw(...)` moved from `@rudderjs/database` to
+  `@rudderjs/contracts` (re-exported from `@rudderjs/database`, so `DB.raw()` and
+  `import { raw } from '@rudderjs/database'` are unchanged) — it now lives on a
+  client-safe path so the query builder's raw methods stay out of `@rudderjs/database`'s
+  node-only graph.
+
+- 370d2ec: feat(orm): `union` / `unionAll` — combine queries (Laravel parity)
+
+  `base.union(other)` / `base.unionAll(other)` combine the current query with another (`UNION` removes duplicate rows, `UNION ALL` keeps them). The combined result takes the base query's `ORDER BY` / `LIMIT` / `OFFSET`; `count()` / `paginate()` count the combined rows.
+
+  Native engine only — on Drizzle and Prisma these throw with a pointer to the native engine / `DB.select(...)`, consistent with joins/groupBy. `other` must be another native `Model.query()`.
+
+- c66e195: feat(orm): `Model.upsert(rows, uniqueBy, update?)` — bulk insert-or-update across native, Drizzle, and Prisma
+
+  Adds Laravel's bulk upsert. Insert every row; on a unique-key conflict (the
+  `uniqueBy` columns) update the `update` columns from the incoming values instead
+  of failing. `update` defaults to every inserted column except `uniqueBy`; an
+  empty list means insert-or-ignore. Returns the number of rows affected.
+
+  ```ts
+  await User.upsert(
+    [
+      { email: "a@x.com", name: "Ada" },
+      { email: "b@x.com", name: "Bob" },
+    ],
+    "email", // uniqueBy (single column or string[])
+    ["name"] // overwrite on conflict; omit → all inserted columns minus uniqueBy
+  );
+  ```
+
+  - **native** — one atomic statement: `ON CONFLICT (…) DO UPDATE / DO NOTHING`
+    (SQLite/Postgres) or `ON DUPLICATE KEY UPDATE` (MySQL), via a new
+    `Dialect.upsertClause()` seam + `compileInsert({ upsert })`.
+  - **Drizzle** — `onConflictDoUpdate` / `onConflictDoNothing` (SQLite/Postgres) or
+    `onDuplicateKeyUpdate` (MySQL).
+  - **Prisma** — no portable bulk ON CONFLICT, so each row maps to a single-row
+    `delegate.upsert` batched in one `$transaction`.
+  - **`@rudderjs/contracts`** — new optional `QueryBuilder.upsert?(rows, uniqueBy,
+update)`; the Model layer throws an adapter-named error if an adapter omits it.
+
+  Like `insertMany`, upsert is a bulk write: `fillable`/`guarded` do **not** apply
+  (write-side casts/mutators still do) and observer events do **not** fire. A
+  matching UNIQUE constraint on `uniqueBy` must exist. MySQL's returned count is
+  rows-touched (1 per insert, 2 per update), not rows-distinct.
+
+- 473dfd9: feat(orm): `whereColumn` + `whereHas` OR/count operators — finishing the where/existence families
+
+  - **`whereColumn(a, b)` / `whereColumn(a, op, b)`** (+ `orWhereColumn`) — compare two
+    columns with both sides identifier-quoted per dialect (unlike `whereRaw`, which is
+    verbatim). Native real (new column-vs-column compiler clause); Drizzle real (column
+    refs through `sql`); Prisma throws and points at `DB.select`/`whereRaw`.
+  - **`orWhereHas` / `orWhereDoesntHave`** — OR-rooted relation-existence predicates.
+  - **`has(rel, op, n)` / `orHas`** — count comparison on a relation (`has('posts', '>=', 3)`),
+    compiled as `(SELECT COUNT(*) …) op n`. Defaults to `>= 1` (≡ `whereHas`).
+  - OR/count are **native-only**; Drizzle and Prisma throw a clear pointer (their query
+    APIs can't express a count filter or an OR-rooted existence join). Plain
+    `whereHas`/`whereDoesntHave` are unchanged on every adapter.
+
+  `whereColumn`/`has`/`orWhereHas` are surfaced as Model statics and on the hydrating
+  query builder. `RelationExistencePredicate` gains optional `boolean` + `count` fields.
+
+### Patch Changes
+
+- ad17e79: feat(orm): `onQuery` query listening on the native engine + app-facing `DB.listen()`
+
+  Laravel's `DB::listen` arrives in RudderJS:
+
+  - **`@rudderjs/contracts`**: `onQuery?(listener)` is now an optional capability on the `OrmAdapter` contract, with new `QueryEvent` (`{ sql, bindings, duration, connection?, model? }`) and `QueryListener` types — the shape Telescope's QueryCollector and Pulse's slow-query recorder already consume.
+  - **`@rudderjs/orm` (native engine)**: the `NativeAdapter` implements `onQuery` by instrumenting its executor — every executed query (Model reads/writes, `DB.*` raw calls, and queries inside `transaction()`, which share the top-level listener list) is timed with `performance.now()` and reported with its SQL + bindings. Listener errors are swallowed and never break the query; only successful executions report (Laravel `QueryExecuted` parity). Transaction control statements (BEGIN/COMMIT/SAVEPOINT) are not reported.
+  - **`@rudderjs/database`**: new `DB.listen(listener)`, mirroring Laravel's `DB::listen` — delegates to the active adapter's `onQuery` hook and throws a clear adapter-named error when the adapter doesn't support query listening. `QueryEvent` / `QueryListener` are re-exported.
+  - **`@rudderjs/orm-prisma`**: the existing ad-hoc `onQuery` method is now typed to the shared contract (no behavior change).
+
+  The Drizzle adapter does not implement the hook yet — `DB.listen()` throws its clear unsupported error there; a follow-up adds it.
+
+- Updated dependencies [e199f5e]
+- Updated dependencies [0e7db2c]
+- Updated dependencies [fc97c10]
+- Updated dependencies [7e6dc85]
+- Updated dependencies [0109afb]
+- Updated dependencies [0dcecaf]
+- Updated dependencies [363d942]
+- Updated dependencies [12b4a55]
+- Updated dependencies [4085846]
+- Updated dependencies [6f8760d]
+- Updated dependencies [083672b]
+- Updated dependencies [8ba6e7d]
+- Updated dependencies [b31d1be]
+- Updated dependencies [0d6c280]
+- Updated dependencies [3b995b7]
+- Updated dependencies [5eb4dd8]
+- Updated dependencies [536b64d]
+- Updated dependencies [ea9b982]
+- Updated dependencies [ad17e79]
+- Updated dependencies [f6afdf8]
+- Updated dependencies [e25472c]
+- Updated dependencies [ca644ad]
+- Updated dependencies [bf1cca0]
+- Updated dependencies [bc76570]
+- Updated dependencies [acc2245]
+- Updated dependencies [0b085a6]
+- Updated dependencies [468dcd4]
+- Updated dependencies [ffbb7f7]
+- Updated dependencies [b897950]
+- Updated dependencies [caff11d]
+- Updated dependencies [26b7acf]
+- Updated dependencies [ea510e0]
+- Updated dependencies [b08aa1d]
+- Updated dependencies [6bd32b0]
+- Updated dependencies [370d2ec]
+- Updated dependencies [c66e195]
+- Updated dependencies [473dfd9]
+- Updated dependencies [6e83e26]
+- Updated dependencies [5617ec2]
+- Updated dependencies [bb07d54]
+- Updated dependencies [7b5d000]
+- Updated dependencies [f1db9d9]
+- Updated dependencies [a93455e]
+- Updated dependencies [e9a3319]
+- Updated dependencies [534bd8d]
+  - @rudderjs/contracts@1.10.0
+  - @rudderjs/orm@1.14.0
+  - @rudderjs/ai@1.11.0
+  - @rudderjs/console@1.4.0
+  - @rudderjs/core@1.7.0
+  - @rudderjs/support@1.5.0
+
 ## 2.0.3
 
 ### Patch Changes

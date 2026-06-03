@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/http",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Fluent HTTP client for RudderJS — retries, timeouts, pools, interceptors, and Http.fake() for testing",
   "license": "MIT",
   "repository": {

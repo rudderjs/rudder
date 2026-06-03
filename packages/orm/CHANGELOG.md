@@ -1,5 +1,615 @@
 # @rudderjs/orm
 
+## 1.14.0
+
+### Minor Changes
+
+- e199f5e: feat(database): scaffold @rudderjs/database + the DB facade skeleton
+
+  Establishes the data-layer extraction boundary (Phase 2, PR1) — a new
+  `@rudderjs/database` package (1.0.0) owning the public `DB` facade
+  (`DB.select/insert/update/delete/statement/raw`), with the `@rudderjs/orm →
+@rudderjs/database` dependency direction. The native engine internals are not
+  relocated yet (a later step).
+
+  - **@rudderjs/contracts** — promote the model-independent execution types
+    (`Row`, `Executor`, `Transaction`, `Connection`) into the zero-dep foundation
+    beside `OrmAdapter`, and add two optional raw-exec seam methods to `OrmAdapter`:
+    `selectRaw(sql, bindings)` and `affectingStatement(sql, bindings)`. Single
+    import point for every adapter — no flag-day.
+  - **@rudderjs/orm** — depends on `@rudderjs/database`; native adapter implements
+    the raw-exec seam; new node-only `@rudderjs/orm/db-bridge` subpath pushes the
+    `ModelRegistry` adapter accessor into the facade (kept off the client bundle).
+  - **@rudderjs/orm-prisma / @rudderjs/orm-drizzle** — implement `selectRaw` /
+    `affectingStatement` over `$queryRawUnsafe`/`$executeRawUnsafe` and
+    `db.execute(...)` respectively; both register the db-bridge on provider load.
+
+  The new `@rudderjs/database` package publishes at 1.0.0 (new-package policy) and
+  is intentionally omitted from this changeset's version bumps so its first release
+  is exactly 1.0.0 rather than a bumped 1.1.0.
+
+- 0e7db2c: feat(database): cross-adapter transaction() + DB.transaction() facade
+
+  Closes the top correctness gap (gap-analysis §8 #1): `transaction()` now works on
+  every adapter, not just the native engine, and is reachable from the new
+  `@rudderjs/database` `DB` facade. The strategy is "boundary now, fill
+  incrementally" — the `OrmAdapter.transaction?` contract was already in place
+  (PR1), so this PR is pure implementation, no contract-shape change.
+
+  - **@rudderjs/orm-prisma** — implement `transaction(fn)` over Prisma's interactive
+    `$transaction`. The callback's adapter re-binds to Prisma's transaction client,
+    so every `Model.*` / `DB.*` call inside the callback runs on that one
+    connection. Nesting maps to a `SAVEPOINT` / `RELEASE SAVEPOINT` (or
+    `ROLLBACK TO SAVEPOINT` on failure) bracket on the transaction connection,
+    since Prisma's interactive client can't open a nested `$transaction`.
+  - **@rudderjs/orm-drizzle** — implement `transaction(fn)` over `db.transaction`.
+    The scoped adapter re-binds to Drizzle's transaction `db`; because Drizzle's
+    `tx` is itself a `db`, nested `transaction()` opens a real SAVEPOINT for free.
+  - **@rudderjs/orm** — `DB.transaction()` reuses the ORM's `AsyncLocalStorage`
+    scoping: the `db-bridge` now also pushes the ORM `transaction()` free function
+    in as the facade's transaction runner, so `Model.*` AND `DB.*` writes inside a
+    `DB.transaction(fn)` callback join the _same_ open transaction (one connection,
+    not two). The native provider now registers the bridge too, so `DB.*` /
+    `DB.transaction()` work in native-engine apps.
+
+  The `@rudderjs/database` `DB.transaction(fn)` surface ships in that package's
+  first publish (still 1.0.0 — same deferral as PR1; it is intentionally kept off
+  this changeset's version bumps so its initial npm release is exactly 1.0.0).
+
+- fc97c10: feat(orm-drizzle): real eager loading for `Model.with()` on the Drizzle adapter
+
+  `Model.with('relation').get()` now actually eager-loads direct relations on the
+  Drizzle adapter, replacing the throw added in #826. Drizzle's adapter can't
+  resolve a relation from its name alone (its relational query API needs
+  pre-declared `relations()` schemas the adapter doesn't hold), so resolution
+  moves to the ORM's Model layer:
+
+  - `@rudderjs/contracts` — new optional `OrmAdapter.eagerLoadStrategy?: 'native' |
+'model-layer'`. Omitted/`'native'` (Prisma) forwards relation names to the
+    adapter's `with()`/`include`; `'model-layer'` routes direct relations into the
+    Model-layer batched loader.
+  - `@rudderjs/orm` — `partitionEagerLoads` gains a strategy param and a `direct`
+    lane; a new `attachDirectRelations` fires one batched `WHERE … IN` query per
+    relation against the related model and stitches the results onto each parent
+    (mirroring the existing polymorphic loader). Covers `hasOne`, `hasMany`,
+    `belongsTo`, `belongsToMany`. Undeclared / nested (`'a.b'`) names throw a clear
+    error. Foreign-key conventions match the lazy `related()` accessor.
+  - `@rudderjs/orm-drizzle` — `DrizzleAdapter` advertises
+    `eagerLoadStrategy: 'model-layer'`, so `Model.with(...)` works. The QB-level
+    `with()` still throws, but only via the `withWhereHas` constrained-eager
+    fallback, which Drizzle still can't satisfy — use `whereHas` + `related()`
+    there.
+
+  Prisma is unaffected (it omits `eagerLoadStrategy`, keeping native `include`).
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+- 0109afb: JSON-path predicates on the native engine: arrow paths in `where()` (`where('meta->prefs->lang', 'en')` — also in `orWhere`, group callbacks, `whereNot`, and the `whereIn`/`whereNull`/`whereBetween` sugar), plus `whereJsonContains` / `whereJsonDoesntContain` / `whereJsonLength` (+ `orWhere*` forms) with Model statics. Compiled through new per-dialect `Dialect.jsonExtract` / `jsonContains` / `jsonLength` seams — sqlite `json_extract`/`json_each`, pg arrow-operator chains with `::numeric`/`::boolean` casts + `@>` + `jsonb_array_length`, mysql `JSON_EXTRACT`/`JSON_CONTAINS`/`JSON_LENGTH`. Path segments are validated (quotes/backslashes/backticks/control chars rejected); numeric segments address array indexes (`meta->items->0`). Prisma/Drizzle throw a clear "not supported on this adapter" error until their follow-ups. Also fixes the native Postgres driver double-encoding bound JSON params (porsager's default json serializer re-stringified already-stringified JSON text — `@>` containment silently matched nothing; strings now pass verbatim, mirroring the earlier date-type fix).
+- 0dcecaf: New `make:resource` scaffolder — `pnpm rudder make:resource User` writes `app/Resources/UserResource.ts` with a `JsonResource` subclass stub (inferred model import, `toArray()` body, conditional-helper examples). Spec lives at `@rudderjs/orm/commands/make-resource` (same MakeSpec pattern as `make:factory`/`make:seeder`); the CLI loader registers it automatically.
+- 363d942: Model ↔ resource wiring (mirrors the `static factoryClass` precedent). **`static resourceClass = UserResource`** binds a model to its API resource; **`user.toResource()`** then wraps the instance (`new UserResource(user)`), with an explicit class argument winning over the binding (`user.toResource(AdminUserResource)`). **`ModelCollection.toResourceCollection(cls?)`** wraps every item and returns a `ResourceCollection` — composing with the paginator/`additional()` envelope (`await users.toResourceCollection().toResponse()`). Unbound + no argument throws a clear pointer error; an empty collection resolves to `{ data: [] }` without needing a class. Supporting DX fix: the `JsonResource`/`ResourceCollection`/`ModelCollection` generic constraints are widened from `Record<string, unknown>` to `object`, so `class UserResource extends JsonResource<User>` (a class instance type) now typechecks — previously any class-typed model tripped the missing-index-signature error. Widening only; no existing call site changes.
+- 12b4a55: feat(orm): date helpers (`whereDate`/`whereTime`/`whereDay`/`whereMonth`/`whereYear`) + `whereNot` group-negation on the native engine
+
+  Laravel's date-based wheres and `whereNot` arrive on the native query engine:
+
+  - **Date helpers** — `whereDate('createdAt', '2026-01-01')`, `whereYear('createdAt', '>=', 2026)`, etc. (+ `orWhere*` forms). Two-arg form is equality; three-arg carries the operator. Compiled through a new per-dialect `Dialect.dateExtract(part, column)` seam: SQLite `strftime` (with `CAST(... AS INTEGER)` for day/month/year), Postgres `::date`/`::time`/`EXTRACT(...)::int`, MySQL `DATE()`/`TIME()`/`DAY()`/`MONTH()`/`YEAR()`. Values bind positionally like any other clause. A `Date` value compares by its UTC components; numeric strings on day/month/year coerce to integers.
+  - **`whereNot(cb)` / `orWhereNot(cb)`** — negated group: the callback's conditions compile as one parenthesized sub-tree wrapped in `NOT (…)`, reusing the `whereGroup` sub-builder machinery. The callback receives a hydrating sub-builder, so named sugar (`whereIn`, `whereNull`, …) composes inside it.
+
+  All methods live on `HydratingQueryBuilder` + as `Model` statics — NOT on the `QueryBuilder` contract (zero adapter/stub churn). On adapters that don't implement them yet (Drizzle, Prisma), the Model-layer proxy throws a clear `<method>() is not supported on this adapter — use whereRaw(...) or DB.select(...)` error instead of a bare TypeError; the Drizzle implementation is a planned follow-up.
+
+- 4085846: feat(orm): native schema builder — foreign keys (`constrained()` / `foreign()` / `onDelete`)
+
+  The native engine's `Schema.create` migrations can now declare foreign keys, Laravel-style:
+
+  ```ts
+  Schema.create("posts", (t) => {
+    t.id();
+    t.foreignId("user_id").constrained(); // → REFERENCES users(id)
+    t.foreignId("author_id").constrained("users"); // explicit table
+    t.foreignId("editor_id").references("id").on("users").onDelete("cascade");
+  });
+
+  // composite / explicit:
+  Schema.create("memberships", (t) => {
+    t.foreign(["org_id", "user_id"])
+      .references(["org_id", "user_id"])
+      .on("org_users");
+  });
+  ```
+
+  - **`constrained(table?, column = 'id')`** infers the referenced table from the column name (`user_id` → `users`, `authorId` → `authors`) or takes it explicitly.
+  - **`references(cols).on(table)`** builds the FK explicitly; **`foreign(cols)`** records a table-level (composite) FK.
+  - **`onDelete` / `onUpdate`** accept `cascade` | `restrict` | `set null` | `no action` (plus `setNull` / `noAction` aliases); anything else throws — arbitrary text never reaches the SQL.
+  - FKs compile to `CONSTRAINT "{table}_{col}_foreign" FOREIGN KEY (...) REFERENCES "tbl" (...) [ON DELETE ...] [ON UPDATE ...]` table constraints, with every identifier validated + quoted.
+
+  **SQLite notes:** FK enforcement requires `PRAGMA foreign_keys = ON` (better-sqlite3 leaves it off by default; this release does not change that). SQLite can't ADD or DROP a foreign key in place, so `Schema.table(...)` adding an FK column or `dropForeign(...)` throws a clear error pointing at creating the table with the FK or a column `change()`/rebuild.
+
+- 6f8760d: feat(orm): `make:migration <name>` now generates a native migration stub for native-engine apps
+
+  For an app on the native SQLite engine (no `@rudderjs/orm-prisma` / `@rudderjs/orm-drizzle` installed), `rudder make:migration <name>` writes a timestamped, hand-authored up/down stub to `database/migrations/<timestamp>_<name>.ts` instead of shelling out to an external migration tool. Laravel-style name inference scaffolds the common case: a `create_<table>_table` name produces an `up()` with `Schema.create('<table>', …)` (`t.id()` + `t.timestamps()`) and a `down()` that drops the table; any other name yields a generic empty stub with `// TODO` markers. Prisma/Drizzle apps and the `--vector` flag path are unchanged.
+
+- 083672b: feat(orm): native `migrate:rollback` / `migrate:refresh` / `migrate:fresh` + transactional batches
+
+  The native SQLite engine can now reverse migrations, not just apply them:
+
+  - **`migrate:rollback`** reverts the last batch — each migration's `down()` runs in reverse apply order and its `migrations` row is deleted.
+  - **`migrate:refresh`** rolls every migration back and re-runs them all.
+  - **`migrate:fresh`** drops all tables and re-applies from scratch (now wired for native; prisma/drizzle keep shelling out).
+  - On prisma/drizzle apps, `migrate:rollback` / `migrate:refresh` print a clear "forward-only — use `migrate:fresh`" message instead of shelling out.
+
+  Each batch (the `up()`s in a `run()`, the `down()`s in a rollback) now executes inside a **single transaction**, so a failure mid-batch rolls the whole batch back atomically — the DDL and the `migrations` state-table writes commit or roll back together. The `Migrator` gains `rollback()`, `rollbackAll()`, `lastBatch()`, `migrationsInBatch()`, and `dropAllTables()`; `MigratorAdapter` now requires `transaction()` (already implemented by `NativeAdapter`).
+
+- 8ba6e7d: feat(orm): native `Schema.table` column `change()` via the SQLite table-rebuild (Phase 7.4b)
+
+  Completes `Schema.table` for the native engine: `t.<type>('col').change()` now changes an existing column's type/nullability/default. SQLite can't alter a column in place, so this runs the canonical 12-step rebuild — introspect the live table, create a shadow table with the new column set, copy the data across, drop the original, rename the shadow into place, and recreate the user indexes — preserving every non-changed column, the primary key (including `INTEGER PRIMARY KEY AUTOINCREMENT`), and unique/regular indexes.
+
+  v1 scope: `change()` must be the only operation in its `Schema.table()` call (split adds/drops/renames/index changes into a separate call); changing a primary-key column isn't supported. New `rebuildTable` + SQLite introspection helpers (`readColumns` / `readIndexSql` / `isAutoincrement`) are exported from `@rudderjs/orm/native`. Atomicity comes from the migrator's per-batch transaction. SQLite only.
+
+- b31d1be: feat(orm): native migration runner — `Migration` + `Schema` facade + `migrate` / `migrate:status` (Phase 7.2)
+
+  Builds the migration runner on top of the 7.1 schema builder, so the native SQLite engine now runs Laravel-style migrations in-process (no external tool):
+
+  - **`Migration`** base class (`up()` / `down()`) and the static **`Schema`** facade (`Schema.create` / `drop` / `dropIfExists` / `hasTable` / `hasColumn`) that migration files call — exported from `@rudderjs/orm/native`.
+  - **`Migrator`** — tracks applied migrations in a `migrations` table (`id`, `migration`, `batch`, mirroring Laravel), applies pending ones in a new batch, and reports status. Plus **`discoverMigrations(dir)`** which loads `database/migrations/*.{ts,js,mts,mjs}` files sorted by name.
+  - **`NativeAdapter.schemaBuilder()`** — exposes a connection-bound `SchemaBuilder` for the runner.
+  - **CLI**: `rudder migrate` and `rudder migrate:status` now detect a native-engine app (no prisma/drizzle adapter package installed) and run the in-process `Migrator` against the booted adapter, instead of shelling out. Prisma/Drizzle apps are unchanged. The CLI boots the app on demand for the native path (`migrate*` otherwise skip boot).
+
+  `migrate:rollback` / `migrate:refresh` (which reverse a batch via `down()`) and transactional batches land in 7.5; the `batch` column is recorded now so rollback has the grouping it needs. `make:migration` for native (the stub generator) is 7.3 — for now, author migration files by hand. SQLite only; additive and opt-in.
+
+- 0d6c280: Native ORM engine: generate TypeScript model types from a live **Postgres** schema (Phase 7.7c). `schema:types` now introspects Postgres via `information_schema` (`readTables`/`readColumns` are dialect-aware) and maps column types through a new `pgTypeToTs` that reflects what the driver returns on read (`jsonb` → `unknown`, `timestamptz`/`date` → `Date`, `int8`/`bigint` → `number`, `numeric`/`money` → `string`, `bytea` → `Uint8Array`). The per-dialect storage mapper is threaded through `resolveColumnType` / `buildTableTypes` / `collectSchemaTypes` and defaults to the SQLite mapping, so existing behavior is unchanged. Declared `casts` still override the generated storage type. Completes Postgres support for the native engine (dialect + driver landed previously).
+- 3b995b7: Native ORM engine: add Postgres support — Phase 7.7. The native engine (`@rudderjs/orm/native`) now runs against Postgres in addition to SQLite.
+
+  - **`PgDialect`** — maps the portable schema-builder column types to Postgres storage types (`bigserial` PK, `varchar(n)`, `jsonb`, `timestamptz`, native `uuid`/`bytea`, `numeric(p,s)`, `double precision`), with `"`-quoted identifiers, `$n` placeholders, and `RETURNING` support. Adds a `Dialect.booleanLiteral(value)` seam so a boolean column `DEFAULT` renders correctly per dialect (Postgres `true`/`false`; SQLite/MySQL `0`/`1`).
+  - **`PostgresDriver`** — a `Driver` over the `postgres` package (porsager, a new optional peer dependency), with pooled connections and real transactions/savepoints. `int8`/`bigserial` columns parse as JS numbers so a model's `id` matches the SQLite engine.
+  - **Driver selection** — `native({ driver: 'pg', url })` wires the Postgres driver + dialect; `SchemaBuilder.hasTable`/`hasColumn` introspect via `information_schema` on Postgres.
+
+  Opt-in and additive — SQLite apps are unaffected. MySQL (7.8) is a separate follow-up.
+
+- 5eb4dd8: feat(orm): native schema builder — `Schema.create` + `Blueprint` for the SQLite engine (Phase 7.1)
+
+  Adds a Laravel-style schema builder to the native engine at `@rudderjs/orm/native`: a `Blueprint` records column/index/primary-key intents, a pure per-dialect DDL compiler turns them into `CREATE TABLE` / `CREATE INDEX` statements, and `SchemaBuilder` executes them against a driver (plus `drop`/`dropIfExists`/`hasTable`/`hasColumn` introspection).
+
+  This is the first slice of native migrations (Phase 7.1) — the schema-definition engine. The static `Schema` facade, `Migration` base class, and the `migrate` / `migrate:rollback` runner land in 7.2+. Column types cover the common set (`id`/`increments`, `string`, `text`, `integer`/`bigInteger`, `boolean`, `dateTime`/`timestamp`, `json`, `uuid`, `decimal`, `float`, `binary`, `foreignId`) with `nullable`/`default`/`useCurrent`/`unique`/`index`/`primary` modifiers and `timestamps()`/`softDeletes()` clusters. SQLite only for now (the DDL compiler is dialect-pluggable; pg/mysql arrive in 7.7/7.8). Additive and opt-in — Prisma/Drizzle apps are untouched.
+
+- 536b64d: feat(orm): native `Schema.table` alters + `Schema.rename` (Phase 7.4)
+
+  Adds table-alteration to the native engine's schema builder (`@rudderjs/orm/native`):
+
+  - **`Schema.table('users', (t) => …)`** — add columns (any `Blueprint` column method), `t.dropColumn(...)`, `t.renameColumn(from, to)`, add indexes (`t.index` / `t.unique` / per-column `.unique()`/`.index()`), and `t.dropIndex(name)`. Compiled to separate `ALTER TABLE` / `CREATE INDEX` / `DROP INDEX` statements in dependency order (rename → add → add-index → drop-index → drop-column).
+  - **`Schema.rename(from, to)`** — `ALTER TABLE … RENAME TO …`.
+  - New `AlterBlueprint` + `compileAlterTable` / `compileRenameTable` + `ColumnBuilder.change()`.
+
+  SQLite's ADD COLUMN limits are enforced with clear errors: you can't add a primary-key column to an existing table, and a NOT NULL column must carry a default (`.default(...)` or `.nullable()`). Changing an existing column's _type_ (`.change()`) needs the SQLite table-rebuild dance and throws a clear "lands in 7.4b" error for now. SQLite only; additive and opt-in.
+
+- ea9b982: feat(orm): schema → TypeScript types generator + SchemaRegistry (GATE 7-types, foundation)
+
+  The headline of the native migrations plan: model column types **generated from the migrated schema** instead of hand-maintained, so they can't drift. This lands the foundation:
+
+  - **Pure type generator** (`@rudderjs/orm/native`): `sqliteTypeToTs` (affinity mapping), `castToTs` (a declared `cast` overrides the storage type — `boolean`/`date`/`json`/…), `resolveColumnType` (nullability + PK rules), `buildTableTypes`, and `emitRegistryDts` — which emits an `app/Models/__schema/registry.d.ts` augmenting `@rudderjs/orm`'s new `SchemaRegistry` interface, one entry per table. Mirrors `@rudderjs/vite`'s scanner pattern.
+  - **Introspection**: `readTables` (user tables, excluding `sqlite_*` + the `migrations` bookkeeping table).
+  - **Orchestrator**: `collectSchemaTypes` / `generateSchemaTypes` — introspect every table, fold in each model's `casts`, write the registry file.
+  - **`SchemaRegistry` + `SchemaColumns<TName>`** exported from `@rudderjs/orm`: empty by default (so nothing changes until you generate), augmented by the generated `.d.ts`. Verified end-to-end with `tsc`: after augmentation, `SchemaColumns<'users'>` resolves to the typed column shape and a wrong column type fails type-checking.
+
+  Non-breaking and opt-in — `Model` is unchanged; until the file is generated, `SchemaRegistry` is empty and everything behaves as before. Follow-ups: the `rudder schema:types` CLI command + post-`migrate` auto-generation, and binding the registry onto `Model<'users'>` so a model needs zero hand-declared fields. SQLite only.
+
+- ad17e79: feat(orm): `onQuery` query listening on the native engine + app-facing `DB.listen()`
+
+  Laravel's `DB::listen` arrives in RudderJS:
+
+  - **`@rudderjs/contracts`**: `onQuery?(listener)` is now an optional capability on the `OrmAdapter` contract, with new `QueryEvent` (`{ sql, bindings, duration, connection?, model? }`) and `QueryListener` types — the shape Telescope's QueryCollector and Pulse's slow-query recorder already consume.
+  - **`@rudderjs/orm` (native engine)**: the `NativeAdapter` implements `onQuery` by instrumenting its executor — every executed query (Model reads/writes, `DB.*` raw calls, and queries inside `transaction()`, which share the top-level listener list) is timed with `performance.now()` and reported with its SQL + bindings. Listener errors are swallowed and never break the query; only successful executions report (Laravel `QueryExecuted` parity). Transaction control statements (BEGIN/COMMIT/SAVEPOINT) are not reported.
+  - **`@rudderjs/database`**: new `DB.listen(listener)`, mirroring Laravel's `DB::listen` — delegates to the active adapter's `onQuery` hook and throws a clear adapter-named error when the adapter doesn't support query listening. `QueryEvent` / `QueryListener` are re-exported.
+  - **`@rudderjs/orm-prisma`**: the existing ad-hoc `onQuery` method is now typed to the shared contract (no behavior change).
+
+  The Drizzle adapter does not implement the hook yet — `DB.listen()` throws its clear unsupported error there; a follow-up adds it.
+
+- f6afdf8: Cast breadth (Laravel parity): three new casts in the built-in registry.
+
+  - **`decimal:N`** — parameterized fixed-precision cast (`static casts = { price: 'decimal:2' }` / `@Cast('decimal:2')`). Both read and write normalize to a string with N fractional digits (`'9.50'`) — strings avoid float-rounding drift on money columns.
+  - **enum** — a TypeScript `enum` (or plain const object) used directly as a cast (`static casts = { status: StatusEnum }`). Validates the value against the enum's members on read/write and throws a clear error (listing the allowed set) on an unknown value. Numeric enums are handled — the reverse-mapping labels are not treated as valid stored values.
+  - **`hashed`** — one-way hash on write via the optional `@rudderjs/hash` peer (resolved synchronously through its shared registry, so `cast.ts` stays client-bundle safe). Re-hashing an already-hashed value is a no-op (Laravel's behavior). Requires a sync-capable driver (bcrypt); argon2 throws a clear message. On read the stored hash is returned verbatim.
+
+- e25472c: feat(orm): `chunk()` / `lazy()` — memory-bounded iteration over large result sets
+
+  Adds Laravel's `chunk` and `lazy` to the query builder (and as Model statics), so
+  you can process huge tables without loading every row at once.
+
+  ```ts
+  // Pages of 200; return false to stop early.
+  await User.query().orderBy('id').chunk(200, async (users) => { … })
+
+  // Async iterator, 1000 rows per page by default.
+  for await (const user of User.query().orderBy('id').lazy()) { … }
+  ```
+
+  Both page the query via the existing `LIMIT`/`OFFSET` primitives at the Model
+  layer — no adapter or contract changes, so every adapter (native, Prisma,
+  Drizzle) supports them. `chunk` re-queries per page and resolves `true` (ran to
+  completion) or `false` (callback bailed); `lazy(size?)` returns an async
+  generator. Add an `orderBy` for stable paging (offset paging needs a consistent
+  sort, same as Laravel's `chunk`).
+
+- ca644ad: feat(orm): `Model.query().cursorPaginate(perPage?, cursor?)` — keyset pagination (Laravel parity)
+
+  Adds cursor (keyset) pagination alongside the existing offset `paginate()`. Instead of `OFFSET`, it filters `WHERE (orderCols) > lastSeenValues` against the query's `orderBy` columns and fetches `LIMIT perPage + 1` (the probe row tells it whether another page exists) — so paging stays O(1) regardless of depth, the right tool for infinite scroll and large API list endpoints.
+
+  ```ts
+  const page = await Post.query()
+    .orderBy("createdAt", "desc")
+    .cursorPaginate(20);
+  //   { data, perPage, nextCursor, prevCursor, hasMore }
+  const next = await Post.query()
+    .orderBy("createdAt", "desc")
+    .cursorPaginate(20, page.nextCursor);
+  ```
+
+  - Returns a `CursorPaginator` — `{ data, perPage, nextCursor, prevCursor, hasMore }` (+ `toJSON()`). The cursor is an opaque base64url-encoded JSON of the boundary row's order-column values; decoded on input, encoded on output. `encodeCursor` / `decodeCursor` are exported too.
+  - **Requires at least one `orderBy()`** (keyset needs a deterministic sort) — throws a clear error otherwise. The primary key is appended as a tiebreaker when it isn't already an order column, giving a stable total order.
+  - **Multi-column orderBy is supported** — compound keyset via the lexicographic `(a, b) > (?, ?)` expansion, composed so it `AND`s correctly with any pre-existing `where()` clauses.
+  - `Model.cursorPaginate(perPage?, cursor?)` (static) defaults to ordering by the primary key.
+  - **Forward-only in v1** — `nextCursor` advances; `prevCursor` is always `null` (backward navigation deferred).
+
+  Built entirely at the Model layer on the existing `where` / `orderBy` / `limit` / `get` primitives — no adapter, contract, or native-engine changes — so it works identically across the native engine, Drizzle, and Prisma.
+
+- bf1cca0: feat(orm): `distinct()` — SELECT DISTINCT (Laravel parity)
+
+  `Model.query().distinct().get()` de-duplicates the result rows; pair it with `select(...)` to de-duplicate on specific columns. With `distinct()`, `count()` / `paginate()` count the distinct rows.
+
+  Native engine only — on Drizzle and Prisma it throws with a pointer to the native engine / `DB.select(...)`, consistent with joins / groupBy / union.
+
+- bc76570: feat(orm): factory relationship building + `Model.factory()` + mass-assignment bypass
+
+  Closes the three Laravel-parity gaps in `ModelFactory` (gap-analysis §8 factory arc):
+
+  - **`Model.factory()` entry point** — link a factory with `static factoryClass = UserFactory` on the model, then call `User.factory()` (≡ `UserFactory.new()`), chaining the same verbs (`.state()`, `.with()`, `.has()`, `.for()`, `.create()`, `.make()`). Unlinked models throw a clear error.
+  - **Relationship building** — `has(childFactory, count?, relationName?)` (hasMany/hasOne children with the parent FK set), `for(parentFactory, relationName?)` (belongsTo — create the parent first, set this row's FK), and `hasAttached(relatedFactory, count?, pivotData?, relationName?)` (belongsToMany — create related rows and attach through the pivot). FKs resolve from `static relations`; the relation name is inferred when a single relation of the right kind points at the other model. Polymorphic relations are not yet supported (clear error).
+  - **Mass-assignment bypass** — factory `create()` now persists via `forceFill()` + `save()` instead of `Model.create()`, so a guarded model still receives every factory attribute (Laravel behavior). Observer events (`creating`/`created`/`saving`/`saved`) still fire; `make()` is unaffected.
+
+  `ModelFactory.new()` also accepts concrete-generic factories (`extends ModelFactory<{ ... }>`) and returns the precise factory type.
+
+- acc2245: Relations: `hasOneThrough` / `hasManyThrough` (Laravel parity). A parent reaches a distant relation through an intermediate model — e.g. `Country → hasManyThrough(Post, User)` walks `countries.id = users.countryId` then `users.id = posts.userId`.
+
+  Declared as object literals on `static relations` (same shape as the other relation types): `{ type: 'hasManyThrough', model: () => Post, through: () => User, firstKey?, secondKey?, localKey?, secondLocalKey? }`. Keys default by Laravel convention — `firstKey` = `${camelCase(Parent)}Id`, `secondKey` = `${camelCase(Through)}Id`, `localKey`/`secondLocalKey` = each model's primary key.
+
+  Both access paths resolve the two hops with batched `WHERE … IN` queries (no join SQL), entirely in the Model layer — so every adapter gets them with no contract/adapter change:
+
+  - **Lazy** — `parent.related('posts')` returns a deferred QueryBuilder (reuses the pivot deferred-proxy machinery); chain `where`/`orderBy`/etc. and terminate with `get`/`first`.
+  - **Eager** — `Model.with('posts')` via the Model-layer batched loader (`attachHasThrough`); always routed to the Model layer regardless of adapter eager strategy (no adapter can express the two-hop walk natively).
+
+  `whereHas` / `withCount` on a through relation throw a clear "not supported yet" error (a two-level EXISTS / aggregate is deferred) pointing at `with()` / `related()`.
+
+- 0b085a6: feat(orm): query-builder breadth — joins, structured `select()`, `groupBy` / `having`
+
+  Adds Laravel-style joins, column projection, and grouping to the query builder. The native engine fully supports them:
+
+  - **Joins** — `join` / `leftJoin` / `rightJoin` / `crossJoin`, with column-vs-column `on()` and bound `where()` conditions. Simple form `join('posts', 'posts.userId', '=', 'users.id')` and callback form `join('posts', j => j.on(...).where(...))`.
+  - **Projection** — `select('users.id', 'posts.title')` (quoted, qualified columns; combines with `selectRaw`).
+  - **Grouping** — `groupBy(...columns)` + `having(col, op, value)` / `orHaving` / `havingRaw('COUNT(*) > ?', [3])` / `orHavingRaw`. With a `GROUP BY` present, `count()` / `paginate()` count the number of groups (wrapped subquery), matching Laravel.
+
+  Each is also a `Model` static (`User.join(...)`, `User.select(...)`, `User.groupBy(...)`, `User.having(...)`).
+
+  On the Drizzle and Prisma adapters these throw with a pointer to the native engine or the `DB` facade — their typed clients can't map a join/projection/grouping result back to a single hydrated model (the same reason `selectRaw` throws there). Use `@rudderjs/orm/native`, or `DB.select(sql, bindings)`.
+
+  `JoinClause` (the join-callback sub-builder type) is exported from `@rudderjs/contracts` and re-exported from `@rudderjs/orm`.
+
+- 468dcd4: Model: `static keyType = 'uuid' | 'ulid'` for application-generated primary keys. When set and the primary key is unset on `Model.create()` / `instance.save()`, the ORM stamps a fresh UUID v4 (Web Crypto `randomUUID`) or a lexicographically sortable 26-char Crockford Base32 ULID before the insert — Laravel's `HasUuids` / `HasUlids` traits. Implemented purely in the Model layer, so all three adapters get it with no contract/adapter change. Default `'int'` stays database-assigned auto-increment (unchanged). A caller-supplied key is never overwritten.
+- ffbb7f7: Per-model named connections (multi-connection PR2): `static connection` + `Model.on('name')`.
+
+  A model can bind every query to a named connection with `static connection = 'reporting'` (Laravel's `protected $connection`), or run a one-off query on another connection with `User.on('reporting').where(...)` — `Model.on()` keeps its two-arg lifecycle-listener form (`User.on('creating', fn)`); the one-arg form starts the connection-scoped query. Named connections open lazily on the model's first query via a deferred record-and-replay QueryBuilder: chainables recorded before the open replay onto the real adapter builder at the first terminal — only the first query per connection pays this; afterwards queries build directly on the opened adapter. Queries inside `transaction(fn, { connection })` join that open transaction; observer events, hydration, scopes, and the Model-layer sugar (`whereIn`, `chunk`/`lazy`, …) all work unchanged on named connections.
+
+- b897950: Named database connections (multi-connection PR1): `DB.connection('name')` + a lazy `ConnectionManager` + per-connection transaction scoping.
+
+  - **`@rudderjs/orm`**: new `ConnectionManager` (globalThis-backed registry of lazy connection factories — registering does no I/O and no driver import, so `config/database.ts`'s `connections` map keeps its menu semantics). `transaction(fn, { connection: 'name' })` runs a transaction on a named connection; the transaction ALS now keys scoped adapters **by connection name**, so a named-connection transaction never captures default-connection queries (and vice versa). `ModelRegistry.getAdapter(name?)` / `getScopedAdapter(name?)` resolve named connections. The native provider registers a factory for every `engine: 'native'` connection (the default stays eager and shares one adapter with `DB.connection(default)`), and the native dev-HMR driver cache is now per-connection (a config edit disposes/reopens only that connection's driver).
+  - **`@rudderjs/database`**: `DB.connection(name)` — a scoped facade (`select`/`insert`/`update`/`delete`/`statement`/`transaction`/`listen`) over a named connection, opened lazily on first use; inside `transaction(fn, { connection: name })` its calls join that open transaction. New bridge hooks (`registerConnectionResolver`, `registerNamedTransactionRunner`) keep the orm→database dependency direction.
+
+  `Model.on('name')` / per-model `static connection` and read/write splitting land in follow-up PRs (see `docs/plans/2026-06-03-orm-multi-connection-read-write-split.md`).
+
+- caff11d: feat(orm): native MySQL dialect + driver (Phase 7.8)
+
+  Adds MySQL to the built-in native engine, mirroring the shipped Postgres path
+  (7.7). Native now drives SQLite, Postgres, **and** MySQL with one query/DDL/
+  introspection/types pipeline.
+
+  - **`MysqlDialect`** — backtick identifier quoting, `?` placeholders, `1`/`0`
+    boolean literals, and the MySQL column-type map (`t.id()` →
+    `bigint AUTO_INCREMENT PRIMARY KEY`, `boolean` → `tinyint(1)`, `json` → `json`,
+    `uuid` → `char(36)`, `dateTime`/`timestamp` → `datetime`/`timestamp`, etc.).
+  - **`MysqlDriver`** (`mysql2`, optional peer) — pooled; autocommit statements run
+    on the pool, `transaction()` reserves a connection (BEGIN/COMMIT/ROLLBACK) and
+    nested transactions map to SAVEPOINTs on that pinned connection.
+  - **No-RETURNING write path** — MySQL 8 has no `RETURNING`, so the query builder
+    branches on `dialect.supportsReturning`: it reads `insertId` / `affectedRows`
+    from the driver's result metadata (a new native-only `AffectingExecutor` seam)
+    and re-SELECTs by primary key for terminals that return a row. SQLite/Postgres
+    keep their exact existing `RETURNING *` path.
+  - **Introspection + type generation** — `information_schema` reads scoped to
+    `DATABASE()` and a `mysqlTypeToTs` mapper, so `rudder schema:types` /
+    post-`migrate` generation works against MySQL (`tinyint` → `number`, refined to
+    `boolean` by a declared cast; `decimal` → `string`; `json` → `unknown`).
+  - **Provider gate reconciled** — the `engine: 'native'` config path previously
+    hard-rejected every non-sqlite driver, leaving the shipped Postgres engine
+    unreachable via `config/database.ts` (and `rudder migrate`, which boots through
+    the provider). The gate now validates the driver name and accepts `sqlite` /
+    `pg` / `mysql` (pg + mysql enabled together); `NativeAdapter.make` then loads
+    the matching optional peer with a clear install/connection error.
+  - `mysql2` added as an optional peer dependency (lazy-imported only —
+    `pnpm test:client-bundle` stays green).
+
+- 26b7acf: Read/write split + sticky reads on the native engine (multi-connection PR3).
+
+  A native connection can declare read replicas in `config/database.ts` — `read: { url: string | string[] }` (round-robin per query), optional `write: { url }` (defaults to `url`), and `sticky: true` for read-your-writes: after a write within the current request scope, reads on that connection route to the writer. Routing rules (Laravel parity): un-locked SELECT terminals + `selectRaw`/`DB.select` → read pool; writes, DDL, locked selects (`lockForUpdate`/`sharedLock`), and **everything inside a transaction** → write connection. The sticky request scope is entered by a middleware the native provider auto-installs on the `web` + `api` groups when a sticky split connection is configured; outside a request scope (jobs, commands) sticky is a no-op and reads go to replicas — wrap with `runWithDatabaseContext()` from the new node-only `@rudderjs/orm/sticky` subpath for read-your-writes there. Query events (`DB.listen`/`onQuery`) now carry the **connection name** (config name when known, driver name otherwise) and — on split connections only — a `target: 'read' | 'write'` field (`QueryEvent.target`, new optional contract field). The dev-HMR driver cache includes the replica list in its signature and `disconnect()` closes replica drivers too.
+
+- ea510e0: Native engine schema/migration breadth (Laravel parity). The `@rudderjs/orm/native` schema builder gains:
+
+  - **`morphs()` / `nullableMorphs()` / `dropMorphs()`** — polymorphic-relation column scaffolding (`{name}Id` + `{name}Type` + composite index, camelCase).
+  - **More column types** — `tinyInteger`/`smallInteger`/`mediumInteger`, `char`, `mediumText`/`longText`, `double`, `date`, `time(precision?)`, `jsonb`, `ulid`, `foreignUuid`/`foreignUlid`/`foreignIdFor`, and `enum`/`set` — mapped across all three native dialects (sqlite/pg/mysql); `set` throws a clear unsupported error on pg/sqlite.
+  - **Column modifiers** — `comment()` (inline on MySQL, `COMMENT ON COLUMN` on pg), `useCurrentOnUpdate()` (MySQL), `after()`/`first()` (MySQL positional ALTER), raw `Expression` defaults (e.g. `raw('gen_random_uuid()')`), and FK shorthands `cascadeOnDelete()` / `restrictOnDelete()` / `nullOnDelete()` / `cascadeOnUpdate()`.
+  - **Migrate command flags** — `migrate --step`/`--pretend`/`--force`, `migrate:rollback --step[=N]`/`--batch=N`, standalone `migrate:reset`, `migrate:refresh --step`/`--seed`, and `migrate:fresh --seed`.
+
+- b08aa1d: feat(orm): raw-SQL expressions — `selectRaw` / `whereRaw` / `orWhereRaw` / `orderByRaw` + `DB.raw(...)` everywhere
+
+  Adds Laravel's raw-SQL escape hatch to the query builder for the clauses the
+  structured builder can't express:
+
+  ```ts
+  // Bound `?` placeholders are rebound to the dialect's form ($n on Postgres).
+  const adults = await User.query().whereRaw("age > ?", [18]).get();
+
+  // Compose with structured wheres + OR raw fragments.
+  await User.query().where("active", true).orWhereRaw("age > ?", [65]).get();
+
+  // Raw ORDER BY + raw projection.
+  await User.query()
+    .orderByRaw("field(status, ?, ?)", ["urgent", "high"])
+    .get();
+  await User.query()
+    .selectRaw("count(*) as total, max(created_at) as latest")
+    .get();
+
+  // DB.raw(...) splices verbatim as a where value or order column.
+  import { DB } from "@rudderjs/database";
+  await User.query()
+    .where("created_at", ">", DB.raw("NOW()"))
+    .orderBy(DB.raw("age asc"))
+    .get();
+  ```
+
+  Threaded through the native engine's compiler (a `?`-placeholder rebinder shares
+  the one positional bindings accumulator, so `$n` indices stay correct across the
+  whole statement). The Drizzle adapter implements `whereRaw`/`orWhereRaw`/
+  `orderByRaw` via its `sql` template; `selectRaw` throws there (its typed select
+  can't map an arbitrary raw projection back to hydrated models). The Prisma
+  adapter throws on all four — its structured client can't splice raw SQL — and
+  points you at the `DB` facade (`DB.select(sql, bindings)`) for raw queries.
+
+  The `Expression` wrapper behind `DB.raw(...)` moved from `@rudderjs/database` to
+  `@rudderjs/contracts` (re-exported from `@rudderjs/database`, so `DB.raw()` and
+  `import { raw } from '@rudderjs/database'` are unchanged) — it now lives on a
+  client-safe path so the query builder's raw methods stay out of `@rudderjs/database`'s
+  node-only graph.
+
+- 6bd32b0: feat(orm): generated model types — `Model.for<'table'>()` binding + `rudder schema:types` (GATE 7-types)
+
+  Finishes the GATE 7-types consumption layer on top of the #817 generator. A model can now derive its column types from the migrated schema with zero hand-declared fields:
+
+  ```ts
+  export class User extends Model.for<"users">() {
+    static override table = "users";
+  }
+
+  await User.find(1); // u.id / u.name / u.email — typed
+  await User.where("active", true).first(); // chains are typed too
+  await User.create({ name, email }); // unknown columns fail tsc
+  ```
+
+  - `Model.for<TName>()` resolves a model's instance type from `SchemaRegistry[TName]` (open-decision #1 → generic binding). Purely additive: `static casts` still refine the storage type, plain `extends Model` and hand-declared fields are unaffected.
+  - `rudder schema:types` regenerates `app/Models/__schema/registry.d.ts` on demand (native engine; boots on demand like `migrate*`).
+  - Native `migrate` / `migrate:fresh` / `migrate:refresh` / `migrate:rollback` auto-regenerate the registry after a successful apply.
+  - The generated `registry.d.ts` should be **committed** (so `tsc`/CI is green without a generate step).
+
+- 370d2ec: feat(orm): `union` / `unionAll` — combine queries (Laravel parity)
+
+  `base.union(other)` / `base.unionAll(other)` combine the current query with another (`UNION` removes duplicate rows, `UNION ALL` keeps them). The combined result takes the base query's `ORDER BY` / `LIMIT` / `OFFSET`; `count()` / `paginate()` count the combined rows.
+
+  Native engine only — on Drizzle and Prisma these throw with a pointer to the native engine / `DB.select(...)`, consistent with joins/groupBy. `other` must be another native `Model.query()`.
+
+- c66e195: feat(orm): `Model.upsert(rows, uniqueBy, update?)` — bulk insert-or-update across native, Drizzle, and Prisma
+
+  Adds Laravel's bulk upsert. Insert every row; on a unique-key conflict (the
+  `uniqueBy` columns) update the `update` columns from the incoming values instead
+  of failing. `update` defaults to every inserted column except `uniqueBy`; an
+  empty list means insert-or-ignore. Returns the number of rows affected.
+
+  ```ts
+  await User.upsert(
+    [
+      { email: "a@x.com", name: "Ada" },
+      { email: "b@x.com", name: "Bob" },
+    ],
+    "email", // uniqueBy (single column or string[])
+    ["name"] // overwrite on conflict; omit → all inserted columns minus uniqueBy
+  );
+  ```
+
+  - **native** — one atomic statement: `ON CONFLICT (…) DO UPDATE / DO NOTHING`
+    (SQLite/Postgres) or `ON DUPLICATE KEY UPDATE` (MySQL), via a new
+    `Dialect.upsertClause()` seam + `compileInsert({ upsert })`.
+  - **Drizzle** — `onConflictDoUpdate` / `onConflictDoNothing` (SQLite/Postgres) or
+    `onDuplicateKeyUpdate` (MySQL).
+  - **Prisma** — no portable bulk ON CONFLICT, so each row maps to a single-row
+    `delegate.upsert` batched in one `$transaction`.
+  - **`@rudderjs/contracts`** — new optional `QueryBuilder.upsert?(rows, uniqueBy,
+update)`; the Model layer throws an adapter-named error if an adapter omits it.
+
+  Like `insertMany`, upsert is a bulk write: `fillable`/`guarded` do **not** apply
+  (write-side casts/mutators still do) and observer events do **not** fire. A
+  matching UNIQUE constraint on `uniqueBy` must exist. MySQL's returned count is
+  rows-touched (1 per insert, 2 per update), not rows-distinct.
+
+- 473dfd9: feat(orm): `whereColumn` + `whereHas` OR/count operators — finishing the where/existence families
+
+  - **`whereColumn(a, b)` / `whereColumn(a, op, b)`** (+ `orWhereColumn`) — compare two
+    columns with both sides identifier-quoted per dialect (unlike `whereRaw`, which is
+    verbatim). Native real (new column-vs-column compiler clause); Drizzle real (column
+    refs through `sql`); Prisma throws and points at `DB.select`/`whereRaw`.
+  - **`orWhereHas` / `orWhereDoesntHave`** — OR-rooted relation-existence predicates.
+  - **`has(rel, op, n)` / `orHas`** — count comparison on a relation (`has('posts', '>=', 3)`),
+    compiled as `(SELECT COUNT(*) …) op n`. Defaults to `>= 1` (≡ `whereHas`).
+  - OR/count are **native-only**; Drizzle and Prisma throw a clear pointer (their query
+    APIs can't express a count filter or an OR-rooted existence join). Plain
+    `whereHas`/`whereDoesntHave` are unchanged on every adapter.
+
+  `whereColumn`/`has`/`orWhereHas` are surfaced as Model statics and on the hydrating
+  query builder. `RelationExistencePredicate` gains optional `boolean` + `count` fields.
+
+- 6e83e26: feat(orm): `whereRelation` / `orWhereRelation` — column-on-relation filter sugar (Laravel parity)
+
+  Shorthand for `whereHas(relation, q => q.where(column, …))`:
+
+  ```ts
+  await User.whereRelation("posts", "published", true).get(); // = operator
+  await User.whereRelation("posts", "views", ">=", 100).get(); // explicit operator
+  await User.orWhereRelation("posts", "flagged", true).get(); // OR-rooted
+  ```
+
+  Available as `Model` statics and as chainable methods on the query builder
+  (`User.where(...).whereRelation(...)`). Delegates to the existing `whereHas`
+  predicate machinery, so it works across every relation type `whereHas` supports
+  (including pivot relations) and carries the same adapter support — no adapter or
+  contract change.
+
+- 5617ec2: feat(orm): `whereX` query sugar — `whereIn`/`whereNull`/`whereBetween`/`when`/`unless` + `pluck`/`value`/`sum`/`exists` terminals
+
+  Adds Laravel's everyday query-builder sugar to the Model query layer:
+
+  ```ts
+  await User.query().whereIn('role', ['admin', 'editor']).get()
+  await User.query().whereNotNull('verifiedAt').whereBetween('age', [18, 65]).get()
+
+  // Conditional clauses — no if-ladders around query building.
+  await User.query().when(role, (q, r) => q.where('role', r)).get()
+  await User.query().unless(includeArchived, (q) => q.whereNull('deletedAt')).get()
+
+  // Ordering + terminals.
+  await User.query().latest('createdAt').limit(10).get()
+  const emails = await User.query().where('active', true).pluck('email')
+  const total  = await User.query().where('role', 'admin').sum('credits')
+  if (await User.query().where('email', e).exists()) { … }
+  ```
+
+  Full set: `whereIn`/`whereNotIn`/`orWhereIn`/`orWhereNotIn`, `whereNull`/`whereNotNull`/`orWhereNull`/`orWhereNotNull`, `whereBetween`/`whereNotBetween`/`orWhereBetween`/`orWhereNotBetween`, `when`/`unless`, `latest`/`oldest`, and the scalar terminals `pluck`/`value`/`sum`/`max`/`min`/`avg`/`exists`/`doesntExist`. Each is also a `Model` static entry point (`User.whereIn(...)`, `User.sum(...)`, etc.).
+
+  Implemented entirely at the Model layer — they compose the existing `where`/`orWhere`/`whereGroup`/`orderBy`/`get`/`first`/`_aggregate` primitives in the hydrating query-builder proxy — so **every adapter (native, Drizzle, Prisma) gets them for free** with no contract or adapter changes. Typed on `HydratingQueryBuilder` (not the `QueryBuilder` contract).
+
+- bb07d54: feat(orm): belongsToMany pivot query constraints — `wherePivot` family (Laravel parity)
+
+  `belongsToMany` / `morphToMany` / `morphedByMany` relation reads can now filter by
+  pivot-table columns, not just project them with `withPivot`:
+
+  - `wherePivot(column, value)` / `wherePivot(column, operator, value)`
+  - `wherePivotIn(column, values)` / `wherePivotNotIn(column, values)`
+  - `wherePivotBetween(column, [min, max])`
+  - `orWherePivot(column, value?)`
+
+  ```ts
+  await user.related("roles").wherePivot("active", 1).get();
+  await user
+    .related("roles")
+    .wherePivotBetween("level", [3, 5])
+    .withPivot("level")
+    .get();
+  ```
+
+  The constraints apply to the pivot-rows query in step 1 of the existing two-step
+  load, so all three adapters get it with no adapter or contract change. The chainable
+  read surface is exported as the `PivotQueryBuilder` type.
+
+- 7b5d000: feat(orm): `withDefault` on belongsTo / hasOne relations (Laravel parity)
+
+  A `belongsTo` / `hasOne` relation can now return a null-object default instead
+  of `null` when it resolves to no row — mirroring Laravel's `->withDefault()`:
+
+  ```ts
+  static relations = {
+    author: { type: 'belongsTo', model: () => Author, withDefault: true },              // empty instance
+    author: { type: 'belongsTo', model: () => Author, withDefault: { name: 'Guest' } }, // with attributes
+    author: { type: 'belongsTo', model: () => Author,
+              withDefault: (author, post) => { author.name = `by ${post.id}` } },       // callback
+  }
+  ```
+
+  Applies on both reads and is pure Model-layer (no adapter or contract change),
+  so all three adapters honour it:
+
+  - **lazy** — `post.related('author').first()` yields the default (and survives a
+    `.where(...)` chain); for `belongsTo`, a null FK no longer throws when
+    `withDefault` is set.
+  - **eager** — `Post.with('author')` substitutes the default after the terminal
+    returns, for any parent whose relation came back null.
+
+  `withDefault` is ignored on `hasMany` (an empty list is already its own
+  null-object). The `RelationDefault` type is exported.
+
+- a93455e: feat(queue): native database-backed queue driver (`@rudderjs/queue/native`)
+
+  A persistent, self-hosted queue driver backed by the native ORM engine — the
+  zero-infrastructure default tier, modeled on Laravel's `database` driver.
+  Selected with `driver: 'database'` in `config/queue.ts`; BullMQ and Inngest
+  remain the high-throughput / cloud tiers, unchanged.
+
+  - Jobs persist in a `jobs` table; exhausted jobs move to `failed_jobs`. Stub the
+    migrations with `pnpm rudder queue:table`, then `pnpm rudder migrate`.
+  - For apps on a non-native ORM (Prisma/Drizzle), set `engine` + `url` on the
+    queue connection to give the queue its own dedicated SQLite/Postgres/MySQL
+    store — its `jobs` / `failed_jobs` tables are created automatically on first
+    use (its private DB, no migration step). Omit `engine` to run against the app's
+    native ORM connection instead.
+  - `pnpm rudder queue:work [queues] [--once --sleep --tries --backoff --timeout
+--max-jobs --stop-when-empty]` — a polling worker with comma-separated queue
+    **priority** order, retries with backoff, and `retry_after` reclaim of jobs
+    abandoned by a crashed worker. Atomic reservation via a transaction +
+    `lockForUpdate()` (`FOR UPDATE` on Postgres/MySQL; a serializing write
+    transaction on SQLite — run a single worker on SQLite).
+  - `queue:status` / `queue:clear` / `queue:failed` / `queue:retry` all work
+    against the new driver.
+
+  Supporting changes:
+
+  - `@rudderjs/orm` (native): new `QueryBuilder.lockForUpdate()` / `sharedLock()`
+    — first-class pessimistic row locking (Laravel parity). The compiler emits the
+    dialect's `FOR UPDATE` / `FOR SHARE` suffix, a no-op on SQLite.
+  - `@rudderjs/contracts`: `QueryBuilder` gains optional `lockForUpdate?()` /
+    `sharedLock?()` (additive; adapters without row locking omit them).
+  - `@rudderjs/queue`: `executeJob` gains an opt-out `invokeFailedHook` flag so the
+    database worker fires `failed()` exactly once, on terminal failure (Laravel
+    parity); existing drivers are unaffected.
+
+  Deferred to a follow-up (same limits as the BullMQ driver today): chains,
+  batches, and closure dispatch.
+
+- e9a3319: Broader conditional helpers on `JsonResource` (Laravel parity): **`whenHas(attribute, value?, fallback?)`** includes only when the attribute is present on the underlying resource (covers Model partial-select hydration; `value` defaults to the attribute). **`whenCounted(relation, fallback?)`** includes the stamped `<relation>Count` only when `withCount('<relation>')` loaded it — a loaded zero is included. **`whenAggregated(relation, fn, column?)`** generalizes to any stamped aggregate alias (`whenAggregated('posts', 'sum', 'views')` reads `postsSumViews`); alias derivation reuses the ORM's own `aggregateAlias` builder, so the helpers can never drift from the loader's camelCase rules. `whenPivotLoaded` is deliberately not included — gated on pivot-column reads (a v1 non-goal).
+- 534bd8d: API-resource envelopes (Laravel parity, non-breaking). **`Resource.collection()` now accepts paginator results directly** and auto-derives the envelope `meta`: a `Model.paginate()` result → `meta: { total, page, perPage, lastPage }`; a `Model.cursorPaginate()` result → `meta: { perPage, nextCursor, prevCursor, hasMore }`; a plain array keeps the original behavior. Detection is duck-typed (no `instanceof` — HMR re-import safe), and an explicit `meta` second argument merges over the derived values. **`additional(extra)`** on both `JsonResource` and `ResourceCollection` merges extra top-level keys into the `toResponse()` envelope (alongside `data`/`meta`, never inside; envelope keys win on conflict). **`JsonResource.toResponse(req?)`** wraps a single resource as `{ data: ..., ...additional }` — async-safe where `toJSON()` throws on an async `toArray()`.
+
+### Patch Changes
+
+- f1db9d9: Fix: bound string timestamps no longer store TZ-shifted on the native Postgres engine. porsager/postgres's default `date` type serializer round-trips every bound value the server describes as `date`/`timestamp`/`timestamptz` through `new Date(x).toISOString()` — a plain `'2026-01-20 11:20:45'` string was parsed as machine-local time and silently stored shifted on any non-UTC server (e.g. `Model.create({ at: '2026-01-20 11:20:45' })` landed as `09:20:45` on a UTC+2 machine; UTC CI never showed it). The driver now overrides the type so strings pass through verbatim (Postgres casts text natively, machine-TZ independent). `Date` values keep the exact previous serialization (`toISOString()`, same instant) and reads are unchanged.
+- Updated dependencies [e199f5e]
+- Updated dependencies [fc97c10]
+- Updated dependencies [7e6dc85]
+- Updated dependencies [ad17e79]
+- Updated dependencies [0b085a6]
+- Updated dependencies [b897950]
+- Updated dependencies [26b7acf]
+- Updated dependencies [b08aa1d]
+- Updated dependencies [c66e195]
+- Updated dependencies [473dfd9]
+- Updated dependencies [a93455e]
+  - @rudderjs/contracts@1.10.0
+  - @rudderjs/console@1.4.0
+  - @rudderjs/core@1.7.0
+  - @rudderjs/database@1.1.0
+
 ## 1.13.0
 
 ### Minor Changes

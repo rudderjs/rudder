@@ -1,5 +1,64 @@
 # @rudderjs/cli
 
+## 4.10.0
+
+### Minor Changes
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+- 0dcecaf: New `make:resource` scaffolder — `pnpm rudder make:resource User` writes `app/Resources/UserResource.ts` with a `JsonResource` subclass stub (inferred model import, `toArray()` body, conditional-helper examples). Spec lives at `@rudderjs/orm/commands/make-resource` (same MakeSpec pattern as `make:factory`/`make:seeder`); the CLI loader registers it automatically.
+
+### Patch Changes
+
+- c954a37: Exit non-zero on an unknown command. `rudder <unknown-command>` previously printed the full help text and exited 0 — a typo'd command looked like success. It now prints a clear `Unknown command: <name>` error with a `rudder --help` hint and exits with code 1, matching Laravel Artisan / npm / cargo. Bare `rudder` (no args) still shows help and exits 0.
+- 083672b: feat(orm): native `migrate:rollback` / `migrate:refresh` / `migrate:fresh` + transactional batches
+
+  The native SQLite engine can now reverse migrations, not just apply them:
+
+  - **`migrate:rollback`** reverts the last batch — each migration's `down()` runs in reverse apply order and its `migrations` row is deleted.
+  - **`migrate:refresh`** rolls every migration back and re-runs them all.
+  - **`migrate:fresh`** drops all tables and re-applies from scratch (now wired for native; prisma/drizzle keep shelling out).
+  - On prisma/drizzle apps, `migrate:rollback` / `migrate:refresh` print a clear "forward-only — use `migrate:fresh`" message instead of shelling out.
+
+  Each batch (the `up()`s in a `run()`, the `down()`s in a rollback) now executes inside a **single transaction**, so a failure mid-batch rolls the whole batch back atomically — the DDL and the `migrations` state-table writes commit or roll back together. The `Migrator` gains `rollback()`, `rollbackAll()`, `lastBatch()`, `migrationsInBatch()`, and `dropAllTables()`; `MigratorAdapter` now requires `transaction()` (already implemented by `NativeAdapter`).
+
+- b31d1be: feat(orm): native migration runner — `Migration` + `Schema` facade + `migrate` / `migrate:status` (Phase 7.2)
+
+  Builds the migration runner on top of the 7.1 schema builder, so the native SQLite engine now runs Laravel-style migrations in-process (no external tool):
+
+  - **`Migration`** base class (`up()` / `down()`) and the static **`Schema`** facade (`Schema.create` / `drop` / `dropIfExists` / `hasTable` / `hasColumn`) that migration files call — exported from `@rudderjs/orm/native`.
+  - **`Migrator`** — tracks applied migrations in a `migrations` table (`id`, `migration`, `batch`, mirroring Laravel), applies pending ones in a new batch, and reports status. Plus **`discoverMigrations(dir)`** which loads `database/migrations/*.{ts,js,mts,mjs}` files sorted by name.
+  - **`NativeAdapter.schemaBuilder()`** — exposes a connection-bound `SchemaBuilder` for the runner.
+  - **CLI**: `rudder migrate` and `rudder migrate:status` now detect a native-engine app (no prisma/drizzle adapter package installed) and run the in-process `Migrator` against the booted adapter, instead of shelling out. Prisma/Drizzle apps are unchanged. The CLI boots the app on demand for the native path (`migrate*` otherwise skip boot).
+
+  `migrate:rollback` / `migrate:refresh` (which reverse a batch via `down()`) and transactional batches land in 7.5; the `batch` column is recorded now so rollback has the grouping it needs. `make:migration` for native (the stub generator) is 7.3 — for now, author migration files by hand. SQLite only; additive and opt-in.
+
+- 6bd32b0: feat(orm): generated model types — `Model.for<'table'>()` binding + `rudder schema:types` (GATE 7-types)
+
+  Finishes the GATE 7-types consumption layer on top of the #817 generator. A model can now derive its column types from the migrated schema with zero hand-declared fields:
+
+  ```ts
+  export class User extends Model.for<"users">() {
+    static override table = "users";
+  }
+
+  await User.find(1); // u.id / u.name / u.email — typed
+  await User.where("active", true).first(); // chains are typed too
+  await User.create({ name, email }); // unknown columns fail tsc
+  ```
+
+  - `Model.for<TName>()` resolves a model's instance type from `SchemaRegistry[TName]` (open-decision #1 → generic binding). Purely additive: `static casts` still refine the storage type, plain `extends Model` and hand-declared fields are unaffected.
+  - `rudder schema:types` regenerates `app/Models/__schema/registry.d.ts` on demand (native engine; boots on demand like `migrate*`).
+  - Native `migrate` / `migrate:fresh` / `migrate:refresh` / `migrate:rollback` auto-regenerate the registry after a successful apply.
+  - The generated `registry.d.ts` should be **committed** (so `tsc`/CI is green without a generate step).
+
+- Updated dependencies [7e6dc85]
+  - @rudderjs/console@1.4.0
+  - @rudderjs/core@1.7.0
+  - @rudderjs/router@1.8.0
+
 ## 4.9.1
 
 ### Patch Changes
