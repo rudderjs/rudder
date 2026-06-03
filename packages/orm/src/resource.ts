@@ -1,3 +1,48 @@
+// ─── Paginator shapes (duck-typed) ──────────────────────────
+//
+// `Resource.collection()` accepts paginator results directly and derives the
+// envelope `meta` from them. Detection is structural, NOT `instanceof` —
+// dev-HMR re-evaluates modules, so a `CursorPaginator` created before a
+// re-boot fails `instanceof` against the re-imported class.
+
+/** Offset-paginated shape — what `Model.paginate()` resolves to (`PaginatedResult`). */
+export interface OffsetPaginated<T> {
+  data:        T[]
+  total:       number
+  perPage:     number
+  currentPage: number
+  lastPage:    number
+}
+
+/** Cursor-paginated shape — what `Model.cursorPaginate()` resolves to (`CursorPaginator`). */
+export interface CursorPaginated<T> {
+  data:       T[]
+  perPage:    number
+  nextCursor: string | null
+  prevCursor: string | null
+  hasMore:    boolean
+}
+
+function isOffsetPaginated<T>(v: unknown): v is OffsetPaginated<T> {
+  if (v === null || typeof v !== 'object') return false
+  const o = v as Record<string, unknown>
+  return Array.isArray(o['data'])
+    && typeof o['total'] === 'number'
+    && typeof o['perPage'] === 'number'
+    && typeof o['currentPage'] === 'number'
+    && typeof o['lastPage'] === 'number'
+}
+
+function isCursorPaginated<T>(v: unknown): v is CursorPaginated<T> {
+  if (v === null || typeof v !== 'object') return false
+  const o = v as Record<string, unknown>
+  return Array.isArray(o['data'])
+    && typeof o['perPage'] === 'number'
+    && 'nextCursor' in o
+    && 'prevCursor' in o
+    && typeof o['hasMore'] === 'boolean'
+}
+
 // ─── JsonResource ───────────────────────────────────────────
 
 /**
@@ -22,6 +67,9 @@
  * res.json(UserResource.collection(users).toResponse())
  */
 export abstract class JsonResource<T extends Record<string, unknown> = Record<string, unknown>> {
+  /** Extra top-level envelope keys added via `additional()`. */
+  #additional: Record<string, unknown> = {}
+
   constructor(protected readonly resource: T) {}
 
   /** Transform the resource into an array/object. Override in subclasses. */
@@ -93,13 +141,67 @@ export abstract class JsonResource<T extends Record<string, unknown> = Record<st
     return condition ? attributes : {}
   }
 
-  /** Create a `ResourceCollection` from an array of raw items using this resource class. */
+  /**
+   * Merge extra top-level keys into the `toResponse()` envelope —
+   * alongside `data`, never inside it (Laravel's `additional()` semantics).
+   * The envelope's own `data` key wins on conflict. Returns `this`.
+   *
+   * @example
+   * res.json(await new UserResource(user).additional({ status: 'ok' }).toResponse())
+   * // → { status: 'ok', data: { ... } }
+   */
+  additional(extra: Record<string, unknown>): this {
+    Object.assign(this.#additional, extra)
+    return this
+  }
+
+  /**
+   * The wrapped single-resource envelope: `{ data: toArray(), ...additional }`.
+   * Async-safe — use this (not `toJSON()`) when `toArray()` is async. The
+   * unwrapped `new R(x).toArray()` form stays the default for bare payloads;
+   * `toResponse()` is the opt-in envelope.
+   */
+  async toResponse(req?: unknown): Promise<{ data: Record<string, unknown> } & Record<string, unknown>> {
+    return { ...this.#additional, data: await this.toArray(req) }
+  }
+
+  /**
+   * Create a `ResourceCollection` from an array of raw items — or directly
+   * from a paginator result, which auto-derives the envelope `meta`:
+   *
+   * - `Model.paginate()` result → `meta: { total, page, perPage, lastPage }`
+   * - `Model.cursorPaginate()` result → `meta: { perPage, nextCursor, prevCursor, hasMore }`
+   * - plain array → no derived meta (exactly the original behavior)
+   *
+   * An explicit `meta` second argument merges over (wins on key conflict
+   * with) the derived meta.
+   *
+   * @example
+   * res.json(await UserResource.collection(await User.paginate(1, 15)).toResponse())
+   * // → { data: [...], meta: { total, page, perPage, lastPage } }
+   */
   static collection<T extends Record<string, unknown>>(
     this: new (item: T) => JsonResource<T>,
-    items: T[],
+    items: T[] | OffsetPaginated<T> | CursorPaginated<T>,
     meta?: Record<string, unknown>,
   ): ResourceCollection<T> {
-    return new ResourceCollection(items.map(item => new this(item)), meta)
+    let list: T[]
+    let derived: Record<string, unknown> | undefined
+    if (Array.isArray(items)) {
+      list = items
+    } else if (isOffsetPaginated<T>(items)) {
+      list = items.data
+      derived = { total: items.total, page: items.currentPage, perPage: items.perPage, lastPage: items.lastPage }
+    } else if (isCursorPaginated<T>(items)) {
+      list = items.data
+      derived = { perPage: items.perPage, nextCursor: items.nextCursor, prevCursor: items.prevCursor, hasMore: items.hasMore }
+    } else {
+      // Unrecognized object shape — preserve the historical "treat it as a
+      // list" behavior rather than throwing on a duck that almost quacks.
+      list = items as unknown as T[]
+    }
+    const merged = derived !== undefined || meta !== undefined ? { ...derived, ...meta } : undefined
+    return new ResourceCollection(list.map(item => new this(item)), merged)
   }
 
   toJSON(): Record<string, unknown> {
@@ -128,12 +230,20 @@ export abstract class JsonResource<T extends Record<string, unknown> = Record<st
  * res.json(await collection.toResponse())
  * // → { data: [...] }
  *
- * // With pagination metadata:
+ * // Pagination metadata is derived automatically from a paginator result:
+ * const collection = UserResource.collection(await User.paginate(1, 15))
+ * res.json(await collection.toResponse())
+ * // → { data: [...], meta: { total, page, perPage, lastPage } }
+ *
+ * // Or passed (and merged over the derived values) explicitly:
  * const collection = UserResource.collection(users, { total: 100, page: 1, perPage: 15 })
  * res.json(await collection.toResponse())
  * // → { data: [...], meta: { total: 100, page: 1, perPage: 15 } }
  */
 export class ResourceCollection<T extends Record<string, unknown> = Record<string, unknown>> {
+  /** Extra top-level envelope keys added via `additional()`. */
+  #additional: Record<string, unknown> = {}
+
   constructor(
     private readonly items: JsonResource<T>[],
     private readonly meta?: Record<string, unknown>,
@@ -146,12 +256,29 @@ export class ResourceCollection<T extends Record<string, unknown> = Record<strin
     return new ResourceCollection(items, meta)
   }
 
+  /**
+   * Merge extra top-level keys into the `toResponse()` envelope —
+   * alongside `data`/`meta`, never inside them (Laravel's `additional()`
+   * semantics). The envelope's own `data`/`meta` keys win on conflict.
+   * Returns `this`.
+   *
+   * @example
+   * res.json(await UserResource.collection(users).additional({ status: 'ok' }).toResponse())
+   * // → { status: 'ok', data: [...] }
+   */
+  additional(extra: Record<string, unknown>): this {
+    Object.assign(this.#additional, extra)
+    return this
+  }
+
   async toArray(req?: unknown): Promise<Record<string, unknown>[]> {
     return Promise.all(this.items.map(item => item.toArray(req)))
   }
 
-  async toResponse(req?: unknown): Promise<{ data: Record<string, unknown>[]; meta?: Record<string, unknown> }> {
+  async toResponse(req?: unknown): Promise<{ data: Record<string, unknown>[]; meta?: Record<string, unknown> } & Record<string, unknown>> {
     const data = await this.toArray(req)
-    return this.meta !== undefined ? { data, meta: this.meta } : { data }
+    return this.meta !== undefined
+      ? { ...this.#additional, data, meta: this.meta }
+      : { ...this.#additional, data }
   }
 }
