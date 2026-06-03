@@ -69,7 +69,7 @@ function isCursorPaginated<T>(v: unknown): v is CursorPaginated<T> {
  * res.json(new UserResource(user).toArray())
  * res.json(UserResource.collection(users).toResponse())
  */
-export abstract class JsonResource<T extends Record<string, unknown> = Record<string, unknown>> {
+export abstract class JsonResource<T extends object = Record<string, unknown>> {
   /** Extra top-level envelope keys added via `additional()`. */
   #additional: Record<string, unknown> = {}
 
@@ -234,7 +234,7 @@ export abstract class JsonResource<T extends Record<string, unknown> = Record<st
    * res.json(await UserResource.collection(await User.paginate(1, 15)).toResponse())
    * // → { data: [...], meta: { total, page, perPage, lastPage } }
    */
-  static collection<T extends Record<string, unknown>>(
+  static collection<T extends object>(
     this: new (item: T) => JsonResource<T>,
     items: T[] | OffsetPaginated<T> | CursorPaginated<T>,
     meta?: Record<string, unknown>,
@@ -294,7 +294,7 @@ export abstract class JsonResource<T extends Record<string, unknown> = Record<st
  * res.json(await collection.toResponse())
  * // → { data: [...], meta: { total: 100, page: 1, perPage: 15 } }
  */
-export class ResourceCollection<T extends Record<string, unknown> = Record<string, unknown>> {
+export class ResourceCollection<T extends object = Record<string, unknown>> {
   /** Extra top-level envelope keys added via `additional()`. */
   #additional: Record<string, unknown> = {}
 
@@ -303,7 +303,7 @@ export class ResourceCollection<T extends Record<string, unknown> = Record<strin
     private readonly meta?: Record<string, unknown>,
   ) {}
 
-  static of<T extends Record<string, unknown>>(
+  static of<T extends object>(
     items: JsonResource<T>[],
     meta?: Record<string, unknown>,
   ): ResourceCollection<T> {

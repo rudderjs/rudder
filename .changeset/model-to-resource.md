@@ -1,0 +1,5 @@
+---
+'@rudderjs/orm': minor
+---
+
+Model ↔ resource wiring (mirrors the `static factoryClass` precedent). **`static resourceClass = UserResource`** binds a model to its API resource; **`user.toResource()`** then wraps the instance (`new UserResource(user)`), with an explicit class argument winning over the binding (`user.toResource(AdminUserResource)`). **`ModelCollection.toResourceCollection(cls?)`** wraps every item and returns a `ResourceCollection` — composing with the paginator/`additional()` envelope (`await users.toResourceCollection().toResponse()`). Unbound + no argument throws a clear pointer error; an empty collection resolves to `{ data: [] }` without needing a class. Supporting DX fix: the `JsonResource`/`ResourceCollection`/`ModelCollection` generic constraints are widened from `Record<string, unknown>` to `object`, so `class UserResource extends JsonResource<User>` (a class instance type) now typechecks — previously any class-typed model tripped the missing-index-signature error. Widening only; no existing call site changes.

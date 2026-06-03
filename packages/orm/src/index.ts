@@ -19,11 +19,15 @@ import {
   type AggregateConstraint,
   type AggregateSumSpec,
 } from './aggregate.js'
-import { attrEqual, readField, writeField, deleteField } from './utils.js'
+import { attrEqual, readField, writeField, deleteField, camelHead } from './utils.js'
 // Type-only — `ModelFactory` is re-exported below from './factory.js'. The import
 // is erased at compile time, so this does not introduce a runtime import cycle
 // (factory.ts already imports types from this module).
 import type { ModelFactory } from './factory.js'
+// Type-only — `JsonResource` is re-exported below from './resource.js'. resource.ts
+// stays free of Model imports (its generic is `object`-constrained, never
+// `extends Model`), so the dependency direction is one-way.
+import type { JsonResource } from './resource.js'
 import {
   resolveBelongsToManyMeta,
   resolveMorphToManyMeta,
@@ -1234,6 +1238,29 @@ export abstract class Model {
     }
     return new Fc()
   }
+
+  /**
+   * The API-resource class linked to this model, enabling `toResource()` /
+   * `toResourceCollection()` without repeating the class at every call site
+   * (mirrors `static factoryClass`):
+   *
+   * ```ts
+   * class User extends Model {
+   *   static resourceClass = UserResource
+   * }
+   * user.toResource()        // ≡ new UserResource(user)
+   * ```
+   *
+   * Left unset, `toResource()` throws a clear error pointing here. There is
+   * deliberately no name-convention auto-discovery — the explicit static
+   * matches how factories wire.
+   */
+  // `(item: any)` (not `(item: object)`) so a concrete resource like
+  // `UserResource extends JsonResource<User>` assigns without tripping the
+  // constructor parameter's contravariant position — same reason
+  // `factoryClass` uses `ModelFactory<any>`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static resourceClass?: new (item: any) => JsonResource<object>
 
   /** Columns to hide from JSON output */
   static hidden: string[] = []
@@ -3562,6 +3589,32 @@ export abstract class Model {
     const base = this.#instanceHidden ?? (this.constructor as typeof Model).hidden
     this.#instanceHidden = [...base, ...keys]
     return this
+  }
+
+  // ── toResource ─────────────────────────────────────────
+
+  /**
+   * Wrap this instance in its API resource — `new UserResource(user)` with
+   * Laravel ergonomics. Resolution order: the explicit `resourceClass`
+   * argument wins; otherwise the model's `static resourceClass` binding;
+   * otherwise a clear error pointing at both options.
+   *
+   * ```ts
+   * user.toResource()                    // via static resourceClass
+   * user.toResource(AdminUserResource)   // explicit override wins
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toResource<R extends JsonResource<object>>(resourceClass?: new (item: any) => R): R {
+    const ctor = this.constructor as typeof Model
+    const Rc = resourceClass ?? ctor.resourceClass
+    if (!Rc) {
+      throw new Error(
+        `[RudderJS ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
+        `or pass the class: \`${camelHead(ctor.name)}.toResource(${ctor.name}Resource)\`.`,
+      )
+    }
+    return new Rc(this) as R
   }
 
   // ── toJSON ─────────────────────────────────────────────

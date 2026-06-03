@@ -1,5 +1,9 @@
 import type { Model } from './index.js'
 import type { QueryBuilder } from '@rudderjs/contracts'
+// Runtime import is cycle-safe: resource.ts never imports collection.ts (or
+// Model) — the dependency direction is one-way.
+import { ResourceCollection, type JsonResource } from './resource.js'
+import { camelHead, readField } from './utils.js'
 
 // ─── ModelCollection ────────────────────────────────────────
 
@@ -18,13 +22,13 @@ import type { QueryBuilder } from '@rudderjs/contracts'
  * users.unique('email')      // deduplicated by email
  * users.makeHidden(['email']) // each item's email hidden from JSON
  */
-export class ModelCollection<T extends Record<string, unknown>> {
+export class ModelCollection<T extends object> {
   private constructor(
     private readonly _items: T[],
     private readonly _primaryKey: string = 'id',
   ) {}
 
-  static wrap<T extends Record<string, unknown>>(
+  static wrap<T extends object>(
     items: T[],
     primaryKey = 'id',
   ): ModelCollection<T> {
@@ -41,14 +45,14 @@ export class ModelCollection<T extends Record<string, unknown>> {
 
   /** Returns an array of primary key values. */
   modelKeys(): Array<string | number> {
-    return this._items.map(item => item[this._primaryKey] as string | number)
+    return this._items.map(item => readField(item, this._primaryKey) as string | number)
   }
 
   // ── Search ────────────────────────────────────────────
 
   /** Find item by primary key, or `undefined` if not found. */
   find(id: string | number): T | undefined {
-    return this._items.find(item => item[this._primaryKey] === id)
+    return this._items.find(item => readField(item, this._primaryKey) === id)
   }
 
   /**
@@ -56,7 +60,7 @@ export class ModelCollection<T extends Record<string, unknown>> {
    */
   contains(idOrFn: string | number | ((item: T) => boolean)): boolean {
     if (typeof idOrFn === 'function') return this._items.some(idOrFn)
-    return this._items.some(item => item[this._primaryKey] === idOrFn)
+    return this._items.some(item => readField(item, this._primaryKey) === idOrFn)
   }
 
   // ── Filtering ─────────────────────────────────────────
@@ -65,7 +69,7 @@ export class ModelCollection<T extends Record<string, unknown>> {
   except(ids: Array<string | number>): ModelCollection<T> {
     const set = new Set<string | number>(ids)
     return ModelCollection.wrap(
-      this._items.filter(item => !set.has(item[this._primaryKey] as string | number)),
+      this._items.filter(item => !set.has(readField(item, this._primaryKey) as string | number)),
       this._primaryKey,
     )
   }
@@ -74,7 +78,7 @@ export class ModelCollection<T extends Record<string, unknown>> {
   only(ids: Array<string | number>): ModelCollection<T> {
     const set = new Set<string | number>(ids)
     return ModelCollection.wrap(
-      this._items.filter(item => set.has(item[this._primaryKey] as string | number)),
+      this._items.filter(item => set.has(readField(item, this._primaryKey) as string | number)),
       this._primaryKey,
     )
   }
@@ -82,9 +86,9 @@ export class ModelCollection<T extends Record<string, unknown>> {
   /** Items not present in `other` (diff by primary key). */
   diff(other: ModelCollection<T> | T[]): ModelCollection<T> {
     const otherItems = other instanceof ModelCollection ? other.all() : other
-    const otherKeys = new Set(otherItems.map(i => i[this._primaryKey]))
+    const otherKeys = new Set(otherItems.map(i => readField(i, this._primaryKey)))
     return ModelCollection.wrap(
-      this._items.filter(item => !otherKeys.has(item[this._primaryKey])),
+      this._items.filter(item => !otherKeys.has(readField(item, this._primaryKey))),
       this._primaryKey,
     )
   }
@@ -98,7 +102,7 @@ export class ModelCollection<T extends Record<string, unknown>> {
     const seen = new Set<unknown>()
     return ModelCollection.wrap(
       this._items.filter(item => {
-        const val = item[k]
+        const val = readField(item, k)
         if (seen.has(val)) return false
         seen.add(val)
         return true
@@ -178,7 +182,7 @@ export class ModelCollection<T extends Record<string, unknown>> {
     const first = this._items[0]
     if (!first) return ModelCollection.wrap([], this._primaryKey)
 
-    const missing = relations.filter(rel => !(rel in first) || first[rel] === undefined)
+    const missing = relations.filter(rel => !(rel in first) || readField(first, rel) === undefined)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (missing.length === 0) return ModelCollection.wrap(this._items as any[], this._primaryKey)
 
@@ -193,6 +197,43 @@ export class ModelCollection<T extends Record<string, unknown>> {
     const ids = this.modelKeys()
     // Use where with array to produce a WHERE IN equivalent
     return modelClass.where(this._primaryKey, ids) as unknown as QueryBuilder<T>
+  }
+
+  /**
+   * Wrap every item in its API resource and return a `ResourceCollection`.
+   * Resolution order mirrors `Model.toResource()`: the explicit
+   * `resourceClass` argument wins; otherwise the items' `static resourceClass`
+   * binding (read off the first item's constructor); otherwise a clear error.
+   * An empty collection resolves to an empty `ResourceCollection` without
+   * needing a class at all.
+   *
+   * ```ts
+   * users.toResourceCollection()                    // via static resourceClass
+   * users.toResourceCollection(AdminUserResource)   // explicit override wins
+   * res.json(await users.toResourceCollection().toResponse())
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toResourceCollection(resourceClass?: new (item: any) => JsonResource<object>): ResourceCollection<T> {
+    let Rc = resourceClass
+    if (Rc === undefined) {
+      const first = this._items[0]
+      if (first === undefined) return new ResourceCollection<T>([])
+      const ctor = (first as object).constructor as {
+        name: string
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        resourceClass?: new (item: any) => JsonResource<object>
+      }
+      Rc = ctor.resourceClass
+      if (Rc === undefined) {
+        throw new Error(
+          `[RudderJS ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
+          `or pass the class: \`${camelHead(ctor.name)}s.toResourceCollection(${ctor.name}Resource)\`.`,
+        )
+      }
+    }
+    const cls = Rc
+    return new ResourceCollection(this._items.map(item => new cls(item)) as JsonResource<T>[])
   }
 
   toJSON(): T[] {
