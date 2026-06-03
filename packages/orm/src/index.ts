@@ -87,6 +87,7 @@ export {
 }                                                  from './vector-errors.js'
 export { Attribute }                               from './attribute.js'
 export { JsonResource, ResourceCollection }        from './resource.js'
+export type { OffsetPaginated, CursorPaginated }   from './resource.js'
 export { ModelCollection }                         from './collection.js'
 export { ModelFactory, sequence }                  from './factory.js'
 export { Seeder }                                  from './seeder.js'
