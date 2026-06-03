@@ -665,6 +665,27 @@ export function Cast(type: CastDefinition) {
  *  to cross the node-only/client-reachable module boundary. */
 const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
 
+/** The date-component predicate methods (adapter-implemented SQL, not pure
+ *  Model-layer sugar). The hydrating proxy forwards each to the adapter QB when
+ *  present, and otherwise throws via {@link adapterMethodUnsupported}. */
+const DATE_PART_METHODS = new Set([
+  'whereDate', 'orWhereDate',
+  'whereTime', 'orWhereTime',
+  'whereDay',  'orWhereDay',
+  'whereMonth', 'orWhereMonth',
+  'whereYear', 'orWhereYear',
+])
+
+/** Clear error for a QB method the active adapter doesn't implement — thrown by
+ *  the hydrating proxy instead of letting the call site hit a bare
+ *  `... is not a function` TypeError. */
+function adapterMethodUnsupported(method: string): Error {
+  return new Error(
+    `[RudderJS ORM] ${method}() is not supported on this adapter — ` +
+      'use whereRaw(...) or DB.select(...) instead.',
+  )
+}
+
 /**
  * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
  * `with()` etc. actually return. Extends the adapter contract with the
@@ -747,6 +768,58 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   /** OR-rooted {@link whereColumn}. */
   orWhereColumn(left: string, right: string): this
   orWhereColumn(left: string, operator: WhereOperator, right: string): this
+
+  // ── date-component predicates + negated groups (adapter SQL, not sugar) ──
+  /**
+   * Compare the DATE component of a column — `whereDate('createdAt',
+   * '2026-01-01')` (two-arg = equality) or `whereDate('createdAt', '>=',
+   * '2026-01-01')`. A `Date` value compares by its UTC calendar date.
+   * **Native engine only for now** — throws a clear unsupported error on
+   * adapters without the method; use `whereRaw(...)` or `DB.select(...)` there.
+   */
+  whereDate(column: string, value: string | Date): this
+  whereDate(column: string, operator: WhereOperator, value: string | Date): this
+  /** OR-rooted {@link whereDate}. */
+  orWhereDate(column: string, value: string | Date): this
+  orWhereDate(column: string, operator: WhereOperator, value: string | Date): this
+  /** Compare the TIME component (`'HH:MM:SS'`) of a column. Same call forms +
+   *  adapter support as {@link whereDate}. */
+  whereTime(column: string, value: string | Date): this
+  whereTime(column: string, operator: WhereOperator, value: string | Date): this
+  /** OR-rooted {@link whereTime}. */
+  orWhereTime(column: string, value: string | Date): this
+  orWhereTime(column: string, operator: WhereOperator, value: string | Date): this
+  /** Compare the day-of-month (1–31, integer) of a column. Same call forms +
+   *  adapter support as {@link whereDate}. */
+  whereDay(column: string, value: number | string | Date): this
+  whereDay(column: string, operator: WhereOperator, value: number | string | Date): this
+  /** OR-rooted {@link whereDay}. */
+  orWhereDay(column: string, value: number | string | Date): this
+  orWhereDay(column: string, operator: WhereOperator, value: number | string | Date): this
+  /** Compare the month (1–12, integer) of a column. Same call forms + adapter
+   *  support as {@link whereDate}. */
+  whereMonth(column: string, value: number | string | Date): this
+  whereMonth(column: string, operator: WhereOperator, value: number | string | Date): this
+  /** OR-rooted {@link whereMonth}. */
+  orWhereMonth(column: string, value: number | string | Date): this
+  orWhereMonth(column: string, operator: WhereOperator, value: number | string | Date): this
+  /** Compare the year (integer) of a column. Same call forms + adapter support
+   *  as {@link whereDate}. */
+  whereYear(column: string, value: number | string | Date): this
+  whereYear(column: string, operator: WhereOperator, value: number | string | Date): this
+  /** OR-rooted {@link whereYear}. */
+  orWhereYear(column: string, value: number | string | Date): this
+  orWhereYear(column: string, operator: WhereOperator, value: number | string | Date): this
+  /**
+   * Negated group — `WHERE NOT (…)` around the callback's conditions, mirroring
+   * Laravel's `whereNot`. The callback receives a hydrating sub-builder, so the
+   * named sugar (`whereIn`, `whereNull`, …) composes inside it. **Native engine
+   * only for now** — throws a clear unsupported error on adapters without the
+   * method.
+   */
+  whereNot(fn: (q: this) => void): this
+  /** OR-rooted {@link whereNot} — `… OR NOT (…)`. */
+  orWhereNot(fn: (q: this) => void): this
 
   // ── joins + structured projection ──
   /**
@@ -1608,6 +1681,36 @@ export abstract class Model {
             return proxy
           }
         }
+        // Date-component predicates (whereDate/whereTime/whereDay/whereMonth/
+        // whereYear + or* forms) — adapter-implemented SQL (per-dialect date
+        // extraction), NOT pure sugar. Forward when the adapter QB has the
+        // method; otherwise throw a clear unsupported error instead of letting
+        // the call site hit a bare `... is not a function` TypeError.
+        if (typeof prop === 'string' && DATE_PART_METHODS.has(prop)) {
+          const impl = (target as Record<string, unknown>)[prop]
+          if (typeof impl !== 'function') {
+            return () => { throw adapterMethodUnsupported(prop) }
+          }
+          return (...args: unknown[]): unknown => {
+            ;(impl as (...a: unknown[]) => unknown).apply(target, args)
+            return proxy
+          }
+        }
+        // whereNot / orWhereNot — negated groups. Same forward-or-throw shape
+        // as the date helpers, plus the whereGroup-style sub-builder wrap so
+        // the callback chains the named sugar (whereIn/whereNull/…) too.
+        if (prop === 'whereNot' || prop === 'orWhereNot') {
+          const impl = (target as Record<string, unknown>)[prop]
+          if (typeof impl !== 'function') {
+            return () => { throw adapterMethodUnsupported(prop) }
+          }
+          return (fn: (q: QueryBuilder<InstanceType<T>>) => void): unknown => {
+            ;(impl as (cb: (sub: QueryBuilder<InstanceType<T>>) => void) => unknown).call(target, (sub) => {
+              fn(Model._hydratingQb(self, sub))
+            })
+            return proxy
+          }
+        }
         // where-sugar — named where variants + conditional clauses + scalar
         // terminals, composed from the adapter QB's existing primitives
         // (where/orWhere/whereGroup/orderBy/get/first/_aggregate). Implemented
@@ -1925,6 +2028,45 @@ export abstract class Model {
   }
   static whereNotBetween<T extends typeof Model>(this: T, column: string, range: readonly [unknown, unknown]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).whereNotBetween(column, range)
+  }
+  static whereDate<T extends typeof Model>(this: T, column: string, value: string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereDate<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereDate<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereDate(column, operatorOrValue as string | Date)
+      : Model._q(this).whereDate(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereTime<T extends typeof Model>(this: T, column: string, value: string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereTime<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereTime<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | string | Date, value?: string | Date): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereTime(column, operatorOrValue as string | Date)
+      : Model._q(this).whereTime(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereDay<T extends typeof Model>(this: T, column: string, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereDay<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereDay<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereDay(column, operatorOrValue as number | string | Date)
+      : Model._q(this).whereDay(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereMonth<T extends typeof Model>(this: T, column: string, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereMonth<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereMonth<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereMonth(column, operatorOrValue as number | string | Date)
+      : Model._q(this).whereMonth(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereYear<T extends typeof Model>(this: T, column: string, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereYear<T extends typeof Model>(this: T, column: string, operator: WhereOperator, value: number | string | Date): HydratingQueryBuilder<InstanceType<T>>
+  static whereYear<T extends typeof Model>(this: T, column: string, operatorOrValue: WhereOperator | number | string | Date, value?: number | string | Date): HydratingQueryBuilder<InstanceType<T>> {
+    return (value === undefined
+      ? Model._q(this).whereYear(column, operatorOrValue as number | string | Date)
+      : Model._q(this).whereYear(column, operatorOrValue as WhereOperator, value))
+  }
+  static whereNot<T extends typeof Model>(this: T, fn: (q: HydratingQueryBuilder<InstanceType<T>>) => void): HydratingQueryBuilder<InstanceType<T>> {
+    const q = Model._q(this)
+    return q.whereNot(fn as (sub: typeof q) => void)
   }
   static whereColumn<T extends typeof Model>(this: T, left: string, right: string): HydratingQueryBuilder<InstanceType<T>>
   static whereColumn<T extends typeof Model>(this: T, left: string, operator: WhereOperator, right: string): HydratingQueryBuilder<InstanceType<T>>

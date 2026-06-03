@@ -14,7 +14,7 @@ import type {
   AggregateRequest,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import type { Dialect } from './dialect.js'
+import type { Dialect, DatePart } from './dialect.js'
 
 /** A raw SQL fragment + its `?`-placeholder bindings, threaded through a clause. */
 export interface RawFragment {
@@ -27,16 +27,21 @@ export interface RawFragment {
  *
  * - `clause` — a single `column <op> value` predicate.
  * - `group`  — a parenthesized sub-tree with its own boolean roots, produced by
- *   `whereGroup` / `orWhereGroup`. Nesting is unbounded.
+ *   `whereGroup` / `orWhereGroup`. Nesting is unbounded. `negated: true`
+ *   (from `whereNot` / `orWhereNot`) wraps the parenthesized tree in `NOT`.
+ * - `date`   — a date-component predicate (`whereDate`/`whereTime`/`whereDay`/
+ *   `whereMonth`/`whereYear`): the column runs through the dialect's
+ *   `dateExtract` seam, the value binds.
  *
  * Each node carries `boolean: 'AND' | 'OR'` recording how it joins to the
  * predicate *before* it at the same level. The first node's boolean is ignored.
  */
 export type ConditionNode =
   | { kind: 'clause'; boolean: 'AND' | 'OR'; clause: WhereClause }
-  | { kind: 'group';  boolean: 'AND' | 'OR'; children: ConditionNode[] }
+  | { kind: 'group';  boolean: 'AND' | 'OR'; children: ConditionNode[]; negated?: boolean }
   | { kind: 'raw';    boolean: 'AND' | 'OR'; raw: RawFragment }
   | { kind: 'column'; boolean: 'AND' | 'OR'; left: string; operator: WhereOperator; right: string }
+  | { kind: 'date';   boolean: 'AND' | 'OR'; part: DatePart; column: string; operator: WhereOperator; value: unknown }
 
 /**
  * A single ORDER BY entry — either a structured `column direction` clause or a
@@ -243,14 +248,23 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       const op = OPERATOR_SQL[node.operator]
       if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.quoteId(node.left)} ${op} ${dialect.quoteId(node.right)}`
+    } else if (node.kind === 'date') {
+      // Date-component predicate (`whereDate`/`whereTime`/`whereDay`/…) — the
+      // column is quoted then run through the dialect's extraction seam; the
+      // value binds through the shared positional Bindings like any clause.
+      const op = OPERATOR_SQL[node.operator]
+      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      frag = `${dialect.dateExtract(node.part, dialect.quoteId(node.column))} ${op} ${b.add(node.value)}`
     } else {
       const inner = compileNodes(node.children, dialect, b)
       // An empty group contributes nothing — skip it entirely so it doesn't
-      // emit dangling `AND ()`. The connector is keyed off whether anything has
-      // been emitted yet (parts.length), not the source index, so a leading
-      // skipped group never leaves a dangling `AND`/`OR`.
+      // emit dangling `AND ()` (or a constant `NOT ()`). The connector is keyed
+      // off whether anything has been emitted yet (parts.length), not the
+      // source index, so a leading skipped group never leaves a dangling
+      // `AND`/`OR`.
       if (inner === '') continue
-      frag = `(${inner})`
+      // `negated` (whereNot / orWhereNot) wraps the parenthesized sub-tree.
+      frag = node.negated ? `NOT (${inner})` : `(${inner})`
     }
     parts.push(parts.length === 0 ? frag : `${node.boolean} ${frag}`)
   }

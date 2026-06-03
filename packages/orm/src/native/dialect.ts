@@ -11,6 +11,14 @@ import { NativeIdentifierError, NativeOrmError } from './errors.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
+ * The date/time component a `whereDate`/`whereTime`/`whereDay`/`whereMonth`/
+ * `whereYear` predicate extracts from a column before comparing. `date` and
+ * `time` compare as strings (`'YYYY-MM-DD'` / `'HH:MM:SS'`); `day`/`month`/
+ * `year` compare as integers.
+ */
+export type DatePart = 'date' | 'time' | 'day' | 'month' | 'year'
+
+/**
  * A SQL dialect: the knobs that change the emitted SQL text between databases.
  * `SqliteDialect` is the first concrete impl; `PgDialect` / `MysqlDialect`
  * plug in here later.
@@ -80,6 +88,18 @@ export interface Dialect {
    * interpolated here — only identifiers, quoted via {@link quoteId}.
    */
   upsertClause(uniqueBy: readonly string[], update: readonly string[]): string
+
+  /**
+   * The SQL expression extracting a date/time component from a column — the
+   * per-dialect half of `whereDate`/`whereTime`/`whereDay`/`whereMonth`/
+   * `whereYear`. `column` arrives ALREADY QUOTED (the compiler runs it through
+   * {@link quoteId} first), so the dialect only splices it into its extraction
+   * function. The result must compare cleanly against a bound value:
+   * `'YYYY-MM-DD'` text for `date`, `'HH:MM:SS'` text for `time`, and an
+   * INTEGER for `day`/`month`/`year` (so a bound `5` matches May — dialects
+   * whose extractor yields text, like SQLite's `strftime`, must CAST).
+   */
+  dateExtract(part: DatePart, column: string): string
 
   /**
    * The pessimistic-locking suffix appended to a `SELECT` (after ORDER BY /
@@ -154,6 +174,20 @@ export class SqliteDialect implements Dialect {
   // boolean default renders as the matching integer literal.
   booleanLiteral(value: boolean): string {
     return value ? '1' : '0'
+  }
+
+  // SQLite stores dates as ISO-8601 text — `strftime` extracts components.
+  // `date`/`time` stay text ('YYYY-MM-DD' / 'HH:MM:SS'); `day`/`month`/`year`
+  // CAST to INTEGER so a bound number compares (strftime returns zero-padded
+  // text like '05', and SQLite never equates TEXT with INTEGER).
+  dateExtract(part: DatePart, column: string): string {
+    switch (part) {
+      case 'date':  return `strftime('%Y-%m-%d', ${column})`
+      case 'time':  return `strftime('%H:%M:%S', ${column})`
+      case 'day':   return `CAST(strftime('%d', ${column}) AS INTEGER)`
+      case 'month': return `CAST(strftime('%m', ${column}) AS INTEGER)`
+      case 'year':  return `CAST(strftime('%Y', ${column}) AS INTEGER)`
+    }
   }
 
   // SQLite has no row-level pessimistic lock — a write transaction (BEGIN
