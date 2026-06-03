@@ -10,7 +10,7 @@
 // one on a signature change — so a `config/database.ts` edit doesn't leak a
 // connection per re-boot. No-op in production (single boot).
 
-import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts } from '@rudderjs/contracts'
+import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts, QueryListener } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
 import { PgDialect } from './dialect-pg.js'
@@ -75,10 +75,64 @@ function cacheNativeClient(entry: NativeClientCacheEntry): void {
   ;(globalThis as Record<string, unknown>)[NATIVE_CLIENT_CACHE_KEY] = entry
 }
 
+/**
+ * Wrap an {@link Executor} so every `execute` / `affectingExecute` call is timed
+ * with `performance.now()` and reported to the registered query listeners. The
+ * emit is best-effort: a throwing listener is swallowed (a broken Telescope
+ * collector must never fail the query), and only *successful* executions are
+ * reported (Laravel parity — `QueryExecuted` doesn't fire on a query error).
+ * `affectingExecute` is forwarded only when the underlying driver implements it,
+ * so capability checks (`typeof ex.affectingExecute === 'function'`) still hold.
+ */
+function instrumentExecutor(
+  exec:       Executor,
+  listeners:  readonly QueryListener[],
+  connection: string | undefined,
+): Executor {
+  const emit = (sql: string, bindings: readonly unknown[], startedAt: number): void => {
+    if (listeners.length === 0) return
+    const duration = performance.now() - startedAt
+    // Snapshot so a listener registering/removing listeners mid-emit is safe.
+    for (const listener of [...listeners]) {
+      try {
+        listener({ sql, bindings: [...bindings], duration, connection })
+      } catch {
+        // Listener errors must never break the query.
+      }
+    }
+  }
+
+  const wrapped: Executor & Partial<AffectingExecutor> = {
+    async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+      const startedAt = performance.now()
+      const rows = await exec.execute(sql, bindings)
+      emit(sql, bindings, startedAt)
+      return rows
+    },
+  }
+
+  const affecting = exec as Partial<AffectingExecutor>
+  if (typeof affecting.affectingExecute === 'function') {
+    const affectingExecute = affecting.affectingExecute.bind(exec)
+    wrapped.affectingExecute = async (sql, bindings) => {
+      const startedAt = performance.now()
+      const result = await affectingExecute(sql, bindings)
+      emit(sql, bindings, startedAt)
+      return result
+    }
+  }
+
+  return wrapped
+}
+
 export class NativeAdapter implements OrmAdapter {
+  /** Where queries run — the top-level connection, or a transaction scope,
+   *  wrapped with query-listener instrumentation (see {@link instrumentExecutor}). */
+  private readonly executor: Executor
+
   private constructor(
-    /** Where queries run — the top-level connection, or a transaction scope. */
-    private readonly executor:   Executor,
+    /** The raw connection / transaction scope queries run on (pre-instrumentation). */
+    executor: Executor,
     /** Where a (nested) transaction is opened. Top-level: the {@link Driver};
      *  scoped: the active {@link Transaction} (so nesting → SAVEPOINT). */
     private readonly scope:      Transaction,
@@ -87,15 +141,25 @@ export class NativeAdapter implements OrmAdapter {
     /** The owned connection — present only on the top-level adapter, `null` on
      *  a transaction-scoped one (it must not close the shared connection). */
     private readonly driver:     Driver | null,
-  ) {}
+    /** Query listeners (`onQuery` / `DB.listen`). Shared BY REFERENCE with every
+     *  transaction-scoped adapter spawned from this one, so a listener registered
+     *  on the top-level adapter also sees queries run inside `transaction()`. */
+    private readonly listeners:  QueryListener[] = [],
+    /** Driver name reported on query events (`'sqlite'` / `'pg'` / `'mysql'`);
+     *  `undefined` for a caller-supplied {@link NativeConfig.driverInstance}. */
+    private readonly connection: string | undefined = undefined,
+  ) {
+    this.executor = instrumentExecutor(executor, listeners, connection)
+  }
 
   /** Build a `NativeAdapter`, opening the configured driver (lazy import). */
   static async make(config: NativeConfig = {}): Promise<NativeAdapter> {
     const primaryKey = config.primaryKey ?? 'id'
 
-    // Caller-supplied driver: no caching, they own the lifecycle.
+    // Caller-supplied driver: no caching, they own the lifecycle. No built-in
+    // driver name to report on query events.
     if (config.driverInstance) {
-      return NativeAdapter._topLevel(config.driverInstance, config.dialect ?? new SqliteDialect(), primaryKey)
+      return NativeAdapter._topLevel(config.driverInstance, config.dialect ?? new SqliteDialect(), primaryKey, undefined)
     }
 
     const driverName = config.driver ?? 'sqlite'
@@ -107,18 +171,18 @@ export class NativeAdapter implements OrmAdapter {
 
     const reused = reusableNativeClient(signature)
     if (reused) {
-      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey)
+      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, driverName)
     }
 
     const { driver, dialect } = await openDriver(driverName, url)
     cacheNativeClient({ signature, driver, dialect })
-    return NativeAdapter._topLevel(driver, dialect, primaryKey)
+    return NativeAdapter._topLevel(driver, dialect, primaryKey, driverName)
   }
 
   /** The adapter that owns the connection — queries and transactions both run
    *  on `driver`; `disconnect()` may close it. */
-  private static _topLevel(driver: Driver, dialect: Dialect, primaryKey: string): NativeAdapter {
-    return new NativeAdapter(driver, driver, dialect, primaryKey, driver)
+  private static _topLevel(driver: Driver, dialect: Dialect, primaryKey: string, connection: string | undefined): NativeAdapter {
+    return new NativeAdapter(driver, driver, dialect, primaryKey, driver, [], connection)
   }
 
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
@@ -207,9 +271,25 @@ export class NativeAdapter implements OrmAdapter {
    */
   transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
     return this.scope.transaction((txScope) => {
-      const scoped = new NativeAdapter(txScope, txScope, this.dialect, this.primaryKey, null)
+      // Shares `this.listeners` by reference — queries inside the transaction
+      // report to the same listeners as top-level ones.
+      const scoped = new NativeAdapter(txScope, txScope, this.dialect, this.primaryKey, null, this.listeners, this.connection)
       return fn(scoped)
     })
+  }
+
+  /**
+   * Register a query listener ({@link OrmAdapter.onQuery}) — fired once per
+   * successfully executed query with the SQL, bindings, and wall-clock duration
+   * in ms. The app-facing entry point is `DB.listen()` (`@rudderjs/database`);
+   * Telescope's QueryCollector and Pulse's slow-query recorder hook in here too.
+   * Listener errors are swallowed — they never break the query. Registering on
+   * a transaction-scoped adapter registers on the shared (top-level) listener
+   * list. Transaction control statements (BEGIN/COMMIT/SAVEPOINT) run inside
+   * the driver and are not reported.
+   */
+  onQuery(listener: QueryListener): void {
+    this.listeners.push(listener)
   }
 
   async connect(): Promise<void> {

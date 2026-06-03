@@ -15,3 +15,4 @@ export {
 } from './registry-bridge.js'
 export type { TransactionRunner } from './registry-bridge.js'
 export type { Row, Executor, Transaction, Connection } from './execution.js'
+export type { QueryEvent, QueryListener } from '@rudderjs/contracts'
