@@ -32,10 +32,28 @@ const notes = sqliteTable('notes', {
 let dir: string
 let n = 0
 
+/** Dispose every cached client (closes the write + replica file handles) before
+ *  dropping the cache. Windows can't unlink an open sqlite file — without this
+ *  the after() rmSync hits EBUSY on the leaked handles. */
+async function drainClientCache(): Promise<void> {
+  const g = globalThis as Record<string, unknown>
+  const cache = g['__rudderjs_drizzle_client__']
+  if (cache instanceof Map) {
+    for (const entry of cache.values() as Iterable<{ dispose?: () => void | Promise<void> }>) {
+      await entry.dispose?.()
+    }
+  }
+  delete g['__rudderjs_drizzle_client__']
+}
+
 before(() => { dir = mkdtempSync(join(tmpdir(), 'rudder-dz-rw-split-')) })
-after(() => { rmSync(dir, { recursive: true, force: true }) })
-beforeEach(() => {
-  delete (globalThis as Record<string, unknown>)['__rudderjs_drizzle_client__']
+after(async () => {
+  await drainClientCache()
+  // maxRetries: Windows may need a beat after close() before unlink succeeds.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+})
+beforeEach(async () => {
+  await drainClientCache()
   delete (globalThis as Record<string, unknown>)['__rudderjs_orm_connections__']
   ModelRegistry.reset()
 })
