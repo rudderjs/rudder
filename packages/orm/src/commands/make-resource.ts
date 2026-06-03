@@ -27,11 +27,11 @@ export const makeResourceSpec: MakeSpec = {
     return `import { JsonResource } from '@rudderjs/orm'
 import { ${modelName} } from 'App/Models/${modelName}.js'
 
-// The generic is \`any\` because \`JsonResource<T>\` constrains T to
-// \`Record<string, unknown>\`, which a class instance only satisfies once you
-// know its concrete attribute surface. Tighten to \`JsonResource<${modelName}>\`
-// (or an explicit attribute shape) once ${modelName}'s fields are declared —
-// \`this.resource\` then type-checks in toArray().
+// Tighten the generic to \`JsonResource<${modelName}>\` once ${modelName}'s fields are
+// declared — \`this.resource\` then type-checks in toArray(). The initial
+// \`any\` is intentional: a freshly scaffolded model declares no fields, so
+// \`this.resource.id\` against \`JsonResource<${modelName}>\` would fail tsc until
+// the model is filled in (same posture as the make:factory stub).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class ${className} extends JsonResource<any> {
   toArray() {

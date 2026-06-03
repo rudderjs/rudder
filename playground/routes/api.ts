@@ -79,6 +79,32 @@ Route.get('/api/hello', async (req) => {
   })
 })
 
+// API-resource demo — paginator-aware envelope + additional() + resourceClass.
+// `collection()` takes the paginate result directly and derives `meta`;
+// `additional()` adds top-level keys alongside data/meta.
+// (Plain /api/todos belongs to the Todo module's provider — service/adapter
+// demo; this is the JsonResource view over the same table.)
+// See docs/guide/database/resources.md.
+Route.get('/api/resources/todos', async (req, res) => {
+  const { Todo } = await import('App/Models/Todo.js')
+  const { TodoResource } = await import('App/Resources/TodoResource.js')
+  const page = Number(req.query['page'] ?? 1)
+
+  return res.json(
+    await TodoResource.collection(await Todo.paginate(page, 10))
+      .additional({ status: 'ok' })
+      .toResponse(),
+  )
+})
+
+// Single-resource variant — `static resourceClass` binding on the model.
+Route.get('/api/resources/todos/:id', async (req, res) => {
+  const { Todo } = await import('App/Models/Todo.js')
+  const todo = await Todo.find(req.params.id)
+  if (!todo) return res.status(404).json({ error: 'Not found' })
+  return res.json(await todo.toResource().toResponse())
+})
+
 // WebSocket demo routes
 Route.post('/api/ws/broadcast', async (req, res) => {
   const { user, text, ts } = req.body as { user: string; text: string; ts: number }

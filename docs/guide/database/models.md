@@ -842,6 +842,8 @@ class PublicUser extends Model {
 
 Per-instance overrides: `user.makeVisible(['email']).makeHidden(['phone'])`. Decorators (`@Hidden`, `@Visible`, `@Appends`) work too if you prefer property-level annotations.
 
+`hidden`/`visible` are model-wide. When different endpoints need different shapes of the same model — or conditional fields, relation guards, pagination envelopes — reach for [API Resources](/guide/database/resources) instead.
+
 ## Observers
 
 Hook into model lifecycle events to enforce invariants, transform data, or cancel operations:

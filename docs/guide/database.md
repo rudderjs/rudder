@@ -150,7 +150,7 @@ const admins    = await User.where('role', 'admin').orderBy('createdAt', 'DESC')
 const created   = await User.create({ name: 'Bob', email: 'bob@example.com' })
 ```
 
-The full Model API — defining models, mass assignment, hidden fields, custom scopes — lives in [Models](/guide/database/models).
+The full Model API — defining models, mass assignment, hidden fields, custom scopes — lives in [Models](/guide/database/models). To shape what your API returns per endpoint (envelopes, conditional fields, pagination meta), see [API Resources](/guide/database/resources).
 
 ## Configuration
 

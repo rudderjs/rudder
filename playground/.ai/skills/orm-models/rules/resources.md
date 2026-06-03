@@ -33,8 +33,17 @@ class UserResource extends JsonResource<User> {
       // Include only when condition is true
       admin: this.when(this.resource.role === 'admin', true),
 
+      // Include only when the attribute is present (partial-select hydration)
+      email: this.whenHas('email'),
+
       // Include only when the relation was eager-loaded
       posts: this.whenLoaded('posts', PostResource.collection(this.resource.posts)),
+
+      // Include only when withCount('posts') stamped it (a loaded 0 is included)
+      postsCount: this.whenCounted('posts'),
+
+      // Generalized aggregate: reads postsSumViews from withSum('posts', 'views')
+      totalViews: this.whenAggregated('posts', 'sum', 'views'),
 
       // Merge multiple fields conditionally
       ...this.mergeWhen(this.resource.isAdmin, {
@@ -53,30 +62,46 @@ class UserResource extends JsonResource<User> {
 ```ts
 const users = await User.with('posts').all()
 
-const collection = UserResource.collection(users, {
-  total:   100,
-  page:    1,
-  perPage: 15,
-})
-
-res.json(await collection.toResponse())
-// {
-//   data: [...],
-//   meta: { total: 100, page: 1, perPage: 15 }
-// }
+res.json(await UserResource.collection(users).toResponse())
+// { data: [...] }
 ```
 
-For a paginated query:
+For a paginated query, pass the paginator result directly — `meta` is derived:
 
 ```ts
-const page = await User.paginate(1, 15)
-const collection = UserResource.collection(page.data, {
-  total:    page.total,
-  page:     page.page,
-  perPage:  page.perPage,
-  lastPage: page.lastPage,
-})
+res.json(await UserResource.collection(await User.paginate(1, 15)).toResponse())
+// { data: [...], meta: { total, page, perPage, lastPage } }
+
+res.json(await UserResource.collection(await User.cursorPaginate(15)).toResponse())
+// { data: [...], meta: { perPage, nextCursor, prevCursor, hasMore } }
 ```
+
+An explicit `meta` second argument merges over the derived values. Don't hand-build meta from the paginator fields — `collection(page.data, { total: page.total, ... })` is the old pattern; passing the paginator itself replaces it.
+
+## Envelopes — `toResponse()` / `additional()`
+
+`toResponse()` wraps a single resource as `{ data: ... }` (async-safe — `JSON.stringify(resource)` throws if `toArray()` is async). `additional()` merges extra TOP-LEVEL keys alongside `data`/`meta` on both single resources and collections:
+
+```ts
+res.json(await new UserResource(user).additional({ status: 'ok' }).toResponse())
+// { status: 'ok', data: { ... } }
+```
+
+## Binding — `static resourceClass` + `toResource()`
+
+```ts
+class User extends Model {
+  static resourceClass = UserResource
+}
+
+res.json(await user.toResource().toResponse())              // ≡ new UserResource(user)
+res.json(await user.toResource(AdminUserResource).toResponse())  // explicit wins
+
+const users = ModelCollection.wrap(await User.all())
+res.json(await users.toResourceCollection().toResponse())
+```
+
+Unbound + no class argument throws a pointer error. Keep the resource file's model import **type-only** (`import type { User }`) so the model's runtime import of the resource stays cycle-free.
 
 ## Pitfalls
 
