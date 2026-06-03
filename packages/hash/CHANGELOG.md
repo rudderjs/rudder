@@ -1,5 +1,21 @@
 # @rudderjs/hash
 
+## 1.2.0
+
+### Minor Changes
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+- f6afdf8: Synchronous hashing surface. Adds `Hash.makeSync(value)` and `Hash.isHashed(value)` to the facade, plus optional `makeSync` / `isHashed` methods on the `HashDriver` contract. `BcryptDriver` implements `makeSync` via `bcryptjs.hashSync` (sync-resolved through `createRequire`); `Argon2Driver.makeSync` throws (argon2 has no synchronous API). Backs `@rudderjs/orm`'s new `hashed` cast, which runs in a synchronous write path that cannot await.
+
+### Patch Changes
+
+- Updated dependencies [7e6dc85]
+  - @rudderjs/console@1.4.0
+  - @rudderjs/core@1.7.0
+
 ## 1.1.0
 
 ### Minor Changes

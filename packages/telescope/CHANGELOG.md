@@ -1,5 +1,79 @@
 # @rudderjs/telescope
 
+## 15.2.0
+
+### Minor Changes
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+### Patch Changes
+
+- Updated dependencies [e199f5e]
+- Updated dependencies [0e7db2c]
+- Updated dependencies [fc97c10]
+- Updated dependencies [7e6dc85]
+- Updated dependencies [0109afb]
+- Updated dependencies [0dcecaf]
+- Updated dependencies [363d942]
+- Updated dependencies [12b4a55]
+- Updated dependencies [4085846]
+- Updated dependencies [6f8760d]
+- Updated dependencies [083672b]
+- Updated dependencies [8ba6e7d]
+- Updated dependencies [b31d1be]
+- Updated dependencies [0d6c280]
+- Updated dependencies [3b995b7]
+- Updated dependencies [5eb4dd8]
+- Updated dependencies [536b64d]
+- Updated dependencies [ea9b982]
+- Updated dependencies [ad17e79]
+- Updated dependencies [f6afdf8]
+- Updated dependencies [e25472c]
+- Updated dependencies [ca644ad]
+- Updated dependencies [bf1cca0]
+- Updated dependencies [bc76570]
+- Updated dependencies [acc2245]
+- Updated dependencies [0b085a6]
+- Updated dependencies [468dcd4]
+- Updated dependencies [ffbb7f7]
+- Updated dependencies [b897950]
+- Updated dependencies [caff11d]
+- Updated dependencies [26b7acf]
+- Updated dependencies [ea510e0]
+- Updated dependencies [b08aa1d]
+- Updated dependencies [6bd32b0]
+- Updated dependencies [370d2ec]
+- Updated dependencies [c66e195]
+- Updated dependencies [473dfd9]
+- Updated dependencies [6e83e26]
+- Updated dependencies [5617ec2]
+- Updated dependencies [bb07d54]
+- Updated dependencies [7b5d000]
+- Updated dependencies [f1db9d9]
+- Updated dependencies [a93455e]
+- Updated dependencies [e9a3319]
+- Updated dependencies [534bd8d]
+  - @rudderjs/contracts@1.10.0
+  - @rudderjs/orm@1.14.0
+  - @rudderjs/ai@1.11.0
+  - @rudderjs/auth@6.4.0
+  - @rudderjs/broadcast@1.3.0
+  - @rudderjs/cache@1.4.0
+  - @rudderjs/console@1.4.0
+  - @rudderjs/core@1.7.0
+  - @rudderjs/http@1.2.0
+  - @rudderjs/log@1.1.0
+  - @rudderjs/mail@1.4.0
+  - @rudderjs/mcp@6.2.0
+  - @rudderjs/middleware@1.2.0
+  - @rudderjs/notification@1.1.0
+  - @rudderjs/queue@4.3.0
+  - @rudderjs/router@1.8.0
+  - @rudderjs/schedule@1.1.0
+  - @rudderjs/sync@1.4.0
+
 ## 15.1.2
 
 ### Patch Changes

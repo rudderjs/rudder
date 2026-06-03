@@ -1,5 +1,29 @@
 # create-rudder
 
+## 1.6.0
+
+### Minor Changes
+
+- 3ac85bd: feat(create-rudder): add the built-in native engine as a Database option (now the default)
+
+  The scaffolder's **Database** prompt now offers **Native** — the zero-dependency built-in engine (`@rudderjs/orm/native`) — alongside Prisma and Drizzle, and it's the pre-highlighted default. Selecting it:
+
+  - pins the driver to SQLite (the native engine's only supported driver today; the driver prompt is skipped) and adds `@rudderjs/orm` + `better-sqlite3` instead of a `@rudderjs/orm-*` adapter package;
+  - writes a `config/database.ts` that opts in with `engine: 'native'` (the auto-discovered `NativeDatabaseProvider` boots from it);
+  - when auth is selected, scaffolds a working `database/migrations/0001_01_01_000000_create_users_table.ts` so the app is fully migrated and typed out of the box;
+  - runs `rudder migrate` in the post-install cascade (instead of the Prisma/Drizzle-only `db:generate` / `db:push`), creating `dev.db`, applying the migration, and generating the typed schema registry.
+
+  `--orm=native` works in non-interactive/JSON mode too (Prisma stays the implicit recipe default there). Prisma/Drizzle remain the path to Postgres/MySQL.
+
+- 7e6dc85: Require Node ≥ 22.12 (drop Node 20)
+
+  Node 20 ("Iron") reached end-of-life in April 2026, so `engines.node` is now `>=22.12.0` (was `^20.19.0 || >=22.12.0`). CI tests against the current Active LTS lines, Node 22 and 24. Consumers still on Node 20 will see an `engines` warning at install time — upgrade to Node 22 or 24. The scaffolder-generated app template now declares the same floor.
+
+### Patch Changes
+
+- Updated dependencies [7e6dc85]
+  - @rudderjs/auth@6.4.0
+
 ## 1.5.7
 
 ### Patch Changes

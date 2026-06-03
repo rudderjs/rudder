@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/telescope",
-  "version": "15.1.2",
+  "version": "15.2.0",
   "rudderjs": {
     "provider": "TelescopeProvider",
     "stage": "monitoring"
