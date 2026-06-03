@@ -230,6 +230,11 @@ async function loadPackageCommands(): Promise<void> {
       const mod = await tryImport('@rudderjs/orm', 'commands/make-seeder')
       registerMakeSpecs(mod['makeSeederSpec'] as import('@rudderjs/console').MakeSpec)
     },
+    // @rudderjs/orm → make:resource
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/make-resource')
+      registerMakeSpecs(mod['makeResourceSpec'] as import('@rudderjs/console').MakeSpec)
+    },
     // @rudderjs/router → route:list
     async () => {
       const mod = await tryImport('@rudderjs/router', 'commands/route-list')
