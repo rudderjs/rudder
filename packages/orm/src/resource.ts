@@ -1,3 +1,6 @@
+import { aggregateAlias } from './aggregate.js'
+import type { AggregateFn } from '@rudderjs/contracts'
+
 // ─── Paginator shapes (duck-typed) ──────────────────────────
 //
 // `Resource.collection()` accepts paginator results directly and derives the
@@ -120,6 +123,57 @@ export abstract class JsonResource<T extends Record<string, unknown> = Record<st
       return value !== undefined ? value : res[relation] as R
     }
     return fallback
+  }
+
+  /**
+   * Include only when the attribute is present on the underlying resource —
+   * covers Model partial-select hydration, where a non-selected column is
+   * absent (or an undefined own property) on the instance. `value` defaults
+   * to the attribute itself; `fallback` (default `undefined`) applies when
+   * the attribute is missing.
+   *
+   * @example
+   * toArray() {
+   *   return {
+   *     id:    this.resource.id,
+   *     email: this.whenHas('email'),               // only when selected
+   *     role:  this.whenHas('role', 'elevated'),    // substitute value
+   *   }
+   * }
+   */
+  protected whenHas(attribute: string): unknown
+  protected whenHas<R>(attribute: string, value: R): R | undefined
+  protected whenHas<R>(attribute: string, value: R, fallback: R): R
+  protected whenHas<R>(attribute: string, value?: R, fallback?: R): R | undefined {
+    const res = this.resource as Record<string, unknown>
+    if (attribute in res && res[attribute] !== undefined) {
+      return value !== undefined ? value : res[attribute] as R
+    }
+    return fallback
+  }
+
+  /**
+   * Include the stamped `<relation>Count` only when a `withCount('<relation>')`
+   * (or `loadCount`) query loaded it — `whenCounted('posts')` reads the
+   * deterministic `postsCount` alias the aggregate loader stamps. A loaded
+   * zero is included; `fallback` applies only when the count was never loaded.
+   */
+  protected whenCounted(relation: string, fallback?: number): number | undefined {
+    const count = this.whenAggregated(relation, 'count')
+    return count !== undefined ? count as number : fallback
+  }
+
+  /**
+   * Generalized aggregate presence check — `whenAggregated('posts', 'sum', 'views')`
+   * reads the deterministic `postsSumViews` alias stamped by
+   * `withSum('posts', 'views')`. Returns `undefined` when that aggregate was
+   * not eager-loaded. Pass an `.as(...)` alias prefix as `relation` when the
+   * query used one.
+   */
+  protected whenAggregated(relation: string, fn: AggregateFn, column?: string): unknown {
+    const alias = aggregateAlias(fn, relation, column)
+    const res = this.resource as Record<string, unknown>
+    return alias in res && res[alias] !== undefined ? res[alias] : undefined
   }
 
   /**
