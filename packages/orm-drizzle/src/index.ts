@@ -1,7 +1,7 @@
 import {
   eq, ne, gt, gte, lt, lte, like, notLike, inArray, notInArray,
   isNull, isNotNull,
-  and, or, asc, desc, count as sqlCount, sql,
+  and, or, not, asc, desc, count as sqlCount, sql,
   exists, notExists,
   getTableColumns,
   type Column, type SQL,
@@ -46,6 +46,35 @@ function rawToSql(fragment: string, bindings: readonly unknown[]): SQL {
     if (i < holes) chunks.push(sql`${bindings[i]}` as SQL)
   })
   return (chunks.length ? sql.join(chunks) : sql.raw('')) as SQL
+}
+
+/** The date/time component a `whereDate`/`whereTime`/`whereDay`/`whereMonth`/
+ *  `whereYear` predicate extracts before comparing (same contract as the native
+ *  engine's `Dialect.dateExtract`). */
+type DatePart = 'date' | 'time' | 'day' | 'month' | 'year'
+
+/**
+ * Normalize a date-helper comparison value for binding — a LOCAL COPY of the
+ * native engine's `normalizeDatePartValue` (that one lives in the node-only
+ * native module; duplicating ~15 lines beats importing across the boundary):
+ * `Date` → the matching **UTC** component ('YYYY-MM-DD' / 'HH:MM:SS' / ints);
+ * numeric strings on day/month/year → `Number` (so `'05'` matches an INTEGER
+ * extraction); everything else binds as-is.
+ */
+function normalizeDatePartValue(part: DatePart, value: unknown): unknown {
+  if (value instanceof Date) {
+    switch (part) {
+      case 'date':  return value.toISOString().slice(0, 10)
+      case 'time':  return value.toISOString().slice(11, 19)
+      case 'day':   return value.getUTCDate()
+      case 'month': return value.getUTCMonth() + 1
+      case 'year':  return value.getUTCFullYear()
+    }
+  }
+  if ((part === 'day' || part === 'month' || part === 'year') && typeof value === 'string' && /^\d+$/.test(value)) {
+    return Number(value)
+  }
+  return value
 }
 
 /** Global-registry symbol the ORM's `HydratingQueryBuilder` Proxy answers with
@@ -468,6 +497,111 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const operator = right === undefined ? '=' : operatorOrRight
     const rightCol = right === undefined ? operatorOrRight : right
     return sql`${this.col(left) as Column} ${sql.raw(operator)} ${this.col(rightCol) as Column}` as SQL
+  }
+
+  // ── date-component predicates (whereDate / whereTime / whereDay / …) ──
+  // Same surface + semantics as the native engine (#857): two-arg = equality,
+  // three-arg carries the operator; the column runs through a per-dialect
+  // extraction expression and the value binds. The extraction SQL mirrors the
+  // native `Dialect.dateExtract` per dialect.
+
+  whereDate(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._extraExprs.push(this._datePartExpr('date', column, operatorOrValue, value)); return this
+  }
+  orWhereDate(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._orExtraExprs.push(this._datePartExpr('date', column, operatorOrValue, value)); return this
+  }
+  whereTime(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._extraExprs.push(this._datePartExpr('time', column, operatorOrValue, value)); return this
+  }
+  orWhereTime(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._orExtraExprs.push(this._datePartExpr('time', column, operatorOrValue, value)); return this
+  }
+  whereDay(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._extraExprs.push(this._datePartExpr('day', column, operatorOrValue, value)); return this
+  }
+  orWhereDay(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._orExtraExprs.push(this._datePartExpr('day', column, operatorOrValue, value)); return this
+  }
+  whereMonth(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._extraExprs.push(this._datePartExpr('month', column, operatorOrValue, value)); return this
+  }
+  orWhereMonth(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._orExtraExprs.push(this._datePartExpr('month', column, operatorOrValue, value)); return this
+  }
+  whereYear(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._extraExprs.push(this._datePartExpr('year', column, operatorOrValue, value)); return this
+  }
+  orWhereYear(column: string, operatorOrValue: unknown, value?: unknown): this {
+    this._orExtraExprs.push(this._datePartExpr('year', column, operatorOrValue, value)); return this
+  }
+
+  private _datePartExpr(part: DatePart, column: string, operatorOrValue: unknown, value?: unknown): SQL {
+    // Two-arg form means equality; three-arg carries the operator in the middle.
+    const operator  = (value === undefined ? '=' : operatorOrValue) as string
+    const rawValue  = value === undefined ? operatorOrValue : value
+    const bound     = normalizeDatePartValue(part, rawValue)
+    const extracted = this._dateExtractExpr(part, this.col(column) as Column)
+    return sql`${extracted} ${sql.raw(operator)} ${bound}` as SQL
+  }
+
+  /** @internal — the per-dialect date-component extraction expression. Mirrors
+   *  the native engine's `Dialect.dateExtract`: sqlite `strftime` (CAST to
+   *  INTEGER for day/month/year — strftime returns zero-padded TEXT and SQLite
+   *  never equates TEXT with INTEGER), pg `::date`/`::time`/`EXTRACT(...)::int`,
+   *  mysql `DATE()`/`TIME()`/`DAY()`/`MONTH()`/`YEAR()`. */
+  private _dateExtractExpr(part: DatePart, col: Column): SQL {
+    if (this.dialect === 'pg') {
+      switch (part) {
+        case 'date':  return sql`${col}::date` as SQL
+        case 'time':  return sql`${col}::time` as SQL
+        case 'day':   return sql`EXTRACT(DAY FROM ${col})::int` as SQL
+        case 'month': return sql`EXTRACT(MONTH FROM ${col})::int` as SQL
+        case 'year':  return sql`EXTRACT(YEAR FROM ${col})::int` as SQL
+      }
+    }
+    if (this.dialect === 'mysql') {
+      switch (part) {
+        case 'date':  return sql`DATE(${col})` as SQL
+        case 'time':  return sql`TIME(${col})` as SQL
+        case 'day':   return sql`DAY(${col})` as SQL
+        case 'month': return sql`MONTH(${col})` as SQL
+        case 'year':  return sql`YEAR(${col})` as SQL
+      }
+    }
+    switch (part) {
+      case 'date':  return sql`strftime('%Y-%m-%d', ${col})` as SQL
+      case 'time':  return sql`strftime('%H:%M:%S', ${col})` as SQL
+      case 'day':   return sql`CAST(strftime('%d', ${col}) AS INTEGER)` as SQL
+      case 'month': return sql`CAST(strftime('%m', ${col}) AS INTEGER)` as SQL
+      case 'year':  return sql`CAST(strftime('%Y', ${col}) AS INTEGER)` as SQL
+    }
+  }
+
+  // ── negated groups (whereNot / orWhereNot) ───────────────
+  // Same surface as the native engine (#857): the callback's conditions wrap in
+  // NOT (…) via Drizzle's `not()`; an empty callback is a no-op. The hydrating
+  // proxy wraps the sub-builder, so named sugar (whereIn/whereNull/…) composes
+  // inside the callback.
+
+  whereNot(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const expr = this._negatedGroupExpr(fn)
+    if (expr) this._extraExprs.push(expr)
+    return this
+  }
+
+  orWhereNot(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const expr = this._negatedGroupExpr(fn)
+    if (expr) this._orExtraExprs.push(expr)
+    return this
+  }
+
+  private _negatedGroupExpr(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): SQL | undefined {
+    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable, this.dialect)
+      ._markSubBuilder()
+    fn(sub)
+    const inner = sub.buildConditions()
+    return inner ? (not(inner) as SQL) : undefined
   }
 
   orderByRaw(rawSql: string, bindings: readonly unknown[] = []): this {
