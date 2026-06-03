@@ -135,6 +135,22 @@ export class PostgresDriver extends PgScope implements Driver {
             : String(x),
           parse: (x: string) => new Date(x),
         },
+        // Replace porsager's default `json` type for the same reason as `date`
+        // above: its serializer `JSON.stringify`s EVERY bound value a server
+        // describes as json/jsonb (114/3802), so an already-stringified JSON
+        // param — the pg dialect's `jsonContains` binds `JSON.stringify(value)`,
+        // and apps porting sqlite-style code bind JSON text into jsonb columns —
+        // was DOUBLE-encoded: `'"php"'` arrived server-side as the JSON string
+        // `"\"php\""` and `@>` containment silently matched nothing. Strings now
+        // pass through verbatim (Postgres parses the JSON text natively; an
+        // invalid document surfaces as a clear server parse error); non-strings
+        // keep porsager's `JSON.stringify`, and reads keep its `JSON.parse`.
+        json: {
+          to:   114,
+          from: [114, 3802],
+          serialize: (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x)),
+          parse: (x: string) => JSON.parse(x) as unknown,
+        },
       },
       ...config.options,
     })

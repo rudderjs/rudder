@@ -10,8 +10,30 @@
 // validated through the shared {@link validateIdentifier} security gate.
 
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, quoteValueList, type Dialect, type DatePart } from './dialect.js'
+import {
+  validateIdentifier,
+  quoteValueList,
+  type Dialect,
+  type DatePart,
+  type JsonPathSegment,
+  type JsonValueKind,
+} from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
+
+/**
+ * Render a pg JSON arrow chain — `col->'a'->'b'`, with the LAST hop as `->>`
+ * (text) when `lastAsText`. String segments are single-quoted literals (safe:
+ * {@link parseJsonPath} rejected quotes/backslashes); numeric segments splice
+ * bare (`->0` = array index — quoting would make pg treat it as an object key).
+ */
+function pgJsonChain(column: string, segments: readonly JsonPathSegment[], lastAsText: boolean): string {
+  return column + segments
+    .map((s, i) => {
+      const op = lastAsText && i === segments.length - 1 ? '->>' : '->'
+      return typeof s === 'number' ? `${op}${s}` : `${op}'${s}'`
+    })
+    .join('')
+}
 
 /**
  * Postgres {@link Dialect} — `"`-quoted identifiers, `$1`/`$2`/… placeholders,
@@ -55,6 +77,36 @@ export class PgDialect implements Dialect {
       case 'month': return `EXTRACT(MONTH FROM ${column})::int`
       case 'year':  return `EXTRACT(YEAR FROM ${column})::int`
     }
+  }
+
+  // Arrow chain with a text (`->>`) last hop, cast when the comparison value
+  // is typed: `::numeric` so `>`/`<` compare numbers (text '10' < '9'),
+  // `::boolean` so a bound JS boolean compares ('true'/'false' text coerces).
+  // Text comparisons stay uncast — the planner types the parameter from context.
+  jsonExtract(column: string, segments: readonly JsonPathSegment[], valueKind: JsonValueKind): string {
+    const chain = pgJsonChain(column, segments, true)
+    if (valueKind === 'number')  return `(${chain})::numeric`
+    if (valueKind === 'boolean') return `(${chain})::boolean`
+    return chain
+  }
+
+  // The extraction is `::boolean`-cast — bind the JS boolean itself.
+  jsonBoolean(value: boolean): unknown {
+    return value
+  }
+
+  // jsonb containment: `(col->'a')::jsonb @> $n::jsonb`, the value bound as
+  // JSON text. The `->` chain (no `->>`) keeps the LHS json; `::jsonb` covers
+  // plain-json columns (no-op on jsonb, which our `json` column type maps to).
+  jsonContains(column: string, segments: readonly JsonPathSegment[], value: unknown, bind: (v: unknown) => string): string {
+    const lhs = segments.length === 0 ? column : pgJsonChain(column, segments, false)
+    return `(${lhs})::jsonb @> ${bind(JSON.stringify(value))}::jsonb`
+  }
+
+  // jsonb_array_length over the (cast) arrow chain — matches Laravel's pg grammar.
+  jsonLength(column: string, segments: readonly JsonPathSegment[]): string {
+    const lhs = segments.length === 0 ? column : pgJsonChain(column, segments, false)
+    return `jsonb_array_length((${lhs})::jsonb)`
   }
 
   // Real row-level pessimistic locking — the suffix trails ORDER BY / LIMIT.

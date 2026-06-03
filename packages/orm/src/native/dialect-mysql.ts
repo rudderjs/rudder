@@ -14,8 +14,17 @@
 //   - **No real boolean type** — booleans store as `tinyint(1)` integers, so a
 //     boolean default renders as `1`/`0` (same as SQLite).
 
+import { raw } from '@rudderjs/contracts'
 import { NativeOrmError } from './errors.js'
-import { validateIdentifier, quoteValueList, type Dialect, type DatePart } from './dialect.js'
+import {
+  validateIdentifier,
+  quoteValueList,
+  jsonPathLiteral,
+  type Dialect,
+  type DatePart,
+  type JsonPathSegment,
+  type JsonValueKind,
+} from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
 
 /**
@@ -59,6 +68,38 @@ export class MysqlDialect implements Dialect {
       case 'month': return `MONTH(${column})`
       case 'year':  return `YEAR(${column})`
     }
+  }
+
+  // JSON_UNQUOTE(JSON_EXTRACT(col, '$."a"."b"')) — text for strings, and MySQL's
+  // loose comparison coerces text numbers against a bound number. Booleans skip
+  // the UNQUOTE: the raw JSON_EXTRACT (json true/false) compares against the
+  // spliced SQL literal `true`/`false` — Laravel's MySQL grammar shape.
+  jsonExtract(column: string, segments: readonly JsonPathSegment[], valueKind: JsonValueKind): string {
+    const extract = `JSON_EXTRACT(${column}, ${jsonPathLiteral(segments)})`
+    return valueKind === 'boolean' ? extract : `JSON_UNQUOTE(${extract})`
+  }
+
+  // Paired with the no-UNQUOTE boolean extraction above — splice the SQL
+  // literal `true`/`false` (an Expression rides compileComparison's verbatim
+  // path; nothing user-controlled, so inlining is safe). A BOUND 'true' string
+  // does NOT work: in a comparison with a JSON value MySQL coerces a string
+  // comparand to a JSON *string* ("true"), never a boolean, so
+  // `JSON_EXTRACT(…) = ?` with 'true' matched nothing (verified on MySQL 8 —
+  // `= 'true'` → 0, `= true` → 1, `= CAST('true' AS JSON)` → 1).
+  jsonBoolean(value: boolean): unknown {
+    return raw(value ? 'true' : 'false')
+  }
+
+  // Native JSON_CONTAINS(col, candidate[, path]) — candidate bound as JSON text.
+  jsonContains(column: string, segments: readonly JsonPathSegment[], value: unknown, bind: (v: unknown) => string): string {
+    const path = segments.length === 0 ? '' : `, ${jsonPathLiteral(segments)}`
+    return `JSON_CONTAINS(${column}, ${bind(JSON.stringify(value))}${path})`
+  }
+
+  // JSON_LENGTH(col[, path]).
+  jsonLength(column: string, segments: readonly JsonPathSegment[]): string {
+    const path = segments.length === 0 ? '' : `, ${jsonPathLiteral(segments)}`
+    return `JSON_LENGTH(${column}${path})`
   }
 
   // MySQL 8 row-level locking — suffix trails ORDER BY / LIMIT. `FOR SHARE`
