@@ -73,6 +73,10 @@ type DrizzleQB = {
    *  columns to plain identifiers as set-operation SQL requires). */
   union(other: DrizzleQB): DrizzleQB
   unionAll(other: DrizzleQB): DrizzleQB
+  /** Pessimistic locking clause (`FOR UPDATE` / `FOR SHARE`) — present on the
+   *  pg + mysql Drizzle select builders, ABSENT on sqlite (no row locks there;
+   *  the adapter no-ops the lock on the sqlite dialect, like the native engine). */
+  for(strength: 'update' | 'share'): DrizzleQB
   orderBy(...cols: SQL[]): DrizzleQB
   limit(n: number): DrizzleQB
   offset(n: number): DrizzleQB
@@ -314,6 +318,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  OFFSET apply to the combined result; member ORDER/LIMIT are dropped
    *  (mirrors the native engine's union semantics). */
   private _unions: Array<{ all: boolean; qb: DrizzleQueryBuilder<T> }> = []
+  /** Pessimistic row lock (`lockForUpdate()` / `sharedLock()`). Rendered via
+   *  Drizzle's `.for('update' | 'share')` on pg/mysql; NO-OP on sqlite (no row
+   *  locks — its write transaction already serializes; same as the native
+   *  engine's `lockSql`). Only meaningful inside a `transaction()`. */
+  private _lock: 'update' | 'share' | null = null
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
 
@@ -601,6 +610,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
+
+  /** Pessimistic `FOR UPDATE` row lock — writers AND locking readers block until
+   *  commit. Renders via Drizzle's `.for('update')` on pg/mysql; no-op on sqlite
+   *  (no row locks — its write transaction already serializes, matching the
+   *  native engine). Only meaningful inside a `transaction()`. */
+  lockForUpdate(): this { this._lock = 'update'; return this }
+
+  /** Shared `FOR SHARE` row lock — readers proceed, writers block until commit.
+   *  Same dialect handling as {@link lockForUpdate}. */
+  sharedLock(): this { this._lock = 'share'; return this }
 
   // A normal `Model.with('relation')` no longer reaches this method: the
   // adapter advertises `eagerLoadStrategy = 'model-layer'`, so the ORM resolves
@@ -1091,6 +1110,15 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return q
   }
 
+  /** @internal — chain the pessimistic lock onto a read terminal's query.
+   *  No-op on sqlite (its select builders have no `.for()` and the dialect has
+   *  no row locks) and on a union'd query (`FOR UPDATE` is not valid SQL on a
+   *  set operation — Postgres rejects it). */
+  private _applyLock(q: DrizzleQB): DrizzleQB {
+    if (this._lock === null || this.dialect === 'sqlite' || this._unions.length > 0) return q
+    return q.for(this._lock)
+  }
+
   /** @internal — row count honoring grouping/distinct. A grouped or distinct
    *  query's row count is the number of groups / distinct rows, not a scalar
    *  aggregate — so wrap the full projection as a subquery and COUNT(*) it
@@ -1163,7 +1191,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     let q = this._applyUnions(this._selectBodyQuery())
     if (orderBy.length) q = q.orderBy(...orderBy)
-    q = q.limit(1)
+    q = this._applyLock(q.limit(1))
 
     const result = await this._run<T[]>(q)
     return result[0] ?? null
@@ -1185,7 +1213,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     sel = sel.where(cond)
     sel = this._applyGroupHaving(sel)
     sel = this._applyUnions(sel)
-    const result = await this._run<T[]>(sel.limit(1))
+    sel = this._applyLock(sel.limit(1))
+    const result = await this._run<T[]>(sel)
     return result[0] ?? null
   }
 
@@ -1198,6 +1227,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
+    q = this._applyLock(q)
 
     return this._run<T[]>(q)
   }
@@ -1511,7 +1541,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     let pageQ = this._applyUnions(this._selectBodyQuery())
     if (orderBy.length) pageQ = pageQ.orderBy(...orderBy)
-    pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
+    pageQ = this._applyLock(pageQ.limit(perPage).offset((page - 1) * perPage))
 
     const [data, total] = await Promise.all([
       this._run<T[]>(pageQ),
