@@ -47,6 +47,13 @@ function rawToSql(fragment: string, bindings: readonly unknown[]): SQL {
   return (chunks.length ? sql.join(chunks) : sql.raw('')) as SQL
 }
 
+/** Global-registry symbol the ORM's `HydratingQueryBuilder` Proxy answers with
+ *  its wrapped adapter builder. `union(other)` reads it to unwrap a passed proxy
+ *  back to the underlying `DrizzleQueryBuilder` so it can build the member's
+ *  select body. `Symbol.for` (not an imported value) — same pattern as the
+ *  native engine's query-builder. */
+const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
 // ─── Minimal Drizzle DB interface ──────────────────────────
 
 // Drizzle DB instances share a common fluent query API regardless of driver.
@@ -59,6 +66,12 @@ type DrizzleQB = {
   crossJoin(table: unknown): DrizzleQB
   groupBy(...cols: (SQL | Column)[]): DrizzleQB
   having(cond: SQL): DrizzleQB
+  /** Set operators — chain another finished select as `UNION [ALL]`. An
+   *  `orderBy`/`limit`/`offset` applied AFTER a set operator attaches to the
+   *  whole compound (Drizzle renders it at the end, auto-unqualifying order
+   *  columns to plain identifiers as set-operation SQL requires). */
+  union(other: DrizzleQB): DrizzleQB
+  unionAll(other: DrizzleQB): DrizzleQB
   orderBy(...cols: SQL[]): DrizzleQB
   limit(n: number): DrizzleQB
   offset(n: number): DrizzleQB
@@ -268,6 +281,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _orHavings:     WhereClause[] = []
   private _havingExprs:   SQL[] = []
   private _orHavingExprs: SQL[] = []
+  /** UNION members — each is another DrizzleQueryBuilder whose select body
+   *  (projection → HAVING, no ORDER/LIMIT) chains onto the base query via
+   *  Drizzle's `.union()`/`.unionAll()`. The BASE query's ORDER BY / LIMIT /
+   *  OFFSET apply to the combined result; member ORDER/LIMIT are dropped
+   *  (mirrors the native engine's union semantics). */
+  private _unions: Array<{ all: boolean; qb: DrizzleQueryBuilder<T> }> = []
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
 
@@ -399,17 +418,6 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   // ── joins + structured projection ────────────────────────
-  // Drizzle's typed select maps each row back to one model; a join/projection
-  // changes the result shape (same reason selectRaw throws). Point at the native
-  // engine / DB facade rather than silently returning the wrong shape.
-  private _builderUnsupported(method: string): never {
-    throw new Error(
-      `[RudderJS ORM Drizzle] ${method} is not supported — Drizzle's typed select can't map this result shape back to hydrated models. ` +
-        `Use the native engine (@rudderjs/orm/native), or run the query via the DB facade: DB.select(sql, bindings).`,
-    )
-  }
-
-  // ── joins + structured projection ────────────────────────
   // Real Drizzle joins. The referenced tables must be registered (via `tables:`
   // config or DrizzleTableRegistry) — same requirement as whereHas. With a join
   // and no explicit `select(...)`, the projection defaults to the BASE table's
@@ -515,8 +523,32 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  union(_other: unknown): this { this._builderUnsupported('union()') }
-  unionAll(_other: unknown): this { this._builderUnsupported('unionAll()') }
+  // ── unions ───────────────────────────────────────────────
+  // Real Drizzle set operators. The base query's ORDER BY / LIMIT / OFFSET
+  // apply to the COMBINED result (Drizzle attaches a post-union orderBy/limit
+  // to the whole compound); a member's own ORDER/LIMIT are dropped — same
+  // semantics as the native engine. Projections must be union-compatible
+  // (same column count/order), as in raw SQL.
+
+  /** `… UNION …` — append another query as a UNION member (duplicate rows
+   *  removed). `other` is another Drizzle-adapter query (`Model.query()`). */
+  union(other: QueryBuilder<T>): this { return this._addUnion(other, false) }
+
+  /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
+  unionAll(other: QueryBuilder<T>): this { return this._addUnion(other, true) }
+
+  private _addUnion(other: QueryBuilder<T>, all: boolean): this {
+    // `other` is usually the HydratingQueryBuilder Proxy wrapping a
+    // DrizzleQueryBuilder — unwrap it via the global symbol the proxy answers.
+    const target = (other as unknown as Record<symbol, unknown>)[QB_TARGET] ?? other
+    if (!(target instanceof DrizzleQueryBuilder)) {
+      throw new Error(
+        '[RudderJS ORM Drizzle] union()/unionAll() requires another Drizzle query builder — pass a Model.query() of a Drizzle-adapter model.',
+      )
+    }
+    this._unions.push({ all, qb: target as DrizzleQueryBuilder<T> })
+    return this
+  }
 
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
@@ -988,12 +1020,44 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return q
   }
 
+  /** @internal — the full select body: projection → joins → WHERE → GROUP BY /
+   *  HAVING, with NO ORDER BY / LIMIT / OFFSET. The shared base for the read
+   *  terminals; also what a union member contributes (its ORDER/LIMIT are
+   *  dropped — only the base query's apply, to the whole compound). */
+  private _selectBodyQuery(): DrizzleQB {
+    const cond = this.buildConditions()
+    let q = this._selectFrom(this.buildSelectFields())
+    q = this._applyJoins(q)
+    if (cond) q = q.where(cond)
+    return this._applyGroupHaving(q)
+  }
+
+  /** @internal — chain accumulated UNION members onto the base select body.
+   *  No-op when no unions, keeping the plain path byte-identical. */
+  private _applyUnions(q: DrizzleQB): DrizzleQB {
+    for (const u of this._unions) {
+      const member = u.qb._selectBodyQuery()
+      q = u.all ? q.unionAll(member) : q.union(member)
+    }
+    return q
+  }
+
   /** @internal — row count honoring grouping/distinct. A grouped or distinct
    *  query's row count is the number of groups / distinct rows, not a scalar
    *  aggregate — so wrap the full projection as a subquery and COUNT(*) it
    *  (Laravel parity: count() of a grouped builder = group count). The plain
    *  path stays a single COUNT(*) over the base table. */
   private async _countRows(cond: SQL | undefined): Promise<number> {
+    // A union'd query's count is the combined row count — wrap the whole
+    // compound as a subquery and COUNT(*) it (precedence over the GROUP BY /
+    // DISTINCT wrap below, which the body subqueries already include).
+    if (this._unions.length) {
+      const sub = this._applyUnions(this._selectBodyQuery()).as('aggregate')
+      const result = await exec<Array<{ value: number | string | bigint }>>(
+        this.db.select({ value: sqlCount() }).from(sub),
+      )
+      return Number(result[0]?.value ?? 0)
+    }
     if (this._groupBy.length || this._distinct) {
       // Count groups by projecting just the GROUP BY keys (portable — avoids
       // `SELECT * … GROUP BY` which strict dialects reject); an explicit
@@ -1046,14 +1110,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         this._limitN = prevLimit
       }
     }
-    const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildSelectFields()
 
-    let q = this._selectFrom(fields)
-    q = this._applyJoins(q)
-    if (cond)           q = q.where(cond)
-    q = this._applyGroupHaving(q)
+    let q = this._applyUnions(this._selectBodyQuery())
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
 
@@ -1076,6 +1135,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     let sel = this._applyJoins(this._selectFrom(fields))
     sel = sel.where(cond)
     sel = this._applyGroupHaving(sel)
+    sel = this._applyUnions(sel)
     const result = await exec<T[]>(sel.limit(1))
     return result[0] ?? null
   }
@@ -1083,14 +1143,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
     if (this._vectorClause !== null) return this._getViaVector() as Promise<T[]>
-    const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildSelectFields()
 
-    let q = this._selectFrom(fields)
-    q = this._applyJoins(q)
-    if (cond)           q = q.where(cond)
-    q = this._applyGroupHaving(q)
+    let q = this._applyUnions(this._selectBodyQuery())
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
@@ -1404,12 +1459,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const fields  = this.buildSelectFields()
 
-    let pageQ = this._selectFrom(fields)
-    pageQ = this._applyJoins(pageQ)
-    if (cond) pageQ = pageQ.where(cond)
-    pageQ = this._applyGroupHaving(pageQ)
+    let pageQ = this._applyUnions(this._selectBodyQuery())
     if (orderBy.length) pageQ = pageQ.orderBy(...orderBy)
     pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
 

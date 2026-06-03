@@ -120,10 +120,3 @@ describe('Drizzle groupBy() / having()', () => {
     assert.equal(page.data.length, 2)
   })
 })
-
-describe('Drizzle union() still throws (separate follow-up)', () => {
-  it('union throws a clear unsupported error', () => {
-    const q = User.query() as unknown as { union(o: unknown): unknown }
-    assert.throws(() => q.union(Post.query()), /union\(\) is not supported/)
-  })
-})

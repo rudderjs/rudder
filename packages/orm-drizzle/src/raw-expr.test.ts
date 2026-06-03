@@ -83,12 +83,7 @@ describe('Drizzle raw expressions', () => {
     assert.throws(() => User.query().selectRaw('count(*) as total'), /not supported.*DB\.select/s)
   })
 
-  // joins + select() (drizzle-joins.test.ts) and groupBy/having/distinct
-  // (group-having-distinct.test.ts) are now implemented on Drizzle.
-  // union/unionAll remain unsupported (a separate follow-up).
-  it('union + unionAll throw with a native-engine / DB-facade pointer', () => {
-    const q = User.query() as unknown as { union(o: unknown): unknown; unionAll(o: unknown): unknown }
-    assert.throws(() => q.union(User.query()),    /union\(\) is not supported.*native engine.*DB\.select/s)
-    assert.throws(() => q.unionAll(User.query()), /unionAll\(\) is not supported/)
-  })
+  // joins + select() (drizzle-joins.test.ts), groupBy/having/distinct
+  // (group-having-distinct.test.ts) and union/unionAll (union.test.ts) are now
+  // all implemented on Drizzle — selectRaw above is the last builder throw.
 })
