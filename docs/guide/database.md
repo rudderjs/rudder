@@ -22,7 +22,8 @@ All three are first-party and feature-equivalent at the model layer. The choice 
 | Drivers | SQLite | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
 | `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
 | Relations via `Model.with()` | Polymorphic only | Supported | Supported (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) |
-| Transactions (`transaction()`) | Supported | — | — |
+| Transactions (`transaction()`) | Supported | Supported | Supported |
+| Read/write split + sticky | Supported | — ([extension](/guide/database/connections#adapter-support)) | Supported |
 
 For setup details see [Native Engine](#native-engine-built-in) below, [Prisma Adapter](/guide/database/prisma), or [Drizzle Adapter](/guide/database/drizzle). The rest of this guide is adapter-neutral.
 
@@ -172,6 +173,8 @@ export default {
 
 Most apps only set `DATABASE_URL` in `.env` and let the rest default.
 
+The `connections` map is a **menu** — entries are lazy, and an unused named connection never opens a socket or even imports its driver. For multiple databases, per-model connections (`static connection` / `Model.on()`), and read/write replica splitting with sticky reads, see [Connections](/guide/database/connections).
+
 ## Unified rudder commands
 
 The framework wraps both ORMs' migration tooling behind a uniform set of `rudder` commands. They auto-detect which adapter is in use and delegate to the underlying tool:
@@ -260,7 +263,7 @@ await transaction(async () => {
 
 Queries join the transaction automatically — no handle to thread through. Nested `transaction()` calls map to **savepoints**: an inner failure rolls back only its own work while the outer transaction continues.
 
-> Transactions are implemented on the **native engine** today. Against the Prisma/Drizzle adapters, `transaction()` throws a clear "not supported" error (their wiring is a follow-up). The capability is an optional part of the `OrmAdapter` contract.
+Transactions work on all three adapters — native, Prisma, and Drizzle. To run one against a [named connection](/guide/database/connections#transactions-on-a-named-connection), pass `{ connection: 'name' }` as the second argument.
 
 ## Pitfalls
 
