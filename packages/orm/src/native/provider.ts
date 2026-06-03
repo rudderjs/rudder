@@ -18,8 +18,9 @@
 // touches this provider). It's a node-only import in this subpath, so it doesn't
 // affect the client-bundle gate.
 
-import { ServiceProvider, config } from '@rudderjs/core'
+import { ServiceProvider, config, appendToGroup } from '@rudderjs/core'
 import { ModelRegistry, ConnectionManager } from '../index.js'
+import { databaseContextMiddleware } from '../sticky.js'
 import { NativeAdapter } from './adapter.js'
 import type { NativeDriverName } from './adapter.js'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter and
@@ -40,10 +41,21 @@ export interface NativeDatabaseConnectionConfig {
   /** Underlying driver: `sqlite` (better-sqlite3), `pg` (postgres), or `mysql`
    *  (mysql2). The matching optional peer must be installed. */
   driver?:     NativeDriverName | (string & {})
-  /** Connection URL / path (`file:./dev.db`, `:memory:`, …). */
+  /** Connection URL / path (`file:./dev.db`, `:memory:`, …). Doubles as the
+   *  WRITE url on a read/write-split connection (alias: `write.url`). */
   url?:        string
   /** Default primary-key column for models that don't override it. */
   primaryKey?: string
+  /** Explicit write-side URL on a read/write split. Defaults to `url`. */
+  write?:      { url?: string }
+  /** Read replica(s) — one URL or an array (round-robin per query). Un-locked
+   *  SELECTs route here; writes, DDL, locked selects, and transactions stay on
+   *  the write connection. */
+  read?:       { url: string | string[] }
+  /** Sticky reads: after a write within the current request scope, reads on
+   *  this connection route to the writer (read-your-writes under replication
+   *  lag). Requires `read`. */
+  sticky?:     boolean
 }
 
 /** `config('database')` shape consumed by {@link NativeDatabaseProvider}. The
@@ -92,18 +104,38 @@ export class NativeDatabaseProvider extends ServiceProvider {
     // nobody uses never opens (or even imports its optional-peer driver).
     // Other connection shapes (prisma/drizzle) are skipped here; their own
     // providers register those.
+    let needsStickyContext = false
     for (const [name, conn] of Object.entries(cfg.connections)) {
       if (conn?.engine !== 'native') continue
+      // Read/write split: `url` is the write URL (or the explicit `write.url`);
+      // `read.url` normalizes to an array of replicas.
+      const writeUrl = conn.write?.url ?? conn.url
+      const readUrls = conn.read === undefined
+        ? []
+        : Array.isArray(conn.read.url) ? conn.read.url : [conn.read.url]
+      const sticky = conn.sticky === true && readUrls.length > 0
+      if (sticky) needsStickyContext = true
       ConnectionManager.register(name, () =>
         NativeAdapter.make({
           driver: validateDriver(conn.driver ?? 'sqlite', name),
           connectionName: name,
-          ...(conn.url !== undefined && { url: conn.url }),
+          ...(writeUrl !== undefined && { url: writeUrl }),
+          ...(readUrls.length > 0 && { readUrls }),
+          ...(sticky && { sticky }),
           ...(conn.primaryKey !== undefined && { primaryKey: conn.primaryKey }),
         }),
       )
     }
     ConnectionManager.setDefaultName(cfg.default)
+
+    // Sticky reads scope to a request — enter a database context per request
+    // on both groups (api requests write too). Installed once here, not per
+    // connection; the ALS scope is shared by every sticky connection.
+    if (needsStickyContext) {
+      const mw = databaseContextMiddleware()
+      appendToGroup('web', mw)
+      appendToGroup('api', mw)
+    }
 
     const conn = cfg.connections[cfg.default]
 

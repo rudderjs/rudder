@@ -79,9 +79,20 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     private readonly dialect:    Dialect,
     private readonly table:      string,
     private readonly primaryKey: string,
+    /** Read-pool picker on a read/write-split connection (round-robin +
+     *  sticky-aware, supplied by the adapter); `null` without a split. */
+    private readonly readPick:   (() => Executor) | null = null,
   ) {}
 
   // ── internal helpers ─────────────────────────────────────
+
+  /** The executor for a READ terminal: the read pool on a split connection,
+   *  EXCEPT locked selects (`lockForUpdate`/`sharedLock`) — a lock is only
+   *  meaningful on the write connection. Writes/`_reselect` never call this. */
+  private _readExecutor(): Executor {
+    if (this._lock !== null || this.readPick === null) return this.executor
+    return this.readPick()
+  }
 
   /** @internal — called by the Model layer to turn on soft-delete scoping. */
   _enableSoftDeletes(): this { this._softDeletes = true; return this }
@@ -471,21 +482,21 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async first(): Promise<T | null> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1 })
-    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
+    const rows = this._coerceAggregates(await this._readExecutor().execute(sql, bindings))
     return (rows[0] as T | undefined) ?? null
   }
 
   async find(id: number | string): Promise<T | null> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect, { limit: 1, extraConditions: this._pkCondition(id) })
-    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
+    const rows = this._coerceAggregates(await this._readExecutor().execute(sql, bindings))
     return (rows[0] as T | undefined) ?? null
   }
 
   async get(): Promise<T[]> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileSelect(this._state(), this.dialect)
-    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
+    const rows = this._coerceAggregates(await this._readExecutor().execute(sql, bindings))
     return rows as T[]
   }
 
@@ -496,7 +507,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async count(): Promise<number> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileCount(this._state(), this.dialect)
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = await this._readExecutor().execute(sql, bindings)
     return Number((rows[0] as Row | undefined)?.['count'] ?? 0)
   }
 
@@ -513,7 +524,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       offsetN: (safePage - 1) * safePerPage,
     }
     const { sql, bindings } = compileSelect(pageState, this.dialect)
-    const rows = this._coerceAggregates(await this.executor.execute(sql, bindings))
+    const rows = this._coerceAggregates(await this._readExecutor().execute(sql, bindings))
 
     const lastPage = Math.max(1, Math.ceil(total / safePerPage))
     return {
@@ -823,7 +834,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
     this._assertNotSubBuilder()
     const { sql, bindings } = compileScalarAggregate(this._state(), this.dialect, fn, column)
-    const rows = await this.executor.execute(sql, bindings)
+    const rows = await this._readExecutor().execute(sql, bindings)
     const raw = (rows[0] as Row | undefined)?.['value']
     if (fn === 'count')  return Number(raw ?? 0)
     if (fn === 'exists') return Number(raw ?? 0) > 0

@@ -28,6 +28,12 @@
       "default": "./dist/db-bridge.js",
       "types": "./dist/db-bridge.d.ts"
     },
+    "./sticky": {
+      "node": "./dist/sticky.js",
+      "import": "./dist/sticky.js",
+      "default": "./dist/sticky.js",
+      "types": "./dist/sticky.d.ts"
+    },
     "./native": {
       "node": "./dist/native/index.js",
       "import": "./dist/native/index.js",
