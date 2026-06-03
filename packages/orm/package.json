@@ -64,6 +64,10 @@
     "./commands/make-seeder": {
       "import": "./dist/commands/make-seeder.js",
       "types": "./dist/commands/make-seeder.d.ts"
+    },
+    "./commands/make-resource": {
+      "import": "./dist/commands/make-resource.js",
+      "types": "./dist/commands/make-resource.d.ts"
     }
   },
   "scripts": {
