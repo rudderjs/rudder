@@ -40,7 +40,7 @@ async function drainClientCache(): Promise<void> {
   const cache = g['__rudderjs_drizzle_client__']
   if (cache instanceof Map) {
     for (const entry of cache.values() as Iterable<{ dispose?: () => void | Promise<void> }>) {
-      await entry.dispose?.()
+      try { await entry.dispose?.() } catch { /* best effort */ }
     }
   }
   delete g['__rudderjs_drizzle_client__']
@@ -49,8 +49,12 @@ async function drainClientCache(): Promise<void> {
 before(() => { dir = mkdtempSync(join(tmpdir(), 'rudder-dz-rw-split-')) })
 after(async () => {
   await drainClientCache()
-  // maxRetries: Windows may need a beat after close() before unlink succeeds.
-  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  // Best-effort: even after close(), Windows can keep a libsql file handle
+  // alive long enough for unlink to EBUSY. Never fail the suite over temp-dir
+  // cleanup — CI runners are ephemeral and a leftover tmpdir is harmless.
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  } catch { /* best effort */ }
 })
 beforeEach(async () => {
   await drainClientCache()
