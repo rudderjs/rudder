@@ -178,5 +178,43 @@ if (!PG_URL) {
         await schema.dropIfExists('rudder_pg_types')
       })
     })
+
+    describe('bound string timestamps store verbatim (TZ regression)', () => {
+      // porsager's default `date` type serializer round-trips every bound value
+      // through `new Date(x).toISOString()` — a plain 'YYYY-MM-DD HH:MM:SS'
+      // string parsed as MACHINE-LOCAL time, so bound string timestamps stored
+      // TZ-shifted on any non-UTC machine (CI is UTC, which hid it). The driver
+      // overrides the type so strings pass through verbatim. This pins it:
+      // the assertions compare SERVER-SIDE text, so they fail on a shift
+      // regardless of the machine's TZ.
+      it('a bound string lands in a TIMESTAMP column unshifted', async () => {
+        await driver.execute(`DROP TABLE IF EXISTS rudder_pg_tz_regress`, [])
+        await driver.execute(`CREATE TABLE rudder_pg_tz_regress (ts TIMESTAMP, d DATE)`, [])
+        await driver.execute(
+          `INSERT INTO rudder_pg_tz_regress (ts, d) VALUES ($1, $2)`,
+          ['2026-01-20 11:20:45', '2026-01-15'],
+        )
+        const rows = await driver.execute(
+          `SELECT ts::text AS ts, d::text AS d FROM rudder_pg_tz_regress`, [],
+        )
+        assert.strictEqual(rows[0]!['ts'], '2026-01-20 11:20:45')
+        assert.strictEqual(rows[0]!['d'], '2026-01-15')
+        await driver.execute(`DROP TABLE rudder_pg_tz_regress`, [])
+      })
+
+      it('a Date object still stores the same instant in TIMESTAMPTZ', async () => {
+        await driver.execute(`DROP TABLE IF EXISTS rudder_pg_tz_regress2`, [])
+        await driver.execute(`CREATE TABLE rudder_pg_tz_regress2 (tstz TIMESTAMPTZ)`, [])
+        await driver.execute(
+          `INSERT INTO rudder_pg_tz_regress2 (tstz) VALUES ($1)`,
+          [new Date('2026-01-20T09:20:45.000Z')],
+        )
+        const rows = await driver.execute(
+          `SELECT (tstz AT TIME ZONE 'UTC')::text AS u FROM rudder_pg_tz_regress2`, [],
+        )
+        assert.strictEqual(rows[0]!['u'], '2026-01-20 09:20:45')
+        await driver.execute(`DROP TABLE rudder_pg_tz_regress2`, [])
+      })
+    })
   })
 }

@@ -115,6 +115,26 @@ export class PostgresDriver extends PgScope implements Driver {
           serialize: (x: number | bigint | string) => String(x),
           parse:     (x: string) => parseInt(x, 10),
         },
+        // Replace porsager's default `date` type. Its serializer round-trips
+        // EVERY bound value through `new Date(x).toISOString()` — and because
+        // serializers register for all `from` OIDs, a param the server
+        // describes as date/timestamp/timestamptz (1082/1114/1184) hits it
+        // even when the JS value is a plain string. `new Date('2026-01-20
+        // 11:20:45')` parses as MACHINE-LOCAL time, so bound string timestamps
+        // were stored TZ-shifted on any non-UTC machine (silent data
+        // corruption; CI is UTC, which hid it). Strings now pass through
+        // verbatim — Postgres casts text natively, machine-TZ independent.
+        // `Date` values keep the exact previous behavior (`toISOString()`,
+        // same instant) and reads keep porsager's default parse (JS `Date`).
+        date: {
+          to:   1184,
+          from: [1082, 1114, 1184],
+          serialize: (x: unknown) =>
+            x instanceof Date        ? x.toISOString()
+            : typeof x === 'number'  ? new Date(x).toISOString()
+            : String(x),
+          parse: (x: string) => new Date(x),
+        },
       },
       ...config.options,
     })
