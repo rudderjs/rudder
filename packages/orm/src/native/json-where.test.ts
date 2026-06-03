@@ -24,6 +24,7 @@ import { Model, ModelRegistry } from '../index.js'
 import { NativeAdapter } from './adapter.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
+import { MysqlDriver } from './drivers/mysql.js'
 import type { Driver } from './driver.js'
 
 const sqlite = new SqliteDialect()
@@ -241,10 +242,13 @@ describe('json where — mysql compilation (JSON_EXTRACT/CONTAINS/LENGTH)', () =
     assert.deepStrictEqual(bindings, ['en'])
   })
 
-  it("booleans skip UNQUOTE and bind 'true'/'false' (CAST-AS-JSON coercion)", () => {
+  it('booleans skip UNQUOTE and splice the SQL literal true/false (a bound string coerces to a JSON *string* and never matches)', () => {
     const { sql, bindings } = compileSelect(baseState({ conditions: [jsonNode(['active'], true)] }), mysql)
-    assert.strictEqual(sql, `SELECT * FROM \`users\` WHERE JSON_EXTRACT(\`meta\`, '$."active"') = ?`)
-    assert.deepStrictEqual(bindings, ['true'])
+    assert.strictEqual(sql, `SELECT * FROM \`users\` WHERE JSON_EXTRACT(\`meta\`, '$."active"') = true`)
+    assert.deepStrictEqual(bindings, [])
+
+    const neg = compileSelect(baseState({ conditions: [jsonNode(['active'], false)] }), mysql)
+    assert.strictEqual(neg.sql, `SELECT * FROM \`users\` WHERE JSON_EXTRACT(\`meta\`, '$."active"') = false`)
   })
 
   it('whereJsonContains compiles to JSON_CONTAINS with the path argument', () => {
@@ -443,6 +447,69 @@ if (!PG_URL) {
     it('whereJsonLength runs live through jsonb_array_length', async () => {
       assert.deepStrictEqual(names(await PgPref.whereJsonLength('meta->items', 0).get()), ['carol'])
       assert.deepStrictEqual(names(await PgPref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
+    })
+  })
+}
+
+// ── Live MySQL round-trip (JSON_EXTRACT / JSON_CONTAINS / JSON_LENGTH live) ──
+//
+// Notably pins the boolean shape live: `JSON_EXTRACT(…) = true` (spliced
+// literal) matches json booleans — a BOUND 'true' string coerces to a JSON
+// *string* in comparison context and matches nothing.
+
+const MYSQL_URL = process.env['MYSQL_TEST_URL']
+
+if (!MYSQL_URL) {
+  test('native json where mysql round-trip (skipped — set MYSQL_TEST_URL to run)', { skip: true }, () => {})
+} else {
+  describe('json where (live mysql)', () => {
+    class MyPref extends Model {
+      static override table = 'rudder_json_where_prefs'
+      id!: number
+      name!: string
+      meta!: Record<string, unknown>
+    }
+    let myDriver: MysqlDriver
+
+    before(async () => {
+      myDriver = await MysqlDriver.open({ url: MYSQL_URL })
+      await myDriver.execute(`DROP TABLE IF EXISTS rudder_json_where_prefs`, [])
+      await myDriver.execute(`CREATE TABLE rudder_json_where_prefs (id INT AUTO_INCREMENT PRIMARY KEY, name TEXT, meta JSON)`, [])
+      // Seed via SQL LITERALS (same convention as the pg block above).
+      for (const [name, meta] of seed) {
+        const json = JSON.stringify(meta).replace(/'/g, "''")
+        await myDriver.execute(`INSERT INTO rudder_json_where_prefs (name, meta) VALUES ('${name}', '${json}')`, [])
+      }
+    })
+    after(async () => {
+      await myDriver.execute(`DROP TABLE IF EXISTS rudder_json_where_prefs`, [])
+      await myDriver.close()
+    })
+    beforeEach(async () => {
+      ModelRegistry.reset()
+      ModelRegistry.set(await NativeAdapter.make({ driverInstance: myDriver, dialect: new MysqlDialect() }))
+    })
+
+    const names = (rows: MyPref[]): string[] => rows.map(r => r.name).sort()
+
+    it('arrow paths run live: text, numeric coercion, and boolean literals', async () => {
+      assert.deepStrictEqual(names(await MyPref.where('meta->theme', 'dark').get()), ['alice', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.query().where('meta->prefs->lang', '=', 'en').get()), ['alice', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.query().where('meta->score', '>', 6).get()), ['alice', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.where('meta->active', true).get()), ['alice', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.where('meta->active', false).get()), ['bob'])
+      assert.deepStrictEqual(names(await MyPref.where('meta->items->0', 'a').get()), ['alice'])
+    })
+
+    it('whereJsonContains / whereJsonDoesntContain run live through JSON_CONTAINS', async () => {
+      assert.deepStrictEqual(names(await MyPref.whereJsonContains('meta->tags', 'php').get()), ['alice', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.whereJsonContains('meta->tags', ['php', 'rust']).get()), ['carol'])
+      assert.deepStrictEqual(names(await MyPref.whereJsonDoesntContain('meta->tags', 'php').get()), ['bob'])
+    })
+
+    it('whereJsonLength runs live through JSON_LENGTH', async () => {
+      assert.deepStrictEqual(names(await MyPref.whereJsonLength('meta->items', 0).get()), ['carol'])
+      assert.deepStrictEqual(names(await MyPref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
     })
   })
 }
