@@ -1,9 +1,9 @@
 // Named connections on the Drizzle adapter (multi-connection Task 4).
 //
 // The provider registers a LAZY ConnectionManager factory per connection it
-// claims (skipping other-engine connections), the dev-HMR client cache keys
-// per connection name, and read/write-split config fails loudly at boot
-// (pointer at the native engine, which supports it).
+// claims (skipping other-engine connections) and the dev-HMR client cache keys
+// per connection name. Read/write-split routing is covered in
+// read-write-split.test.ts.
 
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
@@ -97,18 +97,4 @@ describe('Drizzle DatabaseProvider — named-connection factories', () => {
     assert.equal(auditRows.length, 0, 'audit database is empty — separate connection')
   })
 
-  it('read/write-split config on a Drizzle connection throws at boot pointing at the native engine', async () => {
-    setConfigRepository(new ConfigRepository({ database: {
-      default: 'main',
-      connections: {
-        main: { driver: 'sqlite', url: ':memory:', read: { url: ':memory:' } },
-      },
-      tables: { users },
-    } }))
-
-    await assert.rejects(
-      new DatabaseProvider(fakeApp()).boot(),
-      /read\/write splitting is not implemented on the Drizzle adapter.*native engine/s,
-    )
-  })
 })

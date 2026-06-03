@@ -23,6 +23,9 @@ import type {
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
+// Sticky-read scope (read/write split) — node-only subpath of @rudderjs/orm,
+// shared with the native engine so `runWithDatabaseContext` covers both.
+import { markWrote, stickyWrote, databaseContextMiddleware } from '@rudderjs/orm/sticky'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter.
 import '@rudderjs/orm/db-bridge'
 
@@ -135,6 +138,30 @@ type DrizzleDb = {
   $client?: { end?: () => Promise<void> }
 }
 
+/**
+ * Read/write-split routing info threaded from the adapter into every query
+ * builder (mirrors the native engine's `readPick` 5th QB ctor param, shaped as
+ * one object because Drizzle has no Executor seam to wrap — the QB picks the
+ * `db` per terminal instead).
+ */
+interface DrizzleSplitInfo {
+  /** Round-robin read-db picker — set only on a split connection (`readUrls`).
+   *  Returns the write db (tagged `'write'`) on a sticky hit. `null` = unsplit. */
+  readPick:   (() => { db: DrizzleDb; target: 'read' | 'write' }) | null
+  /** `'write'` when this connection participates in a split (directly or as a
+   *  transaction scope spawned from one) — the query-event tag for non-read
+   *  statements. `undefined` on a single connection (events carry no target). */
+  tag:        'write' | undefined
+  /** Records the sticky write (BEFORE executing). Non-null only when the
+   *  connection is split + `sticky` + named. */
+  markWrite:  (() => void) | null
+  /** Connection name reported on query events (`connectionName ?? dialect`). */
+  connection: string | undefined
+}
+
+/** Default for standalone / sub-builders — single connection, no split. */
+const NO_SPLIT: DrizzleSplitInfo = { readPick: null, tag: undefined, markWrite: null, connection: undefined }
+
 // ─── Global Table Registry ─────────────────────────────────
 
 /**
@@ -205,12 +232,15 @@ function emitQueryEvent(
   bindings:   readonly unknown[],
   startedAt:  number,
   connection: string | undefined,
+  /** Read/write-split side tag. Only set when the connection is configured
+   *  with read replicas — single-connection events carry none. */
+  target?:    'read' | 'write',
 ): void {
   if (listeners.length === 0) return
   const duration = performance.now() - startedAt
   for (const listener of [...listeners]) {
     try {
-      listener({ sql: sqlText, bindings: [...bindings], duration, connection })
+      listener({ sql: sqlText, bindings: [...bindings], duration, connection, target })
     } catch {
       // Listener errors must never break the query.
     }
@@ -385,19 +415,41 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
      *  owning adapter (and through it, transaction-scoped adapters), so every
      *  builder reports to the same list. Empty = zero-overhead fast path. */
     private readonly listeners:  readonly QueryListener[] = [],
+    /** Read/write-split routing (read picker, sticky marker, event tag +
+     *  connection name) — `NO_SPLIT` for sub-builders and standalone use. */
+    private readonly split:      DrizzleSplitInfo = NO_SPLIT,
   ) {}
+
+  /** @internal — pick the connection a read terminal runs on: the read pool on
+   *  a split connection (sticky-aware via `readPick`), the write connection
+   *  when locked or unsplit. Mirrors the native engine's `_readExecutor`. */
+  private _readDb(): { db: DrizzleDb; target: 'read' | 'write' | undefined } {
+    if (this.split.readPick === null) return { db: this.db, target: this.split.tag }
+    if (this._lock !== null) return { db: this.db, target: 'write' }
+    return this.split.readPick()
+  }
+
+  /** @internal — the write connection; records the sticky write first (BEFORE
+   *  the statement executes, so a concurrent read issued while the write is in
+   *  flight already routes sticky — same ordering as the native engine's
+   *  `markWritesExecutor`). */
+  private _writeDb(): DrizzleDb {
+    this.split.markWrite?.()
+    return this.db
+  }
 
   /** @internal — await a built Drizzle query, reporting it to the registered
    *  query listeners (SQL text + params via the builder's `toSQL()`, wall-clock
    *  duration). The no-listener path is a plain `exec` passthrough; only
-   *  successful executions report (Laravel `QueryExecuted` parity). */
-  private async _run<R>(q: unknown): Promise<R> {
+   *  successful executions report (Laravel `QueryExecuted` parity). `target`
+   *  tags the event's read/write side — set only on a split connection. */
+  private async _run<R>(q: unknown, target?: 'read' | 'write'): Promise<R> {
     if (this.listeners.length === 0) return exec<R>(q)
     const startedAt = performance.now()
     const result = await exec<R>(q)
     try {
       const { sql: text, params } = (q as { toSQL(): { sql: string; params: unknown[] } }).toSQL()
-      emitQueryEvent(this.listeners, text, params, startedAt, this.dialect)
+      emitQueryEvent(this.listeners, text, params, startedAt, this.split.connection ?? this.dialect, target)
     } catch {
       // A query object without toSQL() (not a fluent builder) — skip reporting
       // rather than break the read.
@@ -1001,10 +1053,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       }
     })()
 
-    let q = this.db.select({ value: valueExpr }).from(this.table)
+    const { db, target } = this._readDb()
+    let q = db.select({ value: valueExpr }).from(this.table)
     if (cond) q = q.where(cond)
 
-    const result = await this._run<Array<{ value: unknown }>>(q)
+    const result = await this._run<Array<{ value: unknown }>>(q, target)
     const raw = result[0]?.value
     if (fn === 'count') return Number(raw ?? 0)
     if (fn === 'exists') return Number(raw ?? 0) > 0
@@ -1205,11 +1258,14 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   /** @internal — projection root honoring distinct(). `selectDistinct` when
-   *  `.distinct()` was called, else `select`; null fields → project all. */
-  private _selectFrom(fields: Record<string, unknown> | null): DrizzleQB {
+   *  `.distinct()` was called, else `select`; null fields → project all.
+   *  `db` is the read-picked connection on a split — defaults to the write
+   *  connection (sub-builders / union members only contribute SQL, so their
+   *  rooting db never executes). */
+  private _selectFrom(fields: Record<string, unknown> | null, db: DrizzleDb = this.db): DrizzleQB {
     const root = this._distinct
-      ? (fields ? this.db.selectDistinct(fields) : this.db.selectDistinct())
-      : (fields ? this.db.select(fields)         : this.db.select())
+      ? (fields ? db.selectDistinct(fields) : db.selectDistinct())
+      : (fields ? db.select(fields)         : db.select())
     return root.from(this.table)
   }
 
@@ -1226,9 +1282,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  HAVING, with NO ORDER BY / LIMIT / OFFSET. The shared base for the read
    *  terminals; also what a union member contributes (its ORDER/LIMIT are
    *  dropped — only the base query's apply, to the whole compound). */
-  private _selectBodyQuery(): DrizzleQB {
+  private _selectBodyQuery(db: DrizzleDb = this.db): DrizzleQB {
     const cond = this.buildConditions()
-    let q = this._selectFrom(this.buildSelectFields())
+    let q = this._selectFrom(this.buildSelectFields(), db)
     q = this._applyJoins(q)
     if (cond) q = q.where(cond)
     return this._applyGroupHaving(q)
@@ -1259,13 +1315,15 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  (Laravel parity: count() of a grouped builder = group count). The plain
    *  path stays a single COUNT(*) over the base table. */
   private async _countRows(cond: SQL | undefined): Promise<number> {
+    const { db, target } = this._readDb()
     // A union'd query's count is the combined row count — wrap the whole
     // compound as a subquery and COUNT(*) it (precedence over the GROUP BY /
     // DISTINCT wrap below, which the body subqueries already include).
     if (this._unions.length) {
-      const sub = this._applyUnions(this._selectBodyQuery()).as('aggregate')
+      const sub = this._applyUnions(this._selectBodyQuery(db)).as('aggregate')
       const result = await this._run<Array<{ value: number | string | bigint }>>(
-        this.db.select({ value: sqlCount() }).from(sub),
+        db.select({ value: sqlCount() }).from(sub),
+        target,
       )
       return Number(result[0]?.value ?? 0)
     }
@@ -1284,20 +1342,21 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         fields = this.buildSelectFields()
           ?? { ...(getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>) }
       }
-      let inner = this._selectFrom(fields)
+      let inner = this._selectFrom(fields, db)
       inner = this._applyJoins(inner)
       if (cond) inner = inner.where(cond)
       inner = this._applyGroupHaving(inner)
       const sub = inner.as('aggregate')
       const result = await this._run<Array<{ value: number | string | bigint }>>(
-        this.db.select({ value: sqlCount() }).from(sub),
+        db.select({ value: sqlCount() }).from(sub),
+        target,
       )
       return Number(result[0]?.value ?? 0)
     }
-    let q = this.db.select({ value: sqlCount() }).from(this.table)
+    let q = db.select({ value: sqlCount() }).from(this.table)
     q = this._applyJoins(q)
     if (cond) q = q.where(cond)
-    const result = await this._run<Array<{ value: number | string | bigint }>>(q)
+    const result = await this._run<Array<{ value: number | string | bigint }>>(q, target)
     return Number(result[0]?.value ?? 0)
   }
 
@@ -1323,11 +1382,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
     const orderBy = this.buildOrderBy()
 
-    let q = this._applyUnions(this._selectBodyQuery())
+    const { db, target } = this._readDb()
+    let q = this._applyUnions(this._selectBodyQuery(db))
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = this._applyLock(q.limit(1))
 
-    const result = await this._run<T[]>(q)
+    const result = await this._run<T[]>(q, target)
     return result[0] ?? null
   }
 
@@ -1343,12 +1403,13 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond = accumulated ? and(pkExpr, accumulated) as SQL : pkExpr
     const fields = this.buildSelectFields()
 
-    let sel = this._applyJoins(this._selectFrom(fields))
+    const { db, target } = this._readDb()
+    let sel = this._applyJoins(this._selectFrom(fields, db))
     sel = sel.where(cond)
     sel = this._applyGroupHaving(sel)
     sel = this._applyUnions(sel)
     sel = this._applyLock(sel.limit(1))
-    const result = await this._run<T[]>(sel)
+    const result = await this._run<T[]>(sel, target)
     return result[0] ?? null
   }
 
@@ -1357,13 +1418,14 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (this._vectorClause !== null) return this._getViaVector() as Promise<T[]>
     const orderBy = this.buildOrderBy()
 
-    let q = this._applyUnions(this._selectBodyQuery())
+    const { db, target } = this._readDb()
+    let q = this._applyUnions(this._selectBodyQuery(db))
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
     q = this._applyLock(q)
 
-    return this._run<T[]>(q)
+    return this._run<T[]>(q, target)
   }
 
   async all(): Promise<T[]> {
@@ -1472,7 +1534,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     const fullSql = sql`SELECT *${distSelect} FROM ${this.table as Column}${whereSql} ORDER BY ${colExpr} ${op} ${vecLit}::vector LIMIT ${limitN}`
 
-    const exec = this.db.execute
+    // Read terminal — routes to the read pool on a split connection (sticky-
+    // aware). Not reported to query listeners (raw db.execute, no toSQL()).
+    const { db } = this._readDb()
+    const exec = db.execute
     if (typeof exec !== 'function') {
       throw new VectorStorageUnsupportedError(
         'drizzle',
@@ -1481,7 +1546,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
 
     try {
-      const result = await exec.call(this.db, fullSql)
+      const result = await exec.call(db, fullSql)
       // Normalize across driver result shapes:
       //   - postgres-js: { rows: [...] } (the rows array IS the result iterable)
       //   - pg / neon: { rows: [...] }
@@ -1510,10 +1575,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async create(data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
-    const result = await this._run<T[]>(this.db
+    const result = await this._run<T[]>(this._writeDb()
       .insert(this.table)
       .values(data)
-      .returning())
+      .returning(), this.split.tag)
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] create() returned no rows.')
     return result[0]
   }
@@ -1521,11 +1586,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await this._run<T[]>(this.db
+    const result = await this._run<T[]>(this._writeDb()
       .update(this.table)
       .set(data)
       .where(eq(pkCol, id))
-      .returning())
+      .returning(), this.split.tag)
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] update() returned no rows.')
     return result[0]
   }
@@ -1534,37 +1599,37 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     if (this._softDeletes) {
-      await this._run<void>(this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)))
+      await this._run<void>(this._writeDb().update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)), this.split.tag)
       return
     }
-    await this._run<void>(this.db
+    await this._run<void>(this._writeDb()
       .delete(this.table)
-      .where(eq(pkCol, id)))
+      .where(eq(pkCol, id)), this.split.tag)
   }
 
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await this._run<T[]>(this.db
+    const result = await this._run<T[]>(this._writeDb()
       .update(this.table)
       .set({ deletedAt: null })
       .where(eq(pkCol, id))
-      .returning())
+      .returning(), this.split.tag)
     return result[0] as T
   }
 
   async forceDelete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    await this._run<void>(this.db
+    await this._run<void>(this._writeDb()
       .delete(this.table)
-      .where(eq(pkCol, id)))
+      .where(eq(pkCol, id)), this.split.tag)
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
     this._assertNotSubBuilder()
     if (rows.length === 0) return
-    await this._run<void>(this.db.insert(this.table).values(rows))
+    await this._run<void>(this._writeDb().insert(this.table).values(rows), this.split.tag)
   }
 
   /** @internal — build the conflict `set` map: each update column references the
@@ -1590,7 +1655,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       // MySQL keys off existing unique indexes — no conflict target. An empty
       // `update` degrades to a no-op self-assignment on the first uniqueBy column.
       const cols = update.length > 0 ? update : uniqueBy.slice(0, 1)
-      const q = (this.db.insert(this.table).values(rows) as unknown as {
+      const q = (this._writeDb().insert(this.table).values(rows) as unknown as {
         onDuplicateKeyUpdate: (cfg: { set: Record<string, SQL> }) => unknown
       }).onDuplicateKeyUpdate({ set: this._upsertSet(cols, true) })
       return affectedRowCount(q, this.dialect)
@@ -1599,28 +1664,28 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     // SQLite / Postgres — ON CONFLICT (target) DO UPDATE / DO NOTHING, with
     // RETURNING so we can count affected rows in one round-trip.
     const target = uniqueBy.map(c => this.col(c) as Column)
-    const insert = this.db.insert(this.table).values(rows) as unknown as {
+    const insert = this._writeDb().insert(this.table).values(rows) as unknown as {
       onConflictDoNothing: (cfg: { target: Column[] }) => { returning: () => Promise<unknown[]> }
       onConflictDoUpdate: (cfg: { target: Column[]; set: Record<string, SQL> }) => { returning: () => Promise<unknown[]> }
     }
     const q = update.length === 0
       ? insert.onConflictDoNothing({ target })
       : insert.onConflictDoUpdate({ target, set: this._upsertSet(update, false) })
-    const out = await this._run<unknown[]>(q.returning())
+    const out = await this._run<unknown[]>(q.returning(), this.split.tag)
     return out.length
   }
 
   async deleteAll(): Promise<number> {
     this._assertNotSubBuilder()
     const cond = this.buildConditions()
-    let q = this.db.delete(this.table)
+    let q = this._writeDb().delete(this.table)
     if (cond) q = q.where(cond)
     return affectedRowCount(q, this.dialect)
   }
 
   async updateAll(data: Partial<T>): Promise<number> {
     const cond = this.buildConditions()
-    let q = this.db.update(this.table).set(data)
+    let q = this._writeDb().update(this.table).set(data)
     if (cond) q = q.where(cond)
     return affectedRowCount(q, this.dialect)
   }
@@ -1650,20 +1715,23 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const label = op === '+' ? 'increment' : 'decrement'
 
     if (this.dialect === 'mysql') {
-      await this._run<unknown>(this.db
+      await this._run<unknown>(this._writeDb()
         .update(this.table)
         .set({ [column]: delta, ...extra })
-        .where(eq(pkCol, id)))
-      const after = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1))
+        .where(eq(pkCol, id)), this.split.tag)
+      // Re-select deliberately stays on the WRITE connection (read-your-write
+      // after the no-RETURNING update — a replica may not have it yet; mirrors
+      // the native engine's `_reselect`).
+      const after = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1), this.split.tag)
       if (!after[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() target row not found.`)
       return after[0]
     }
 
-    const result = await this._run<T[]>(this.db
+    const result = await this._run<T[]>(this._writeDb()
       .update(this.table)
       .set({ [column]: delta, ...extra })
       .where(eq(pkCol, id))
-      .returning())
+      .returning(), this.split.tag)
     if (!result[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() returned no rows.`)
     return result[0]
   }
@@ -1673,12 +1741,13 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
 
-    let pageQ = this._applyUnions(this._selectBodyQuery())
+    const { db, target } = this._readDb()
+    let pageQ = this._applyUnions(this._selectBodyQuery(db))
     if (orderBy.length) pageQ = pageQ.orderBy(...orderBy)
     pageQ = this._applyLock(pageQ.limit(perPage).offset((page - 1) * perPage))
 
     const [data, total] = await Promise.all([
-      this._run<T[]>(pageQ),
+      this._run<T[]>(pageQ, target),
       this._countRows(cond),
     ])
 
@@ -1769,7 +1838,10 @@ class DrizzleJoinClause implements JoinClause {
 interface DrizzleClientCacheEntry {
   signature: string
   db:        DrizzleDb
+  /** Read-replica clients (read/write split) — empty without `readUrls`. */
+  readDbs:   DrizzleDb[]
   dialect:   DrizzleDialect
+  /** Closes the write client AND any replicas. */
   dispose:   () => void | Promise<void>
 }
 const DRIZZLE_CLIENT_CACHE_KEY = '__rudderjs_drizzle_client__'
@@ -1787,8 +1859,10 @@ function drizzleClientCache(): Map<string, DrizzleClientCacheEntry> {
     // Pre-map single-entry shape from an older bundle of this module (dev
     // re-boot across a version edit) — keep the live client, keyed by its
     // signature so an unnamed lookup still reuses it.
-    const legacy = cache as DrizzleClientCacheEntry | undefined
-    if (legacy && typeof legacy.signature === 'string') map.set(legacy.signature, legacy)
+    const legacy = cache as (DrizzleClientCacheEntry & { readDbs?: DrizzleDb[] }) | undefined
+    if (legacy && typeof legacy.signature === 'string') {
+      map.set(legacy.signature, { ...legacy, readDbs: legacy.readDbs ?? [] })
+    }
     g[DRIZZLE_CLIENT_CACHE_KEY] = map
     cache = map
   }
@@ -1801,11 +1875,11 @@ function drizzleClientCache(): Map<string, DrizzleClientCacheEntry> {
  * (fire-and-forget — the new client doesn't wait on the old one closing) and
  * report a miss.
  */
-function reusableDrizzleClient(cacheKey: string, signature: string): { db: DrizzleDb; dialect: DrizzleDialect } | undefined {
+function reusableDrizzleClient(cacheKey: string, signature: string): { db: DrizzleDb; readDbs: DrizzleDb[]; dialect: DrizzleDialect } | undefined {
   const cache = drizzleClientCache()
   const cached = cache.get(cacheKey)
   if (!cached) return undefined
-  if (cached.signature === signature) return { db: cached.db, dialect: cached.dialect }
+  if (cached.signature === signature) return { db: cached.db, readDbs: cached.readDbs, dialect: cached.dialect }
   void Promise.resolve()
     .then(() => cached.dispose())
     .catch(() => { /* best effort — releasing a superseded connection */ })
@@ -1815,6 +1889,51 @@ function reusableDrizzleClient(cacheKey: string, signature: string): { db: Drizz
 
 function cacheDrizzleClient(cacheKey: string, entry: DrizzleClientCacheEntry): void {
   drizzleClientCache().set(cacheKey, entry)
+}
+
+/**
+ * Open one drizzle client for `driver` + `url` (lazy optional-peer import).
+ * Factored out of `make()` so a read/write-split connection opens its write
+ * client and each read replica through the same path. `dispose` closes the
+ * underlying driver (not the drizzle wrapper) so the dev-HMR cache can release
+ * a superseded connection on a signature change.
+ */
+async function openDrizzleClient(
+  driver: NonNullable<DrizzleConfig['driver']>,
+  url: string,
+): Promise<{ db: DrizzleDb; dialect: DrizzleDialect; dispose: () => void | Promise<void> }> {
+  if (driver === 'postgresql') {
+    // postgres uses `export =` so dynamic import wraps it in a `.default`
+    const postgresModule          = await import('postgres') as unknown as { default?: (url: string) => unknown }
+    const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
+    const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
+    const sql                     = postgres(url) as { end: () => Promise<void> }
+    const db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(sql)
+    return { db, dialect: 'pg', dispose: () => sql.end() }
+  }
+  if (driver === 'libsql') {
+    const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
+    const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
+    const client                  = createClient({ url })
+    const db = dzLibsql(client) as unknown as DrizzleDb
+    return { db, dialect: 'sqlite', dispose: () => client.close() }
+  }
+  if (driver === 'mysql') {
+    // mysql2 ships its own promise wrapper at `mysql2/promise`. The drizzle
+    // mysql core expects the promise pool (not the callback-style client).
+    const mysqlModule             = await import('mysql2/promise') as { createPool: (url: string) => unknown }
+    const pool                    = mysqlModule.createPool(url) as { end: () => Promise<void> }
+    const { drizzle: dzMysql }    = await import('drizzle-orm/mysql2') as typeof import('drizzle-orm/mysql2')
+    const db = (dzMysql as unknown as (pool: unknown) => DrizzleDb)(pool)
+    return { db, dialect: 'mysql', dispose: () => pool.end() }
+  }
+  // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
+  const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
+  const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
+  const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
+  const sqliteDb                = new Database(url.replace(/^file:/, '')) as { close: () => void }
+  const db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(sqliteDb)
+  return { db, dialect: 'sqlite', dispose: () => sqliteDb.close() }
 }
 
 // ─── Drizzle Adapter ───────────────────────────────────────
@@ -1831,6 +1950,15 @@ export class DrizzleAdapter implements OrmAdapter {
    */
   readonly eagerLoadStrategy = 'model-layer' as const
 
+  /** `'write'` when this adapter participates in a read/write split (directly
+   *  or as a transaction scope spawned from one) — the query-event tag. */
+  private readonly splitTag: 'write' | undefined
+
+  /** Read/write-split routing threaded into every query builder — read picker
+   *  (round-robin + sticky-hit→writer), sticky write marker, event tag, and
+   *  the connection name reported on query events. */
+  private readonly split: DrizzleSplitInfo
+
   private constructor(
     readonly db:                 DrizzleDb,
     private readonly tables:     Record<string, unknown>,
@@ -1840,66 +1968,82 @@ export class DrizzleAdapter implements OrmAdapter {
      *  transaction-scoped adapter spawned from this one, so a listener registered
      *  on the top-level adapter also sees queries run inside `transaction()`. */
     private readonly listeners:  QueryListener[] = [],
-  ) {}
+    /** The `config/database.ts` connection name — reported on query events
+     *  (fallback: the dialect) and the sticky-write key. `undefined` for
+     *  standalone `make()` use. */
+    private readonly connectionName: string | undefined = undefined,
+    /** Read-replica drizzle clients (read/write split). Owned by the top-level
+     *  adapter; always empty on a transaction-scoped one. */
+    private readonly readDbs:    DrizzleDb[] = [],
+    /** Sticky reads enabled for this connection (only meaningful with a split). */
+    private readonly sticky:     boolean = false,
+    /** Inherited split participation for transaction-scoped adapters: a tx
+     *  spawned from a split adapter has no read clients of its own but still
+     *  tags its events `'write'` and marks sticky writes. */
+    inheritedSplitTag: 'write' | undefined = undefined,
+  ) {
+    const isSplit = readDbs.length > 0
+    this.splitTag = isSplit ? 'write' : inheritedSplitTag
+    // Sticky marking applies to write paths only, and only when this connection
+    // participates in a split (directly or via its spawning adapter).
+    const markWrite = sticky && this.splitTag === 'write' && connectionName !== undefined
+      ? () => markWrote(connectionName)
+      : null
+    let readPick: DrizzleSplitInfo['readPick'] = null
+    if (isSplit && connectionName !== undefined) {
+      let rr = 0
+      readPick = () => {
+        if (this.sticky && stickyWrote(connectionName)) return { db: this.db, target: 'write' }
+        const db = readDbs[rr % readDbs.length] ?? this.db
+        rr++
+        return { db, target: 'read' }
+      }
+    }
+    this.split = { readPick, tag: this.splitTag, markWrite, connection: connectionName }
+  }
 
   static async make(config: DrizzleConfig): Promise<DrizzleAdapter> {
     let db = config.client as DrizzleDb | undefined
     let resolvedDialect: DrizzleDialect | undefined = config.dialect
+    const readUrls = config.readUrls ?? []
+    let readDbs: DrizzleDb[] = []
+
+    if (db && readUrls.length > 0) {
+      throw new Error(
+        '[RudderJS ORM Drizzle] Read replicas (readUrls) require url-based config — a pre-built ' +
+          '`client:` owns its connection lifecycle, so the adapter cannot open replica clients for it.',
+      )
+    }
 
     if (!db) {
       const url    = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
       const driver = config.driver ?? 'sqlite'
 
-      // Reuse the live client across dev re-boots when driver + url are unchanged;
-      // a changed signature disposes the superseded driver. See reusableDrizzleClient().
-      const signature = `${driver}::${url}`
+      // Reuse the live client(s) across dev re-boots when driver + urls are
+      // unchanged; a changed signature disposes the superseded clients. The
+      // replica list is part of the signature so a replica edit disposes/reopens
+      // just this connection (no-replica form stays byte-identical to before).
+      const signature = readUrls.length > 0
+        ? `${driver}::${url}::${readUrls.join(',')}`
+        : `${driver}::${url}`
       const cacheKey = config.connectionName ?? signature
       const reused = reusableDrizzleClient(cacheKey, signature)
       if (reused) {
         db = reused.db
+        readDbs = reused.readDbs
         resolvedDialect ??= reused.dialect
       } else {
-        // `dispose` closes the underlying driver (not the drizzle wrapper) so the
-        // cache can release a superseded connection on a signature change.
-        let dispose: () => void | Promise<void>
-
-        if (driver === 'postgresql') {
-          // postgres uses `export =` so dynamic import wraps it in a `.default`
-          const postgresModule          = await import('postgres') as unknown as { default?: (url: string) => unknown }
-          const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
-          const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
-          const sql                     = postgres(url) as { end: () => Promise<void> }
-          db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(sql)
-          dispose = () => sql.end()
-          resolvedDialect ??= 'pg'
-        } else if (driver === 'libsql') {
-          const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
-          const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
-          const client                  = createClient({ url })
-          db = dzLibsql(client) as unknown as DrizzleDb
-          dispose = () => client.close()
-          resolvedDialect ??= 'sqlite'
-        } else if (driver === 'mysql') {
-          // mysql2 ships its own promise wrapper at `mysql2/promise`. The drizzle
-          // mysql core expects the promise pool (not the callback-style client).
-          const mysqlModule             = await import('mysql2/promise') as { createPool: (url: string) => unknown }
-          const pool                    = mysqlModule.createPool(url) as { end: () => Promise<void> }
-          const { drizzle: dzMysql }    = await import('drizzle-orm/mysql2') as typeof import('drizzle-orm/mysql2')
-          db = (dzMysql as unknown as (pool: unknown) => DrizzleDb)(pool)
-          dispose = () => pool.end()
-          resolvedDialect ??= 'mysql'
-        } else {
-          // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
-          const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
-          const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
-          const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
-          const sqliteDb                = new Database(url.replace(/^file:/, '')) as { close: () => void }
-          db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(sqliteDb)
-          dispose = () => sqliteDb.close()
-          resolvedDialect ??= 'sqlite'
+        const opened = await openDrizzleClient(driver, url)
+        db = opened.db
+        resolvedDialect ??= opened.dialect
+        const disposes = [opened.dispose]
+        for (const readUrl of readUrls) {
+          const replica = await openDrizzleClient(driver, readUrl)
+          readDbs.push(replica.db)
+          disposes.push(replica.dispose)
         }
-
-        cacheDrizzleClient(cacheKey, { signature, db, dialect: resolvedDialect ?? 'sqlite', dispose })
+        const dispose = async (): Promise<void> => { await Promise.all(disposes.map((d) => d())) }
+        cacheDrizzleClient(cacheKey, { signature, db, readDbs, dialect: resolvedDialect ?? 'sqlite', dispose })
       }
     }
 
@@ -1909,7 +2053,10 @@ export class DrizzleAdapter implements OrmAdapter {
     // code paths work on both Postgres and SQLite — the explicit dialect knob
     // only changes behavior for MySQL, where omitting it would silently break
     // increment/deleteAll/updateAll.
-    return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id', resolvedDialect ?? 'pg')
+    return new DrizzleAdapter(
+      db, config.tables ?? {}, config.primaryKey ?? 'id', resolvedDialect ?? 'pg', [],
+      config.connectionName, readDbs, config.sticky === true && readDbs.length > 0,
+    )
   }
 
   query<T>(table: string, opts?: { primaryKey?: string }): QueryBuilder<T> {
@@ -1926,7 +2073,7 @@ export class DrizzleAdapter implements OrmAdapter {
     // columns (e.g. `users.id` + `subscriptions.uuid`) work without forcing
     // every model onto the same PK.
     const pk = opts?.primaryKey ?? this.primaryKey
-    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name), this.dialect, this.listeners)
+    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name), this.dialect, this.listeners, this.split)
   }
 
   /** @internal — resolve a table by name across both the constructor-provided
@@ -1941,8 +2088,11 @@ export class DrizzleAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
-    const end = this.db.$client?.end
-    if (typeof end === 'function') await end()
+    // Close the write client AND any read replicas (split connection).
+    for (const db of [this.db, ...this.readDbs]) {
+      const end = db.$client?.end
+      if (typeof end === 'function') await end()
+    }
   }
 
   /**
@@ -1971,8 +2121,13 @@ export class DrizzleAdapter implements OrmAdapter {
     // `unknown` — cast back to the declared `Promise<T>`.
     return run.call(this.db, (txDb: DrizzleDb) => {
       // Shares `this.listeners` by reference — queries inside the transaction
-      // report to the same listeners as top-level ones.
-      const scoped = new DrizzleAdapter(txDb, this.tables, this.primaryKey, this.dialect, this.listeners)
+      // report to the same listeners as top-level ones. A tx spawned from a
+      // split adapter inherits the 'write' tag + sticky marking (it has no read
+      // clients of its own — every tx statement runs on the write connection).
+      const scoped = new DrizzleAdapter(
+        txDb, this.tables, this.primaryKey, this.dialect, this.listeners,
+        this.connectionName, [], this.sticky, this.splitTag,
+      )
       return fn(scoped)
     }) as Promise<T>
   }
@@ -1984,9 +2139,12 @@ export class DrizzleAdapter implements OrmAdapter {
    * Telescope's QueryCollector and Pulse's slow-query recorder hook in here too.
    * Listener errors are swallowed — they never break the query. Registering on
    * a transaction-scoped adapter registers on the shared (top-level) listener
-   * list. The reported `connection` is the adapter's dialect (`'sqlite'` /
-   * `'pg'` / `'mysql'`). Not reported: pgvector similarity queries (they bypass
-   * the fluent builder via `db.execute`) and Drizzle-internal BEGIN/COMMIT.
+   * list. The reported `connection` is the `config/database.ts` connection name
+   * when the provider passed one, else the adapter's dialect (`'sqlite'` /
+   * `'pg'` / `'mysql'`); `target: 'read' | 'write'` is set only on a
+   * read/write-split connection. Not reported: pgvector similarity queries
+   * (they bypass the fluent builder via `db.execute`) and Drizzle-internal
+   * BEGIN/COMMIT.
    */
   onQuery(listener: QueryListener): void {
     this.listeners.push(listener)
@@ -2009,11 +2167,15 @@ export class DrizzleAdapter implements OrmAdapter {
 
   /**
    * Raw `SELECT` for the `DB` facade (`DB.select`) via Drizzle's `db.execute`.
-   * Normalizes the per-driver result shape (postgres-js returns an array; node-pg
-   * returns `{ rows }`) to a flat `Row[]`.
+   * On a split connection routes to the read pool (sticky-aware — Laravel
+   * parity for `DB::select`). Normalizes the per-driver result shape
+   * (postgres-js returns an array; node-pg returns `{ rows }`) to a flat `Row[]`.
    */
   async selectRaw(text: string, bindings: readonly unknown[]): Promise<Row[]> {
-    const exec = this.db.execute
+    const picked = this.split.readPick === null
+      ? { db: this.db, target: this.split.tag }
+      : this.split.readPick()
+    const exec = picked.db.execute
     if (typeof exec !== 'function') {
       throw new Error(
         '[RudderJS DB] db.execute() is not available on this Drizzle driver — ' +
@@ -2021,8 +2183,8 @@ export class DrizzleAdapter implements OrmAdapter {
       )
     }
     const startedAt = performance.now()
-    const result = await exec.call(this.db, this.rawSql(text, bindings))
-    emitQueryEvent(this.listeners, text, bindings, startedAt, this.dialect)
+    const result = await exec.call(picked.db, this.rawSql(text, bindings))
+    emitQueryEvent(this.listeners, text, bindings, startedAt, this.connectionName ?? this.dialect, picked.target)
     if (Array.isArray(result)) return result as Row[]
     return ((result as { rows?: Row[] })?.rows) ?? []
   }
@@ -2040,9 +2202,11 @@ export class DrizzleAdapter implements OrmAdapter {
           'raw DB writes require a driver that supports execute() (postgres-js, pg, neon, or libsql).',
       )
     }
+    // Always the write connection; record the sticky write BEFORE executing.
+    this.split.markWrite?.()
     const startedAt = performance.now()
     const result = (await exec.call(this.db, this.rawSql(text, bindings))) as unknown
-    emitQueryEvent(this.listeners, text, bindings, startedAt, this.dialect)
+    emitQueryEvent(this.listeners, text, bindings, startedAt, this.connectionName ?? this.dialect, this.split.tag)
     if (Array.isArray(result)) return result.length
     const r = result as {
       rowCount?: number; rowsAffected?: number; changes?: number; affectedRows?: number
@@ -2077,8 +2241,20 @@ export interface DrizzleConfig {
   /** The `config/database.ts` connection name this adapter serves (passed by
    *  the provider / ConnectionManager factory). Keys the dev-HMR client cache
    *  so each named connection holds its own client and a config edit disposes
-   *  only that connection's superseded one. Omitted for standalone use. */
+   *  only that connection's superseded one. Also reported on query events and
+   *  required for a read/write split (the sticky-write key). Omitted for
+   *  standalone use. */
   connectionName?: string
+  /** Read replica URL(s) — round-robin per query (read/write split). Un-locked
+   *  SELECT terminals and raw `DB.select` route here; writes, DDL, locked
+   *  selects, and transactions stay on the write connection (`url`). Requires
+   *  url-based config (incompatible with a pre-built `client:`) and a
+   *  `connectionName`. */
+  readUrls?: string[]
+  /** Sticky reads: after a write within the current database context (request),
+   *  reads on this connection route to the write connection — read-your-writes
+   *  under replication lag. Only meaningful with `readUrls`. */
+  sticky?: boolean
   /**
    * SQL dialect — drives capability branching for batch updates and
    * counter operations. MySQL has no `RETURNING`, so increment/decrement
@@ -2129,7 +2305,7 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
 
 // ─── DatabaseProvider ──────────────────────────────────────
 
-import { ServiceProvider, config as appConfig } from '@rudderjs/core'
+import { ServiceProvider, config as appConfig, appendToGroup } from '@rudderjs/core'
 import {
   ModelRegistry,
   ConnectionManager,
@@ -2147,10 +2323,15 @@ export interface DatabaseConnectionConfig {
   /** Engine discriminator — connections claiming another engine (e.g.
    *  `'native'`) are skipped by this provider. */
   engine?:  string
-  /** Read/write split is not implemented on the Drizzle adapter yet —
-   *  configuring these throws at boot (the native engine supports them). */
-  read?:    unknown
-  write?:   unknown
+  /** Explicit write-side URL on a read/write split. Defaults to `url`. */
+  write?:   { url?: string }
+  /** Read replica(s) — one URL or an array (round-robin per query). Un-locked
+   *  SELECTs route here; writes, DDL, locked selects, and transactions stay on
+   *  the write connection. */
+  read?:    { url: string | string[] }
+  /** Sticky reads: after a write within the current request scope, reads on
+   *  this connection route to the writer (read-your-writes under replication
+   *  lag). Requires `read`. */
   sticky?:  boolean
 }
 
@@ -2195,23 +2376,25 @@ export class DatabaseProvider extends ServiceProvider {
       // no driver import. `tables` is adapter-global (a schema describes
       // shape, not location) so every factory shares it; a pre-built
       // `cfg.client` applies to the DEFAULT connection only.
+      let needsStickyContext = false
       for (const [name, conn] of Object.entries(cfg.connections)) {
         if (conn?.engine !== undefined && conn.engine !== 'drizzle') continue
-        // Read/write split is not implemented on the Drizzle adapter yet — a
-        // silent ignore would silently serve every read from the writer, so
-        // fail loudly at boot. (The native engine supports read/write/sticky.)
-        if (conn.read !== undefined || conn.write !== undefined) {
-          throw new Error(
-            `[RudderJS ORM Drizzle] Connection '${name}': read/write splitting is not implemented ` +
-              `on the Drizzle adapter yet — the native engine (engine: 'native') supports ` +
-              `read/write/sticky natively.`,
-          )
-        }
+        // Read/write split: `url` is the write URL (or the explicit `write.url`);
+        // `read.url` normalizes to an array of replicas. Mirrors the native
+        // engine's provider.
+        const writeUrl = conn.write?.url ?? conn.url
+        const readUrls = conn.read === undefined
+          ? []
+          : Array.isArray(conn.read.url) ? conn.read.url : [conn.read.url]
+        const sticky = conn.sticky === true && readUrls.length > 0
+        if (sticky) needsStickyContext = true
         ConnectionManager.register(name, () =>
           DrizzleAdapter.make({
             driver: conn.driver,
             connectionName: name,
-            ...(conn.url !== undefined && { url: conn.url }),
+            ...(writeUrl !== undefined && { url: writeUrl }),
+            ...(readUrls.length > 0 && { readUrls }),
+            ...(sticky && { sticky }),
             ...(conn.dialect !== undefined && { dialect: conn.dialect }),
             ...(cfg.tables && { tables: cfg.tables }),
             ...(cfg.client && name === cfg.default ? { client: cfg.client } : {}),
@@ -2219,6 +2402,16 @@ export class DatabaseProvider extends ServiceProvider {
         )
       }
       ConnectionManager.setDefaultName(cfg.default)
+
+      // Sticky reads scope to a request — enter a database context per request
+      // on both groups (api requests write too). Installed once here, not per
+      // connection; the ALS scope is shared by every sticky connection (and
+      // with the native engine's — same `@rudderjs/orm/sticky` module).
+      if (needsStickyContext) {
+        const mw = databaseContextMiddleware()
+        appendToGroup('web', mw)
+        appendToGroup('api', mw)
+      }
     }
 
     // Eager default boot — resolved through the same ConnectionManager entry
