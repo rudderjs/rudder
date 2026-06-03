@@ -66,6 +66,7 @@ import {
 } from './polymorphic-eager-load.js'
 import { attachDirectRelations } from './direct-eager-load.js'
 import { ConnectionManager } from './connection-manager.js'
+import { deferredQuery } from './deferred-connection-qb.js'
 import {
   CursorPaginator,
   encodeCursor,
@@ -1057,6 +1058,22 @@ export abstract class Model {
   static primaryKey = 'id'
 
   /**
+   * The named database connection this model queries (Laravel's
+   * `protected $connection`). `undefined` (the default) uses the app's default
+   * connection. The named connection opens lazily on the model's first query —
+   * registered by the adapter provider, resolved through `ConnectionManager`.
+   *
+   * ```ts
+   * class PageView extends Model {
+   *   static override connection = 'reporting'
+   * }
+   * ```
+   *
+   * One-off queries on another connection: `Model.on('reporting').where(...)`.
+   */
+  static connection?: string
+
+  /**
    * Primary-key value type. `'int'` (the default) is a database-assigned
    * auto-increment — the ORM never sets it on insert. `'uuid'` and `'ulid'`
    * are application-generated: when the primary key is unset on
@@ -1357,17 +1374,37 @@ export abstract class Model {
     this._observers.push(new ObserverClass())
   }
 
+  /**
+   * Two-arg form: register a lifecycle event listener (`User.on('creating',
+   * fn)`).
+   *
+   * One-arg form: start a query on a NAMED connection — Laravel's
+   * `User::on('reporting')`. One-off counterpart of `static connection`
+   * (which rebinds every query of the model). The connection opens lazily on
+   * the first terminal if it isn't open yet; inside `transaction(fn,
+   * { connection: name })` the query joins that open transaction.
+   *
+   * ```ts
+   * const rows = await User.on('reporting').where('active', true).get()
+   * ```
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static on(event: ModelEvent, handler: (...args: any[]) => any): void {
+  static on(event: ModelEvent, handler: (...args: any[]) => any): void
+  static on<T extends typeof Model>(this: T, connection: string): HydratingQueryBuilder<InstanceType<T>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static on(eventOrConnection: string, handler?: (...args: any[]) => any): unknown {
+    if (handler === undefined) {
+      return Model._q(this as typeof Model, eventOrConnection)
+    }
     if (!Object.prototype.hasOwnProperty.call(this, '_listeners')) {
       this._listeners = new Map()
     }
-    const list = this._listeners.get(event) ?? []
+    const list = this._listeners.get(eventOrConnection as ModelEvent) ?? []
     list.push(handler)
-    this._listeners.set(event, list)
+    this._listeners.set(eventOrConnection as ModelEvent, list)
+    return undefined
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // Returns `unknown` (not `Promise<unknown>`) so the common fast path stays
   // synchronous: when a class has no observers or event listeners — the typical
   // case for read paths like `.all()` / `.find()` — the call returns the payload
@@ -1959,12 +1996,9 @@ export abstract class Model {
     const excludedScopes = new Set<string>()
 
     const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
-      const adapter = ModelRegistry.getAdapter()
-      ormTraceBuild(modelClass, adapter as object)
-      let raw = adapter.query<InstanceType<T>>(
-        modelClass.getTable(),
-        { primaryKey: modelClass.primaryKey },
-      )
+      const { qb, adapter } = Model._adapterQb<InstanceType<T>>(modelClass, modelClass.connection)
+      ormTraceBuild(modelClass, adapter)
+      let raw = qb as HydratingQueryBuilder<InstanceType<T>>
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (raw as any)._enableSoftDeletes?.()
@@ -1974,7 +2008,7 @@ export abstract class Model {
           raw = scopeFn(raw) as HydratingQueryBuilder<InstanceType<T>>
         }
       }
-      return Model._hydratingQb(this, raw, adapter as object)
+      return Model._hydratingQb(this, raw, adapter)
     }
 
     const enhance = (q: HydratingQueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } => {
@@ -1995,15 +2029,41 @@ export abstract class Model {
     return enhance(buildScoped())
   }
 
-  private static _q<T extends typeof Model>(self: T): HydratingQueryBuilder<InstanceType<T>> {
+  /**
+   * Resolve the adapter QueryBuilder (+ the adapter object, for trace tags and
+   * the eager-load strategy) for a model query, honoring the model's
+   * connection: `connection` (an `on()` override or `static connection`)
+   * routes to that named connection — the transaction-scoped adapter when
+   * inside `transaction(fn, { connection })`, the opened adapter when the
+   * connection has materialized, else a deferred record-and-replay builder
+   * that opens the connection on the first terminal. The default-connection
+   * path is untouched (and pays no named-connection logic beyond one
+   * `undefined` check).
+   */
+  private static _adapterQb<R>(
+    ModelClass: typeof Model,
+    connection: string | undefined,
+  ): { qb: QueryBuilder<R>; adapter: object | null } {
+    const table = ModelClass.getTable()
+    const opts = { primaryKey: ModelClass.primaryKey }
+    if (connection !== undefined && connection !== ConnectionManager.defaultName()) {
+      const open = ModelRegistry.getScopedAdapter(connection) ?? ConnectionManager.peek(connection)
+      if (open) return { qb: open.query<R>(table, opts), adapter: open as object }
+      // Not open yet — defer. (A transaction-scoped adapter always hits the
+      // `open` branch above, so the deferred path only ever opens the
+      // top-level connection.)
+      return { qb: deferredQuery<R>(() => ConnectionManager.ensure(connection), table, opts), adapter: null }
+    }
+    const adapter = ModelRegistry.getAdapter()
+    return { qb: adapter.query<R>(table, opts), adapter: adapter as object }
+  }
+
+  private static _q<T extends typeof Model>(self: T, connection?: string): HydratingQueryBuilder<InstanceType<T>> {
     ModelRegistry.register(self)
     const ModelClass = self as typeof Model
-    const adapter = ModelRegistry.getAdapter()
-    ormTraceBuild(ModelClass, adapter as object)
-    let q = adapter.query<InstanceType<T>>(
-      ModelClass.getTable(),
-      { primaryKey: ModelClass.primaryKey },
-    )
+    const { qb, adapter } = Model._adapterQb<InstanceType<T>>(ModelClass, connection ?? ModelClass.connection)
+    ormTraceBuild(ModelClass, adapter)
+    let q = qb as HydratingQueryBuilder<InstanceType<T>>
     if (ModelClass.softDeletes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (q as any)._enableSoftDeletes?.()
@@ -2011,7 +2071,7 @@ export abstract class Model {
     for (const [, scopeFn] of Object.entries(ModelClass.globalScopes)) {
       q = scopeFn(q) as HydratingQueryBuilder<InstanceType<T>>
     }
-    return Model._hydratingQb(self, q, adapter as object)
+    return Model._hydratingQb(self, q, adapter)
   }
 
   static async find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
