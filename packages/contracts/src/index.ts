@@ -501,6 +501,13 @@ export interface QueryEvent {
   connection?: string | undefined
   /** Model name when the adapter can infer it from the query. */
   model?: string | undefined
+  /**
+   * Which side of a read/write split the query ran on. Only set when the
+   * connection is configured with read replicas — single-connection queries
+   * carry no target. `'write'` covers writes, DDL, locked selects, sticky
+   * reads, and everything inside a transaction.
+   */
+  target?: 'read' | 'write' | undefined
 }
 
 /** A query listener registered via {@link OrmAdapter.onQuery} / `DB.listen`. */

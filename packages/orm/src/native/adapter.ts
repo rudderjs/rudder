@@ -16,6 +16,7 @@ import { SqliteDialect } from './dialect.js'
 import { PgDialect } from './dialect-pg.js'
 import { MysqlDialect } from './dialect-mysql.js'
 import type { Driver, Executor, Transaction, Row, AffectingExecutor } from './driver.js'
+import { markWrote, stickyWrote } from '../sticky.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
@@ -56,6 +57,20 @@ export interface NativeConfig {
    * only that connection's superseded client. Omitted for standalone use.
    */
   connectionName?: string
+  /**
+   * Read-replica URLs (read/write split). When set, un-locked SELECTs (and
+   * `selectRaw`) round-robin across these; writes, DDL, locked selects, and
+   * every transaction run on the write connection (`url`). Same driver as the
+   * write connection.
+   */
+  readUrls?: string[]
+  /**
+   * Sticky reads: after a write on this connection within the current request
+   * scope (see `@rudderjs/orm/sticky`), subsequent reads in that scope route
+   * to the write connection — read-your-writes under replication lag. Only
+   * meaningful with `readUrls`.
+   */
+  sticky?: boolean
 }
 
 // ── Dev-HMR driver reuse (mirrors orm-drizzle / orm-prisma) ──
@@ -67,9 +82,11 @@ export interface NativeConfig {
 // re-boot loop, and two coexisting unnamed adapters with different URLs are
 // legitimate there).
 interface NativeClientCacheEntry {
-  signature: string
-  driver:    Driver
-  dialect:   Dialect
+  signature:   string
+  driver:      Driver
+  /** Read-replica drivers (read/write split) — empty without `readUrls`. */
+  readDrivers: Driver[]
+  dialect:     Dialect
 }
 const NATIVE_CLIENT_CACHE_KEY = '__rudderjs_native_client__'
 
@@ -81,22 +98,32 @@ function nativeClientCache(): Map<string, NativeClientCacheEntry> {
     // Pre-map single-entry shape from an older bundle of this module (dev
     // re-boot across a version edit) — keep the live driver, keyed by its
     // signature so an unnamed lookup still reuses it.
-    const legacy = cache as NativeClientCacheEntry | undefined
-    if (legacy && typeof legacy.signature === 'string') map.set(legacy.signature, legacy)
+    const legacy = cache as (NativeClientCacheEntry & { readDrivers?: Driver[] }) | undefined
+    if (legacy && typeof legacy.signature === 'string') {
+      map.set(legacy.signature, { ...legacy, readDrivers: legacy.readDrivers ?? [] })
+    }
     g[NATIVE_CLIENT_CACHE_KEY] = map
     cache = map
   }
   return cache as Map<string, NativeClientCacheEntry>
 }
 
-function reusableNativeClient(cacheKey: string, signature: string): { driver: Driver; dialect: Dialect } | undefined {
+function reusableNativeClient(
+  cacheKey: string,
+  signature: string,
+): { driver: Driver; readDrivers: Driver[]; dialect: Dialect } | undefined {
   const cache = nativeClientCache()
   const cached = cache.get(cacheKey)
   if (!cached) return undefined
-  if (cached.signature === signature) return { driver: cached.driver, dialect: cached.dialect }
+  if (cached.signature === signature) {
+    return { driver: cached.driver, readDrivers: cached.readDrivers, dialect: cached.dialect }
+  }
   // Signature changed for this connection (e.g. a config edit) — dispose the
-  // superseded driver, fire-and-forget, so its connection is released.
-  void Promise.resolve().then(() => cached.driver.close()).catch(() => { /* best effort */ })
+  // superseded drivers (write + replicas), fire-and-forget, so their
+  // connections are released.
+  void Promise.resolve()
+    .then(() => Promise.all([cached.driver, ...cached.readDrivers].map((d) => d.close())))
+    .catch(() => { /* best effort */ })
   cache.delete(cacheKey)
   return undefined
 }
@@ -118,6 +145,9 @@ function instrumentExecutor(
   exec:       Executor,
   listeners:  readonly QueryListener[],
   connection: string | undefined,
+  /** Read/write-split side tag for query events. Only set when the connection
+   *  is configured with read replicas — single-connection events carry none. */
+  target?:    'read' | 'write',
 ): Executor {
   const emit = (sql: string, bindings: readonly unknown[], startedAt: number): void => {
     if (listeners.length === 0) return
@@ -125,7 +155,7 @@ function instrumentExecutor(
     // Snapshot so a listener registering/removing listeners mid-emit is safe.
     for (const listener of [...listeners]) {
       try {
-        listener({ sql, bindings: [...bindings], duration, connection })
+        listener({ sql, bindings: [...bindings], duration, connection, target })
       } catch {
         // Listener errors must never break the query.
       }
@@ -155,10 +185,41 @@ function instrumentExecutor(
   return wrapped
 }
 
+/**
+ * Wrap an executor so every statement records a sticky write for `connection`
+ * (see `../sticky.js`). Applied to the WRITE side of a split connection only —
+ * statements through it are writes, DDL, locked selects, or sticky-routed
+ * reads; marking the last two is a harmless over-approximation (conservative
+ * direction: more reads on the primary). Marks BEFORE executing so a
+ * concurrent read issued while the write is in flight already routes sticky.
+ */
+function markWritesExecutor(exec: Executor, connection: string): Executor {
+  const marked: Executor & Partial<AffectingExecutor> = {
+    async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+      markWrote(connection)
+      return exec.execute(sql, bindings)
+    },
+  }
+  const affecting = exec as Partial<AffectingExecutor>
+  if (typeof affecting.affectingExecute === 'function') {
+    const affectingExecute = affecting.affectingExecute.bind(exec)
+    marked.affectingExecute = async (sql, bindings) => {
+      markWrote(connection)
+      return affectingExecute(sql, bindings)
+    }
+  }
+  return marked
+}
+
 export class NativeAdapter implements OrmAdapter {
   /** Where queries run — the top-level connection, or a transaction scope,
    *  wrapped with query-listener instrumentation (see {@link instrumentExecutor}). */
   private readonly executor: Executor
+
+  /** Round-robin read-executor picker — set only on a split connection
+   *  (`readUrls`). Returns the write executor on a sticky hit. The QB calls it
+   *  per read terminal; locked selects bypass it (see `_readExecutor`). */
+  private readonly readPick: (() => Executor) | null
 
   private constructor(
     /** The raw connection / transaction scope queries run on (pre-instrumentation). */
@@ -175,12 +236,46 @@ export class NativeAdapter implements OrmAdapter {
      *  transaction-scoped adapter spawned from this one, so a listener registered
      *  on the top-level adapter also sees queries run inside `transaction()`. */
     private readonly listeners:  QueryListener[] = [],
-    /** Driver name reported on query events (`'sqlite'` / `'pg'` / `'mysql'`);
-     *  `undefined` for a caller-supplied {@link NativeConfig.driverInstance}. */
+    /** Connection name reported on query events — the `config/database.ts`
+     *  connection name when the provider passed one, else the driver name
+     *  (`'sqlite'` / `'pg'` / `'mysql'`); `undefined` for a caller-supplied
+     *  {@link NativeConfig.driverInstance}. */
     private readonly connection: string | undefined = undefined,
+    /** Read-replica drivers (read/write split). Owned by the top-level adapter
+     *  (closed by `disconnect()`); always empty on a transaction-scoped one. */
+    private readonly readDrivers: Driver[] = [],
+    /** Sticky reads enabled for this connection (only meaningful with a split). */
+    private readonly sticky: boolean = false,
+    /** Inherited split participation for transaction-scoped adapters: a tx
+     *  spawned from a split adapter has no read drivers of its own but still
+     *  tags its events `'write'` and marks sticky writes. */
+    inheritedSplitTag: 'write' | undefined = undefined,
   ) {
-    this.executor = instrumentExecutor(executor, listeners, connection)
+    const split = readDrivers.length > 0
+    this.splitTag = split ? 'write' : inheritedSplitTag
+    // Sticky marking wraps the WRITE side only, and only when this connection
+    // participates in a split (directly or via its spawning adapter).
+    const base = sticky && this.splitTag === 'write' && connection !== undefined
+      ? markWritesExecutor(executor, connection)
+      : executor
+    this.executor = instrumentExecutor(base, listeners, connection, this.splitTag)
+    if (split && connection !== undefined) {
+      const readExecs = readDrivers.map((d) => instrumentExecutor(d, listeners, connection, 'read'))
+      let rr = 0
+      this.readPick = () => {
+        if (this.sticky && stickyWrote(connection)) return this.executor
+        const exec = readExecs[rr % readExecs.length] ?? this.executor
+        rr++
+        return exec
+      }
+    } else {
+      this.readPick = null
+    }
   }
+
+  /** `'write'` when this adapter participates in a read/write split (directly
+   *  or as a transaction scope spawned from one) — the query-event tag. */
+  private readonly splitTag: 'write' | undefined
 
   /** Build a `NativeAdapter`, opening the configured driver (lazy import). */
   static async make(config: NativeConfig = {}): Promise<NativeAdapter> {
@@ -197,37 +292,56 @@ export class NativeAdapter implements OrmAdapter {
       config.url ??
       (typeof process !== 'undefined' ? process.env?.['DATABASE_URL'] : undefined) ??
       ':memory:'
-    const signature = `${driverName}::${url}`
+    const readUrls = config.readUrls ?? []
+    const sticky = config.sticky ?? false
+    // Replica list is part of the signature so a replica edit disposes/reopens
+    // just this connection. The no-replica form stays byte-identical to before.
+    const signature = readUrls.length > 0
+      ? `${driverName}::${url}::${readUrls.join(',')}`
+      : `${driverName}::${url}`
     const cacheKey = config.connectionName ?? signature
+    const connection = config.connectionName ?? driverName
 
     const reused = reusableNativeClient(cacheKey, signature)
     if (reused) {
-      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, driverName)
+      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, connection, reused.readDrivers, sticky)
     }
 
     const { driver, dialect } = await openDriver(driverName, url)
-    cacheNativeClient(cacheKey, { signature, driver, dialect })
-    return NativeAdapter._topLevel(driver, dialect, primaryKey, driverName)
+    const readDrivers: Driver[] = []
+    for (const readUrl of readUrls) {
+      readDrivers.push((await openDriver(driverName, readUrl)).driver)
+    }
+    cacheNativeClient(cacheKey, { signature, driver, readDrivers, dialect })
+    return NativeAdapter._topLevel(driver, dialect, primaryKey, connection, readDrivers, sticky)
   }
 
   /** The adapter that owns the connection — queries and transactions both run
    *  on `driver`; `disconnect()` may close it. */
-  private static _topLevel(driver: Driver, dialect: Dialect, primaryKey: string, connection: string | undefined): NativeAdapter {
-    return new NativeAdapter(driver, driver, dialect, primaryKey, driver, [], connection)
+  private static _topLevel(
+    driver: Driver,
+    dialect: Dialect,
+    primaryKey: string,
+    connection: string | undefined,
+    readDrivers: Driver[] = [],
+    sticky = false,
+  ): NativeAdapter {
+    return new NativeAdapter(driver, driver, dialect, primaryKey, driver, [], connection, readDrivers, sticky)
   }
 
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
     const pk = opts?.primaryKey ?? this.primaryKey
-    return new NativeQueryBuilder<T>(this.executor, this.dialect, table, pk)
+    return new NativeQueryBuilder<T>(this.executor, this.dialect, table, pk, this.readPick)
   }
 
   /**
-   * Raw `SELECT` for the `DB` facade (`DB.select`) — runs `sql` with positional
-   * `bindings` on this adapter's executor (the top-level connection, or the
-   * transaction scope when inside `transaction()`) and resolves to the rows.
+   * Raw `SELECT` for the `DB` facade (`DB.select`) — on a split connection
+   * routes to the read pool (sticky-aware, Laravel parity for `DB::select`);
+   * otherwise runs on this adapter's executor (the top-level connection, or
+   * the transaction scope when inside `transaction()`).
    */
   async selectRaw(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
-    return this.executor.execute(sql, bindings)
+    return (this.readPick?.() ?? this.executor).execute(sql, bindings)
   }
 
   /**
@@ -303,8 +417,13 @@ export class NativeAdapter implements OrmAdapter {
   transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
     return this.scope.transaction((txScope) => {
       // Shares `this.listeners` by reference — queries inside the transaction
-      // report to the same listeners as top-level ones.
-      const scoped = new NativeAdapter(txScope, txScope, this.dialect, this.primaryKey, null, this.listeners, this.connection)
+      // report to the same listeners as top-level ones. No read drivers: every
+      // statement in a transaction runs on the write connection; the inherited
+      // splitTag keeps event tagging + sticky marking intact.
+      const scoped = new NativeAdapter(
+        txScope, txScope, this.dialect, this.primaryKey, null, this.listeners, this.connection,
+        [], this.sticky, this.splitTag,
+      )
       return fn(scoped)
     })
   }
@@ -340,6 +459,9 @@ export class NativeAdapter implements OrmAdapter {
       if (entry.driver === this.driver) cache.delete(key)
     }
     await this.driver.close()
+    for (const readDriver of this.readDrivers) {
+      await readDriver.close()
+    }
   }
 }
 

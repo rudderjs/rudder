@@ -182,6 +182,51 @@ describe('NativeDatabaseProvider — activation', () => {
     )
   })
 
+  it('maps read/write/sticky config onto the adapter (replica serves the reads)', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'rudder-provider-rw-'))
+    try {
+      // Seed distinguishable writer/replica files BEFORE the provider opens them.
+      const seed = async (file: string, marker: string): Promise<string> => {
+        const a = await NativeAdapter.make({ driver: 'sqlite', url: file })
+        await a.affectingStatement('create table notes (id integer primary key autoincrement, src text)', [])
+        await a.affectingStatement('insert into notes (src) values (?)', [marker])
+        await a.disconnect()
+        return file
+      }
+      const writeFile = await seed(join(dir, 'w.db'), 'writer')
+      const readFile  = await seed(join(dir, 'r.db'), 'replica')
+
+      setDbConfig({
+        default: 'main',
+        connections: {
+          main: {
+            engine: 'native',
+            url:    writeFile,
+            read:   { url: readFile },
+            sticky: true,
+          },
+        },
+      })
+      await new NativeDatabaseProvider(fakeApp().app).boot()
+
+      // Un-locked read → replica; write lands on the writer.
+      const reads = await ModelRegistry.getAdapter().query<{ src: string }>('notes').get()
+      assert.deepEqual(reads.map((r) => r.src), ['replica'])
+      await ModelRegistry.getAdapter().query('notes').create({ src: 'fresh' })
+      const writer = await NativeAdapter.make({ driver: 'sqlite', url: writeFile })
+      const onWriter = await writer.selectRaw('select src from notes order by id', [])
+      assert.deepEqual(onWriter.map((r) => r.src), ['writer', 'fresh'])
+      await writer.disconnect()
+
+      await (ModelRegistry.get() as NativeAdapter).disconnect()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('nativeDatabase() returns the provider class for explicit wiring', () => {
     assert.strictEqual(nativeDatabase(), NativeDatabaseProvider)
   })
