@@ -3,7 +3,7 @@ import { readJsonSafe } from './_fs.js'
 
 /**
  * Loose semver `Major.Minor.Patch` parser — good enough to compare against a
- * package.json `engines.node` range like `^20.19.0 || >=22.12.0`.
+ * package.json `engines.node` range like `>=22.12.0`.
  *
  * We don't pull in `semver` because the CLI ships with the framework and
  * pulling a 3rd-party parser for one comparison is wasteful. The range syntax

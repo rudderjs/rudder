@@ -100,7 +100,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node-version: ['20', '22']
+        # Active LTS lines only — Node 20 ("Iron") reached EOL April 2026.
+        # Odd-numbered lines (21/23/25) are never LTS and are intentionally skipped.
+        node-version: ['22', '24']
 
     steps:
       - name: Checkout
