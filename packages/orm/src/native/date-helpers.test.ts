@@ -256,8 +256,13 @@ if (!PG_URL) {
       await pgDriver.execute(`DROP TABLE IF EXISTS rudder_date_helpers_events`, [])
       // Plain TIMESTAMP (no TZ) so ::date / EXTRACT are server-TZ independent.
       await pgDriver.execute(`CREATE TABLE rudder_date_helpers_events (id SERIAL PRIMARY KEY, name TEXT, "happenedAt" TIMESTAMP)`, [])
+      // Seed via SQL LITERALS, not bound params: postgres-js stores a *bound*
+      // timestamp string into a TIMESTAMP column TZ-shifted (it interprets the
+      // plain string as machine-local wall-clock), so param-seeded rows make
+      // this test fail on any non-UTC machine — CI (UTC) hid it. A literal
+      // text → timestamp cast is verbatim, machine-TZ independent.
       for (const [n, at] of [['launch', '2026-01-15 09:30:00'], ['summit', '2026-01-20 11:20:45'], ['kickoff', '2025-12-31 23:59:59']] as const) {
-        await pgDriver.execute(`INSERT INTO rudder_date_helpers_events (name, "happenedAt") VALUES ($1, $2)`, [n, at])
+        await pgDriver.execute(`INSERT INTO rudder_date_helpers_events (name, "happenedAt") VALUES ('${n}', '${at}')`, [])
       }
     })
     after(async () => {
