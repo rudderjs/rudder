@@ -1,4 +1,4 @@
-import type { QueryBuilder } from '@rudderjs/contracts'
+import type { QueryBuilder, WhereOperator } from '@rudderjs/contracts'
 import { Model, ModelRegistry } from '../index.js'
 import type {
   BelongsToManyDef,
@@ -10,6 +10,40 @@ import type {
   MorphedByManyMeta,
 } from './pivot-meta.js'
 import type { HasThroughMeta } from './has-through.js'
+
+// ─── Pivot-constrained query surface ───────────────────────
+
+/**
+ * The chainable query returned from `parent.related('roles')` for a
+ * `belongsToMany` / `morphToMany` / `morphedByMany` relation. Extends the
+ * plain {@link QueryBuilder} with the pivot-column *filter* methods (the
+ * read-side sibling of `withPivot`, which projects pivot columns).
+ *
+ * Every `wherePivot*` call constrains the **pivot table's** rows in step 1
+ * of the two-step load (`SELECT * FROM role_user WHERE user_id = ? AND
+ * <your pivot filters>` → then the related rows by IN). Mirrors Laravel's
+ * `wherePivot` family. The inherited `where`/`orderBy`/etc. still filter the
+ * *related* rows in step 2.
+ *
+ * Note `orWherePivot` ORs flat against the pivot WHERE — like Laravel, it is
+ * not parenthesised, so `where(parent) AND wherePivot(a) OR orWherePivot(b)`
+ * binds as `(parent AND a) OR b`. Group with `wherePivotBetween` / explicit
+ * `wherePivot` calls when you need tighter scoping.
+ */
+export interface PivotQueryBuilder extends QueryBuilder<Model> {
+  /** Filter the pivot rows by `column` (equality, or `operator`). */
+  wherePivot(column: string, value: unknown): PivotQueryBuilder
+  wherePivot(column: string, operator: WhereOperator, value: unknown): PivotQueryBuilder
+  /** OR-rooted {@link wherePivot} (flat — see the interface note on precedence). */
+  orWherePivot(column: string, value: unknown): PivotQueryBuilder
+  orWherePivot(column: string, operator: WhereOperator, value: unknown): PivotQueryBuilder
+  /** Filter the pivot rows by `column IN (values)`. */
+  wherePivotIn(column: string, values: readonly unknown[]): PivotQueryBuilder
+  /** Filter the pivot rows by `column NOT IN (values)`. */
+  wherePivotNotIn(column: string, values: readonly unknown[]): PivotQueryBuilder
+  /** Filter the pivot rows by `column >= min AND column <= max`. */
+  wherePivotBetween(column: string, range: readonly [unknown, unknown]): PivotQueryBuilder
+}
 
 // ─── morphMany / morphOne read query ───────────────────────
 
@@ -41,6 +75,14 @@ export function morphParentQuery(
 const CHAIN_METHODS = new Set([
   'where', 'orWhere', 'orderBy', 'limit', 'offset', 'with', 'withTrashed', 'onlyTrashed',
 ])
+/** Pivot-column filter methods — recorded separately from CHAIN_METHODS
+ *  because they apply to the pivot-rows query (step 1), not the related
+ *  query (step 2). Only intercepted when the deferred QB wires an
+ *  `onWherePivot` hook (belongsToMany / morph variants); on through
+ *  relations they fall through to the unsupported-method guard. */
+const PIVOT_WHERE_METHODS = new Set([
+  'wherePivot', 'orWherePivot', 'wherePivotIn', 'wherePivotNotIn', 'wherePivotBetween',
+])
 const TERMINAL_METHODS = new Set([
   'first', 'find', 'get', 'all', 'count', 'paginate',
 ])
@@ -55,6 +97,47 @@ function replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, un
   for (const [m, args] of recorded) {
     const fn = (cur as unknown as QbAsDict)[m]
     if (fn) cur = fn.apply(cur, args) as QueryBuilder<Model>
+  }
+  return cur
+}
+
+/**
+ * Apply recorded `wherePivot*` constraints to the pivot-rows query (step 1).
+ * Each constraint composes onto the base `foreignPivotKey = parentVal` (+ morph
+ * discriminator) WHERE using the generic `where`/`orWhere` primitives every
+ * adapter implements — so all three adapters get pivot filtering for free.
+ * `wherePivotBetween` expands to a flat `>= … AND <= …` pair.
+ */
+function applyPivotConstraints(
+  q:           QueryBuilder<Record<string, unknown>>,
+  constraints: ReadonlyArray<[string, unknown[]]>,
+): QueryBuilder<Record<string, unknown>> {
+  let cur = q
+  for (const [method, args] of constraints) {
+    const column = args[0] as string
+    switch (method) {
+      case 'wherePivot':
+        cur = args.length >= 3
+          ? cur.where(column, args[1] as WhereOperator, args[2])
+          : cur.where(column, args[1])
+        break
+      case 'orWherePivot':
+        cur = args.length >= 3
+          ? cur.orWhere(column, args[1] as WhereOperator, args[2])
+          : cur.orWhere(column, args[1])
+        break
+      case 'wherePivotIn':
+        cur = cur.where(column, 'IN', args[1])
+        break
+      case 'wherePivotNotIn':
+        cur = cur.where(column, 'NOT IN', args[1])
+        break
+      case 'wherePivotBetween': {
+        const [min, max] = args[1] as [unknown, unknown]
+        cur = cur.where(column, '>=', min).where(column, '<=', max)
+        break
+      }
+    }
   }
   return cur
 }
@@ -74,6 +157,11 @@ interface DeferredProxyHooks {
    *  provided (mirrors the contract). The implementation captures the column
    *  list into the deferred-QB closure for post-terminal stamping. */
   onWithPivot?(columns: string[]): void
+  /** Called when a `wherePivot*` method is invoked. `method` is the method
+   *  name (`'wherePivot'`, `'wherePivotIn'`, …) and `args` its raw arguments.
+   *  The implementation records them for replay against the pivot-rows query
+   *  before the step-1 `.get()`. */
+  onWherePivot?(method: string, args: unknown[]): void
   /** Called after a terminal returns a result. Receives the pivot rows
    *  resolved for *this* call (not closure-captured) so concurrent
    *  terminals on the same builder don't read each other's pivot data. */
@@ -130,6 +218,12 @@ function makeDeferredProxy(
             throw new Error('[RudderJS ORM] withPivot() requires at least one column name.')
           }
           hooks.onWithPivot?.(cols)
+          return proxy
+        }
+      }
+      if (PIVOT_WHERE_METHODS.has(name) && hooks.onWherePivot) {
+        return (...args: unknown[]) => {
+          hooks.onWherePivot!(name, args)
           return proxy
         }
       }
@@ -238,16 +332,18 @@ export function belongsToManyDeferredQb(
   _def:      BelongsToManyDef,
   meta:      BelongsToManyMeta,
   parentVal: unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
+): PivotQueryBuilder {
+  const recorded:         Array<[string, unknown[]]> = []
+  const pivotColumns:     string[] = []
+  const pivotConstraints: Array<[string, unknown[]]> = []
 
   const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
+    let pivotQ = adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
-      .get()
+    pivotQ = applyPivotConstraints(pivotQ, pivotConstraints)
+    const pivotRows = await pivotQ.get()
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     // Empty IN list — short-circuit with a guaranteed-empty query so
     // adapters don't have to handle the edge case.
@@ -258,10 +354,11 @@ export function belongsToManyDeferredQb(
 
   return makeDeferredProxy(buildResolved, recorded, 'belongsToMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
+    onWherePivot(method, args) { pivotConstraints.push([method, args]) },
     postProcess(result, terminal, pivotRows) {
       return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
-  })
+  }) as PivotQueryBuilder
 }
 
 export function morphToManyDeferredQb(
@@ -269,17 +366,19 @@ export function morphToManyDeferredQb(
   _def:      MorphToManyDef,
   meta:      MorphToManyMeta,
   parentVal: unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
+): PivotQueryBuilder {
+  const recorded:         Array<[string, unknown[]]> = []
+  const pivotColumns:     string[] = []
+  const pivotConstraints: Array<[string, unknown[]]> = []
 
   const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
+    let pivotQ = adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .get()
+    pivotQ = applyPivotConstraints(pivotQ, pivotConstraints)
+    const pivotRows = await pivotQ.get()
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
@@ -288,10 +387,11 @@ export function morphToManyDeferredQb(
 
   return makeDeferredProxy(buildResolved, recorded, 'morphToMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
+    onWherePivot(method, args) { pivotConstraints.push([method, args]) },
     postProcess(result, terminal, pivotRows) {
       return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
-  })
+  }) as PivotQueryBuilder
 }
 
 export function morphedByManyDeferredQb(
@@ -299,17 +399,19 @@ export function morphedByManyDeferredQb(
   _def:      MorphedByManyDef,
   meta:      MorphedByManyMeta,
   parentVal: unknown,
-): QueryBuilder<Model> {
-  const recorded:     Array<[string, unknown[]]> = []
-  const pivotColumns: string[] = []
+): PivotQueryBuilder {
+  const recorded:         Array<[string, unknown[]]> = []
+  const pivotColumns:     string[] = []
+  const pivotConstraints: Array<[string, unknown[]]> = []
 
   const buildResolved = async (): Promise<ResolvedQuery> => {
     const adapter = ModelRegistry.getAdapter()
-    const pivotRows = await adapter
+    let pivotQ = adapter
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
-      .get()
+    pivotQ = applyPivotConstraints(pivotQ, pivotConstraints)
+    const pivotRows = await pivotQ.get()
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
@@ -318,10 +420,11 @@ export function morphedByManyDeferredQb(
 
   return makeDeferredProxy(buildResolved, recorded, 'morphedByMany', {
     onWithPivot(cols) { pivotColumns.push(...cols) },
+    onWherePivot(method, args) { pivotConstraints.push([method, args]) },
     postProcess(result, terminal, pivotRows) {
       return stampPivotOnResult(result, terminal, meta.relatedKey, pivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
     },
-  })
+  }) as PivotQueryBuilder
 }
 
 // ─── hasOneThrough / hasManyThrough ────────────────────────

@@ -57,17 +57,23 @@ type DrizzleQB = {
   leftJoin(table: unknown, on: SQL): DrizzleQB
   rightJoin(table: unknown, on: SQL): DrizzleQB
   crossJoin(table: unknown): DrizzleQB
+  groupBy(...cols: (SQL | Column)[]): DrizzleQB
+  having(cond: SQL): DrizzleQB
   orderBy(...cols: SQL[]): DrizzleQB
   limit(n: number): DrizzleQB
   offset(n: number): DrizzleQB
   returning(): DrizzleQB
   set(data: unknown): DrizzleQB
   values(data: unknown): DrizzleQB
+  /** Wrap a finished select as a named subquery (passable to `.from()`).
+   *  Used to count groups / distinct rows by COUNT(*)-ing the subquery. */
+  as(alias: string): unknown
   then<TResult>(onfulfilled: (value: unknown) => TResult): Promise<TResult>
 }
 
 type DrizzleDb = {
   select(fields?: Record<string, unknown>): { from(table: unknown): DrizzleQB }
+  selectDistinct(fields?: Record<string, unknown>): { from(table: unknown): DrizzleQB }
   insert(table: unknown): { values(data: unknown): DrizzleQB }
   update(table: unknown): { set(data: unknown): DrizzleQB }
   delete(table: unknown): DrizzleQB
@@ -252,6 +258,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _joins: Array<{ kind: 'inner' | 'left' | 'right' | 'cross'; table: unknown; on: SQL | null }> = []
   /** Structured projection from `select(...)` — qualified names; replaces `*`. */
   private _selectCols: string[] = []
+  /** SELECT DISTINCT toggle (`distinct()`). */
+  private _distinct = false
+  /** GROUP BY columns — qualified `table.col` allowed (resolved like select). */
+  private _groupBy: string[] = []
+  /** HAVING clauses — structured column/op/value (AND + OR) plus raw fragments,
+   *  mirroring the WHERE accumulators. Combined by `buildHaving()`. */
+  private _havings:       WhereClause[] = []
+  private _orHavings:     WhereClause[] = []
+  private _havingExprs:   SQL[] = []
+  private _orHavingExprs: SQL[] = []
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
 
@@ -463,12 +479,42 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return q
   }
 
-  distinct(): this { this._builderUnsupported('distinct()') }
-  groupBy(..._columns: string[]): this { this._builderUnsupported('groupBy()') }
-  having(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('having()') }
-  orHaving(_column: string, _operatorOrValue: unknown, _value?: unknown): this { this._builderUnsupported('orHaving()') }
-  havingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('havingRaw()') }
-  orHavingRaw(_sql: string, _bindings?: readonly unknown[]): this { this._builderUnsupported('orHavingRaw()') }
+  // ── distinct / groupBy / having (real Drizzle) ───────────
+  // Drizzle exposes `.selectDistinct()`, `.groupBy()` and `.having()` natively,
+  // so these map straight onto the fluent builder. Projecting a GROUP BY
+  // aggregate (e.g. `COUNT(*) AS total`) still needs `selectRaw`, which throws
+  // here — so HAVING on an aggregate goes through `havingRaw('COUNT(*) > ?')`,
+  // not `having('total', ...)` against a non-projected alias.
+
+  distinct(): this { this._distinct = true; return this }
+
+  groupBy(...columns: string[]): this {
+    this._groupBy.push(...columns)
+    return this
+  }
+
+  having(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    if (value === undefined) this._havings.push({ column, operator: '=', value: operatorOrValue })
+    else                     this._havings.push({ column, operator: operatorOrValue as WhereOperator, value })
+    return this
+  }
+
+  orHaving(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    if (value === undefined) this._orHavings.push({ column, operator: '=', value: operatorOrValue })
+    else                     this._orHavings.push({ column, operator: operatorOrValue as WhereOperator, value })
+    return this
+  }
+
+  havingRaw(rawSql: string, bindings: readonly unknown[] = []): this {
+    this._havingExprs.push(rawToSql(rawSql, bindings))
+    return this
+  }
+
+  orHavingRaw(rawSql: string, bindings: readonly unknown[] = []): this {
+    this._orHavingExprs.push(rawToSql(rawSql, bindings))
+    return this
+  }
+
   union(_other: unknown): this { this._builderUnsupported('union()') }
   unionAll(_other: unknown): this { this._builderUnsupported('unionAll()') }
 
@@ -834,7 +880,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const hasSelect = this._selectCols.length > 0
     const hasJoins  = this._joins.length > 0
     const hasAgg    = this._aggregates.length > 0
-    if (!hasSelect && !hasJoins && !hasAgg) return null
+    const hasGroup  = this._groupBy.length > 0
+    if (!hasSelect && !hasJoins && !hasAgg && !hasGroup) return null
 
     let fields: Record<string, unknown>
     if (hasSelect) {
@@ -845,7 +892,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         fields[key] = this.resolveColumn(name)
       }
     } else {
-      // joins-default / aggregates-only → project the base table's columns.
+      // joins-default / aggregates-only / groupBy-default → base table columns.
       fields = { ...(getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>) }
     }
     for (const req of this._aggregates) fields[req.alias] = this._aggregateSubquery(req)
@@ -890,6 +937,95 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return (andCombined ?? orCombined) as SQL
   }
 
+  /** @internal — one HAVING clause → SQL. Resolves qualified `table.col` and
+   *  splices a raw `Expression` value verbatim, mirroring clauseToExprOn but on
+   *  resolveColumn (HAVING may reference a joined table's column). */
+  private havingExpr(c: WhereClause): SQL {
+    if (c.value instanceof Expression) {
+      return sql`${this.resolveColumn(c.column)} ${sql.raw(c.operator)} ${sql.raw(String(c.value.getValue()))}` as SQL
+    }
+    return this._compareValue(this.resolveColumn(c.column), c.operator, c.value)
+  }
+
+  /** @internal — combine structured + raw HAVING clauses, same AND/OR shape as
+   *  buildConditions. Returns undefined when no HAVING was set. */
+  private buildHaving(): SQL | undefined {
+    const andExprs: SQL[] = this._havings.map(c => this.havingExpr(c))
+    const orExprs:  SQL[] = this._orHavings.map(c => this.havingExpr(c))
+    for (const e of this._havingExprs)   andExprs.push(e)
+    for (const e of this._orHavingExprs) orExprs.push(e)
+
+    const hasAnd = andExprs.length > 0
+    const hasOr  = orExprs.length > 0
+    if (!hasAnd && !hasOr) return undefined
+
+    const andCombined: SQL | undefined = hasAnd
+      ? (andExprs.length === 1 ? andExprs[0] : and(...andExprs) as SQL)
+      : undefined
+    const orCombined: SQL | undefined = hasOr
+      ? (orExprs.length === 1 ? orExprs[0] : or(...orExprs) as SQL)
+      : undefined
+
+    if (andCombined && orCombined) return or(andCombined, orCombined) as SQL
+    return (andCombined ?? orCombined) as SQL
+  }
+
+  /** @internal — projection root honoring distinct(). `selectDistinct` when
+   *  `.distinct()` was called, else `select`; null fields → project all. */
+  private _selectFrom(fields: Record<string, unknown> | null): DrizzleQB {
+    const root = this._distinct
+      ? (fields ? this.db.selectDistinct(fields) : this.db.selectDistinct())
+      : (fields ? this.db.select(fields)         : this.db.select())
+    return root.from(this.table)
+  }
+
+  /** @internal — apply GROUP BY + HAVING after WHERE. Both no-op when unused so
+   *  the non-grouped path stays byte-identical. */
+  private _applyGroupHaving(q: DrizzleQB): DrizzleQB {
+    if (this._groupBy.length) q = q.groupBy(...this._groupBy.map(c => this.resolveColumn(c)))
+    const having = this.buildHaving()
+    if (having) q = q.having(having)
+    return q
+  }
+
+  /** @internal — row count honoring grouping/distinct. A grouped or distinct
+   *  query's row count is the number of groups / distinct rows, not a scalar
+   *  aggregate — so wrap the full projection as a subquery and COUNT(*) it
+   *  (Laravel parity: count() of a grouped builder = group count). The plain
+   *  path stays a single COUNT(*) over the base table. */
+  private async _countRows(cond: SQL | undefined): Promise<number> {
+    if (this._groupBy.length || this._distinct) {
+      // Count groups by projecting just the GROUP BY keys (portable — avoids
+      // `SELECT * … GROUP BY` which strict dialects reject); an explicit
+      // select() or a distinct() falls back to buildSelectFields().
+      let fields: Record<string, unknown> | null
+      if (this._groupBy.length && this._selectCols.length === 0) {
+        fields = {}
+        for (const name of this._groupBy) {
+          const dot = name.lastIndexOf('.')
+          fields[dot === -1 ? name : name.slice(dot + 1)] = this.resolveColumn(name)
+        }
+      } else {
+        fields = this.buildSelectFields()
+          ?? { ...(getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>) }
+      }
+      let inner = this._selectFrom(fields)
+      inner = this._applyJoins(inner)
+      if (cond) inner = inner.where(cond)
+      inner = this._applyGroupHaving(inner)
+      const sub = inner.as('aggregate')
+      const result = await exec<Array<{ value: number | string | bigint }>>(
+        this.db.select({ value: sqlCount() }).from(sub),
+      )
+      return Number(result[0]?.value ?? 0)
+    }
+    let q = this.db.select({ value: sqlCount() }).from(this.table)
+    q = this._applyJoins(q)
+    if (cond) q = q.where(cond)
+    const result = await exec<Array<{ value: number | string | bigint }>>(q)
+    return Number(result[0]?.value ?? 0)
+  }
+
   private buildOrderBy(): SQL[] {
     return this._orders.map(o => {
       if ('rawSql' in o) return o.rawSql
@@ -914,9 +1050,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const orderBy = this.buildOrderBy()
     const fields  = this.buildSelectFields()
 
-    let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    let q = this._selectFrom(fields)
     q = this._applyJoins(q)
     if (cond)           q = q.where(cond)
+    q = this._applyGroupHaving(q)
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
 
@@ -936,9 +1073,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const cond = accumulated ? and(pkExpr, accumulated) as SQL : pkExpr
     const fields = this.buildSelectFields()
 
-    const base = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
-    const sel = this._applyJoins(base)
-    const result = await exec<T[]>(sel.where(cond).limit(1))
+    let sel = this._applyJoins(this._selectFrom(fields))
+    sel = sel.where(cond)
+    sel = this._applyGroupHaving(sel)
+    const result = await exec<T[]>(sel.limit(1))
     return result[0] ?? null
   }
 
@@ -949,9 +1087,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const orderBy = this.buildOrderBy()
     const fields  = this.buildSelectFields()
 
-    let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    let q = this._selectFrom(fields)
     q = this._applyJoins(q)
     if (cond)           q = q.where(cond)
+    q = this._applyGroupHaving(q)
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
@@ -971,14 +1110,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         'vector queries route through raw SQL with an implicit ORDER BY similarity.',
       )
     }
-    const cond = this.buildConditions()
-
-    let q = this.db.select({ value: sqlCount() }).from(this.table)
-    q = this._applyJoins(q)
-    if (cond) q = q.where(cond)
-
-    const result = await exec<Array<{ value: number | string | bigint }>>(q)
-    return Number(result[0]?.value ?? 0)
+    return this._countRows(this.buildConditions())
   }
 
   /**
@@ -1274,24 +1406,18 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const orderBy = this.buildOrderBy()
     const fields  = this.buildSelectFields()
 
-    let pageQ = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
-    let cntQ  = this.db.select({ value: sqlCount() }).from(this.table)
+    let pageQ = this._selectFrom(fields)
     pageQ = this._applyJoins(pageQ)
-    cntQ  = this._applyJoins(cntQ)
-
-    if (cond) {
-      pageQ = pageQ.where(cond)
-      cntQ  = cntQ.where(cond)
-    }
+    if (cond) pageQ = pageQ.where(cond)
+    pageQ = this._applyGroupHaving(pageQ)
     if (orderBy.length) pageQ = pageQ.orderBy(...orderBy)
     pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
 
-    const [data, countResult] = await Promise.all([
+    const [data, total] = await Promise.all([
       exec<T[]>(pageQ),
-      exec<Array<{ value: number | string | bigint }>>(cntQ),
+      this._countRows(cond),
     ])
 
-    const total    = Number(countResult[0]?.value ?? 0)
     const lastPage = Math.max(1, Math.ceil(total / perPage))
 
     return {

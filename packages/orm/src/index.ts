@@ -97,6 +97,7 @@ export { CursorPaginator, encodeCursor, decodeCursor } from './cursor-paginator.
 export type { CursorOrder }                         from './cursor-paginator.js'
 export type { BelongsToManyAccessor, MorphToManyAccessor, MorphedByManyAccessor } from './relations/pivot-accessors.js'
 export type { RelationDefault } from './relations/with-default.js'
+export type { PivotQueryBuilder } from './relations/pivot-deferred.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
