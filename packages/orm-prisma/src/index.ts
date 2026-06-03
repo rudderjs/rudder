@@ -282,6 +282,24 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   union(_other: unknown): this { this._builderUnsupported('union()') }
   unionAll(_other: unknown): this { this._builderUnsupported('unionAll()') }
 
+  // Pessimistic locking has no Prisma equivalent — its query API can't emit
+  // FOR UPDATE / FOR SHARE on a find. Point at a raw transaction instead of
+  // silently reading without the lock (a silent no-op here would be a
+  // correctness bug for job-queue-style reservations).
+  lockForUpdate(): this {
+    throw new Error(
+      '[RudderJS ORM Prisma] lockForUpdate() is not supported on the Prisma adapter — its query API has no FOR UPDATE clause. ' +
+        'Run the locking read raw inside a transaction: DB.transaction(() => DB.select("SELECT ... FOR UPDATE", bindings)), or use the native engine.',
+    )
+  }
+
+  sharedLock(): this {
+    throw new Error(
+      '[RudderJS ORM Prisma] sharedLock() is not supported on the Prisma adapter — its query API has no FOR SHARE clause. ' +
+        'Run the locking read raw inside a transaction: DB.transaction(() => DB.select("SELECT ... FOR SHARE", bindings)), or use the native engine.',
+    )
+  }
+
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
   with(...relations: string[]): this { this._withs.push(...relations); return this }

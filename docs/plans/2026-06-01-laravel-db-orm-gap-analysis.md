@@ -251,6 +251,6 @@ Independent, shippable, high-leverage — all shipped except cursor pagination (
 ### Next (Phase 1.5 / Phase 2)
 
 - **PR8 — `whereX` sugar family** (next, cheap): named `whereIn`/`whereNotIn`/`whereBetween`/`whereNull`/`whereColumn`/`whereNot`/`whereLike` + `when()`/`unless()` + `pluck()`/`value()` + `sum/max/min/avg`/`exists` terminals + structured `select()`/`distinct()`. Pure ergonomics — most expressible via `where(col, op, val)` today, so this is high-touch DX, not new capability.
-- **Bigger QB surface** (net-new, larger): joins/unions/`groupBy`/`having`/locking; JSON-path where; multi-connection + read/write split; ~~`onQuery`/`DB::listen`~~ (shipped on all three adapters + `DB.listen()`).
+- **Bigger QB surface** (net-new, larger): ~~joins/unions/`groupBy`/`having`~~ (shipped native + Drizzle); ~~locking~~ (native #837; Drizzle real via `.for()`, Prisma clear-throw); JSON-path where; multi-connection + read/write split; ~~`onQuery`/`DB::listen`~~ (shipped on all three adapters + `DB.listen()`).
 - **`morphs()` migration helper** + **`whereHas` OR/count operators** — the two ⬜ rows left in §2.
 - **Phase 2 — deliberate `@rudderjs/database` extraction**: the boundary + `DB` facade + `ORM → DB` dep direction are already established (#823); the native engine internals (`orm/src/native/{compiler,dialect,driver,query-builder,schema}`) still physically live in `@rudderjs/orm` and get relocated in a dedicated engine-migration step once the surface has proven out.
