@@ -23,8 +23,24 @@ import type { OrmAdapter } from '@rudderjs/contracts'
  */
 export type TransactionRunner = <T>(fn: () => Promise<T>) => Promise<T>
 
+/**
+ * Resolves the adapter for a NAMED connection (`DB.connection('reporting')`),
+ * opening it lazily on first use. Pushed in by `@rudderjs/orm`'s `db-bridge`
+ * (it closes over the ConnectionManager + the transaction-scope lookup, so a
+ * `DB.connection(name).select()` inside a `transaction(fn, { connection:
+ * name })` callback joins that open transaction). Async because the first
+ * access may open the connection (driver import + connect).
+ */
+export type ConnectionResolver = (name: string) => Promise<OrmAdapter>
+
+/** Runs `fn` inside a transaction on a NAMED connection — the named
+ *  counterpart of {@link TransactionRunner}, same injection rationale. */
+export type NamedTransactionRunner = <T>(name: string, fn: () => Promise<T>) => Promise<T>
+
 let resolver: (() => OrmAdapter) | null = null
 let txRunner: TransactionRunner | null = null
+let connectionResolver: ConnectionResolver | null = null
+let namedTxRunner: NamedTransactionRunner | null = null
 
 /**
  * Register the function that resolves the active ORM adapter. Called once by
@@ -77,8 +93,58 @@ export function resolveTransactionRunner(): TransactionRunner {
   return txRunner
 }
 
-/** @internal — test-only reset of the registered resolver + transaction runner. */
+/**
+ * Register the function that resolves a named connection's adapter. Called by
+ * `@rudderjs/orm`'s `db-bridge` module alongside {@link registerAdapterResolver}.
+ * Idempotent — last registration wins (dev HMR re-boot re-installs it).
+ */
+export function registerConnectionResolver(fn: ConnectionResolver): void {
+  connectionResolver = fn
+}
+
+/**
+ * Resolve the named-connection resolver. Throws a clear error when none has
+ * been registered — i.e. `@rudderjs/orm` (and a database provider) wasn't
+ * loaded, or the installed `@rudderjs/orm` predates named-connection support.
+ */
+export function resolveConnectionResolver(): ConnectionResolver {
+  if (!connectionResolver) {
+    throw new Error(
+      '[RudderJS DB] No connection resolver is available. DB.connection(name) ' +
+        'resolves named connections through @rudderjs/orm — make sure a database ' +
+        'provider is registered (and @rudderjs/orm installed) before calling ' +
+        'DB.connection().',
+    )
+  }
+  return connectionResolver
+}
+
+/**
+ * Register the function that runs work inside a transaction on a named
+ * connection. Called by `@rudderjs/orm`'s `db-bridge` module. Idempotent —
+ * last registration wins.
+ */
+export function registerNamedTransactionRunner(fn: NamedTransactionRunner): void {
+  namedTxRunner = fn
+}
+
+/** Resolve the named transaction runner. Throws a clear error when none has
+ *  been registered. */
+export function resolveNamedTransactionRunner(): NamedTransactionRunner {
+  if (!namedTxRunner) {
+    throw new Error(
+      '[RudderJS DB] No named transaction runner is available. ' +
+        'DB.connection(name).transaction() runs through @rudderjs/orm — make sure ' +
+        'a database provider is registered (and @rudderjs/orm installed) first.',
+    )
+  }
+  return namedTxRunner
+}
+
+/** @internal — test-only reset of the registered resolvers + transaction runners. */
 export function __resetAdapterResolver(): void {
   resolver = null
   txRunner = null
+  connectionResolver = null
+  namedTxRunner = null
 }

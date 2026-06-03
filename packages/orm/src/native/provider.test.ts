@@ -12,7 +12,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { ConfigRepository, setConfigRepository } from '@rudderjs/core'
 import type { Application } from '@rudderjs/core'
-import { Model, ModelRegistry } from '../index.js'
+import { Model, ModelRegistry, ConnectionManager } from '../index.js'
 import { NativeAdapter } from './adapter.js'
 import { NativeDatabaseProvider, nativeDatabase } from './provider.js'
 
@@ -27,13 +27,16 @@ function setDbConfig(database: unknown): void {
   setConfigRepository(new ConfigRepository({ database }))
 }
 
-/** The driver the provider opened (cached on globalThis by NativeAdapter.make). */
+/** The driver the provider opened (cached on globalThis by NativeAdapter.make —
+ *  a per-connection Map since multi-connection support; the provider boots the
+ *  default connection, so the first entry is its driver). */
 function bootedDriver(): { execute(sql: string, b: readonly unknown[]): Promise<unknown[]> } {
-  const cached = (globalThis as Record<string, unknown>)['__rudderjs_native_client__'] as
-    | { driver: { execute(sql: string, b: readonly unknown[]): Promise<unknown[]> } }
+  const cache = (globalThis as Record<string, unknown>)['__rudderjs_native_client__'] as
+    | Map<string, { driver: { execute(sql: string, b: readonly unknown[]): Promise<unknown[]> } }>
     | undefined
-  assert.ok(cached?.driver, 'provider should have opened + cached a native driver')
-  return cached.driver
+  const entry = cache && [...cache.values()][0]
+  assert.ok(entry?.driver, 'provider should have opened + cached a native driver')
+  return entry.driver
 }
 
 class Widget extends Model {
@@ -44,11 +47,13 @@ class Widget extends Model {
 
 beforeEach(() => {
   ModelRegistry.reset()
+  ConnectionManager.__reset()
   // Fresh in-memory DB per test: drop the cached driver so make() reopens.
   delete (globalThis as Record<string, unknown>)['__rudderjs_native_client__']
 })
 
 afterEach(() => {
+  ConnectionManager.__reset()
   delete (globalThis as Record<string, unknown>)['__rudderjs_native_client__']
 })
 
@@ -116,6 +121,65 @@ describe('NativeDatabaseProvider — activation', () => {
       )
       assert.strictEqual(ModelRegistry.get(), null)
     }
+  })
+
+  it('registers lazy factories for NAMED engine:native connections (no eager open)', async () => {
+    setDbConfig({
+      default: 'main',
+      connections: {
+        main:      { engine: 'native', url: ':memory:' },
+        reporting: { engine: 'native', url: ':memory:' },
+        // Menu entry owned by another adapter — must NOT be claimed here.
+        postgresql: { driver: 'postgresql', url: 'postgres://nope' },
+      },
+    })
+    await new NativeDatabaseProvider(fakeApp().app).boot()
+
+    assert.strictEqual(ConnectionManager.defaultName(), 'main')
+    assert.deepStrictEqual(ConnectionManager.names().sort(), ['main', 'reporting'])
+    // Default opened eagerly — and it IS the registry adapter (one connection).
+    assert.strictEqual(ConnectionManager.peek('main'), ModelRegistry.get())
+    // Named connection stays closed until first use (menu semantics).
+    assert.strictEqual(ConnectionManager.peek('reporting'), null)
+
+    const reporting = await ConnectionManager.ensure('reporting')
+    assert.ok(reporting instanceof NativeAdapter)
+    assert.notStrictEqual(reporting, ModelRegistry.get(), 'distinct adapter per connection')
+    await reporting.disconnect()
+  })
+
+  it('registers named engine:native connections even when the DEFAULT is another engine', async () => {
+    setDbConfig({
+      default: 'main',
+      connections: {
+        main:      { driver: 'sqlite', url: ':memory:' },        // prisma/drizzle-shaped
+        reporting: { engine: 'native', url: ':memory:' },
+      },
+    })
+    await new NativeDatabaseProvider(fakeApp().app).boot()
+
+    // Inert for the default (collision guard intact)…
+    assert.strictEqual(ModelRegistry.get(), null)
+    // …but the named native connection is reachable, lazily.
+    assert.deepStrictEqual(ConnectionManager.names(), ['reporting'])
+    assert.strictEqual(ConnectionManager.peek('reporting'), null)
+  })
+
+  it('a typo in a NAMED connection driver surfaces at first use, not at boot', async () => {
+    setDbConfig({
+      default: 'main',
+      connections: {
+        main:      { engine: 'native', url: ':memory:' },
+        reporting: { engine: 'native', driver: 'oracle' },
+      },
+    })
+    // Boot succeeds — the bad named connection is lazy.
+    await new NativeDatabaseProvider(fakeApp().app).boot()
+
+    await assert.rejects(
+      ConnectionManager.ensure('reporting'),
+      /Unknown native driver `oracle` \(connection 'reporting'\)/,
+    )
   })
 
   it('nativeDatabase() returns the provider class for explicit wiring', () => {

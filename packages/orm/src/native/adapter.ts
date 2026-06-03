@@ -49,9 +49,23 @@ export interface NativeConfig {
   url?: string
   /** Default primary-key column for models that don't override it. */
   primaryKey?: string
+  /**
+   * The `config/database.ts` connection name this adapter serves (passed by
+   * the provider / ConnectionManager factory). Keys the dev-HMR driver cache
+   * so each named connection holds its own driver and a config edit disposes
+   * only that connection's superseded client. Omitted for standalone use.
+   */
+  connectionName?: string
 }
 
 // ── Dev-HMR driver reuse (mirrors orm-drizzle / orm-prisma) ──
+//
+// One cache entry PER CONNECTION: named connections (multi-connection support)
+// key by their config name so each holds its own driver and a config edit
+// disposes/reopens only that connection; unnamed standalone `make()` calls key
+// by the signature itself (no supersede semantics — standalone use has no dev
+// re-boot loop, and two coexisting unnamed adapters with different URLs are
+// legitimate there).
 interface NativeClientCacheEntry {
   signature: string
   driver:    Driver
@@ -59,20 +73,36 @@ interface NativeClientCacheEntry {
 }
 const NATIVE_CLIENT_CACHE_KEY = '__rudderjs_native_client__'
 
-function reusableNativeClient(signature: string): { driver: Driver; dialect: Dialect } | undefined {
+function nativeClientCache(): Map<string, NativeClientCacheEntry> {
   const g = globalThis as Record<string, unknown>
-  const cached = g[NATIVE_CLIENT_CACHE_KEY] as NativeClientCacheEntry | undefined
+  let cache = g[NATIVE_CLIENT_CACHE_KEY]
+  if (!(cache instanceof Map)) {
+    const map = new Map<string, NativeClientCacheEntry>()
+    // Pre-map single-entry shape from an older bundle of this module (dev
+    // re-boot across a version edit) — keep the live driver, keyed by its
+    // signature so an unnamed lookup still reuses it.
+    const legacy = cache as NativeClientCacheEntry | undefined
+    if (legacy && typeof legacy.signature === 'string') map.set(legacy.signature, legacy)
+    g[NATIVE_CLIENT_CACHE_KEY] = map
+    cache = map
+  }
+  return cache as Map<string, NativeClientCacheEntry>
+}
+
+function reusableNativeClient(cacheKey: string, signature: string): { driver: Driver; dialect: Dialect } | undefined {
+  const cache = nativeClientCache()
+  const cached = cache.get(cacheKey)
   if (!cached) return undefined
   if (cached.signature === signature) return { driver: cached.driver, dialect: cached.dialect }
-  // Signature changed (e.g. a config edit) — dispose the superseded driver,
-  // fire-and-forget, so its connection is released.
+  // Signature changed for this connection (e.g. a config edit) — dispose the
+  // superseded driver, fire-and-forget, so its connection is released.
   void Promise.resolve().then(() => cached.driver.close()).catch(() => { /* best effort */ })
-  delete g[NATIVE_CLIENT_CACHE_KEY]
+  cache.delete(cacheKey)
   return undefined
 }
 
-function cacheNativeClient(entry: NativeClientCacheEntry): void {
-  ;(globalThis as Record<string, unknown>)[NATIVE_CLIENT_CACHE_KEY] = entry
+function cacheNativeClient(cacheKey: string, entry: NativeClientCacheEntry): void {
+  nativeClientCache().set(cacheKey, entry)
 }
 
 /**
@@ -168,14 +198,15 @@ export class NativeAdapter implements OrmAdapter {
       (typeof process !== 'undefined' ? process.env?.['DATABASE_URL'] : undefined) ??
       ':memory:'
     const signature = `${driverName}::${url}`
+    const cacheKey = config.connectionName ?? signature
 
-    const reused = reusableNativeClient(signature)
+    const reused = reusableNativeClient(cacheKey, signature)
     if (reused) {
       return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, driverName)
     }
 
     const { driver, dialect } = await openDriver(driverName, url)
-    cacheNativeClient({ signature, driver, dialect })
+    cacheNativeClient(cacheKey, { signature, driver, dialect })
     return NativeAdapter._topLevel(driver, dialect, primaryKey, driverName)
   }
 
@@ -301,12 +332,13 @@ export class NativeAdapter implements OrmAdapter {
     // one out from under the owning adapter.
     if (!this.driver) return
     // Evict the cached client BEFORE closing so a later make() with the same
-    // driver::url signature opens a fresh driver instead of reusing this closed
-    // one. The cache only holds a self-opened driver (driverInstance bypasses
-    // caching), so a stale entry here is always the one we're about to close.
-    const g = globalThis as Record<string, unknown>
-    const cached = g[NATIVE_CLIENT_CACHE_KEY] as NativeClientCacheEntry | undefined
-    if (cached?.driver === this.driver) delete g[NATIVE_CLIENT_CACHE_KEY]
+    // cache key opens a fresh driver instead of reusing this closed one. The
+    // cache only holds self-opened drivers (driverInstance bypasses caching),
+    // so any entry holding this driver is the one we're about to close.
+    const cache = nativeClientCache()
+    for (const [key, entry] of cache) {
+      if (entry.driver === this.driver) cache.delete(key)
+    }
     await this.driver.close()
   }
 }
