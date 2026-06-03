@@ -19,6 +19,7 @@ import type {
   RelationExistencePredicate,
   JoinClause,
   Row,
+  QueryListener,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
@@ -155,6 +156,32 @@ export class DrizzleTableRegistry {
  */
 function exec<R>(q: unknown): Promise<R> {
   return q as Promise<R>
+}
+
+/**
+ * Report one executed query to the registered `onQuery` / `DB.listen` listeners.
+ * Best-effort, Laravel `QueryExecuted` parity (same contract as the native
+ * engine's `instrumentExecutor`): a throwing listener is swallowed — a broken
+ * Telescope collector must never fail the query — and callers only emit on
+ * *successful* executions. The listener array is snapshotted so a listener
+ * registering/removing listeners mid-emit is safe.
+ */
+function emitQueryEvent(
+  listeners:  readonly QueryListener[],
+  sqlText:    string,
+  bindings:   readonly unknown[],
+  startedAt:  number,
+  connection: string | undefined,
+): void {
+  if (listeners.length === 0) return
+  const duration = performance.now() - startedAt
+  for (const listener of [...listeners]) {
+    try {
+      listener({ sql: sqlText, bindings: [...bindings], duration, connection })
+    } catch {
+      // Listener errors must never break the query.
+    }
+  }
 }
 
 /** SQL dialect threaded through the adapter to drive capability branching —
@@ -316,7 +343,29 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     /** SQL dialect — drives RETURNING vs affectedRows branching for
      *  `increment` / `decrement` / `deleteAll` / `updateAll`. */
     private readonly dialect:    DrizzleDialect = 'pg',
+    /** Query listeners (`onQuery` / `DB.listen`) — shared BY REFERENCE with the
+     *  owning adapter (and through it, transaction-scoped adapters), so every
+     *  builder reports to the same list. Empty = zero-overhead fast path. */
+    private readonly listeners:  readonly QueryListener[] = [],
   ) {}
+
+  /** @internal — await a built Drizzle query, reporting it to the registered
+   *  query listeners (SQL text + params via the builder's `toSQL()`, wall-clock
+   *  duration). The no-listener path is a plain `exec` passthrough; only
+   *  successful executions report (Laravel `QueryExecuted` parity). */
+  private async _run<R>(q: unknown): Promise<R> {
+    if (this.listeners.length === 0) return exec<R>(q)
+    const startedAt = performance.now()
+    const result = await exec<R>(q)
+    try {
+      const { sql: text, params } = (q as { toSQL(): { sql: string; params: unknown[] } }).toSQL()
+      emitQueryEvent(this.listeners, text, params, startedAt, this.dialect)
+    } catch {
+      // A query object without toSQL() (not a fluent builder) — skip reporting
+      // rather than break the read.
+    }
+    return result
+  }
 
   /** @internal — mark this builder as a sub-builder so terminals throw. */
   _markSubBuilder(): this { this._isSubBuilder = true; return this }
@@ -802,7 +851,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     let q = this.db.select({ value: valueExpr }).from(this.table)
     if (cond) q = q.where(cond)
 
-    const result = await exec<Array<{ value: unknown }>>(q)
+    const result = await this._run<Array<{ value: unknown }>>(q)
     const raw = result[0]?.value
     if (fn === 'count') return Number(raw ?? 0)
     if (fn === 'exists') return Number(raw ?? 0) > 0
@@ -1053,7 +1102,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     // DISTINCT wrap below, which the body subqueries already include).
     if (this._unions.length) {
       const sub = this._applyUnions(this._selectBodyQuery()).as('aggregate')
-      const result = await exec<Array<{ value: number | string | bigint }>>(
+      const result = await this._run<Array<{ value: number | string | bigint }>>(
         this.db.select({ value: sqlCount() }).from(sub),
       )
       return Number(result[0]?.value ?? 0)
@@ -1078,7 +1127,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       if (cond) inner = inner.where(cond)
       inner = this._applyGroupHaving(inner)
       const sub = inner.as('aggregate')
-      const result = await exec<Array<{ value: number | string | bigint }>>(
+      const result = await this._run<Array<{ value: number | string | bigint }>>(
         this.db.select({ value: sqlCount() }).from(sub),
       )
       return Number(result[0]?.value ?? 0)
@@ -1086,7 +1135,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     let q = this.db.select({ value: sqlCount() }).from(this.table)
     q = this._applyJoins(q)
     if (cond) q = q.where(cond)
-    const result = await exec<Array<{ value: number | string | bigint }>>(q)
+    const result = await this._run<Array<{ value: number | string | bigint }>>(q)
     return Number(result[0]?.value ?? 0)
   }
 
@@ -1116,7 +1165,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
 
-    const result = await exec<T[]>(q)
+    const result = await this._run<T[]>(q)
     return result[0] ?? null
   }
 
@@ -1136,7 +1185,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     sel = sel.where(cond)
     sel = this._applyGroupHaving(sel)
     sel = this._applyUnions(sel)
-    const result = await exec<T[]>(sel.limit(1))
+    const result = await this._run<T[]>(sel.limit(1))
     return result[0] ?? null
   }
 
@@ -1150,7 +1199,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
 
-    return exec<T[]>(q)
+    return this._run<T[]>(q)
   }
 
   async all(): Promise<T[]> {
@@ -1297,7 +1346,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async create(data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
-    const result = await exec<T[]>(this.db
+    const result = await this._run<T[]>(this.db
       .insert(this.table)
       .values(data)
       .returning())
@@ -1308,7 +1357,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await exec<T[]>(this.db
+    const result = await this._run<T[]>(this.db
       .update(this.table)
       .set(data)
       .where(eq(pkCol, id))
@@ -1321,10 +1370,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     if (this._softDeletes) {
-      await exec<void>(this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)))
+      await this._run<void>(this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)))
       return
     }
-    await exec<void>(this.db
+    await this._run<void>(this.db
       .delete(this.table)
       .where(eq(pkCol, id)))
   }
@@ -1332,7 +1381,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await exec<T[]>(this.db
+    const result = await this._run<T[]>(this.db
       .update(this.table)
       .set({ deletedAt: null })
       .where(eq(pkCol, id))
@@ -1343,7 +1392,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async forceDelete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    await exec<void>(this.db
+    await this._run<void>(this.db
       .delete(this.table)
       .where(eq(pkCol, id)))
   }
@@ -1351,7 +1400,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async insertMany(rows: Partial<T>[]): Promise<void> {
     this._assertNotSubBuilder()
     if (rows.length === 0) return
-    await exec<void>(this.db.insert(this.table).values(rows))
+    await this._run<void>(this.db.insert(this.table).values(rows))
   }
 
   /** @internal — build the conflict `set` map: each update column references the
@@ -1393,7 +1442,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const q = update.length === 0
       ? insert.onConflictDoNothing({ target })
       : insert.onConflictDoUpdate({ target, set: this._upsertSet(update, false) })
-    const out = await exec<unknown[]>(q.returning())
+    const out = await this._run<unknown[]>(q.returning())
     return out.length
   }
 
@@ -1437,16 +1486,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const label = op === '+' ? 'increment' : 'decrement'
 
     if (this.dialect === 'mysql') {
-      await exec<unknown>(this.db
+      await this._run<unknown>(this.db
         .update(this.table)
         .set({ [column]: delta, ...extra })
         .where(eq(pkCol, id)))
-      const after = await exec<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1))
+      const after = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1))
       if (!after[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() target row not found.`)
       return after[0]
     }
 
-    const result = await exec<T[]>(this.db
+    const result = await this._run<T[]>(this.db
       .update(this.table)
       .set({ [column]: delta, ...extra })
       .where(eq(pkCol, id))
@@ -1465,7 +1514,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
 
     const [data, total] = await Promise.all([
-      exec<T[]>(pageQ),
+      this._run<T[]>(pageQ),
       this._countRows(cond),
     ])
 
@@ -1601,6 +1650,10 @@ export class DrizzleAdapter implements OrmAdapter {
     private readonly tables:     Record<string, unknown>,
     private readonly primaryKey: string,
     readonly dialect:            DrizzleDialect,
+    /** Query listeners (`onQuery` / `DB.listen`). Shared BY REFERENCE with every
+     *  transaction-scoped adapter spawned from this one, so a listener registered
+     *  on the top-level adapter also sees queries run inside `transaction()`. */
+    private readonly listeners:  QueryListener[] = [],
   ) {}
 
   static async make(config: DrizzleConfig): Promise<DrizzleAdapter> {
@@ -1686,7 +1739,7 @@ export class DrizzleAdapter implements OrmAdapter {
     // columns (e.g. `users.id` + `subscriptions.uuid`) work without forcing
     // every model onto the same PK.
     const pk = opts?.primaryKey ?? this.primaryKey
-    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name), this.dialect)
+    return new DrizzleQueryBuilder<T>(this.db, schema, pk, (name) => this.resolveTable(name), this.dialect, this.listeners)
   }
 
   /** @internal — resolve a table by name across both the constructor-provided
@@ -1730,9 +1783,26 @@ export class DrizzleAdapter implements OrmAdapter {
     // `.call` drops the generic binding, so the callback result widens to
     // `unknown` — cast back to the declared `Promise<T>`.
     return run.call(this.db, (txDb: DrizzleDb) => {
-      const scoped = new DrizzleAdapter(txDb, this.tables, this.primaryKey, this.dialect)
+      // Shares `this.listeners` by reference — queries inside the transaction
+      // report to the same listeners as top-level ones.
+      const scoped = new DrizzleAdapter(txDb, this.tables, this.primaryKey, this.dialect, this.listeners)
       return fn(scoped)
     }) as Promise<T>
+  }
+
+  /**
+   * Register a query listener ({@link OrmAdapter.onQuery}) — fired once per
+   * successfully executed query with the SQL, bindings, and wall-clock duration
+   * in ms. The app-facing entry point is `DB.listen()` (`@rudderjs/database`);
+   * Telescope's QueryCollector and Pulse's slow-query recorder hook in here too.
+   * Listener errors are swallowed — they never break the query. Registering on
+   * a transaction-scoped adapter registers on the shared (top-level) listener
+   * list. The reported `connection` is the adapter's dialect (`'sqlite'` /
+   * `'pg'` / `'mysql'`). Not reported: pgvector similarity queries (they bypass
+   * the fluent builder via `db.execute`) and Drizzle-internal BEGIN/COMMIT.
+   */
+  onQuery(listener: QueryListener): void {
+    this.listeners.push(listener)
   }
 
   /**
@@ -1763,7 +1833,9 @@ export class DrizzleAdapter implements OrmAdapter {
           'raw DB.select() requires a driver that supports execute() (postgres-js, pg, neon, or libsql).',
       )
     }
+    const startedAt = performance.now()
     const result = await exec.call(this.db, this.rawSql(text, bindings))
+    emitQueryEvent(this.listeners, text, bindings, startedAt, this.dialect)
     if (Array.isArray(result)) return result as Row[]
     return ((result as { rows?: Row[] })?.rows) ?? []
   }
@@ -1781,7 +1853,9 @@ export class DrizzleAdapter implements OrmAdapter {
           'raw DB writes require a driver that supports execute() (postgres-js, pg, neon, or libsql).',
       )
     }
+    const startedAt = performance.now()
     const result = (await exec.call(this.db, this.rawSql(text, bindings))) as unknown
+    emitQueryEvent(this.listeners, text, bindings, startedAt, this.dialect)
     if (Array.isArray(result)) return result.length
     const r = result as {
       rowCount?: number; rowsAffected?: number; changes?: number; affectedRows?: number
