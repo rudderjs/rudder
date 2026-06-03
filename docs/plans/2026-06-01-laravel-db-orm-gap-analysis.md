@@ -57,7 +57,7 @@ Parity broke at two seams, **both largely closed in Phase 1 (2026-06-02)**:
    shipped on both (#824) and Drizzle eager `with()` is real (#829). ~~`onQuery`/`DB::listen`
    remains Prisma-only with no app-facing registration~~ — `onQuery` is now a typed
    `OrmAdapter` capability, the native engine implements it, and `DB.listen()` is the
-   app-facing registration; the Drizzle hook is the remaining follow-up.
+   app-facing registration; the Drizzle adapter implements it too (timed at the fluent-builder choke point via `toSQL()`; raw `DB.*` seams report directly). All three adapters covered.
 
 Headline correctness gaps are closed. **What remains is net-new surface, not
 correctness:** the `whereX` sugar (PR8), joins/unions/locking, multi-connection +
@@ -107,7 +107,7 @@ Deduped, ordered by leverage for a Laravel dev landing in RudderJS. **Status col
 **db-connection**
 - Multi-connection: runtime `DB::connection('name')`, per-model `$connection`, `Schema::connection()` — only the default is wired into `ModelRegistry`.
 - Read/write split + sticky reads; deadlock-retry `attempts`; manual `beginTransaction`/`commit`/`rollBack`.
-- ~~`onQuery` / `DB::listen`: adapter hook exists but **only Prisma implements it** (native + Drizzle don't); no app-facing registration~~ — shipped: `onQuery?` is on the `OrmAdapter` contract, the native engine implements it (timed executor; transaction-scoped queries report too), and `DB.listen()` is the app-facing registration. Drizzle's hook is the remaining follow-up.
+- ~~`onQuery` / `DB::listen`: adapter hook exists but **only Prisma implements it** (native + Drizzle don't); no app-facing registration~~ — shipped: `onQuery?` is on the `OrmAdapter` contract, the native engine implements it (timed executor; transaction-scoped queries report too), and `DB.listen()` is the app-facing registration. Drizzle's hook shipped right after — all three adapters report (Prisma via its driver events, native + Drizzle via timed execution).
 - `whenQueryingForLongerThan` (cumulative threshold — Telescope does per-query only).
 
 **db-schema-migrations**
@@ -251,6 +251,6 @@ Independent, shippable, high-leverage — all shipped except cursor pagination (
 ### Next (Phase 1.5 / Phase 2)
 
 - **PR8 — `whereX` sugar family** (next, cheap): named `whereIn`/`whereNotIn`/`whereBetween`/`whereNull`/`whereColumn`/`whereNot`/`whereLike` + `when()`/`unless()` + `pluck()`/`value()` + `sum/max/min/avg`/`exists` terminals + structured `select()`/`distinct()`. Pure ergonomics — most expressible via `where(col, op, val)` today, so this is high-touch DX, not new capability.
-- **Bigger QB surface** (net-new, larger): joins/unions/`groupBy`/`having`/locking; JSON-path where; multi-connection + read/write split; `onQuery`/`DB::listen` on drizzle (native + `DB.listen()` shipped).
+- **Bigger QB surface** (net-new, larger): joins/unions/`groupBy`/`having`/locking; JSON-path where; multi-connection + read/write split; ~~`onQuery`/`DB::listen`~~ (shipped on all three adapters + `DB.listen()`).
 - **`morphs()` migration helper** + **`whereHas` OR/count operators** — the two ⬜ rows left in §2.
 - **Phase 2 — deliberate `@rudderjs/database` extraction**: the boundary + `DB` facade + `ORM → DB` dep direction are already established (#823); the native engine internals (`orm/src/native/{compiler,dialect,driver,query-builder,schema}`) still physically live in `@rudderjs/orm` and get relocated in a dedicated engine-migration step once the surface has proven out.
