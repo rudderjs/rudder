@@ -9,7 +9,7 @@
   },
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   },
   "description": "Legacy alias for `create-rudder` — `npm create rudder-app@latest` still works but `npm create rudder@latest` is the canonical command.",
   "bin": {

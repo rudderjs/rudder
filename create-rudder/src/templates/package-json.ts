@@ -182,7 +182,7 @@ export function packageJson(ctx: TemplateContext): string {
     private: true,
     type:    'module',
     engines: {
-      node: '^20.19.0 || >=22.12.0',
+      node: '>=22.12.0',
     },
     scripts: {
       dev:               'vike dev',
