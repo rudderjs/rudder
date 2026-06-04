@@ -107,6 +107,22 @@ describe('inspectDatabase / inspectTable — sqlite', () => {
     assert.strictEqual(titleIx.unique, false)
   })
 
+  it('tolerates a table dropped mid-scan — counts continue, vanished table has no rows', async () => {
+    // Simulates the shared-database race: the catalog lists a table, then a
+    // concurrent DDL drops it before its COUNT(*) runs. The overview must not
+    // fail wholesale; the vanished table just reports no count.
+    const racy = {
+      execute: async (sql: string, bindings: unknown[]) => {
+        if (sql.includes('COUNT(*)') && sql.includes('"posts"')) throw new Error('no such table: posts')
+        return driver.execute(sql, bindings)
+      },
+    }
+    const info = await inspectDatabase(racy, dialect, { counts: true })
+    const byName = new Map(info.tables.map((t) => [t.name, t.rows]))
+    assert.strictEqual(byName.get('users'), 2)
+    assert.strictEqual(byName.get('posts'), undefined)
+  })
+
   it('inspectTable returns null for a missing table (the injection gate)', async () => {
     assert.strictEqual(await inspectTable(driver, dialect, 'nope'), null)
     assert.strictEqual(await inspectTable(driver, dialect, `users"; DROP TABLE users; --`), null)

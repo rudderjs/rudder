@@ -176,7 +176,14 @@ export async function inspectDatabase(
   const tables: TableSummary[] = []
   for (const name of names) {
     const summary: TableSummary = { name, sizeBytes: sizes.get(name) ?? null }
-    if (opts.counts) summary.rows = await countRows(executor, dialect, name)
+    if (opts.counts) {
+      // Per-table COUNT(*) races concurrent DDL on a shared database — a table
+      // the catalog just listed can be dropped before its count runs (a
+      // migration mid-`db:show`, or parallel live-test suites on one CI
+      // database). A vanished/unreadable table keeps `rows` undefined instead
+      // of failing the whole overview; the renderer shows `—`.
+      try { summary.rows = await countRows(executor, dialect, name) } catch { /* dropped mid-scan */ }
+    }
     tables.push(summary)
   }
 

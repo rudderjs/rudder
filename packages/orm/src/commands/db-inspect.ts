@@ -81,7 +81,7 @@ function printDatabase(info: DatabaseInfo, counts: boolean): void {
     console.log(`  ${'TABLE'.padEnd(nameWidth)}  ${'SIZE'.padEnd(9)}${counts ? '  ROWS' : ''}`)
     console.log(`  ${'─'.repeat(nameWidth)}  ${'─'.repeat(9)}${counts ? `  ${'─'.repeat(6)}` : ''}`)
     for (const t of info.tables) {
-      console.log(`  ${t.name.padEnd(nameWidth)}  ${formatBytes(t.sizeBytes).padEnd(9)}${counts ? `  ${t.rows ?? 0}` : ''}`)
+      console.log(`  ${t.name.padEnd(nameWidth)}  ${formatBytes(t.sizeBytes).padEnd(9)}${counts ? `  ${t.rows ?? '—'}` : ''}`)
     }
   }
 
