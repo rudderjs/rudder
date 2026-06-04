@@ -80,6 +80,49 @@ function normalizeDatePartValue(part: DatePart, value: unknown): unknown {
   return value
 }
 
+/** One step of a JSON arrow path (`meta->prefs->lang`, `meta->items->0`): a
+ *  validated object key, or a number for an array index (`$[0]` / pg `->0`). */
+type JsonPathSegment = string | number
+
+// LOCAL COPY of the native engine's `parseJsonPath` / `jsonPathLiteral` (they
+// live in the node-only native module; duplicating ~30 lines beats importing
+// across the boundary — same call as `normalizeDatePartValue` above). Path
+// segments are user-supplied strings spliced into SQL text (quoted keys inside
+// a path literal or pg `->'key'` operands), so REJECT every character that
+// could escape either quoting layer; spaces/dots stay legal via `$."a b"`.
+// eslint-disable-next-line no-control-regex -- control characters are exactly what we reject
+const JSON_SEGMENT_REJECT = /['"`\\\x00-\x1f]/
+
+/** Split a `column->path->to->key` arrow column into the base column and its
+ *  validated JSON path segments. All-digit segments become numeric array
+ *  indexes (`meta->items->0` → `$[0]` / pg `->0`). */
+function parseJsonPath(path: string): { column: string; segments: JsonPathSegment[] } {
+  const [column, ...rawSegments] = path.split('->')
+  if (!column || rawSegments.length === 0 || rawSegments.some(s => s.length === 0)) {
+    throw new Error(
+      `[RudderJS ORM Drizzle] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
+    )
+  }
+  const segments = rawSegments.map((seg): JsonPathSegment => {
+    if (JSON_SEGMENT_REJECT.test(seg)) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, ` +
+        'backslash, backtick, or control character — not allowed (path segments are spliced into SQL text).',
+      )
+    }
+    return /^\d+$/.test(seg) ? Number(seg) : seg
+  })
+  return { column, segments }
+}
+
+/** Render validated segments as a single-quoted SQL JSON-path literal —
+ *  `'$."a"."b"[0]'`. Safe to inline: {@link parseJsonPath} rejected every
+ *  character that could escape either quoting layer. Used for the sqlite and
+ *  mysql path-literal forms (pg uses `->` operator chains instead). */
+function jsonPathLiteral(segments: readonly JsonPathSegment[]): string {
+  return `'$${segments.map(s => (typeof s === 'number' ? `[${s}]` : `."${s}"`)).join('')}'`
+}
+
 /** Global-registry symbol the ORM's `HydratingQueryBuilder` Proxy answers with
  *  its wrapped adapter builder. `union(other)` reads it to unwrap a passed proxy
  *  back to the underlying `DrizzleQueryBuilder` so it can build the member's
@@ -630,6 +673,197 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
+  // ── JSON predicates (arrow where() / whereJsonContains / whereJsonLength) ──
+  // Same surface + semantics as the native engine (#871). Arrow columns in
+  // plain where()/orWhere() are detected at clause-render time in
+  // `clauseToExprOn`, so group callbacks, whereNot, the whereIn/whereNull
+  // sugar — and whereHas constraint callbacks — compose for free. The
+  // extraction SQL mirrors the native dialect seams.
+
+  /** `whereJsonContains('meta->tags', 'php')` — JSON containment at an arrow
+   *  path (or the whole column). `value` may be a scalar or an array (every
+   *  element contained). pg `@>`, mysql `JSON_CONTAINS`, sqlite emulated via
+   *  `json_each` EXISTS (scalars only there). */
+  whereJsonContains(column: string, value: unknown): this {
+    this._extraExprs.push(this._jsonContainsExpr(column, value, false)); return this
+  }
+  /** OR-rooted {@link whereJsonContains}. */
+  orWhereJsonContains(column: string, value: unknown): this {
+    this._orExtraExprs.push(this._jsonContainsExpr(column, value, false)); return this
+  }
+  /** Negated {@link whereJsonContains} — `NOT (…)` around the containment. */
+  whereJsonDoesntContain(column: string, value: unknown): this {
+    this._extraExprs.push(this._jsonContainsExpr(column, value, true)); return this
+  }
+  /** OR-rooted {@link whereJsonDoesntContain}. */
+  orWhereJsonDoesntContain(column: string, value: unknown): this {
+    this._orExtraExprs.push(this._jsonContainsExpr(column, value, true)); return this
+  }
+  /** `whereJsonLength('meta->tags', '>', 2)` — compare a JSON array's length
+   *  (two-arg form is equality). sqlite/pg `json(b)_array_length`, mysql
+   *  `JSON_LENGTH`. */
+  whereJsonLength(column: string, operatorOrValue: WhereOperator | number, value?: number): this {
+    this._extraExprs.push(this._jsonLengthExpr(column, operatorOrValue, value)); return this
+  }
+  /** OR-rooted {@link whereJsonLength}. */
+  orWhereJsonLength(column: string, operatorOrValue: WhereOperator | number, value?: number): this {
+    this._orExtraExprs.push(this._jsonLengthExpr(column, operatorOrValue, value)); return this
+  }
+
+  /** @internal — column-or-arrow-path → resolved base column + validated
+   *  segments (`[]` = whole column). Clear error when the base column isn't
+   *  declared on the table schema. */
+  private _jsonTarget(table: unknown, path: string): { col: Column; segments: JsonPathSegment[] } {
+    const parsed = path.includes('->') ? parseJsonPath(path) : { column: path, segments: [] as JsonPathSegment[] }
+    const col = this.colOf(table, parsed.column)
+    if (!col) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] Column "${parsed.column}" (JSON path "${path}") is not declared on the table schema.`,
+      )
+    }
+    return { col, segments: parsed.segments }
+  }
+
+  /** @internal — pg arrow chain `col->'a'->>'b'` (last hop `->>` = text when
+   *  `lastAsText`). Segments are validated, so splicing is safe; numeric
+   *  segments splice bare (`->0` = array index — quoting would make pg treat
+   *  it as an object key). */
+  private _pgJsonChain(col: Column, segments: readonly JsonPathSegment[], lastAsText: boolean): SQL {
+    let chain = sql`${col}` as SQL
+    segments.forEach((s, i) => {
+      const op = lastAsText && i === segments.length - 1 ? '->>' : '->'
+      chain = sql`${chain}${sql.raw(typeof s === 'number' ? `${op}${s}` : `${op}'${s}'`)}` as SQL
+    })
+    return chain
+  }
+
+  /** @internal — the per-dialect JSON extraction for a scalar comparison.
+   *  Mirrors the native `Dialect.jsonExtract`: sqlite `json_extract` (typed
+   *  results, hint unused), pg `->`/`->>` chains with `::numeric`/`::boolean`
+   *  casts when the comparison value is typed, mysql `JSON_UNQUOTE(JSON_EXTRACT)`
+   *  with booleans skipping the UNQUOTE (compared against a spliced literal). */
+  private _jsonExtractExpr(col: Column, segments: readonly JsonPathSegment[], valueKind: 'text' | 'number' | 'boolean'): SQL {
+    if (this.dialect === 'pg') {
+      const chain = this._pgJsonChain(col, segments, true)
+      if (valueKind === 'number')  return sql`(${chain})::numeric` as SQL
+      if (valueKind === 'boolean') return sql`(${chain})::boolean` as SQL
+      return chain
+    }
+    if (this.dialect === 'mysql') {
+      const extract = sql`JSON_EXTRACT(${col}, ${sql.raw(jsonPathLiteral(segments))})` as SQL
+      return valueKind === 'boolean' ? extract : sql`JSON_UNQUOTE(${extract})` as SQL
+    }
+    return sql`json_extract(${col}, ${sql.raw(jsonPathLiteral(segments))})` as SQL
+  }
+
+  /** @internal — normalize a boolean JSON comparison value per dialect: sqlite
+   *  `1`/`0` (json_extract yields integers), mysql the spliced SQL literal
+   *  `true`/`false` (a BOUND 'true' string coerces to a JSON *string* in
+   *  comparison context and never matches — the #871 native finding), pg the
+   *  boolean itself (the extraction is `::boolean`-cast). */
+  private _jsonBooleanValue(value: boolean): unknown {
+    if (this.dialect === 'sqlite') return value ? 1 : 0
+    if (this.dialect === 'mysql')  return value ? sql`true` : sql`false`
+    return value
+  }
+
+  /** @internal — the arrow-column comparison (`where('meta->a', op, v)`),
+   *  rendered against `table`'s schema (whereHas constraints pass the related
+   *  table). null → IS [NOT] NULL; IN/NOT IN expand; booleans normalize per
+   *  dialect; `raw(...)` values splice verbatim. */
+  private _jsonClauseExpr(table: unknown, clause: WhereClause): SQL {
+    const { col, segments } = this._jsonTarget(table, clause.column)
+    const { operator, value } = clause
+    const probe = (operator === 'IN' || operator === 'NOT IN') && Array.isArray(value) ? value[0] : value
+    const valueKind = typeof probe === 'number' ? 'number' : typeof probe === 'boolean' ? 'boolean' : 'text'
+    const lhs = this._jsonExtractExpr(col, segments, valueKind)
+    if (value instanceof Expression) {
+      return sql`${lhs} ${sql.raw(operator)} ${sql.raw(String(value.getValue()))}` as SQL
+    }
+    if (value === null && (operator === '=' || operator === '!=')) {
+      return (operator === '=' ? isNull(lhs) : isNotNull(lhs)) as SQL
+    }
+    const norm = (v: unknown): unknown => (typeof v === 'boolean' ? this._jsonBooleanValue(v) : v)
+    if (operator === 'IN' || operator === 'NOT IN') {
+      const arr = (value as unknown[]).map(norm)
+      return (operator === 'IN'
+        ? inArray(lhs as unknown as Column, arr)
+        : notInArray(lhs as unknown as Column, arr)) as SQL
+    }
+    return this._compareValue(lhs as unknown as Column, operator, norm(value))
+  }
+
+  /** @internal — the containment predicate (`whereJsonContains`). */
+  private _jsonContainsExpr(column: string, value: unknown, negated: boolean): SQL {
+    const { col, segments } = this._jsonTarget(this.table, column)
+    let expr: SQL
+    if (this.dialect === 'pg') {
+      const lhs = segments.length === 0 ? (sql`${col}` as SQL) : this._pgJsonChain(col, segments, false)
+      // Bind the candidate THROUGH a text cast so the parameter is described
+      // as text: postgres-js' json serializer re-stringifies a param the
+      // server describes as jsonb (double-encode — the #871 native-driver
+      // bug), and node-postgres would send the bare string, which fails the
+      // jsonb parse. `cast(? as text)::jsonb` behaves identically on both.
+      expr = sql`(${lhs})::jsonb @> cast(${JSON.stringify(value)} as text)::jsonb` as SQL
+    } else if (this.dialect === 'mysql') {
+      expr = segments.length === 0
+        ? (sql`JSON_CONTAINS(${col}, ${JSON.stringify(value)})` as SQL)
+        : (sql`JSON_CONTAINS(${col}, ${JSON.stringify(value)}, ${sql.raw(jsonPathLiteral(segments))})` as SQL)
+    } else {
+      // SQLite has no containment operator — emulate per element via
+      // json_each EXISTS (AND-joined for arrays, matching pg @> / mysql
+      // "every element contained"). Scalars only — a nested object/array
+      // element has no reliable json_each equality form.
+      const target = segments.length === 0
+        ? (sql`${col}` as SQL)
+        : (sql`${col}, ${sql.raw(jsonPathLiteral(segments))}` as SQL)
+      const elements = Array.isArray(value) ? value : [value]
+      const parts = elements.map((v): SQL => {
+        if (v !== null && typeof v === 'object') {
+          throw new Error(
+            '[RudderJS ORM Drizzle] whereJsonContains on SQLite supports scalar values (and arrays of scalars) ' +
+            'only — object containment has no json_each equality form. Use whereRaw(...) for structural checks.',
+          )
+        }
+        // json null elements surface as SQL NULL in json_each.value — match on
+        // the row's declared type instead (`= NULL` never matches in SQL).
+        if (v === null) return sql`EXISTS (SELECT 1 FROM json_each(${target}) WHERE "json_each"."type" = 'null')` as SQL
+        const bound = typeof v === 'boolean' ? (v ? 1 : 0) : v
+        return sql`EXISTS (SELECT 1 FROM json_each(${target}) WHERE "json_each"."value" = ${bound})` as SQL
+      })
+      expr = parts.length === 1 ? parts[0]! : (and(...parts) as SQL)
+    }
+    // Explicit parens — drizzle's not() prefixes a raw SQL fragment WITHOUT
+    // wrapping it, leaving `NOT a @> b` to operator precedence. Unambiguous
+    // on every dialect this way.
+    return negated ? (sql`not (${expr})` as SQL) : expr
+  }
+
+  /** @internal — the array-length comparison (`whereJsonLength`). Two-arg form
+   *  is equality; three-arg carries the operator (Laravel semantics). */
+  private _jsonLengthExpr(column: string, operatorOrValue: WhereOperator | number, value?: number): SQL {
+    const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
+    const count    = value === undefined ? (operatorOrValue as number) : value
+    if (!Number.isInteger(count)) {
+      throw new Error(`[RudderJS ORM Drizzle] whereJsonLength expects an integer length, got ${String(count)}.`)
+    }
+    const { col, segments } = this._jsonTarget(this.table, column)
+    let lhs: SQL
+    if (this.dialect === 'pg') {
+      const chain = segments.length === 0 ? (sql`${col}` as SQL) : this._pgJsonChain(col, segments, false)
+      lhs = sql`jsonb_array_length((${chain})::jsonb)` as SQL
+    } else if (this.dialect === 'mysql') {
+      lhs = segments.length === 0
+        ? (sql`JSON_LENGTH(${col})` as SQL)
+        : (sql`JSON_LENGTH(${col}, ${sql.raw(jsonPathLiteral(segments))})` as SQL)
+    } else {
+      lhs = segments.length === 0
+        ? (sql`json_array_length(${col})` as SQL)
+        : (sql`json_array_length(${col}, ${sql.raw(jsonPathLiteral(segments))})` as SQL)
+    }
+    return sql`${lhs} ${sql.raw(operator)} ${count}` as SQL
+  }
+
   // ── negated groups (whereNot / orWhereNot) ───────────────
   // Same surface as the native engine (#857): the callback's conditions wrap in
   // NOT (…) via Drizzle's `not()`; an empty callback is a no-op. The hydrating
@@ -856,6 +1090,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   /** Same shape as clauseToExpr but parameterised by the column owner —
    *  used to AND constraint clauses into a whereHas inner subquery. */
   private clauseToExprOn(table: unknown, clause: WhereClause): SQL {
+    // Arrow column (`meta->prefs->lang`) = a JSON-path predicate, Laravel-style
+    // (#871 parity). Detection here covers where/orWhere AND everything
+    // composed from them: group callbacks, whereNot, the whereIn/whereNull/
+    // whereBetween sugar — and whereHas constraint callbacks (rendered against
+    // the related table).
+    if (clause.column.includes('->')) return this._jsonClauseExpr(table, clause)
     const col = this.colOf(table, clause.column)
     // `where(col, op, raw('NOW()'))` — splice the expression verbatim, no bind.
     // The WhereOperator string IS its SQL text, so reuse it directly.
@@ -2088,10 +2328,13 @@ export class DrizzleAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
-    // Close the write client AND any read replicas (split connection).
+    // Close the write client AND any read replicas (split connection). Call
+    // end() ON the client — a detached reference loses `this` (harmless for
+    // postgres-js, whose end is a closure; a TypeError on mysql2's promise
+    // pool, whose end() reads `this.pool`).
     for (const db of [this.db, ...this.readDbs]) {
-      const end = db.$client?.end
-      if (typeof end === 'function') await end()
+      const client = db.$client
+      if (typeof client?.end === 'function') await client.end()
     }
   }
 
