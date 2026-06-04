@@ -2604,6 +2604,14 @@ export class DrizzleAdapter implements OrmAdapter {
     const startedAt = performance.now()
     const result = await exec.call(picked.db, this.rawSql(text, bindings))
     emitQueryEvent(this.listeners, text, bindings, startedAt, this.connectionName ?? this.dialect, picked.target)
+    if (this.dialect === 'mysql') {
+      // mysql2 resolves `db.execute()` to the TUPLE `[rows, fields]` — the
+      // bare-array check below would return the tuple itself as "rows", so
+      // every DB.select() on mysql came back as [rowsArray, fieldsArray].
+      // planetscale-serverless resolves to `{ rows }`, caught by the fallback.
+      const rows = Array.isArray(result) ? result[0] : (result as { rows?: Row[] })?.rows
+      return (Array.isArray(rows) ? rows : []) as Row[]
+    }
     if (Array.isArray(result)) return result as Row[]
     return ((result as { rows?: Row[] })?.rows) ?? []
   }
@@ -2626,6 +2634,12 @@ export class DrizzleAdapter implements OrmAdapter {
     const startedAt = performance.now()
     const result = (await exec.call(this.db, this.rawSql(text, bindings))) as unknown
     emitQueryEvent(this.listeners, text, bindings, startedAt, this.connectionName ?? this.dialect, this.split.tag)
+    if (this.dialect === 'mysql') {
+      // mysql2's `[ResultSetHeader, fields]` tuple — the bare-array branch
+      // below would report `.length` (always 2) instead of affectedRows.
+      const header = mysqlWriteHeader(result)
+      return header.affectedRows ?? header.rowsAffected ?? 0
+    }
     if (Array.isArray(result)) return result.length
     const r = result as {
       rowCount?: number; rowsAffected?: number; changes?: number; affectedRows?: number
