@@ -157,8 +157,8 @@ export async function inspectDatabase(
   const names = await listTables(executor, dialect)
   const sizes = await readSizes(executor, dialect)
 
-  let version: string | null = null
-  let database: string | null = null
+  let version: string | null
+  let database: string | null
   if (dialect.name === 'pg') {
     version  = String(await scalar(executor, `SELECT current_setting('server_version') AS v`) ?? '') || null
     database = String(await scalar(executor, `SELECT current_database() AS db`) ?? '') || null
