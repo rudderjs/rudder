@@ -235,6 +235,19 @@ await DB.transaction(async () => {
 raw-transaction pointer — a silent no-op would be a correctness bug for
 queue-style reservations.
 
+Both methods take an optional wait-behavior argument — mutually exclusive,
+both set throws:
+
+```ts
+.lockForUpdate({ skipLocked: true })  // skip rows another worker holds (FOR UPDATE SKIP LOCKED)
+.lockForUpdate({ noWait: true })      // fail immediately instead of blocking (NOWAIT)
+```
+
+`skipLocked` is *the* concurrent job-reservation pattern — each worker grabs
+only unclaimed rows, no lock queueing. Native + Drizzle on Postgres/MySQL 8;
+on SQLite the options are a no-op along with the lock itself. See
+[Pessimistic locking](/guide/database#pessimistic-locking).
+
 ## Raw SQL escape hatches
 
 `selectRaw` / `whereRaw` / `orWhereRaw` / `orderByRaw` accept raw fragments
