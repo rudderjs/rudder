@@ -740,6 +740,7 @@ const FORWARDED_QB_METHODS = new Set([
   'whereJsonDoesntContain', 'orWhereJsonDoesntContain',
   'whereJsonLength',       'orWhereJsonLength',
   'withExpression', 'withRecursiveExpression',
+  'whereExists', 'whereNotExists', 'orWhereExists', 'orWhereNotExists',
 ])
 
 /** Clear error for a QB method the active adapter doesn't implement — thrown by
@@ -1029,6 +1030,20 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * the CTE's own name). **Native engine only** — throws on Drizzle/Prisma.
    */
   withRecursiveExpression(name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): this
+  /**
+   * `WHERE EXISTS (…)` — an arbitrary EXISTS subquery: another native query
+   * (`Model.query()` chain — correlate via qualified
+   * `whereColumn('orders.userId', 'users.id')`) or a raw SQL string with `?`
+   * placeholders + `bindings`. For relation-shaped checks prefer `whereHas`.
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  whereExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
+  /** `WHERE NOT EXISTS (…)` — negated {@link whereExists}. */
+  whereNotExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
+  /** OR-rooted {@link whereExists}. */
+  orWhereExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
+  /** OR-rooted {@link whereNotExists}. */
+  orWhereNotExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -2364,6 +2379,12 @@ export abstract class Model {
   }
   static withRecursiveExpression<T extends typeof Model>(this: T, name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).withRecursiveExpression(name, query, opts)
+  }
+  static whereExists<T extends typeof Model>(this: T, query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereExists(query, bindings)
+  }
+  static whereNotExists<T extends typeof Model>(this: T, query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).whereNotExists(query, bindings)
   }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)

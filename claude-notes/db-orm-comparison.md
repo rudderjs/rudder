@@ -161,7 +161,7 @@
 1. `transaction(fn, { isolationLevel })` — every competitor has it; native pg/mysql support is trivial (`SET TRANSACTION ISOLATION LEVEL`); sqlite n/a.
 2. ~~CTEs~~ — **SHIPPED post-audit**: `withExpression`/`withRecursiveExpression` (native engine; raw-or-builder body, recursive via raw SQL + bindings, `join('name', …)` to reference).
 3. Lock options — `lockForUpdate({ skipLocked: true, noWait: true })`; queue driver would benefit immediately (SKIP LOCKED is THE job-reservation pattern).
-4. `whereExists(cb)` / `whereNotExists(cb)` subquery callbacks (we only have relation-shaped EXISTS via whereHas).
+4. ~~whereExists~~ — **SHIPPED post-audit**: `whereExists`/`whereNotExists`/`orWhere*` (native engine; builder-or-raw body, whereColumn correlation).
 
 **Tier 2 — differentiated-but-real:**
 5. Optimistic locking (`static version` column, OptimisticLockError) — TypeORM/MikroORM precedent.
