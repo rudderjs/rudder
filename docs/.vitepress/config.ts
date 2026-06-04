@@ -118,6 +118,7 @@ export default defineConfig({
           items: [
             { text: 'Getting Started', link: '/guide/database' },
             { text: 'Models', link: '/guide/database/models' },
+            { text: 'API Resources', link: '/guide/database/resources' },
             { text: 'Connections', link: '/guide/database/connections' },
             { text: 'Migrations', link: '/guide/database/migrations' },
             { text: 'Native Engine', link: '/guide/database/native' },
