@@ -59,6 +59,10 @@
       "import": "./dist/commands/schema-types.js",
       "types": "./dist/commands/schema-types.d.ts"
     },
+    "./commands/db-inspect": {
+      "import": "./dist/commands/db-inspect.js",
+      "types": "./dist/commands/db-inspect.d.ts"
+    },
     "./commands/prune": {
       "import": "./dist/commands/prune.js",
       "types": "./dist/commands/prune.d.ts"
