@@ -2,11 +2,12 @@
 //
 // Audit P0-2 (docs/plans/2026-06-05-data-layer-test-audit.md) — the MySQL half
 // of the orm-prisma live pair; see pg-live.test.ts for the client-generation
-// rationale. Connects through @prisma/adapter-mariadb (MySQL wire-compatible;
-// the same adapter PrismaAdapter.make's url path uses). Parsed options instead
-// of a URL string so we can set allowPublicKeyRetrieval — MySQL 8's default
-// caching_sha2_password auth needs it over a non-TLS connection (the CI
-// service container).
+// rationale. Construction goes through the REAL make() path (PrismaClient
+// class + driver + url → @prisma/adapter-mariadb), which is also the
+// regression gate for the useTextProtocol fix: MySQL can't prepare SAVEPOINT
+// statements (error 1295), so the nested-transaction test below fails on any
+// client whose mariadb adapter is left on the binary protocol — exactly what
+// this suite caught on its first CI run.
 //
 //   MYSQL_TEST_URL=mysql://root:rudder@127.0.0.1:3306/rudder_native_mysql_test pnpm --filter @rudderjs/orm-prisma test
 
@@ -25,12 +26,13 @@ const MYSQL_URL = process.env['MYSQL_TEST_URL']
 
 const TABLE = 'pr_live_accounts' // pr_live_* — distinct from rudder_* / dz_* live tables
 
-type LiveClient = NonNullable<PrismaConfig['client']> & {
-  $executeRawUnsafe(sql: string): Promise<number>
-  $disconnect(): Promise<void>
-}
+type PrismaClientCtor = NonNullable<PrismaConfig['PrismaClient']>
 
-type PrismaClientCtor = new (opts: { adapter: unknown }) => unknown
+/** The created adapter, widened to the teardown/raw seams the suite drives. */
+type LiveAdapter = OrmAdapter & {
+  affectingStatement(sql: string, bindings: readonly unknown[]): Promise<number>
+  disconnect(): Promise<void>
+}
 
 class Account extends Model {
   static override table = 'prLiveAccount' // Prisma delegate name (NOT the @@map'd SQL name)
@@ -50,7 +52,7 @@ if (!MYSQL_URL) {
   test('PrismaAdapter mysql live tests (skipped — set MYSQL_TEST_URL to run)', { skip: true }, () => {})
 } else {
   describe('PrismaAdapter (live mysql)', () => {
-    let client: LiveClient
+    let live: LiveAdapter
 
     before(async () => {
       // dist-test/mysql-live.test.js → ../fixtures/live/mysql (tsc rootDir is src).
@@ -70,40 +72,37 @@ if (!MYSQL_URL) {
       const PrismaClient = mod.PrismaClient ?? mod.default?.PrismaClient
       assert.ok(PrismaClient, 'generated client exposes PrismaClient')
 
-      const { PrismaMariaDb } = await import('@prisma/adapter-mariadb')
-      const u = new URL(MYSQL_URL)
-      client = new PrismaClient({
-        adapter: new PrismaMariaDb({
-          host:     u.hostname,
-          port:     u.port ? Number(u.port) : 3306,
-          user:     decodeURIComponent(u.username),
-          password: decodeURIComponent(u.password),
-          database: u.pathname.replace(/^\//, ''),
-          allowPublicKeyRetrieval: true,
-        }),
-      }) as LiveClient
+      // Drive the REAL make() construction path — mysql:// url parsing +
+      // PrismaMariaDb with useTextProtocol (the savepoint fix's home turf).
+      live = (await prisma({
+        PrismaClient,
+        driver: 'mysql',
+        url: MYSQL_URL,
+        connectionName: `pr-live-mysql-${process.pid}`,
+      }).create()) as LiveAdapter
 
-      await client.$executeRawUnsafe(`DROP TABLE IF EXISTS ${TABLE}`)
-      await client.$executeRawUnsafe(
+      await live.affectingStatement(`DROP TABLE IF EXISTS ${TABLE}`, [])
+      await live.affectingStatement(
         `CREATE TABLE ${TABLE} (
            id INT AUTO_INCREMENT PRIMARY KEY,
            name VARCHAR(191) NOT NULL UNIQUE,
            active TINYINT(1) NOT NULL DEFAULT 1,
            age INT NOT NULL DEFAULT 0
          )`,
+        [],
       )
 
       ModelRegistry.reset()
-      ModelRegistry.set(await prisma({ client, driver: 'mysql' }).create())
+      ModelRegistry.set(live)
     })
 
     after(async () => {
-      await client.$executeRawUnsafe(`DROP TABLE IF EXISTS ${TABLE}`)
-      await client.$disconnect()
+      await live.affectingStatement(`DROP TABLE IF EXISTS ${TABLE}`, []).catch(() => {})
+      await live.disconnect()
     })
 
     beforeEach(async () => {
-      await client.$executeRawUnsafe(`TRUNCATE TABLE ${TABLE}`)
+      await live.affectingStatement(`TRUNCATE TABLE ${TABLE}`, [])
     })
 
     it('create() inserts and returns the AUTO_INCREMENT id', async () => {

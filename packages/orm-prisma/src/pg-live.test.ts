@@ -35,13 +35,13 @@ const PG_URL = process.env['PG_TEST_URL']
 
 const TABLE = 'pr_live_accounts' // pr_live_* — distinct from rudder_* / dz_* live tables
 
-/** Structural shape of the real generated client, narrowed to what we drive. */
-type LiveClient = NonNullable<PrismaConfig['client']> & {
-  $executeRawUnsafe(sql: string): Promise<number>
-  $disconnect(): Promise<void>
-}
+type PrismaClientCtor = NonNullable<PrismaConfig['PrismaClient']>
 
-type PrismaClientCtor = new (opts: { adapter: unknown }) => unknown
+/** The created adapter, widened to the teardown/raw seams the suite drives. */
+type LiveAdapter = OrmAdapter & {
+  affectingStatement(sql: string, bindings: readonly unknown[]): Promise<number>
+  disconnect(): Promise<void>
+}
 
 class Account extends Model {
   static override table = 'prLiveAccount' // Prisma delegate name (NOT the @@map'd SQL name)
@@ -61,7 +61,7 @@ if (!PG_URL) {
   test('PrismaAdapter pg live tests (skipped — set PG_TEST_URL to run)', { skip: true }, () => {})
 } else {
   describe('PrismaAdapter (live pg)', () => {
-    let client: LiveClient
+    let live: LiveAdapter
 
     before(async () => {
       // dist-test/pg-live.test.js → ../fixtures/live/pg (tsc rootDir is src).
@@ -81,30 +81,39 @@ if (!PG_URL) {
       const PrismaClient = mod.PrismaClient ?? mod.default?.PrismaClient
       assert.ok(PrismaClient, 'generated client exposes PrismaClient')
 
-      const { PrismaPg } = await import('@prisma/adapter-pg')
-      client = new PrismaClient({ adapter: new PrismaPg({ connectionString: PG_URL }) }) as LiveClient
+      // Drive the REAL make() construction path (PrismaClient class + driver +
+      // url → @prisma/adapter-pg over a pg Pool) — the same code an app's
+      // config/database.ts goes through, so adapter-construction regressions
+      // surface here, not just against hand-built clients.
+      live = (await prisma({
+        PrismaClient,
+        driver: 'postgresql',
+        url: PG_URL,
+        connectionName: `pr-live-pg-${process.pid}`,
+      }).create()) as LiveAdapter
 
-      await client.$executeRawUnsafe(`DROP TABLE IF EXISTS ${TABLE}`)
-      await client.$executeRawUnsafe(
+      await live.affectingStatement(`DROP TABLE IF EXISTS ${TABLE}`, [])
+      await live.affectingStatement(
         `CREATE TABLE ${TABLE} (
            id SERIAL PRIMARY KEY,
            name TEXT NOT NULL UNIQUE,
            active BOOLEAN NOT NULL DEFAULT true,
            age INTEGER NOT NULL DEFAULT 0
          )`,
+        [],
       )
 
       ModelRegistry.reset()
-      ModelRegistry.set(await prisma({ client, driver: 'postgresql' }).create())
+      ModelRegistry.set(live)
     })
 
     after(async () => {
-      await client.$executeRawUnsafe(`DROP TABLE IF EXISTS ${TABLE}`)
-      await client.$disconnect()
+      await live.affectingStatement(`DROP TABLE IF EXISTS ${TABLE}`, []).catch(() => {})
+      await live.disconnect()
     })
 
     beforeEach(async () => {
-      await client.$executeRawUnsafe(`TRUNCATE ${TABLE} RESTART IDENTITY`)
+      await live.affectingStatement(`TRUNCATE ${TABLE} RESTART IDENTITY`, [])
     })
 
     it('create() inserts and returns the serial-generated id', async () => {
