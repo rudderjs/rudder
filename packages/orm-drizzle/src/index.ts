@@ -795,6 +795,18 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       return sql`${lhs} ${sql.raw(operator)} ${sql.raw(String(value.getValue()))}` as SQL
     }
     if (value === null && (operator === '=' || operator === '!=')) {
+      // mysql: JSON_EXTRACT returns a JSON `null` LITERAL (not SQL NULL) for
+      // an explicit json null — IS NULL on the (unquoted) extract matches
+      // missing keys only, and the UNQUOTE'd lhs would be the STRING 'null'.
+      // Laravel's grammar shape unifies both as null (mirrors the native
+      // Dialect.jsonNullComparison seam); the negation ANDs the inverses
+      // (JSON_TYPE(NULL) is NULL — three-valued without the IS NOT NULL arm).
+      if (this.dialect === 'mysql') {
+        const extract = sql`JSON_EXTRACT(${col}, ${sql.raw(jsonPathLiteral(segments))})` as SQL
+        return (operator === '='
+          ? sql`(${extract} IS NULL OR JSON_TYPE(${extract}) = 'NULL')`
+          : sql`(${extract} IS NOT NULL AND JSON_TYPE(${extract}) != 'NULL')`) as SQL
+      }
       return (operator === '=' ? isNull(lhs) : isNotNull(lhs)) as SQL
     }
     const norm = (v: unknown): unknown => (typeof v === 'boolean' ? this._jsonBooleanValue(v) : v)

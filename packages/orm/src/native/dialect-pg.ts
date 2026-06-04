@@ -91,6 +91,12 @@ export class PgDialect implements Dialect {
     return chain
   }
 
+  // `->>` surfaces BOTH a missing key and an explicit json null as SQL NULL —
+  // the plain IS [NOT] NULL on the (uncast) text chain is correct.
+  jsonNullComparison(column: string, segments: readonly JsonPathSegment[], negated: boolean): string {
+    return `${this.jsonExtract(column, segments, 'text')} IS ${negated ? 'NOT ' : ''}NULL`
+  }
+
   // The extraction is `::boolean`-cast — bind the JS boolean itself.
   jsonBoolean(value: boolean): unknown {
     return value

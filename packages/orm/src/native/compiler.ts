@@ -250,8 +250,11 @@ function compileComparison(lhs: string, operator: WhereOperator, value: unknown,
  * inside `compileExists`. The value's JS type picks the extraction shape (pg
  * casts; mysql booleans skip UNQUOTE), and booleans normalize per dialect via
  * the jsonBoolean seam. `IN` probes its first element so a list of numbers
- * compares against the typed extraction. Comparison semantics (Expression /
- * IN / IS NULL) ride the shared {@link compileComparison} tail.
+ * compares against the typed extraction. Null equality routes through the
+ * {@link Dialect.jsonNullComparison} seam (mysql needs Laravel's
+ * IS NULL OR JSON_TYPE = 'NULL' shape — a missing key and an explicit json
+ * null both count as null on every dialect). Other comparison semantics
+ * (Expression / IN) ride the shared {@link compileComparison} tail.
  */
 function compileJsonComparison(
   columnExpr: string,
@@ -261,6 +264,9 @@ function compileJsonComparison(
   dialect:    Dialect,
   b:          Bindings,
 ): string {
+  if (value === null && (operator === '=' || operator === '!=')) {
+    return dialect.jsonNullComparison(columnExpr, segments, operator === '!=')
+  }
   const probe = (operator === 'IN' || operator === 'NOT IN') && Array.isArray(value)
     ? value[0]
     : value
