@@ -41,6 +41,18 @@ function jobs(a: OrmAdapter, table: string): LockingQb {
   return a.query<JobRow>(table) as LockingQb
 }
 
+/** Drizzle wraps driver errors in `Failed query: <sql>` (DrizzleQueryError)
+ *  with the server error on `cause` — match the reason anywhere down the
+ *  cause chain instead of only on the top-level message. */
+function rejectsWith(pattern: RegExp): (err: unknown) => boolean {
+  return (err: unknown): boolean => {
+    for (let e = err as { message?: unknown; cause?: unknown } | undefined; e; e = e.cause as typeof e) {
+      if (pattern.test(String(e.message ?? ''))) return true
+    }
+    return false
+  }
+}
+
 // ── Postgres ────────────────────────────────────────────────
 if (!PG_URL) {
   test('drizzle lock options Postgres live tests (skipped — set PG_TEST_URL to run)', { skip: true }, () => {})
@@ -92,7 +104,9 @@ if (!PG_URL) {
           adapter.transaction!(async (txB) =>
             jobs(txB, TABLE).where('id', 1).lockForUpdate({ noWait: true }).get(),
           ),
-          /could not obtain lock/,
+          // pg 55P03; the SQL itself ('… for update nowait') is the fallback
+          // when the driver layer swallows the server message entirely.
+          rejectsWith(/could not obtain lock|nowait/i),
         )
       })
     })
@@ -164,8 +178,8 @@ if (!MYSQL_URL) {
           adapter.transaction!(async (txB) =>
             jobs(txB, TABLE).where('id', 1).lockForUpdate({ noWait: true }).get(),
           ),
-          // ER_LOCK_NOWAIT (3572)
-          /NOWAIT is set|could not be acquired/,
+          // ER_LOCK_NOWAIT (3572); SQL-text fallback as on pg.
+          rejectsWith(/NOWAIT is set|could not be acquired|nowait/i),
         )
       })
     })
