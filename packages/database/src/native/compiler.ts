@@ -107,6 +107,39 @@ export interface JoinNode {
   conditions: JoinCondition[]
 }
 
+/** Window functions `selectWindow` accepts. The map to SQL names lives in
+ *  {@link WINDOW_FUNCTION_SQL} — like the isolation-level map, the closed set
+ *  IS the injection gate (the function name is spliced, never bound). All five
+ *  are zero-argument ranking functions with identical syntax on SQLite ≥3.25,
+ *  Postgres, and MySQL 8 — no dialect seam needed. */
+export type WindowFunction = 'rowNumber' | 'rank' | 'denseRank' | 'percentRank' | 'cumeDist'
+
+const WINDOW_FUNCTION_SQL: Record<WindowFunction, string> = {
+  rowNumber:   'ROW_NUMBER',
+  rank:        'RANK',
+  denseRank:   'DENSE_RANK',
+  percentRank: 'PERCENT_RANK',
+  cumeDist:    'CUME_DIST',
+}
+
+/** Runtime membership check for {@link WindowFunction} — the builder's
+ *  injection gate for the spliced function name (JS callers bypass the TS
+ *  union). */
+export function isWindowFunction(fn: string): fn is WindowFunction {
+  return Object.prototype.hasOwnProperty.call(WINDOW_FUNCTION_SQL, fn)
+}
+
+/** One `fn() OVER (PARTITION BY … ORDER BY …) AS alias` projection entry from
+ *  `selectWindow`. Identifiers quote at compile time; directions are validated
+ *  to `asc`/`desc` by the builder. No bindings — the whole entry is identifiers
+ *  + keywords. */
+export interface WindowSelect {
+  fn:          WindowFunction
+  as:          string
+  partitionBy: string[]
+  orderBy:     Array<{ column: string; direction: 'asc' | 'desc' }>
+}
+
 /**
  * One entry in a HAVING clause.
  * - `clause` — `column <op> value` (the value binds); the column may be a
@@ -157,6 +190,11 @@ export interface NativeQueryState {
   ctes?:      CteNode[]
   /** `SELECT DISTINCT` from `distinct()` — de-duplicates the projected rows. */
   distinct?:  boolean
+  /** Window-function projections from `selectWindow(...)`. ADDITIVE — appended
+   *  to the projection (after structured/raw selects, or after the default `*`
+   *  when none replace it), unlike `selectRaw`'s REPLACE semantics: a ranking
+   *  column is almost always wanted *alongside* the row. */
+  windows?:   WindowSelect[]
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
   softDelete: 'exclude' | 'only' | 'with'
   /** Column the soft-delete filter targets. Default `deletedAt`. */
@@ -632,7 +670,11 @@ function compileSelectBody(
   // compiled BEFORE the WHERE so their bindings land first — matching the SQL
   // text order (SELECT list precedes WHERE).
   const aggParts = (state.aggregates ?? []).map(req => compileAggregateSubselect(state.table, req, dialect, b))
-  const selectList = aggParts.length > 0 ? [baseSelect, ...aggParts].join(', ') : baseSelect
+  // Window projections are ADDITIVE (appended after the base projection +
+  // aggregates) and bind-free — pure identifiers and keywords.
+  const windowParts = (state.windows ?? []).map(w => compileWindowSelect(w, dialect))
+  const extraParts = [...aggParts, ...windowParts]
+  const selectList = extraParts.length > 0 ? [baseSelect, ...extraParts].join(', ') : baseSelect
 
   let sql = `SELECT ${state.distinct ? 'DISTINCT ' : ''}${selectList} FROM ${table}`
 
@@ -651,6 +693,21 @@ function compileSelectBody(
   if (having) sql += ` HAVING ${having}`
 
   return sql
+}
+
+/** `ROW_NUMBER() OVER (PARTITION BY "a" ORDER BY "b" DESC) AS "alias"`. The
+ *  function name comes from the closed {@link WINDOW_FUNCTION_SQL} map (the
+ *  injection gate — `selectWindow` validates membership); every identifier is
+ *  quoted; directions are pre-validated to `asc`/`desc`. */
+function compileWindowSelect(w: WindowSelect, dialect: Dialect): string {
+  const parts: string[] = []
+  if (w.partitionBy.length > 0) {
+    parts.push(`PARTITION BY ${w.partitionBy.map(c => dialect.quoteId(c)).join(', ')}`)
+  }
+  if (w.orderBy.length > 0) {
+    parts.push(`ORDER BY ${w.orderBy.map(o => `${dialect.quoteId(o.column)} ${o.direction === 'desc' ? 'DESC' : 'ASC'}`).join(', ')}`)
+  }
+  return `${WINDOW_FUNCTION_SQL[w.fn]}() OVER (${parts.join(' ')}) AS ${dialect.quoteId(w.as)}`
 }
 
 /** Compile `SELECT COUNT(*) AS count FROM ... WHERE ...` for `count()` /

@@ -20,6 +20,7 @@ unsupported throws a clear error naming the alternative — never a silent no-op
 | `groupBy` / `having` / `havingRaw` | ✅ | ✅ | `DB.select` |
 | `union` / `unionAll` | ✅ | ✅ | `DB.select` |
 | CTEs (`withExpression`) | ✅ | `DB.select` | `DB.select` |
+| Window functions (`selectWindow`) | ✅ | `DB.select` | `DB.select` |
 | `whereExists` / `whereNotExists` | ✅ | `DB.select` | `DB.select` |
 | `whereColumn` | ✅ | ✅ | `DB.select` |
 | Date helpers (`whereDate` …) | ✅ | ✅ | `DB.select` |
@@ -89,6 +90,37 @@ const byCity = await User.query()
 `count()` and `paginate()` of a grouped query count the number of **groups**
 (Laravel parity), not per-group rows. `having('alias', …)` on a SELECT alias
 works on SQLite/MySQL but not Postgres — use `havingRaw` for portability.
+
+## Window functions — `selectWindow`
+
+`selectWindow(fn, opts)` adds a typed ranking projection — `ROW_NUMBER()` /
+`RANK()` / `DENSE_RANK()` / `PERCENT_RANK()` / `CUME_DIST()` `OVER (PARTITION
+BY … ORDER BY …)`:
+
+```ts
+// Each user's posts ranked by views — 1, 2, 3 within every userId partition
+const ranked = await Post.selectWindow('rowNumber', {
+  as:          'rn',
+  partitionBy: 'userId',
+  orderBy:     { column: 'views', direction: 'desc' },
+}).get()
+
+ranked[0].rn // 1
+```
+
+Unlike `selectRaw`, `selectWindow` is **additive** — it appends to the
+projection (`SELECT *, … AS "rn"`), so rows still hydrate as full models with
+the alias as an extra attribute. `partitionBy` takes one column or an array;
+`orderBy` takes a column string (asc), a `{ column, direction }` object, or an
+array of either. Works identically on SQLite (3.25+), Postgres, and MySQL 8.
+
+Two boundaries to know:
+
+- SQL forbids window results in `WHERE` — to filter on a rank (e.g. "top 2 per
+  user"), put the windowed query in a CTE and join it, or use `DB.select`.
+- For aggregates `OVER`, `lag`/`lead`, `ntile`, or frame clauses, use
+  `selectRaw('SUM(total) OVER (PARTITION BY "userId") AS running', [])` — the
+  typed surface covers the zero-argument ranking set.
 
 ## Combining queries — `union` / `unionAll`
 
