@@ -42,9 +42,9 @@
   },
   "dependencies": {
     "@rudderjs/console": "workspace:^",
+    "@rudderjs/contracts": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
-    "@rudderjs/contracts": "workspace:^",
     "@rudderjs/support": "workspace:^"
   },
   "peerDependencies": {
@@ -60,19 +60,20 @@
     }
   },
   "optionalDependencies": {
-    "better-sqlite3": "^12.0.0",
-    "@prisma/adapter-better-sqlite3": "^7.0.0",
-    "pg": "^8.0.0",
-    "@prisma/adapter-pg": "^7.0.0",
     "@libsql/client": "^0.17.0",
+    "@prisma/adapter-better-sqlite3": "^7.0.0",
     "@prisma/adapter-libsql": "^7.0.0",
+    "@prisma/adapter-mariadb": "^7.0.0",
+    "@prisma/adapter-pg": "^7.0.0",
+    "better-sqlite3": "^12.0.0",
     "mariadb": "^3.0.0",
-    "@prisma/adapter-mariadb": "^7.0.0"
+    "pg": "^8.0.0"
   },
   "devDependencies": {
+    "@prisma/client-runtime-utils": "^7.4.2",
     "@rudderjs/database": "workspace:^",
-    "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.0.0",
+    "@types/node": "^20.0.0",
     "@types/pg": "^8.0.0",
     "prisma": "^7.0.0",
     "typescript": "^5.4.0"

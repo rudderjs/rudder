@@ -364,11 +364,11 @@ jobs:
         run: node scripts/orm-standalone-smoke.mjs
 
   orm-pg:
-    # Live Postgres conformance for the native ORM engine + the Drizzle adapter.
-    # The default build-test matrix runs SQLite only (in-memory better-sqlite3); the pg
-    # round-trip tests (orm's drivers/postgres.test.ts + the relocated engine suites in
-    # packages/database + orm-drizzle's PG-gated blocks) skip
-    # themselves unless PG_TEST_URL is set. This job stands up a real Postgres
+    # Live Postgres conformance for the native ORM engine + the Drizzle and Prisma
+    # adapters. The default build-test matrix runs SQLite only (in-memory better-sqlite3);
+    # the pg round-trip tests (orm's drivers/postgres.test.ts + the relocated engine suites
+    # in packages/database + orm-drizzle's PG-gated blocks + orm-prisma's pg-live suite)
+    # skip themselves unless PG_TEST_URL is set. This job stands up a real Postgres
     # service and points the suite at it, so the pg dialect + driver are exercised
     # end-to-end in CI instead of only on a maintainer's machine. Linux-only —
     # GitHub service containers don't run on Windows runners (the matrix's Windows
@@ -417,14 +417,14 @@ jobs:
       - name: ORM tests against live Postgres
         env:
           PG_TEST_URL: postgres://rudder:rudder@localhost:5432/rudder_native_pg_test
-        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --filter @rudderjs/orm-drizzle --force
+        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --filter @rudderjs/orm-drizzle --filter @rudderjs/orm-prisma --force
 
   orm-mysql:
-    # Live MySQL conformance for the native ORM engine + the Drizzle adapter —
+    # Live MySQL conformance for the native ORM engine + the Drizzle and Prisma adapters —
     # mirrors orm-pg. The default build-test matrix runs SQLite only; the mysql round-trip
     # tests (orm's drivers/mysql.test.ts + the relocated engine suites in packages/database
-    # + orm-drizzle's MySQL-gated blocks, incl. the post-#882 mysql-writes regression suite)
-    # skip themselves unless MYSQL_TEST_URL is set. This job stands up a real MySQL
+    # + orm-drizzle's MySQL-gated blocks, incl. the post-#882 mysql-writes regression suite,
+    # + orm-prisma's mysql-live suite) skip themselves unless MYSQL_TEST_URL is set. This job stands up a real MySQL
     # service so the mysql dialect + driver (and the no-RETURNING write path) are
     # exercised end-to-end in CI. Linux-only — GitHub service containers don't run
     # on Windows runners.
@@ -471,7 +471,7 @@ jobs:
       - name: ORM tests against live MySQL
         env:
           MYSQL_TEST_URL: mysql://root:rudder@127.0.0.1:3306/rudder_native_mysql_test
-        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --filter @rudderjs/orm-drizzle --force
+        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --filter @rudderjs/orm-drizzle --filter @rudderjs/orm-prisma --force
 
   docs-build:
     # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the

@@ -1,0 +1,22 @@
+// Live-test fixture schema (Postgres). `pg-live.test.ts` runs `prisma generate`
+// against this file in its before() hook and dynamic-imports the generated
+// client from ./client (gitignored). No datasource url — Prisma 7 schemas
+// don't carry one; the suite connects through a driver adapter
+// (@prisma/adapter-pg) passed to the PrismaClient constructor.
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model PrLiveAccount {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  active Boolean @default(true)
+  age    Int     @default(0)
+
+  @@map("pr_live_accounts")
+}
