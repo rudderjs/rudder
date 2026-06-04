@@ -40,6 +40,7 @@ import {
   type HavingNode,
   type NativeQueryState,
   type CteNode,
+  type SubqueryBody,
 } from './compiler.js'
 
 /** One-time dev warning that native `with(<direct relation>)` doesn't eager-load
@@ -588,6 +589,62 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       body = { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
     }
     this._ctes.push({ name, recursive, body, ...(opts.columns !== undefined ? { columns: opts.columns } : {}) })
+    return this
+  }
+
+  // ── EXISTS subqueries ────────────────────────────────────
+
+  /**
+   * `WHERE EXISTS (…)` — an arbitrary EXISTS subquery. `query` is another
+   * native query (`Model.query()` chain — correlate to the outer table via
+   * qualified `whereColumn('orders.userId', 'users.id')` refs) or a raw SQL
+   * string with `?` placeholders + `bindings`. For relation-shaped existence
+   * checks prefer `whereHas` — this is the escape hatch for subqueries no
+   * declared relation describes.
+   */
+  whereExists(query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): this {
+    return this._addExists('AND', false, query, bindings)
+  }
+
+  /** `WHERE NOT EXISTS (…)` — negated {@link whereExists}. */
+  whereNotExists(query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): this {
+    return this._addExists('AND', true, query, bindings)
+  }
+
+  /** OR-rooted {@link whereExists}. */
+  orWhereExists(query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): this {
+    return this._addExists('OR', false, query, bindings)
+  }
+
+  /** OR-rooted {@link whereNotExists}. */
+  orWhereNotExists(query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): this {
+    return this._addExists('OR', true, query, bindings)
+  }
+
+  private _addExists(
+    boolean: 'AND' | 'OR',
+    negated: boolean,
+    query: QueryBuilder<unknown> | string,
+    bindings?: readonly unknown[],
+  ): this {
+    let body: SubqueryBody
+    if (typeof query === 'string') {
+      body = { kind: 'raw', raw: { sql: query, bindings: bindings ?? [] } }
+    } else {
+      if (bindings !== undefined) {
+        throw new Error(
+          '[RudderJS ORM native] whereExists() bindings are only valid with a raw-SQL body — a query-builder body carries its own.',
+        )
+      }
+      const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
+      if (!(target instanceof NativeQueryBuilder)) {
+        throw new Error(
+          '[RudderJS ORM native] whereExists() requires a native query builder or a raw SQL string body.',
+        )
+      }
+      body = { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
+    }
+    this._conditions.push({ kind: 'exists', boolean, negated, body })
     return this
   }
 

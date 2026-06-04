@@ -51,6 +51,17 @@ export type ConditionNode =
   | { kind: 'json';         boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; operator: WhereOperator; value: unknown }
   | { kind: 'jsonContains'; boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; value: unknown; negated: boolean }
   | { kind: 'jsonLength';   boolean: 'AND' | 'OR'; column: string; segments: readonly JsonPathSegment[]; operator: WhereOperator; value: number }
+  | { kind: 'exists';       boolean: 'AND' | 'OR'; negated: boolean; body: SubqueryBody }
+
+/**
+ * A subquery body — another native query's captured state (`Model.query()` /
+ * `adapter.query(...)` chains) or a raw SQL fragment. Shared by CTE bodies
+ * ({@link CteNode}) and `whereExists` predicates. Builder-backed bodies keep
+ * their own UNION members but drop ORDER BY / LIMIT (same rule as `union()`).
+ */
+export type SubqueryBody =
+  | { kind: 'state'; state: NativeQueryState }
+  | { kind: 'raw'; raw: RawFragment }
 
 /**
  * A single ORDER BY entry — either a structured `column direction` clause or a
@@ -73,7 +84,7 @@ export interface CteNode {
   name:      string
   recursive: boolean
   columns?:  readonly string[]
-  body:      { kind: 'state'; state: NativeQueryState } | { kind: 'raw'; raw: RawFragment }
+  body:      SubqueryBody
 }
 
 /** The four join flavors. `cross` carries no ON conditions. */
@@ -341,6 +352,13 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       const op = OPERATOR_SQL[node.operator]
       if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.jsonLength(dialect.quoteId(node.column), node.segments)} ${op} ${b.add(node.value)}`
+    } else if (node.kind === 'exists') {
+      // whereExists / whereNotExists — an arbitrary [NOT] EXISTS subquery.
+      // Builder-backed bodies correlate to the outer query via qualified
+      // whereColumn refs ('orders.userId' = 'users.id'); raw bodies rebind
+      // their ? placeholders through the shared Bindings (text order — the
+      // subquery sits exactly here in the WHERE).
+      frag = `${node.negated ? 'NOT ' : ''}EXISTS (${compileSubqueryBody(node.body, dialect, b)})`
     } else {
       const inner = compileNodes(node.children, dialect, b)
       // An empty group contributes nothing — skip it entirely so it doesn't
@@ -559,19 +577,25 @@ function compileCtePrefix(ctes: readonly CteNode[], dialect: Dialect, b: Binding
     const cols = cte.columns && cte.columns.length > 0
       ? ` (${cte.columns.map(c => dialect.quoteId(c)).join(', ')})`
       : ''
-    let body: string
-    if (cte.body.kind === 'raw') {
-      body = compileRaw(cte.body.raw, b)
-    } else {
-      body = compileSelectBody(cte.body.state, dialect, b)
-      for (const u of cte.body.state.unions ?? []) {
-        body += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
-      }
-    }
-    return `${name}${cols} AS (${body})`
+    return `${name}${cols} AS (${compileSubqueryBody(cte.body, dialect, b)})`
   })
   const recursive = ctes.some(c => c.recursive)
   return `WITH ${recursive ? 'RECURSIVE ' : ''}${parts.join(', ')} `
+}
+
+/**
+ * Compile a {@link SubqueryBody} (CTE body / `whereExists` subquery) through
+ * the caller's shared {@link Bindings}. Builder-backed bodies compile via
+ * {@link compileSelectBody} plus their own UNION members (ORDER BY / LIMIT
+ * dropped — the UNION-member rule); raw bodies rebind their `?` placeholders.
+ */
+function compileSubqueryBody(body: SubqueryBody, dialect: Dialect, b: Bindings): string {
+  if (body.kind === 'raw') return compileRaw(body.raw, b)
+  let sql = compileSelectBody(body.state, dialect, b)
+  for (const u of body.state.unions ?? []) {
+    sql += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
+  }
+  return sql
 }
 
 /**
