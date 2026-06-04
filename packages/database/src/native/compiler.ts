@@ -60,6 +60,22 @@ export type OrderItem =
   | OrderClause
   | { kind: 'raw'; raw: RawFragment }
 
+/**
+ * One common table expression from `withExpression` / `withRecursiveExpression`.
+ * The body is either another native query's state (`Model.query()` /
+ * `adapter.query(...)` chains, captured like a UNION member) or a raw SQL
+ * fragment — recursive bodies are usually raw, because they reference the CTE's
+ * own name (`… UNION ALL SELECT … FROM cte_name …`), which a table-rooted
+ * builder can't express. `columns` (optional) emits the explicit column list
+ * (`name (col1, col2)`) most useful on recursive CTEs.
+ */
+export interface CteNode {
+  name:      string
+  recursive: boolean
+  columns?:  readonly string[]
+  body:      { kind: 'state'; state: NativeQueryState } | { kind: 'raw'; raw: RawFragment }
+}
+
 /** The four join flavors. `cross` carries no ON conditions. */
 export type JoinType = 'inner' | 'left' | 'right' | 'cross'
 
@@ -122,6 +138,11 @@ export interface NativeQueryState {
    *  own ORDER BY / LIMIT / OFFSET / lock are ignored — the BASE query's apply to
    *  the whole combined result. Member bindings follow the base body's in order. */
   unions?:    Array<{ all: boolean; state: NativeQueryState }>
+  /** Common table expressions from `withExpression(...)`/`withRecursiveExpression(...)`.
+   *  Emitted as a `WITH [RECURSIVE] name [(cols)] AS (body), …` prefix on reads
+   *  (`compileSelect` + `compileCount`); their bindings come FIRST (SQL text
+   *  order — the WITH clause precedes the main SELECT). */
+  ctes?:      CteNode[]
   /** `SELECT DISTINCT` from `distinct()` — de-duplicates the projected rows. */
   distinct?:  boolean
   /** Soft-delete scoping resolved by the builder from the Model + with/onlyTrashed. */
@@ -485,9 +506,13 @@ export function compileSelect(
 ): CompiledQuery {
   const b = new Bindings(dialect)
 
+  // WITH prefix first — CTE-body bindings precede every other parameter (the
+  // WITH clause is the first SQL text). '' when the query declares no CTEs.
+  let sql = compileCtePrefix(state.ctes ?? [], dialect, b)
+
   // Base SELECT body (projection → HAVING; no ORDER BY / LIMIT / lock — those
   // apply to the whole result, after any UNION). `overrides` only touch the base.
-  let sql = compileSelectBody(state, dialect, b, overrides)
+  sql += compileSelectBody(state, dialect, b, overrides)
 
   // UNION / UNION ALL members. Each member's body shares the same `Bindings`, so
   // its parameters land positionally after the base body's. Member ORDER BY /
@@ -516,6 +541,37 @@ export function compileSelect(
   if (state.lock) sql += dialect.lockSql(state.lock)
 
   return { sql, bindings: b.values }
+}
+
+/**
+ * Compile the `WITH [RECURSIVE] name [(cols)] AS (body), …` prefix (trailing
+ * space included) — or `''` when `ctes` is empty. `RECURSIVE` is a property of
+ * the whole WITH list (standard SQL): one recursive member marks the list.
+ * Builder-backed bodies compile through {@link compileSelectBody} (+ their own
+ * UNION members — recursive-style bodies built from two queries `union`ed work);
+ * raw bodies rebind their `?` placeholders through the shared {@link Bindings}.
+ * Body ORDER BY / LIMIT are dropped, same rule as UNION members.
+ */
+function compileCtePrefix(ctes: readonly CteNode[], dialect: Dialect, b: Bindings): string {
+  if (ctes.length === 0) return ''
+  const parts = ctes.map(cte => {
+    const name = dialect.quoteId(cte.name)
+    const cols = cte.columns && cte.columns.length > 0
+      ? ` (${cte.columns.map(c => dialect.quoteId(c)).join(', ')})`
+      : ''
+    let body: string
+    if (cte.body.kind === 'raw') {
+      body = compileRaw(cte.body.raw, b)
+    } else {
+      body = compileSelectBody(cte.body.state, dialect, b)
+      for (const u of cte.body.state.unions ?? []) {
+        body += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
+      }
+    }
+    return `${name}${cols} AS (${body})`
+  })
+  const recursive = ctes.some(c => c.recursive)
+  return `WITH ${recursive ? 'RECURSIVE ' : ''}${parts.join(', ')} `
 }
 
 /**
@@ -575,6 +631,9 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   const table = dialect.quoteId(state.table)
   const countCol = dialect.quoteId('count')
 
+  // WITH prefix first (same rule as compileSelect) — CTE bindings precede all.
+  const cte = compileCtePrefix(state.ctes ?? [], dialect, b)
+
   // A UNION counts the rows of the COMBINED result — wrap the whole union body
   // (each member carries its own GROUP BY/HAVING). Takes precedence over the
   // GROUP BY wrap below; member ORDER BY/LIMIT are irrelevant to a count.
@@ -582,7 +641,7 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   if (unions.length > 0) {
     let inner = compileSelectBody(state, dialect, b)
     for (const u of unions) inner += ` UNION ${u.all ? 'ALL ' : ''}${compileSelectBody(u.state, dialect, b)}`
-    const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
+    const sql = `${cte}SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
     return { sql, bindings: b.values }
   }
 
@@ -590,7 +649,7 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   // DISTINCT body (a bare `COUNT(DISTINCT *)` isn't valid SQL).
   if (state.distinct) {
     const inner = compileSelectBody(state, dialect, b)
-    const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
+    const sql = `${cte}SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
     return { sql, bindings: b.values }
   }
 
@@ -600,7 +659,7 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
 
   // No GROUP BY → a plain scalar COUNT(*).
   if (groupBy.length === 0) {
-    let sql = `SELECT COUNT(*) AS ${countCol} FROM ${table}`
+    let sql = `${cte}SELECT COUNT(*) AS ${countCol} FROM ${table}`
     if (joins) sql += ` ${joins}`
     if (where) sql += ` WHERE ${where}`
     return { sql, bindings: b.values }
@@ -615,7 +674,7 @@ export function compileCount(state: NativeQueryState, dialect: Dialect): Compile
   inner += ` GROUP BY ${compileGroupBy(groupBy, dialect)}`
   const having = compileHaving(state.having ?? [], dialect, b)
   if (having) inner += ` HAVING ${having}`
-  const sql = `SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
+  const sql = `${cte}SELECT COUNT(*) AS ${countCol} FROM (${inner}) AS ${dialect.quoteId('aggregate')}`
   return { sql, bindings: b.values }
 }
 

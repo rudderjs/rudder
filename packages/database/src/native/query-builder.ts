@@ -39,6 +39,7 @@ import {
   type JoinCondition,
   type HavingNode,
   type NativeQueryState,
+  type CteNode,
 } from './compiler.js'
 
 /** One-time dev warning that native `with(<direct relation>)` doesn't eager-load
@@ -72,6 +73,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _groupBy:    string[]        = []
   private readonly _having:     HavingNode[]    = []
   private readonly _unions:     Array<{ all: boolean; state: NativeQueryState }> = []
+  private readonly _ctes:       CteNode[]       = []
   private readonly _rawSelects: RawFragment[]   = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
@@ -137,6 +139,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       groupBy:         this._groupBy,
       having:          this._having,
       unions:          this._unions,
+      ctes:            this._ctes,
       distinct:        this._distinct,
       lock:            this._lock,
     }
@@ -531,6 +534,60 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       )
     }
     this._unions.push({ all, state: (target as NativeQueryBuilder<T>)._state() })
+    return this
+  }
+
+  // ── common table expressions ─────────────────────────────
+
+  /**
+   * `WITH name AS (…)` — prepend a common table expression the main query can
+   * reference (typically via `join('name', …)` — the FROM stays the model's
+   * table). `query` is another native query (`Model.query()` chain) or a raw
+   * SQL string with `?` placeholders + `opts.bindings`. CTE bindings precede
+   * the main query's (SQL text order). Read-side only (`get`/`first`/`find`/
+   * `count`/`paginate`); a builder-backed body keeps its own UNION members but
+   * drops ORDER BY / LIMIT (same rule as `union()`).
+   */
+  withExpression(name: string, query: QueryBuilder<unknown> | string, opts: { bindings?: readonly unknown[]; columns?: readonly string[] } = {}): this {
+    return this._addCte(name, query, opts, false)
+  }
+
+  /**
+   * `WITH RECURSIVE name [(cols)] AS (…)` — like {@link withExpression} for a
+   * self-referencing body. Recursive bodies are usually a raw SQL string (the
+   * body references the CTE's own name, which a table-rooted builder can't
+   * express): `withRecursiveExpression('tree', 'SELECT … UNION ALL SELECT …
+   * FROM t JOIN tree …', { bindings: [rootId], columns: ['id'] })`.
+   */
+  withRecursiveExpression(name: string, query: QueryBuilder<unknown> | string, opts: { bindings?: readonly unknown[]; columns?: readonly string[] } = {}): this {
+    return this._addCte(name, query, opts, true)
+  }
+
+  private _addCte(
+    name: string,
+    query: QueryBuilder<unknown> | string,
+    opts: { bindings?: readonly unknown[]; columns?: readonly string[] },
+    recursive: boolean,
+  ): this {
+    let body: CteNode['body']
+    if (typeof query === 'string') {
+      body = { kind: 'raw', raw: { sql: query, bindings: opts.bindings ?? [] } }
+    } else {
+      if (opts.bindings !== undefined) {
+        throw new Error(
+          '[RudderJS ORM native] withExpression() bindings are only valid with a raw-SQL body — a query-builder body carries its own.',
+        )
+      }
+      // Same proxy unwrap as union() — accepts Model.query() chains.
+      const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
+      if (!(target instanceof NativeQueryBuilder)) {
+        throw new Error(
+          '[RudderJS ORM native] withExpression() requires a native query builder or a raw SQL string body.',
+        )
+      }
+      body = { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
+    }
+    this._ctes.push({ name, recursive, body, ...(opts.columns !== undefined ? { columns: opts.columns } : {}) })
     return this
   }
 
