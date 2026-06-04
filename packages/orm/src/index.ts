@@ -741,6 +741,7 @@ const FORWARDED_QB_METHODS = new Set([
   'whereJsonLength',       'orWhereJsonLength',
   'withExpression', 'withRecursiveExpression',
   'whereExists', 'whereNotExists', 'orWhereExists', 'orWhereNotExists',
+  'insertUsing',
 ])
 
 /** Clear error for a QB method the active adapter doesn't implement — thrown by
@@ -1044,6 +1045,14 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   orWhereExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
   /** OR-rooted {@link whereNotExists}. */
   orWhereNotExists(query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): this
+  /**
+   * `INSERT INTO table (cols) SELECT …` — insert rows produced by a subquery
+   * (another native query or raw SQL + bindings). The column list maps the
+   * subquery projection positionally; returns the inserted-row count. Bulk
+   * data-plane write — no observer events, no fillable/guarded filtering.
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  insertUsing(columns: readonly string[], query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): Promise<number>
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -1916,8 +1925,11 @@ export abstract class Model {
             return () => { throw adapterMethodUnsupported(prop) }
           }
           return (...args: unknown[]): unknown => {
-            ;(impl as (...a: unknown[]) => unknown).apply(target, args)
-            return proxy
+            // Chainables return the adapter QB (`this`) — re-wrap to the proxy.
+            // Promise-returning terminals in the set (`insertUsing`) must pass
+            // their result through untouched.
+            const out = (impl as (...a: unknown[]) => unknown).apply(target, args)
+            return out === target ? proxy : out
           }
         }
         // whereNot / orWhereNot — negated groups. Same forward-or-throw shape
@@ -2385,6 +2397,9 @@ export abstract class Model {
   }
   static whereNotExists<T extends typeof Model>(this: T, query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).whereNotExists(query, bindings)
+  }
+  static insertUsing<T extends typeof Model>(this: T, columns: readonly string[], query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): Promise<number> {
+    return Model._q(this).insertUsing(columns, query, bindings)
   }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)

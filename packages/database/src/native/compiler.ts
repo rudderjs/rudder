@@ -781,6 +781,35 @@ export function compileInsert(
 }
 
 /**
+ * Compile `INSERT INTO table (cols) SELECT …` for `insertUsing(columns, query)`
+ * — the rows come from a subquery (builder state or raw SQL), not VALUES
+ * tuples. Column names are identifier-quoted; the subquery compiles through
+ * the shared {@link Bindings} (raw `?` placeholders rebound per dialect). The
+ * column list is REQUIRED — the subquery's projection order must be pinned to
+ * named target columns, a bare `INSERT INTO t SELECT …` is a column-order
+ * footgun.
+ */
+export function compileInsertUsing(
+  state: NativeQueryState,
+  dialect: Dialect,
+  columns: readonly string[],
+  body: SubqueryBody,
+  opts: { returning?: boolean } = {},
+): CompiledQuery {
+  if (columns.length === 0) {
+    throw new NativeOrmError(
+      'NATIVE_INSERT_USING_COLUMNS',
+      'insertUsing() requires an explicit target column list — the subquery projection maps to it positionally.',
+    )
+  }
+  const b = new Bindings(dialect)
+  const cols = columns.map(c => dialect.quoteId(c)).join(', ')
+  let sql = `INSERT INTO ${dialect.quoteId(state.table)} (${cols}) ${compileSubqueryBody(body, dialect, b)}`
+  if (opts.returning) sql += ` RETURNING *`
+  return { sql, bindings: b.values }
+}
+
+/**
  * Render the SET clause for an UPDATE payload containing arrow-path keys
  * (`'meta->prefs->lang': 'en'` → `"meta" = json_set("meta", '$."prefs"."lang"', json(?))`).
  *
