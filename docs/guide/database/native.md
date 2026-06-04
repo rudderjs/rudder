@@ -1,21 +1,33 @@
 # Native Engine
 
-The **native engine** is RudderJS's built-in, first-party SQL query engine. It ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — no external ORM, no separate adapter package. It talks directly to `better-sqlite3`, brings its own Laravel-style schema builder and migration runner, and **generates your models' column types from the migrated schema** so they can't drift.
+The **native engine** is RudderJS's built-in, first-party SQL query engine. It ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — no external ORM, no separate adapter package. It talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), brings its own Laravel-style schema builder and migration runner, and **generates your models' column types from the migrated schema** so they can't drift.
 
-It's the default engine scaffolded by `create-rudder`. Pick it when you want a zero-dependency data layer and SQLite is enough; reach for the [Prisma](/guide/database/prisma) or [Drizzle](/guide/database/drizzle) adapters when you need Postgres or MySQL today.
+It's the default engine scaffolded by `create-rudder`. Pick it when you want a first-party data layer with no external ORM; reach for the [Prisma](/guide/database/prisma) or [Drizzle](/guide/database/drizzle) adapters when you want their schema tooling or ecosystem.
 
-::: tip SQLite only (for now)
-The native engine currently supports the **`sqlite`** driver. A Postgres dialect is in progress; MySQL follows. Until they land, use Prisma or Drizzle for Postgres/MySQL — the `Model` API is identical, so switching engines later is a config change, not a rewrite.
+::: tip Three drivers
+The native engine supports **`sqlite`** (better-sqlite3), **`pg`** (postgres), and **`mysql`** (mysql2). Each is an optional peer, lazy-loaded only when a connection selects it — the `Model` API is identical across all three, so switching is a config change, not a rewrite.
 :::
 
 ## Install
 
-```bash
+Install `@rudderjs/orm` plus the driver for your database — each is an optional peer, lazy-loaded and never reaching a client bundle. No `@rudderjs/orm-*` adapter package is needed.
+
+::: code-group
+
+```bash [SQLite]
 pnpm add @rudderjs/orm better-sqlite3
 pnpm add -D @types/better-sqlite3
 ```
 
-`better-sqlite3` is the only peer — it's lazy-loaded and never reaches a client bundle. No `@rudderjs/orm-*` adapter package is needed.
+```bash [Postgres]
+pnpm add @rudderjs/orm postgres
+```
+
+```bash [MySQL]
+pnpm add @rudderjs/orm mysql2
+```
+
+:::
 
 With `create-rudder`, choose **Native** at the Database prompt (it's the default) and this is all wired for you.
 
@@ -36,11 +48,22 @@ export default {
       driver: 'sqlite' as const,
       url:    Env.get('DATABASE_URL', 'file:./dev.db'),
     },
+    // Postgres and MySQL use the same shape — just swap the driver:
+    pg: {
+      engine: 'native' as const,
+      driver: 'pg' as const,
+      url:    Env.get('DATABASE_URL', 'postgres://user:pass@localhost:5432/app'),
+    },
+    mysql: {
+      engine: 'native' as const,
+      driver: 'mysql' as const,
+      url:    Env.get('DATABASE_URL', 'mysql://user:pass@localhost:3306/app'),
+    },
   },
 }
 ```
 
-`url` accepts a `file:` path, a bare path, or `:memory:`. Most apps just set `DATABASE_URL` in `.env`.
+For sqlite, `url` accepts a `file:` path, a bare path, or `:memory:`; pg/mysql take a standard connection string. Most apps just set `DATABASE_URL` in `.env`. A native connection can also declare [read/write splitting and sticky reads](/guide/database/connections#read-write-splitting) — read replicas round-robin per query while writes (and everything inside a transaction) go to the primary.
 
 ### Register the provider
 
@@ -138,7 +161,8 @@ The native adapter implements the same `OrmAdapter` interface as Prisma/Drizzle 
 
 | Feature | Native | Notes |
 |---|---|---|
-| Drivers | SQLite | Postgres/MySQL in progress — use Prisma/Drizzle meanwhile |
+| Drivers | SQLite, Postgres, MySQL | Optional peers: `better-sqlite3` / `postgres` / `mysql2` |
+| Read/write split | Supported | Replica round-robin + [sticky reads](/guide/database/connections#read-write-splitting) |
 | Migrations | Built-in | `Schema` builder + `migrate` family of commands |
 | Typed columns | Generated | `Model.for<'table'>()` from `schema:types` |
 | `transaction()` | Supported | Savepoint-nested |
@@ -149,5 +173,5 @@ The native adapter implements the same `OrmAdapter` interface as Prisma/Drizzle 
 
 - **`static table` is the SQL table name.** Native queries the table directly — `static table = 'users'`, not the Prisma delegate (`'user'`) or a Drizzle registry key.
 - **`engine: 'native'` is required.** Without it on the default connection the provider stays inert and Models have no adapter — the first query throws. (This is the collision guard that lets `@rudderjs/orm` ship in every app.)
-- **Non-sqlite drivers throw at boot.** Setting `driver: 'postgresql'` on a native connection fails fast with a pointer to Prisma/Drizzle — it is not silently downgraded.
+- **Driver names are `sqlite` / `pg` / `mysql`.** An unknown name (e.g. `postgresql`) fails fast with a pointer to the supported list — it is not silently downgraded.
 - **Commit `app/Models/__schema/registry.d.ts`.** It's generated, never hand-edited, and checked in so `tsc`/CI stays green.

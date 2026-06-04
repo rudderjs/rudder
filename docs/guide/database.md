@@ -17,9 +17,9 @@ All three are first-party and feature-equivalent at the model layer. The choice 
 
 | | Native (built-in) | Prisma | Drizzle |
 |---|---|---|---|
-| Install | `@rudderjs/orm` + `better-sqlite3` | `@rudderjs/orm-prisma` | `@rudderjs/orm-drizzle` |
+| Install | `@rudderjs/orm` + a driver (`better-sqlite3` / `postgres` / `mysql2`) | `@rudderjs/orm-prisma` | `@rudderjs/orm-drizzle` |
 | Schema / migrations | **Built-in** (`Schema` builder + `migrate`) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
-| Drivers | SQLite | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, libSQL |
+| Drivers | SQLite, PostgreSQL, MySQL | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, MySQL, libSQL |
 | `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
 | Relations via `Model.with()` | Polymorphic only | Supported | Supported (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) |
 | Transactions (`transaction()`) | Supported | Supported | Supported |
@@ -29,7 +29,7 @@ For setup details see [Native Engine](#native-engine-built-in) below, [Prisma Ad
 
 ## Native engine (built-in)
 
-The native engine ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — a first-party SQL query engine that talks directly to `better-sqlite3`, no external ORM. It's **opt-in**: a connection selects it with `engine: 'native'`, and the built-in `NativeDatabaseProvider` (auto-discovered) wires it up. Without that flag it stays dormant, so installing it alongside Prisma/Drizzle is harmless.
+The native engine ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — a first-party SQL query engine that talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), no external ORM. It's **opt-in**: a connection selects it with `engine: 'native'`, and the built-in `NativeDatabaseProvider` (auto-discovered) wires it up. Without that flag it stays dormant, so installing it alongside Prisma/Drizzle is harmless.
 
 ```ts
 // config/database.ts
@@ -42,13 +42,13 @@ export default {
 ```
 
 ```bash
-pnpm add better-sqlite3   # the only peer; lazy-loaded, never in a client bundle
+pnpm add better-sqlite3   # or `postgres` / `mysql2`, per driver; lazy-loaded, never in a client bundle
 ```
 
 That's the whole setup — Models, relations, `whereHas`/aggregates, soft deletes, and [transactions](#transactions) all work. The `@rudderjs/orm` main entry stays client-bundle-safe; the native driver and provider live only under the `./native` subpath and are never reachable from a browser graph.
 
-::: tip Native migrations (SQLite)
-The native engine ships its own Laravel-style schema builder + migration runner — `Schema.create` / `Schema.table`, `make:migration`, `migrate`, `migrate:rollback` / `migrate:refresh` / `migrate:fresh`, foreign keys, and transactional batches — for **SQLite** today. Postgres/MySQL DDL are in progress; until they land, use Prisma/Drizzle for those drivers. Native is the **default engine scaffolded by `create-rudder`**. See the dedicated [Native Engine](/guide/database/native) guide, and [Typed models from migrations](#typed-models-from-migrations-schema-types) for the headline feature: column types generated from your migrations.
+::: tip Native migrations
+The native engine ships its own Laravel-style schema builder + migration runner — `Schema.create` / `Schema.table`, `make:migration`, `migrate`, `migrate:rollback` / `migrate:refresh` / `migrate:fresh`, foreign keys, and transactional batches — on **all three drivers** (SQLite, Postgres, MySQL; a column-type `.change()` rebuild is SQLite-only). Native is the **default engine scaffolded by `create-rudder`**. See the dedicated [Native Engine](/guide/database/native) guide, and [Typed models from migrations](#typed-models-from-migrations-schema-types) for the headline feature: column types generated from your migrations.
 :::
 
 ### Typed models from migrations (`schema:types`)
