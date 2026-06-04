@@ -33,7 +33,7 @@ Setting `static table` is effectively required — the default (lowercase class 
 
 ## Querying
 
-`where()` returns a chainable `QueryBuilder`. `first()`, `count()`, and `paginate()` are static shortcuts for the no-conditions case.
+`where()` returns a chainable `QueryBuilder`. `first()`, `count()`, and `paginate()` are static shortcuts for the no-conditions case. Beyond the basics here, the builder speaks joins, grouping, unions, CTEs, EXISTS subqueries, JSON paths, and row locking — see the [Query Builder](/guide/database/query-builder) guide.
 
 ```ts
 await User.all()
