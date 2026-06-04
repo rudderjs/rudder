@@ -14,7 +14,7 @@ import type {
   AggregateRequest,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import type { Dialect, DatePart, JsonPathSegment } from './dialect.js'
+import { parseJsonPath, type Dialect, type DatePart, type JsonPathSegment } from './dialect.js'
 
 /** A raw SQL fragment + its `?`-placeholder bindings, threaded through a clause. */
 export interface RawFragment {
@@ -244,6 +244,33 @@ function compileComparison(lhs: string, operator: WhereOperator, value: unknown,
 }
 
 /**
+ * Render a JSON arrow-path comparison for an already-quoted column expression —
+ * the shared body of the `json` condition kind and arrow-path constraint wheres
+ * inside `compileExists`. The value's JS type picks the extraction shape (pg
+ * casts; mysql booleans skip UNQUOTE), and booleans normalize per dialect via
+ * the jsonBoolean seam. `IN` probes its first element so a list of numbers
+ * compares against the typed extraction. Comparison semantics (Expression /
+ * IN / IS NULL) ride the shared {@link compileComparison} tail.
+ */
+function compileJsonComparison(
+  columnExpr: string,
+  segments:   readonly JsonPathSegment[],
+  operator:   WhereOperator,
+  value:      unknown,
+  dialect:    Dialect,
+  b:          Bindings,
+): string {
+  const probe = (operator === 'IN' || operator === 'NOT IN') && Array.isArray(value)
+    ? value[0]
+    : value
+  const valueKind = typeof probe === 'number' ? 'number' : typeof probe === 'boolean' ? 'boolean' : 'text'
+  const norm = (v: unknown): unknown => (typeof v === 'boolean' ? dialect.jsonBoolean(v) : v)
+  const normalized = Array.isArray(value) ? value.map(norm) : norm(value)
+  const expr = dialect.jsonExtract(columnExpr, segments, valueKind)
+  return compileComparison(expr, operator, normalized, b)
+}
+
+/**
  * Render a list of sibling condition nodes into a single boolean expression,
  * inserting each node's `boolean` connector between siblings. Returns `''` for
  * an empty list (caller omits the WHERE/parens).
@@ -271,20 +298,10 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.dateExtract(node.part, dialect.quoteId(node.column))} ${op} ${b.add(node.value)}`
     } else if (node.kind === 'json') {
-      // JSON arrow-path comparison (`where('meta->prefs->lang', …)`). The
-      // value's JS type picks the extraction shape (pg casts; mysql booleans
-      // skip UNQUOTE), and booleans normalize per dialect via the jsonBoolean
-      // seam. `IN` probes its first element so a list of numbers compares
-      // against the typed extraction. Comparison semantics (Expression / IN /
-      // IS NULL) ride the shared compileComparison tail.
-      const probe = (node.operator === 'IN' || node.operator === 'NOT IN') && Array.isArray(node.value)
-        ? node.value[0]
-        : node.value
-      const valueKind = typeof probe === 'number' ? 'number' : typeof probe === 'boolean' ? 'boolean' : 'text'
-      const norm = (v: unknown): unknown => (typeof v === 'boolean' ? dialect.jsonBoolean(v) : v)
-      const value = Array.isArray(node.value) ? node.value.map(norm) : norm(node.value)
-      const expr = dialect.jsonExtract(dialect.quoteId(node.column), node.segments, valueKind)
-      frag = compileComparison(expr, node.operator, value, b)
+      // JSON arrow-path comparison (`where('meta->prefs->lang', …)`) — shared
+      // body in compileJsonComparison (also serves arrow-path constraint
+      // wheres inside compileExists).
+      frag = compileJsonComparison(dialect.quoteId(node.column), node.segments, node.operator, node.value, dialect, b)
     } else if (node.kind === 'jsonContains') {
       // whereJsonContains / whereJsonDoesntContain — the dialect seam owns the
       // whole predicate (pg @>, mysql JSON_CONTAINS, sqlite json_each EXISTS)
@@ -797,8 +814,19 @@ function qcol(table: string, column: string, dialect: Dialect): string {
  * {@link compileClause} (operator map, `IS [NOT] NULL`, `IN`/`NOT IN` expansion)
  * but every column reference is `"table"."col"` — required inside a correlated
  * subquery where an unqualified name could resolve to the outer table.
+ *
+ * Arrow-path columns (`meta->prefs->lang`, from a `where()` inside a whereHas
+ * constrain callback) route through the same {@link compileJsonComparison}
+ * body as top-level `json` condition nodes — the base column is qualified +
+ * quoted, the path segments are validated by {@link parseJsonPath}, and the
+ * value binds through the shared positional {@link Bindings} so it lands in
+ * SQL-text order within the EXISTS body.
  */
 function compileClauseOn(table: string, clause: WhereClause, dialect: Dialect, b: Bindings): string {
+  if (clause.column.includes('->')) {
+    const { column, segments } = parseJsonPath(clause.column)
+    return compileJsonComparison(qcol(table, column, dialect), segments, clause.operator, clause.value, dialect, b)
+  }
   const col = qcol(table, clause.column, dialect)
   const { operator, value } = clause
 
