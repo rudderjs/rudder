@@ -54,6 +54,11 @@ const _warnedWith = new Set<string>()
 const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
 
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
+  /** Capability marker read by the Model layer's hydrating proxy — arrow-path
+   *  update keys (`'meta->prefs->lang'`) throw a clear Model-layer error on
+   *  adapter QBs without it (Drizzle/Prisma until their follow-up). */
+  readonly supportsJsonPathUpdates = true
+
   private readonly _conditions: ConditionNode[] = []
   private readonly _orders:     OrderItem[]     = []
   private readonly _selects:    string[]        = []

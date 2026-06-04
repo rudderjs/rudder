@@ -16,6 +16,7 @@ import {
   type Dialect,
   type DatePart,
   type JsonPathSegment,
+  type JsonPathWrite,
   type JsonValueKind,
 } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
@@ -107,6 +108,22 @@ export class PgDialect implements Dialect {
   jsonLength(column: string, segments: readonly JsonPathSegment[]): string {
     const lhs = segments.length === 0 ? column : pgJsonChain(column, segments, false)
     return `jsonb_array_length((${lhs})::jsonb)`
+  }
+
+  // jsonb_set takes a single text[] path — nest one wrap per write. Path
+  // elements are single-quoted literals (safe: parseJsonPath rejected quotes/
+  // backslashes); numeric segments render as their text form ('0'), which
+  // jsonb_set treats as an array index against a JSON array. The bound value
+  // is JSON text re-typed via `::jsonb` (the PostgresDriver's json type
+  // override passes the pre-stringified text verbatim — #871). `(col)::jsonb`
+  // covers plain-json columns (no-op on jsonb, which our `json` type maps to).
+  jsonSet(column: string, writes: readonly JsonPathWrite[], bind: (v: unknown) => string): string {
+    let expr = `(${column})::jsonb`
+    for (const w of writes) {
+      const path = `ARRAY[${w.segments.map(s => `'${s}'`).join(', ')}]`
+      expr = `jsonb_set(${expr}, ${path}, ${bind(JSON.stringify(w.value))}::jsonb)`
+    }
+    return expr
   }
 
   // Real row-level pessimistic locking — the suffix trails ORDER BY / LIMIT.

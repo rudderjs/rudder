@@ -24,6 +24,7 @@ import {
   type Dialect,
   type DatePart,
   type JsonPathSegment,
+  type JsonPathWrite,
   type JsonValueKind,
 } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
@@ -101,6 +102,17 @@ export class MysqlDialect implements Dialect {
   jsonLength(column: string, segments: readonly JsonPathSegment[]): string {
     const path = segments.length === 0 ? '' : `, ${jsonPathLiteral(segments)}`
     return `JSON_LENGTH(${column}${path})`
+  }
+
+  // JSON_SET takes (path, value) varargs — one call covers every write on the
+  // column. `CAST(? AS JSON)` parses the bound JSON text so all value types
+  // land as real JSON values (a bare bound string would store a JSON string —
+  // fine for strings, wrong for booleans/numbers/objects).
+  jsonSet(column: string, writes: readonly JsonPathWrite[], bind: (v: unknown) => string): string {
+    const args = writes
+      .map(w => `${jsonPathLiteral(w.segments)}, CAST(${bind(JSON.stringify(w.value))} AS JSON)`)
+      .join(', ')
+    return `JSON_SET(${column}, ${args})`
   }
 
   // MySQL 8 row-level locking — suffix trails ORDER BY / LIMIT. `FOR SHARE`

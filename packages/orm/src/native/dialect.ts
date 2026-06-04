@@ -34,6 +34,16 @@ export type JsonPathSegment = string | number
 export type JsonValueKind = 'text' | 'number' | 'boolean'
 
 /**
+ * One JSON path write inside an UPDATE payload (`'meta->prefs->lang': 'en'`
+ * → `{ segments: ['prefs', 'lang'], value: 'en' }`), consumed by
+ * {@link Dialect.jsonSet}. Segments are validated by {@link parseJsonPath}.
+ */
+export interface JsonPathWrite {
+  segments: readonly JsonPathSegment[]
+  value:    unknown
+}
+
+/**
  * A SQL dialect: the knobs that change the emitted SQL text between databases.
  * `SqliteDialect` is the first concrete impl; `PgDialect` / `MysqlDialect`
  * plug in here later.
@@ -163,6 +173,27 @@ export interface Dialect {
    * `JSON_LENGTH(col, '$."a"')`. `segments` may be empty (whole column).
    */
   jsonLength(column: string, segments: readonly JsonPathSegment[]): string
+
+  /**
+   * The SET right-hand side writing one or more JSON paths into a single
+   * column — the per-dialect half of `update(id, { 'meta->prefs->lang': … })`.
+   * `column` arrives ALREADY QUOTED; `writes` carry segments validated by
+   * {@link parseJsonPath}. Values are never interpolated — each binds as JSON
+   * text (`JSON.stringify`) through the `bind` callback in write order, so
+   * positional bindings stay in SQL-text order, and the JSON-text shape keeps
+   * every value type (string/number/boolean/null/array/object) round-tripping
+   * identically across dialects:
+   *
+   * - sqlite: `json_set(col, '$."a"', json(?), '$."b"', json(?))`
+   * - mysql:  `JSON_SET(col, '$."a"', CAST(? AS JSON), …)`
+   * - pg:     nested `jsonb_set((col)::jsonb, ARRAY['a'], $n::jsonb)` (one
+   *   wrap per write — jsonb_set takes a single path).
+   *
+   * Like Laravel's grammars, missing INTERMEDIATE keys are not created (only
+   * the leaf key is); a NULL column stays NULL on pg (`jsonb_set(NULL, …)` is
+   * NULL) — write the whole column to initialize it.
+   */
+  jsonSet(column: string, writes: readonly JsonPathWrite[], bind: (v: unknown) => string): string
 
   /**
    * The pessimistic-locking suffix appended to a `SELECT` (after ORDER BY /
@@ -341,6 +372,16 @@ export class SqliteDialect implements Dialect {
     return segments.length === 0
       ? `json_array_length(${column})`
       : `json_array_length(${column}, ${jsonPathLiteral(segments)})`
+  }
+
+  // json_set takes (path, value) varargs — one call covers every write on the
+  // column. `json(?)` parses the bound JSON text so all value types (string/
+  // number/boolean/null/array/object) land as real JSON values, not text.
+  jsonSet(column: string, writes: readonly JsonPathWrite[], bind: (v: unknown) => string): string {
+    const args = writes
+      .map(w => `${jsonPathLiteral(w.segments)}, json(${bind(JSON.stringify(w.value))})`)
+      .join(', ')
+    return `json_set(${column}, ${args})`
   }
 
   // SQLite has no row-level pessimistic lock — a write transaction (BEGIN
