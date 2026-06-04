@@ -6,7 +6,7 @@
 // `Schema.drop`, etc. operate on that connection.
 //
 //   // database/migrations/2026_05_31_120000_create_users_table.ts
-//   import { Migration, Schema } from '@rudderjs/orm/native'
+//   import { Migration, Schema } from '@rudderjs/database'   // ('@rudderjs/orm/native' still works)
 //   export default class extends Migration {
 //     async up()   { await Schema.create('users', (t) => { t.id(); t.string('name'); t.timestamps() }) }
 //     async down() { await Schema.dropIfExists('users') }

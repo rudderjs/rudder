@@ -13,11 +13,11 @@ import { describe, it, test, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { OrmAdapter } from '@rudderjs/contracts'
 import { Model, ModelRegistry } from '../../index.js'
-import { NativeAdapter } from '../adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { PostgresDriver } from '@rudderjs/database/native'
 import { PgDialect } from '@rudderjs/database/native'
-import { SchemaBuilder } from '../schema/schema-builder.js'
-import { Blueprint } from '../schema/blueprint.js'
+import { SchemaBuilder } from '@rudderjs/database/native'
+import { Blueprint } from '@rudderjs/database/native'
 
 const PG_URL = process.env['PG_TEST_URL']
 

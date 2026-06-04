@@ -20,9 +20,9 @@
 
 import { ServiceProvider, config, appendToGroup } from '@rudderjs/core'
 import { ModelRegistry, ConnectionManager } from '../index.js'
-import { databaseContextMiddleware } from '../sticky.js'
-import { NativeAdapter } from './adapter.js'
-import type { NativeDriverName } from './adapter.js'
+import { databaseContextMiddleware } from '@rudderjs/database/sticky'
+import { NativeAdapter } from '@rudderjs/database/native'
+import type { NativeDriverName } from '@rudderjs/database/native'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter and
 // pushes the transaction runner — mirrors the prisma/drizzle adapter entries, so
 // `DB.*` / `DB.transaction()` work in native-engine apps too. Node-only subpath,

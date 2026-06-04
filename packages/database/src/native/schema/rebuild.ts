@@ -16,9 +16,9 @@
 // verbatim). Atomicity comes from the migrator's per-batch transaction (7.5);
 // run standalone, the steps execute sequentially.
 
-import type { Executor } from '@rudderjs/database/native'
-import type { Dialect } from '@rudderjs/database/native'
-import { NativeOrmError } from '@rudderjs/database/native'
+import type { Executor } from '../driver.js'
+import type { Dialect } from '../dialect.js'
+import { NativeOrmError } from '../errors.js'
 import type { AlterBlueprint } from './alter-blueprint.js'
 import { compileColumnSpec } from './ddl-compiler.js'
 import { readColumns, readIndexSql, isAutoincrement, type RawColumn } from './introspect.js'

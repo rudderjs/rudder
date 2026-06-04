@@ -12,7 +12,7 @@ import {
   buildNativeMigrationStub, writeNativeMigration,
   hasFlag, flagNumber, rollbackStep,
 } from './migrate.js'
-import { NativeAdapter } from '../native/adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
 

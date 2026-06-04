@@ -18,7 +18,7 @@ import type { QueryBuilder, OrmAdapter } from '@rudderjs/contracts'
 import { Migration } from './migration.js'
 import { withSchema } from './schema-facade.js'
 import type { SchemaBuilder } from './schema-builder.js'
-import { NativeOrmError } from '@rudderjs/database/native'
+import { NativeOrmError } from '../errors.js'
 
 /** The minimal connection surface the migrator needs. `NativeAdapter` satisfies it. */
 export interface MigratorAdapter {

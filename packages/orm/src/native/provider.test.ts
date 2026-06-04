@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { ConfigRepository, setConfigRepository } from '@rudderjs/core'
 import type { Application } from '@rudderjs/core'
 import { Model, ModelRegistry, ConnectionManager } from '../index.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { NativeDatabaseProvider, nativeDatabase } from './provider.js'
 
 // A minimal Application stub — the provider only touches `app.instance(...)`.

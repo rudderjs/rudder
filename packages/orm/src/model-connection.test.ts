@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { test, beforeEach } from 'node:test'
 import { Model, ModelRegistry, ConnectionManager, transaction } from './index.js'
-import { NativeAdapter } from './native/adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 
 class Metric extends Model {
   static override table = 'metrics'

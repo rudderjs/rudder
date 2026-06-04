@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { CliError } from '@rudderjs/console'
 import { ModelRegistry } from '../index.js'
 import type { OrmAdapter } from '@rudderjs/contracts'
-import type { ModelCastInfo } from '../native/schema/schema-types.js'
+import type { ModelCastInfo } from '@rudderjs/database/native'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -335,7 +335,7 @@ interface SchemaTypesCapable {
  *  drizzle adapters don't have it. Avoids an `instanceof` across module
  *  boundaries and keeps native off the cold-boot path for non-native apps. */
 export type NativeAdapterLike = OrmAdapter
-  & import('../native/schema/migrator.js').MigratorAdapter
+  & import('@rudderjs/database/native').MigratorAdapter
   & SchemaTypesCapable
 
 export function nativeAdapterOrNull(): NativeAdapterLike | null {

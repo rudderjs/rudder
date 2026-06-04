@@ -21,7 +21,7 @@ import { SqliteDialect, parseJsonPath, type JsonPathSegment } from '@rudderjs/da
 import { PgDialect } from '@rudderjs/database/native'
 import { MysqlDialect } from '@rudderjs/database/native'
 import { Model, ModelRegistry } from '../index.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import { PostgresDriver } from '@rudderjs/database/native'
 import { MysqlDriver } from '@rudderjs/database/native'

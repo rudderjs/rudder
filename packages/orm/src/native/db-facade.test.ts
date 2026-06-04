@@ -5,7 +5,7 @@ import { Model, ModelRegistry } from '../index.js'
 // Side effect: registers ModelRegistry.getAdapter() as the DB facade's resolver
 // and `transaction()` as its transaction runner.
 import '../db-bridge.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 
 test('DB.select round-trips on the native engine', async () => {
   const adapter = await NativeAdapter.make({ driver: 'sqlite', url: ':memory:' })
