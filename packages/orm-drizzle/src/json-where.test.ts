@@ -195,33 +195,33 @@ describe('Drizzle json where — pg SQL shapes', () => {
     await Pref.where('meta->prefs->lang', 'en').get()
     await Pref.query().where('meta->score', '>', 6).get()
     await Pref.where('meta->active', true).get()
-    assert.match(captured[0]!.sql, /"meta"->'prefs'->>'lang' = \$1/)
+    assert.match(captured[0]!.sql, /"prefs"\."meta"->'prefs'->>'lang' = \$1/)
     assert.deepEqual(captured[0]!.params, ['en'])
-    assert.match(captured[1]!.sql, /\("meta"->>'score'\)::numeric > \$1/)
+    assert.match(captured[1]!.sql, /\("prefs"\."meta"->>'score'\)::numeric > \$1/)
     assert.deepEqual(captured[1]!.params, [6])
-    assert.match(captured[2]!.sql, /\("meta"->>'active'\)::boolean = \$1/)
+    assert.match(captured[2]!.sql, /\("prefs"\."meta"->>'active'\)::boolean = \$1/)
     assert.deepEqual(captured[2]!.params, [true])
   })
 
   it('numeric index segments splice bare (array index, not object key)', async () => {
     await Pref.where('meta->items->0', 'a').get()
-    assert.match(captured[0]!.sql, /"meta"->'items'->>0 = \$1/)
+    assert.match(captured[0]!.sql, /"prefs"\."meta"->'items'->>0 = \$1/)
   })
 
   it('whereJsonContains binds the candidate SINGLE-encoded through a text cast (postgres-js double-encode dodge)', async () => {
     await Pref.whereJsonContains('meta->tags', 'php').get()
-    assert.match(captured[0]!.sql, /\("meta"->'tags'\)::jsonb @> cast\(\$1 as text\)::jsonb/)
+    assert.match(captured[0]!.sql, /\("prefs"\."meta"->'tags'\)::jsonb @> cast\(\$1 as text\)::jsonb/)
     // The param is the JSON text ONCE — '"php"', not '"\\"php\\""'.
     assert.deepEqual(captured[0]!.params, ['"php"'])
 
     await Pref.whereJsonDoesntContain('meta->tags', ['php', 'js']).get()
-    assert.match(captured[1]!.sql, /not \(\("meta"->'tags'\)::jsonb @> cast\(\$1 as text\)::jsonb\)/)
+    assert.match(captured[1]!.sql, /not \(\("prefs"\."meta"->'tags'\)::jsonb @> cast\(\$1 as text\)::jsonb\)/)
     assert.deepEqual(captured[1]!.params, ['["php","js"]'])
   })
 
   it('whereJsonLength compiles via jsonb_array_length over the cast chain', async () => {
     await Pref.whereJsonLength('meta->tags', '>', 1).get()
-    assert.match(captured[0]!.sql, /jsonb_array_length\(\("meta"->'tags'\)::jsonb\) > \$1/)
+    assert.match(captured[0]!.sql, /jsonb_array_length\(\("prefs"\."meta"->'tags'\)::jsonb\) > \$1/)
     assert.deepEqual(captured[0]!.params, [1])
   })
 })
@@ -240,24 +240,24 @@ describe('Drizzle json where — mysql SQL shapes', () => {
 
   it('text comparison extracts via JSON_UNQUOTE(JSON_EXTRACT(...))', async () => {
     await Pref.where('meta->prefs->lang', 'en').get()
-    assert.match(captured[0]!.sql, /JSON_UNQUOTE\(JSON_EXTRACT\(`meta`, '\$\."prefs"\."lang"'\)\) = \?/)
+    assert.match(captured[0]!.sql, /JSON_UNQUOTE\(JSON_EXTRACT\(`prefs`\.`meta`, '\$\."prefs"\."lang"'\)\) = \?/)
     assert.deepEqual(captured[0]!.params, ['en'])
   })
 
   it('booleans skip UNQUOTE and splice the SQL literal true/false (NO bound param)', async () => {
     await Pref.where('meta->active', true).get()
     await Pref.where('meta->active', false).get()
-    assert.match(captured[0]!.sql, /JSON_EXTRACT\(`meta`, '\$\."active"'\) = true/)
+    assert.match(captured[0]!.sql, /JSON_EXTRACT\(`prefs`\.`meta`, '\$\."active"'\) = true/)
     assert.deepEqual(captured[0]!.params, [])
-    assert.match(captured[1]!.sql, /JSON_EXTRACT\(`meta`, '\$\."active"'\) = false/)
+    assert.match(captured[1]!.sql, /JSON_EXTRACT\(`prefs`\.`meta`, '\$\."active"'\) = false/)
   })
 
   it('whereJsonContains / whereJsonLength compile to JSON_CONTAINS / JSON_LENGTH with the path', async () => {
     await Pref.whereJsonContains('meta->tags', ['php', 'js']).get()
     await Pref.whereJsonLength('meta->tags', '>=', 2).get()
-    assert.match(captured[0]!.sql, /JSON_CONTAINS\(`meta`, \?, '\$\."tags"'\)/)
+    assert.match(captured[0]!.sql, /JSON_CONTAINS\(`prefs`\.`meta`, \?, '\$\."tags"'\)/)
     assert.deepEqual(captured[0]!.params, ['["php","js"]'])
-    assert.match(captured[1]!.sql, /JSON_LENGTH\(`meta`, '\$\."tags"'\) >= \?/)
+    assert.match(captured[1]!.sql, /JSON_LENGTH\(`prefs`\.`meta`, '\$\."tags"'\) >= \?/)
   })
 })
 

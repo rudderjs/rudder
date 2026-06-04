@@ -833,7 +833,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       })
       expr = parts.length === 1 ? parts[0]! : (and(...parts) as SQL)
     }
-    return negated ? (not(expr) as SQL) : expr
+    // Explicit parens — drizzle's not() prefixes a raw SQL fragment WITHOUT
+    // wrapping it, leaving `NOT a @> b` to operator precedence. Unambiguous
+    // on every dialect this way.
+    return negated ? (sql`not (${expr})` as SQL) : expr
   }
 
   /** @internal — the array-length comparison (`whereJsonLength`). Two-arg form
@@ -2325,10 +2328,13 @@ export class DrizzleAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
-    // Close the write client AND any read replicas (split connection).
+    // Close the write client AND any read replicas (split connection). Call
+    // end() ON the client — a detached reference loses `this` (harmless for
+    // postgres-js, whose end is a closure; a TypeError on mysql2's promise
+    // pool, whose end() reads `this.pool`).
     for (const db of [this.db, ...this.readDbs]) {
-      const end = db.$client?.end
-      if (typeof end === 'function') await end()
+      const client = db.$client
+      if (typeof client?.end === 'function') await client.end()
     }
   }
 
