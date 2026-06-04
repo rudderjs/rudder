@@ -575,8 +575,9 @@ export interface OrmAdapter {
    *   foreign key / direction, fires one batched `WHERE … IN` query per relation
    *   against the related model, and stitches the results onto each parent
    *   (the same machinery polymorphic relations already use). The Drizzle
-   *   adapter sets this — Drizzle's relational query API needs pre-declared
-   *   `relations()` schemas the adapter doesn't hold.
+   *   adapter sets this (Drizzle's relational query API needs pre-declared
+   *   `relations()` schemas the adapter doesn't hold), and so does the native
+   *   engine (its adapter contract carries relation names only, no join shape).
    *
    * Polymorphic relations are always resolved in the model layer regardless of
    * this setting; it governs only the direct-relation routing.

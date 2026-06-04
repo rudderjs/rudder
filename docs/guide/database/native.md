@@ -166,7 +166,7 @@ The native adapter implements the same `OrmAdapter` interface as Prisma/Drizzle 
 | Migrations | Built-in | `Schema` builder + `migrate` family of commands |
 | Typed columns | Generated | `Model.for<'table'>()` from `schema:types` |
 | `transaction()` | Supported | Savepoint-nested |
-| `with(relation)` | Polymorphic only | Load other relations via `related()` |
+| `with(relation)` | Supported | Model-layer batched WHERE-IN, all relation types |
 | `db:push` / `db:generate` | n/a | Prisma/Drizzle only — native uses migrations |
 
 ## Pitfalls
