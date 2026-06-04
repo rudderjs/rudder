@@ -1324,6 +1324,16 @@ class PrismaAdapter implements OrmAdapter {
         user:     decodeURIComponent(u.username),
         password: decodeURIComponent(u.password),
         database: u.pathname.replace(/^\//, ''),
+      }, {
+        // Text protocol (`query`), not the binary prepared-statement protocol
+        // (`execute`). MySQL cannot prepare SAVEPOINT / ROLLBACK TO SAVEPOINT /
+        // RELEASE SAVEPOINT (error 1295 ER_UNSUPPORTED_PS), and this adapter's
+        // nested-transaction support emits exactly those through
+        // `$executeRawUnsafe` — under the default binary protocol every nested
+        // `transaction()` on mysql fails. Caught live by mysql-live.test.ts;
+        // mysql2 (the native engine's driver) uses the text protocol for the
+        // same statements.
+        useTextProtocol: true,
       })
     } else if (config.driver === 'libsql' && config.url) {
       // Remote libSQL / Turso
