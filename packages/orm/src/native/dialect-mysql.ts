@@ -81,6 +81,20 @@ export class MysqlDialect implements Dialect {
     return valueKind === 'boolean' ? extract : `JSON_UNQUOTE(${extract})`
   }
 
+  // MySQL's JSON_EXTRACT returns a JSON `null` LITERAL (not SQL NULL) for an
+  // explicit json null — `extract IS NULL` alone matches missing keys only,
+  // and JSON_UNQUOTE would turn the literal into the STRING 'null'. Laravel's
+  // grammar shape unifies both as null: missing key → IS NULL, explicit null
+  // → JSON_TYPE(extract) = 'NULL'. The negation must AND the inverses (note
+  // JSON_TYPE(NULL) is NULL, so the != 'NULL' arm alone is three-valued —
+  // the IS NOT NULL arm keeps a missing key from slipping through).
+  jsonNullComparison(column: string, segments: readonly JsonPathSegment[], negated: boolean): string {
+    const extract = `JSON_EXTRACT(${column}, ${jsonPathLiteral(segments)})`
+    return negated
+      ? `(${extract} IS NOT NULL AND JSON_TYPE(${extract}) != 'NULL')`
+      : `(${extract} IS NULL OR JSON_TYPE(${extract}) = 'NULL')`
+  }
+
   // Paired with the no-UNQUOTE boolean extraction above — splice the SQL
   // literal `true`/`false` (an Expression rides compileComparison's verbatim
   // path; nothing user-controlled, so inlining is safe). A BOUND 'true' string

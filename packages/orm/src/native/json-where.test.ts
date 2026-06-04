@@ -251,6 +251,19 @@ describe('json where — mysql compilation (JSON_EXTRACT/CONTAINS/LENGTH)', () =
     assert.strictEqual(neg.sql, `SELECT * FROM \`users\` WHERE JSON_EXTRACT(\`meta\`, '$."active"') = false`)
   })
 
+  it('null comparison unifies missing key and explicit json null via JSON_TYPE (Laravel grammar shape)', () => {
+    const extract = `JSON_EXTRACT(\`meta\`, '$."nick"')`
+    const eq = compileSelect(baseState({ conditions: [jsonNode(['nick'], null)] }), mysql)
+    assert.strictEqual(eq.sql, `SELECT * FROM \`users\` WHERE (${extract} IS NULL OR JSON_TYPE(${extract}) = 'NULL')`)
+    assert.deepStrictEqual(eq.bindings, [])
+
+    // Negation ANDs the inverses — JSON_TYPE(NULL) is NULL, so the != arm
+    // alone would be three-valued and let missing keys through.
+    const ne = compileSelect(baseState({ conditions: [jsonNode(['nick'], null, '!=')] }), mysql)
+    assert.strictEqual(ne.sql, `SELECT * FROM \`users\` WHERE (${extract} IS NOT NULL AND JSON_TYPE(${extract}) != 'NULL')`)
+    assert.deepStrictEqual(ne.bindings, [])
+  })
+
   it('whereJsonContains compiles to JSON_CONTAINS with the path argument', () => {
     const { sql, bindings } = compileSelect(baseState({ conditions: [containsNode(['tags'], ['php', 'js'])] }), mysql)
     assert.strictEqual(sql, `SELECT * FROM \`users\` WHERE JSON_CONTAINS(\`meta\`, ?, '$."tags"')`)
@@ -277,7 +290,7 @@ let driver: Driver
 
 // [name, meta] — meta stored as JSON text (sqlite json_* read TEXT json).
 const seed: Array<[string, Record<string, unknown>]> = [
-  ['alice', { theme: 'dark',  score: 10, active: true,  'a b': 1, prefs: { lang: 'en' },             tags: ['php', 'js'],         items: ['a', 'b', 'c'] }],
+  ['alice', { theme: 'dark',  score: 10, active: true,  'a b': 1, nick: null, prefs: { lang: 'en' },             tags: ['php', 'js'],         items: ['a', 'b', 'c'] }],
   ['bob',   { theme: 'light', score: 5,  active: false,          prefs: { lang: 'de' },             tags: ['js'],                items: ['x'] }],
   ['carol', { theme: 'dark',  score: 7,  active: true,           prefs: { lang: 'en', tz: 'UTC' },  tags: ['php', 'rust', 'js'], items: [] }],
 ]
@@ -329,6 +342,9 @@ describe('json where (native sqlite E2E)', () => {
     // Missing key extracts SQL NULL — whereNull/whereNotNull sugar applies.
     assert.deepEqual(names(await Pref.whereNull('meta->prefs->tz').get()), ['alice', 'bob'])
     assert.deepEqual(names(await Pref.whereNotNull('meta->prefs->tz').get()), ['carol'])
+    // Explicit json null (alice's nick) counts as null too — same as a missing key.
+    assert.deepEqual(names(await Pref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+    assert.deepEqual(names(await Pref.whereNotNull('meta->nick').get()), [])
   })
 
   it('whereJsonContains matches scalars and arrays (every element)', async () => {
@@ -448,6 +464,14 @@ if (!PG_URL) {
       assert.deepStrictEqual(names(await PgPref.whereJsonLength('meta->items', 0).get()), ['carol'])
       assert.deepStrictEqual(names(await PgPref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
     })
+
+    it('whereNull/whereNotNull unify explicit json null and missing key', async () => {
+      // alice carries nick: null (explicit), bob/carol have no nick key.
+      assert.deepStrictEqual(names(await PgPref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+      assert.deepStrictEqual(names(await PgPref.whereNotNull('meta->nick').get()), [])
+      assert.deepStrictEqual(names(await PgPref.whereNull('meta->prefs->tz').get()), ['alice', 'bob'])
+      assert.deepStrictEqual(names(await PgPref.whereNotNull('meta->prefs->tz').get()), ['carol'])
+    })
   })
 }
 
@@ -510,6 +534,16 @@ if (!MYSQL_URL) {
     it('whereJsonLength runs live through JSON_LENGTH', async () => {
       assert.deepStrictEqual(names(await MyPref.whereJsonLength('meta->items', 0).get()), ['carol'])
       assert.deepStrictEqual(names(await MyPref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
+    })
+
+    it('whereNull/whereNotNull unify explicit json null and missing key (JSON_TYPE shape)', async () => {
+      // alice carries nick: null (explicit json null — JSON_EXTRACT returns a
+      // JSON null LITERAL, not SQL NULL); bob/carol have no nick key (SQL
+      // NULL). A plain IS NULL matched bob/carol only before the JSON_TYPE fix.
+      assert.deepStrictEqual(names(await MyPref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+      assert.deepStrictEqual(names(await MyPref.whereNotNull('meta->nick').get()), [])
+      assert.deepStrictEqual(names(await MyPref.whereNull('meta->prefs->tz').get()), ['alice', 'bob'])
+      assert.deepStrictEqual(names(await MyPref.whereNotNull('meta->prefs->tz').get()), ['carol'])
     })
   })
 }

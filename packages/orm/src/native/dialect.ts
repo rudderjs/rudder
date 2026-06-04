@@ -138,6 +138,19 @@ export interface Dialect {
   jsonExtract(column: string, segments: readonly JsonPathSegment[], valueKind: JsonValueKind): string
 
   /**
+   * The `IS [NOT] NULL` predicate for a JSON path — `whereNull('meta->x')` /
+   * `where('meta->x', null)`. Laravel semantics: a MISSING key and an explicit
+   * json `null` BOTH count as null (`whereNotNull` matches only an actual
+   * value). sqlite and pg get this for free — their extractions surface both
+   * as SQL NULL — but mysql's `JSON_EXTRACT` returns a JSON `null` LITERAL
+   * (not SQL NULL) for an explicit null, and `JSON_UNQUOTE` turns it into the
+   * STRING `'null'`, so a plain `extract IS NULL` matched missing keys only.
+   * mysql emits Laravel's grammar shape instead:
+   * `(extract IS NULL OR JSON_TYPE(extract) = 'NULL')`.
+   */
+  jsonNullComparison(column: string, segments: readonly JsonPathSegment[], negated: boolean): string
+
+  /**
    * Normalize a boolean JSON comparison value for binding, paired with
    * {@link jsonExtract}'s `'boolean'` shape: sqlite `1`/`0` (json_extract
    * yields integers for json booleans), mysql `'true'`/`'false'` (compared
@@ -336,6 +349,12 @@ export class SqliteDialect implements Dialect {
   // the bound value compares directly — no cast, the valueKind hint is unused.
   jsonExtract(column: string, segments: readonly JsonPathSegment[], _valueKind: JsonValueKind): string {
     return `json_extract(${column}, ${jsonPathLiteral(segments)})`
+  }
+
+  // json_extract already surfaces BOTH a missing key and an explicit json
+  // null as SQL NULL — the plain IS [NOT] NULL on the extraction is correct.
+  jsonNullComparison(column: string, segments: readonly JsonPathSegment[], negated: boolean): string {
+    return `${this.jsonExtract(column, segments, 'text')} IS ${negated ? 'NOT ' : ''}NULL`
   }
 
   // json_extract yields INTEGER 1/0 for json true/false — bind the matching int.

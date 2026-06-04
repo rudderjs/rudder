@@ -59,7 +59,7 @@ const names = (rows: Pref[]): string[] => rows.map(r => r.name).sort()
 
 // [name, meta] — same seed as the native json-where suite.
 const seed: Array<[string, Record<string, unknown>]> = [
-  ['alice', { theme: 'dark',  score: 10, active: true,  'a b': 1, prefs: { lang: 'en' },            tags: ['php', 'js'],         items: ['a', 'b', 'c'] }],
+  ['alice', { theme: 'dark',  score: 10, active: true,  'a b': 1, nick: null, prefs: { lang: 'en' },            tags: ['php', 'js'],         items: ['a', 'b', 'c'] }],
   ['bob',   { theme: 'light', score: 5,  active: false,           prefs: { lang: 'de' },            tags: ['js'],                items: ['x'] }],
   ['carol', { theme: 'dark',  score: 7,  active: true,            prefs: { lang: 'en', tz: 'UTC' }, tags: ['php', 'rust', 'js'], items: [] }],
 ]
@@ -108,6 +108,9 @@ describe('Drizzle json where (sqlite E2E)', () => {
     // Missing key extracts SQL NULL — whereNull/whereNotNull sugar applies.
     assert.deepEqual(names(await Pref.whereNull('meta->prefs->tz').get()), ['alice', 'bob'])
     assert.deepEqual(names(await Pref.whereNotNull('meta->prefs->tz').get()), ['carol'])
+    // Explicit json null (alice's nick) counts as null too — same as a missing key.
+    assert.deepEqual(names(await Pref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+    assert.deepEqual(names(await Pref.whereNotNull('meta->nick').get()), [])
   })
 
   it('arrow paths work inside whereHas constraint callbacks (related table)', async () => {
@@ -252,6 +255,17 @@ describe('Drizzle json where — mysql SQL shapes', () => {
     assert.match(captured[1]!.sql, /JSON_EXTRACT\(`prefs`\.`meta`, '\$\."active"'\) = false/)
   })
 
+  it('null comparison unifies missing key and explicit json null via JSON_TYPE (Laravel grammar shape)', async () => {
+    await Pref.whereNull('meta->nick').get()
+    await Pref.whereNotNull('meta->nick').get()
+    // Escaped regex source for: JSON_EXTRACT(`prefs`.`meta`, '$."nick"')
+    const extract = 'JSON_EXTRACT\\(`prefs`\\.`meta`, \'\\$\\."nick"\'\\)'
+    assert.match(captured[0]!.sql, new RegExp(`\\(${extract} IS NULL OR JSON_TYPE\\(${extract}\\) = 'NULL'\\)`))
+    assert.deepEqual(captured[0]!.params, [])
+    assert.match(captured[1]!.sql, new RegExp(`\\(${extract} IS NOT NULL AND JSON_TYPE\\(${extract}\\) != 'NULL'\\)`))
+    assert.deepEqual(captured[1]!.params, [])
+  })
+
   it('whereJsonContains / whereJsonLength compile to JSON_CONTAINS / JSON_LENGTH with the path', async () => {
     await Pref.whereJsonContains('meta->tags', ['php', 'js']).get()
     await Pref.whereJsonLength('meta->tags', '>=', 2).get()
@@ -308,6 +322,9 @@ test('live pg: arrow paths + containment + length round-trip through postgres-js
     assert.deepEqual(liveNames(await LivePref.whereJsonDoesntContain('meta->tags', 'php').get()), ['bob'])
     assert.deepEqual(liveNames(await LivePref.whereJsonLength('meta->items', 0).get()), ['carol'])
     assert.deepEqual(liveNames(await LivePref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
+    // Explicit json null (alice's nick) and missing key (bob/carol) both count as null.
+    assert.deepEqual(liveNames(await LivePref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+    assert.deepEqual(liveNames(await LivePref.whereNotNull('meta->nick').get()), [])
   } finally {
     await adapter.affectingStatement(`drop table if exists ${table}`, []).catch(() => {})
     await adapter.disconnect()
@@ -356,6 +373,11 @@ test('live mysql: arrow paths + containment + length round-trip through mysql2',
     assert.deepEqual(liveNames(await LivePref.whereJsonDoesntContain('meta->tags', 'php').get()), ['bob'])
     assert.deepEqual(liveNames(await LivePref.whereJsonLength('meta->items', 0).get()), ['carol'])
     assert.deepEqual(liveNames(await LivePref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])
+    // The JSON_TYPE shape live: alice's explicit json null (a JSON null
+    // LITERAL to JSON_EXTRACT, not SQL NULL) and bob/carol's missing key both
+    // count as null; whereNotNull matches only an actual value.
+    assert.deepEqual(liveNames(await LivePref.whereNull('meta->nick').get()), ['alice', 'bob', 'carol'])
+    assert.deepEqual(liveNames(await LivePref.whereNotNull('meta->nick').get()), [])
   } finally {
     await adapter.affectingStatement(`drop table if exists ${table}`, []).catch(() => {})
     await adapter.disconnect()
