@@ -282,6 +282,28 @@ All three adapters support it on Postgres and MySQL — the native engine emits 
 - **Outermost call only.** A nested `transaction()` maps to a savepoint, whose isolation can't diverge from the enclosing transaction's — passing `isolationLevel` there throws.
 - **SQLite throws.** SQLite has no isolation levels (its single-writer model is already serializable), so requesting one fails loudly instead of silently meaning nothing.
 
+## Pessimistic locking
+
+Lock the selected rows for the rest of the transaction with `lockForUpdate()` (writers and locking readers block) or `sharedLock()` (writers block, readers proceed). Only meaningful inside a `transaction()`:
+
+```ts
+await transaction(async () => {
+  const job = await Job.query()
+    .where('status', 'pending')
+    .orderBy('id')
+    .lockForUpdate({ skipLocked: true })   // skip rows another worker holds
+    .first()
+  if (job) await Job.update(job.id, { status: 'running' })
+})
+```
+
+Both methods take an optional wait-behavior argument — **mutually exclusive, both set throws**:
+
+- `{ skipLocked: true }` — skip rows another transaction has locked instead of waiting (`FOR UPDATE SKIP LOCKED`). *The* pattern for concurrent job reservation: each worker grabs only unclaimed rows.
+- `{ noWait: true }` — fail immediately with a lock-conflict error instead of blocking (`NOWAIT`).
+
+Adapter support: **native** and **Drizzle** emit the real clauses on Postgres and MySQL 8; on SQLite the lock (options included) is a no-op — there are no row locks, and its single-writer transaction already serializes. **Prisma** throws — its query API has no `FOR UPDATE`; run the locking read raw inside a transaction (`DB.transaction(() => DB.select('SELECT … FOR UPDATE SKIP LOCKED', binds))`) or use the native engine.
+
 ## Pitfalls
 
 - **`static table` mismatch.** For Prisma, the value is the **delegate** name (camelCase, e.g. `blogPost`) — not the SQL table name (`blog_posts`). For Drizzle, it's the key in the `tables: {}` object passed to the adapter.

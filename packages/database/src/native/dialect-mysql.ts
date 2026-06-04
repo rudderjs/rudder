@@ -15,7 +15,7 @@
 //     boolean default renders as `1`/`0` (same as SQLite). On READ the driver's
 //     typeCast maps `tinyint(1)` back to JS booleans (Postgres parity).
 
-import { raw } from '@rudderjs/contracts'
+import { raw, type LockOptions } from '@rudderjs/contracts'
 import { NativeOrmError } from './errors.js'
 import {
   validateIdentifier,
@@ -130,9 +130,16 @@ export class MysqlDialect implements Dialect {
   }
 
   // MySQL 8 row-level locking — suffix trails ORDER BY / LIMIT. `FOR SHARE`
-  // replaced the legacy `LOCK IN SHARE MODE` in 8.0.1 and is the form used here.
-  lockSql(mode: 'update' | 'shared'): string {
-    return mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+  // replaced the legacy `LOCK IN SHARE MODE` in 8.0.1 and is the form used
+  // here; `SKIP LOCKED` / `NOWAIT` arrived in the same release (8.0.1) and
+  // only attach to the FOR UPDATE/FOR SHARE forms (never the legacy one).
+  // NOWAIT raises ER_LOCK_NOWAIT (3572) instead of blocking. Mutual
+  // exclusivity is validated upstream by the QueryBuilder.
+  lockSql(mode: 'update' | 'shared', opts?: LockOptions): string {
+    const base = mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+    if (opts?.skipLocked) return `${base} SKIP LOCKED`
+    if (opts?.noWait) return `${base} NOWAIT`
+    return base
   }
 
   // MySQL has no ON CONFLICT target — it keys off whatever unique index the row

@@ -20,6 +20,7 @@ import {
   type JsonValueKind,
 } from './dialect.js'
 import type { ColumnDefinition } from './schema/column.js'
+import type { LockOptions } from '@rudderjs/contracts'
 
 /**
  * Render a pg JSON arrow chain — `col->'a'->'b'`, with the LAST hop as `->>`
@@ -134,8 +135,14 @@ export class PgDialect implements Dialect {
 
   // Real row-level pessimistic locking — the suffix trails ORDER BY / LIMIT.
   // `FOR UPDATE` blocks concurrent writers; `FOR SHARE` blocks only writers.
-  lockSql(mode: 'update' | 'shared'): string {
-    return mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+  // Wait behavior: `SKIP LOCKED` skips rows another transaction holds (the
+  // job-reservation pattern), `NOWAIT` raises 55P03 instead of blocking.
+  // Mutual exclusivity is validated upstream by the QueryBuilder.
+  lockSql(mode: 'update' | 'shared', opts?: LockOptions): string {
+    const base = mode === 'shared' ? ' FOR SHARE' : ' FOR UPDATE'
+    if (opts?.skipLocked) return `${base} SKIP LOCKED`
+    if (opts?.noWait) return `${base} NOWAIT`
+    return base
   }
 
   // Postgres shares SQLite's `ON CONFLICT (target) DO UPDATE`/`DO NOTHING` form,

@@ -33,7 +33,8 @@ function makeRecorder(calls: Array<[string, ...unknown[]]>) {
   }
 }
 
-type LockableQB = { lockForUpdate(): unknown; sharedLock(): unknown }
+type LockOpts = { skipLocked?: boolean; noWait?: boolean }
+type LockableQB = { lockForUpdate(opts?: LockOpts): unknown; sharedLock(opts?: LockOpts): unknown }
 
 async function recordedGet(dialect: 'pg' | 'mysql' | 'sqlite', chain: (q: LockableQB) => void) {
   const calls: Array<[string, ...unknown[]]> = []
@@ -63,6 +64,46 @@ describe('Drizzle locking — dialect branching (recorded)', () => {
   it('no lock requested → no .for() call', async () => {
     const calls = await recordedGet('pg', () => {})
     assert.deepEqual(calls, [])
+  })
+})
+
+describe('Drizzle locking — wait-behavior options (skipLocked / noWait)', () => {
+  it('lockForUpdate({ skipLocked }) chains .for("update", { skipLocked: true }) on pg', async () => {
+    const calls = await recordedGet('pg', q => q.lockForUpdate({ skipLocked: true }))
+    assert.deepEqual(calls, [['for', 'update', { skipLocked: true }]])
+  })
+
+  it('lockForUpdate({ noWait }) chains .for("update", { noWait: true }) on mysql', async () => {
+    const calls = await recordedGet('mysql', q => q.lockForUpdate({ noWait: true }))
+    assert.deepEqual(calls, [['for', 'update', { noWait: true }]])
+  })
+
+  it('sharedLock({ skipLocked }) chains .for("share", { skipLocked: true })', async () => {
+    const calls = await recordedGet('pg', q => q.sharedLock({ skipLocked: true }))
+    assert.deepEqual(calls, [['for', 'share', { skipLocked: true }]])
+  })
+
+  it('false flags degrade to the plain .for() call (back-compat SQL)', async () => {
+    const calls = await recordedGet('pg', q => q.lockForUpdate({ skipLocked: false, noWait: false }))
+    assert.deepEqual(calls, [['for', 'update']])
+  })
+
+  it('options stay a no-op on sqlite along with the lock', async () => {
+    const calls = await recordedGet('sqlite', q => q.lockForUpdate({ skipLocked: true }))
+    assert.deepEqual(calls, [])
+  })
+
+  it('throws when skipLocked and noWait are both set (mutually exclusive)', async () => {
+    const adapter = await drizzle({ client: makeRecorder([]), dialect: 'pg', tables: { users: {} } }).create()
+    const q = adapter.query('users') as unknown as LockableQB
+    assert.throws(
+      () => q.lockForUpdate({ skipLocked: true, noWait: true }),
+      /lockForUpdate\(\) options skipLocked and noWait are mutually exclusive/,
+    )
+    assert.throws(
+      () => q.sharedLock({ skipLocked: true, noWait: true }),
+      /sharedLock\(\) options skipLocked and noWait are mutually exclusive/,
+    )
   })
 })
 

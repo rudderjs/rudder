@@ -9,6 +9,7 @@
 
 import { NativeIdentifierError, NativeOrmError } from './errors.js'
 import type { ColumnDefinition } from './schema/column.js'
+import type { LockOptions } from '@rudderjs/contracts'
 
 /**
  * The date/time component a `whereDate`/`whereTime`/`whereDay`/`whereMonth`/
@@ -213,14 +214,18 @@ export interface Dialect {
    * LIMIT), or `''` when the dialect has no row-level locking. Powers
    * `QueryBuilder.lockForUpdate()` / `sharedLock()`:
    *
-   * - Postgres / MySQL 8: `' FOR UPDATE'` / `' FOR SHARE'`.
+   * - Postgres / MySQL 8: `' FOR UPDATE'` / `' FOR SHARE'`, with `opts`
+   *   appending the wait behavior — `' SKIP LOCKED'` (skip already-locked
+   *   rows) or `' NOWAIT'` (error instead of blocking). The QueryBuilder
+   *   validates mutual exclusivity before the options reach here.
    * - SQLite: `''` — there is no per-row lock; a write transaction already
-   *   serializes writers, so the reservation is safe without a suffix.
+   *   serializes writers, so the reservation is safe without a suffix. The
+   *   options are ignored along with the lock itself.
    *
    * Always prefixed with a leading space so the compiler can concatenate it
    * unconditionally.
    */
-  lockSql(mode: 'update' | 'shared'): string
+  lockSql(mode: 'update' | 'shared', opts?: LockOptions): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -405,8 +410,9 @@ export class SqliteDialect implements Dialect {
 
   // SQLite has no row-level pessimistic lock — a write transaction (BEGIN
   // IMMEDIATE) already serializes writers, so the queue reservation is safe
-  // without a `FOR UPDATE` suffix. No-op.
-  lockSql(_mode: 'update' | 'shared'): string {
+  // without a `FOR UPDATE` suffix. No-op, options included: with no row locks
+  // there is never a locked row to skip or fail on.
+  lockSql(_mode: 'update' | 'shared', _opts?: LockOptions): string {
     return ''
   }
 

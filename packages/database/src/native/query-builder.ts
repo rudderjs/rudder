@@ -20,6 +20,7 @@ import type {
   AggregateRequest,
   AggregateFn,
   JoinClause,
+  LockOptions,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { parseJsonPath, type Dialect, type DatePart } from './dialect.js'
@@ -86,6 +87,9 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private _withTrashed  = false
   private _onlyTrashed  = false
   private _lock: 'update' | 'shared' | null = null
+  /** Wait behavior for `_lock` (`skipLocked` / `noWait`) — validated mutually
+   *  exclusive at the setter, threaded to `Dialect.lockSql` via the state. */
+  private _lockOpts: LockOptions | null = null
   /** Marks a sub-builder created for whereGroup — terminals throw on it. */
   private _isSubBuilder = false
 
@@ -144,6 +148,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       ctes:            this._ctes,
       distinct:        this._distinct,
       lock:            this._lock,
+      lockOptions:     this._lockOpts,
     }
   }
 
@@ -644,11 +649,36 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   /** Pessimistic `FOR UPDATE` row lock (no-op on SQLite — see {@link Dialect.lockSql}).
    *  Only meaningful inside a `transaction()`; the powering primitive for the
-   *  native database queue's atomic job reservation. */
-  lockForUpdate(): this { this._lock = 'update'; return this }
+   *  native database queue's atomic job reservation. `opts.skipLocked` skips
+   *  already-locked rows (`SKIP LOCKED`), `opts.noWait` errors instead of
+   *  blocking (`NOWAIT`) — mutually exclusive, both throw. */
+  lockForUpdate(opts?: LockOptions): this {
+    this._lock = 'update'
+    this._lockOpts = this._validateLockOpts('lockForUpdate', opts)
+    return this
+  }
 
-  /** Shared `FOR SHARE` row lock (no-op on SQLite). */
-  sharedLock(): this { this._lock = 'shared'; return this }
+  /** Shared `FOR SHARE` row lock (no-op on SQLite). Same options as
+   *  {@link lockForUpdate}. */
+  sharedLock(opts?: LockOptions): this {
+    this._lock = 'shared'
+    this._lockOpts = this._validateLockOpts('sharedLock', opts)
+    return this
+  }
+
+  /** `skipLocked` skips conflicting rows; `noWait` errors on them — asking for
+   *  both is a contradiction, so it throws here at the call site (every
+   *  dialect), not at compile/execute time. */
+  private _validateLockOpts(method: string, opts?: LockOptions): LockOptions | null {
+    if (!opts) return null
+    if (opts.skipLocked && opts.noWait) {
+      throw new Error(
+        `[RudderJS ORM native] ${method}() options skipLocked and noWait are mutually ` +
+        'exclusive — skip conflicting rows OR fail fast on them, not both. Pass at most one.',
+      )
+    }
+    return opts
+  }
 
   // ── read terminals ───────────────────────────────────────
 
