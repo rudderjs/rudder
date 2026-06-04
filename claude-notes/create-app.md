@@ -9,7 +9,7 @@
 
 1. Project name — skipped if passed as argv
 2. **What are you building?** — `web-app` (default) · `saas` · `api-service` · `realtime` · `minimal` · `custom`. Single-select recipe picker that drives the next prompts.
-3. Database ORM — **Native** (default, pre-highlighted) · Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`). Native is the built-in engine (`@rudderjs/orm/native`) — SQLite-only today.
+3. Database ORM — **Native** (default, pre-highlighted) · Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`). Native is the built-in engine (`@rudderjs/database`, re-exported at `@rudderjs/orm/native`).
 4. Database driver — SQLite (default) · PostgreSQL · MySQL — only when ORM is Prisma/Drizzle. **Skipped for Native** (forced to `sqlite`; the native provider throws for other drivers).
 5. **Packages** — categorized multiselect (8 sections, 25 visible rows, Authentication pre-checked). **Only shown for recipe = `custom`.** When ORM=None, the three DB-gated rows (Authentication, Sanctum, Passport) are hidden — Socialite stays.
 6. Frontend framework — single select: React (default) · Vue · Solid · None. Skipped for recipe = `api-service` or `minimal`. Multi-framework picks live behind the legacy `--frameworks` flag only.

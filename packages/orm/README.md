@@ -6,7 +6,7 @@ ORM contract, `Model` base class, and `ModelRegistry` for RudderJS applications.
 pnpm add @rudderjs/orm
 ```
 
-This package provides the shared abstractions plus a **built-in native SQLite engine** at the node-only `@rudderjs/orm/native` subpath. For Postgres/MySQL, or to keep using Prisma/Drizzle, install an adapter:
+This package provides the Eloquent-style `Model` layer on top of **`@rudderjs/database`** — the SQL data-layer foundation that ships the built-in native engine (SQLite/Postgres/MySQL), installed automatically as a dependency. The node-only `@rudderjs/orm/native` subpath re-exports the engine for back-compat. To use Prisma or Drizzle instead, install an adapter:
 
 - `@rudderjs/orm-prisma` — Prisma adapter (SQLite, PostgreSQL, MySQL)
 - `@rudderjs/orm-drizzle` — Drizzle adapter (SQLite, PostgreSQL, LibSQL)
@@ -39,7 +39,7 @@ npm install @rudderjs/orm better-sqlite3
 
 ```ts
 import { Model, ModelRegistry } from '@rudderjs/orm'
-import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/orm/native'
+import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/database'
 
 class Todo extends Model {
   static table = 'todos'

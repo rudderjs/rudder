@@ -122,7 +122,7 @@ With `sticky: true`, once a request writes to a split connection, **subsequent r
 **Outside a request scope — queue jobs, `rudder` commands, the scheduler — sticky is a no-op** and reads go to the replicas. (Laravel resets the flag per request; a long-lived Node process without a scope boundary would otherwise go sticky-forever after its first write.) A job that needs read-your-writes opens its own scope:
 
 ```ts
-import { runWithDatabaseContext } from '@rudderjs/orm/sticky'
+import { runWithDatabaseContext } from '@rudderjs/database/sticky'
 
 await runWithDatabaseContext(async () => {
   await Order.create({ ... })
@@ -130,7 +130,7 @@ await runWithDatabaseContext(async () => {
 })
 ```
 
-`@rudderjs/orm/sticky` is a node-only subpath — don't import it from client-reachable code.
+`@rudderjs/database/sticky` is a node-only subpath — don't import it from client-reachable code. (The pre-relocation `@rudderjs/orm/sticky` path re-exports the same module and shares the same request scope.)
 
 ## Observing routing — query events
 

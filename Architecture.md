@@ -58,7 +58,8 @@ rudderjs/
 │   │                       #   ViewResponse that server-hono resolves through Vike's renderPage().
 │   │                       #   Typed React/Vue/Solid components from app/Views/ with full SSR +
 │   │                       #   SPA navigation (no Inertia adapter, no JSON envelope)
-│   ├── orm/                # Model base class, QueryBuilder, ModelRegistry
+│   ├── database/           # SQL foundation — DB facade + the built-in native engine (orm depends on it)
+│   ├── orm/                # Eloquent Model layer, ModelRegistry (on top of database)
 │   │                       #   Attribute casts (12 built-in + custom CastUsing), Attribute.make()
 │   │                       #   accessors/mutators, @Hidden/@Visible/@Appends/@Cast decorators,
 │   │                       #   JsonResource/ResourceCollection, ModelCollection, ModelFactory, sequence()
