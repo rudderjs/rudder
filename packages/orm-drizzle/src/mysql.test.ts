@@ -17,7 +17,7 @@
  *    `MYSQL_TEST_URL=mysql://root:secret@localhost:3306/test pnpm test`.
  *    CI portability matrix Phase 3 will land this in a dedicated job.
  */
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
@@ -215,6 +215,20 @@ type MRow = { id: number; views: number }
 
 describe('DrizzleAdapter — MySQL integration', { skip: skipReason }, () => {
   let adapter: DrizzleAdapter
+
+  // Close the pooled mysql2 client when the block finishes — without this the
+  // open pool keeps the file's event loop alive and the WHOLE `node --test`
+  // fleet hangs waiting for this file to exit (every beforeEach `make()` with
+  // the same signature reuses the one cached client, so a single disconnect
+  // closes it). Every other live block (json-where, read-write-split,
+  // mysql-writes) already does this in its own teardown.
+  after(async () => {
+    const raw = (adapter?.db as unknown as { execute: (s: unknown) => Promise<unknown> } | undefined)?.execute
+    if (typeof raw === 'function') {
+      await raw.call(adapter.db, 'DROP TABLE IF EXISTS rl_phase4' as unknown).catch(() => {})
+    }
+    await adapter?.disconnect()
+  })
 
   beforeEach(async () => {
     adapter = await drizzle({
