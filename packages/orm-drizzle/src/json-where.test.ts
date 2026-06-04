@@ -14,7 +14,7 @@
 // string coerces to a JSON *string* and never matches). Gated live-pg /
 // live-mysql blocks prove both against real servers.
 
-import { describe, it, test, before, after, beforeEach } from 'node:test'
+import { describe, it, test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
