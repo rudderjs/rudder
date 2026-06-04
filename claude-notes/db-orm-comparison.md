@@ -54,12 +54,12 @@
 | chunk / streaming | ✅ chunk + lazy() generator | **❌ (Prisma Next promise)** | ✅ iterator | ✅ .stream() | ✅ .stream() | ✅ em.stream() (v7) |
 | Cursor pagination | ✅ cursorPaginate | ✅ cursor+take | ✅ (guide) | ❌ | ❌ (community libs) | ✅ findByCursor (richest) |
 | **CTEs** | ✅ withExpression + recursive (native; shipped post-audit) | ❌ | ✅ | ❌ | ✅ + recursive | ✅ + recursive (v7) |
-| **Window functions** | **❌** | ❌ | via sql`` | ❌ | ✅ typed | via sql`` |
+| **Window functions** | ✅ typed ranking set (`selectWindow`; aggregates-OVER via selectRaw) | ❌ | via sql`` | ❌ | ✅ typed | via sql`` |
 | INSERT…SELECT | ✅ insertUsing (native; shipped post-audit) | ❌ | ✅ | ✅ 1.0 | ✅ | ✅ insertFrom |
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
 | whereColumn / column-vs-column | ✅ | ❌ | manual sql | manual | ✅ (ref) | manual |
 
-**Take:** post the 2026 query-builder arc (+ the post-audit Tier-1 round: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — remaining deltas: window functions and optimistic locking.
+**Take:** post the 2026 query-builder arc (+ the post-audit rounds: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait, typed window ranking) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — remaining delta: optimistic locking.
 
 ## Relations
 
@@ -166,7 +166,7 @@
 **Tier 2 — differentiated-but-real:**
 5. Optimistic locking (`static version` column, OptimisticLockError) — TypeORM/MikroORM precedent.
 6. ~~INSERT…SELECT~~ — **SHIPPED post-audit**: `insertUsing(columns, query)` (native engine).
-7. Window functions (at least `orderByRaw`-adjacent typed `rowNumber()/rank() OVER`) — or document the raw-expr recipe.
+7. ~~Window functions~~ — **SHIPPED post-audit**: `selectWindow(fn, { as, partitionBy, orderBy })` (native engine; typed zero-arg ranking set rowNumber/rank/denseRank/percentRank/cumeDist, ADDITIVE projection; aggregates-OVER/lag/lead documented as the selectRaw recipe).
 8. Weighted/custom replica picker (Drizzle parity) — small seam on `readPick`.
 9. `Schema.connection()` + `migrate --connection` (multi-DB migrations; TypeORM has per-DataSource).
 10. afterCommit hooks (`transaction()` queue + flush-on-commit).

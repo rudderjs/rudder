@@ -43,6 +43,9 @@ import {
   type NativeQueryState,
   type CteNode,
   type SubqueryBody,
+  type WindowFunction,
+  type WindowSelect,
+  isWindowFunction,
 } from './compiler.js'
 
 /** One-time dev warning that native `with(<direct relation>)` doesn't eager-load
@@ -56,6 +59,11 @@ const _warnedWith = new Set<string>()
  *  `Symbol.for` (not an imported value) keeps the node-only native module out of
  *  the client-reachable `index.ts` import graph. */
 const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
+
+/** One ORDER BY entry for `selectWindow` — a bare column (asc) or an explicit
+ *  `{ column, direction }` object. Deliberately NOT a `[col, dir]` tuple: a
+ *  flat two-string array is ambiguous with "two columns". */
+export type WindowOrderInput = string | { column: string; direction?: 'asc' | 'desc' }
 
 export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   /** Capability marker read by the Model layer's hydrating proxy — arrow-path
@@ -78,6 +86,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private readonly _unions:     Array<{ all: boolean; state: NativeQueryState }> = []
   private readonly _ctes:       CteNode[]       = []
   private readonly _rawSelects: RawFragment[]   = []
+  private readonly _windows:    WindowSelect[]  = []
   private readonly _relationExists: RelationExistencePredicate[] = []
   private readonly _aggregates:     AggregateRequest[] = []
   private _distinct = false
@@ -147,6 +156,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       unions:          this._unions,
       ctes:            this._ctes,
       distinct:        this._distinct,
+      windows:         this._windows,
       lock:            this._lock,
       lockOptions:     this._lockOpts,
     }
@@ -401,6 +411,52 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
 
   selectRaw(sql: string, bindings: readonly unknown[] = []): this {
     this._rawSelects.push({ sql, bindings })
+    return this
+  }
+
+  /**
+   * Add a typed window-function projection:
+   * `selectWindow('rowNumber', { as: 'rn', partitionBy: 'userId', orderBy: { column: 'createdAt', direction: 'desc' } })`
+   * → `ROW_NUMBER() OVER (PARTITION BY "userId" ORDER BY "createdAt" DESC) AS "rn"`.
+   *
+   * ADDITIVE — appends to the projection (`SELECT *, … AS "rn"` by default), so
+   * rows still hydrate as full models with the alias as an extra attribute;
+   * `selectRaw`'s REPLACE semantics don't apply. Functions: `rowNumber` /
+   * `rank` / `denseRank` / `percentRank` / `cumeDist` (zero-arg ranking set —
+   * identical syntax on SQLite ≥3.25 / Postgres / MySQL 8). For aggregates
+   * OVER, lag/lead, or frame clauses, use `selectRaw`. SQL forbids window
+   * results in WHERE — filter via a CTE/subquery instead.
+   */
+  selectWindow(
+    fn: WindowFunction,
+    opts: {
+      as: string
+      partitionBy?: string | readonly string[]
+      orderBy?: WindowOrderInput | readonly WindowOrderInput[]
+    },
+  ): this {
+    // Runtime gates (JS callers bypass the TS union): the function name and
+    // each direction are SPLICED into SQL, never bound.
+    if (!isWindowFunction(fn)) {
+      throw new Error(`[RudderJS ORM native] selectWindow(): unknown window function '${String(fn)}'.`)
+    }
+    if (typeof opts?.as !== 'string' || opts.as.length === 0) {
+      throw new Error(`[RudderJS ORM native] selectWindow() requires a non-empty 'as' alias.`)
+    }
+    const partitionBy = opts.partitionBy === undefined
+      ? []
+      : (typeof opts.partitionBy === 'string' ? [opts.partitionBy] : [...opts.partitionBy])
+    const orderInputs = opts.orderBy === undefined
+      ? []
+      : (Array.isArray(opts.orderBy) ? opts.orderBy : [opts.orderBy as WindowOrderInput])
+    const orderBy = orderInputs.map((o) => {
+      const entry = typeof o === 'string' ? { column: o, direction: 'asc' as const } : { column: o.column, direction: o.direction ?? 'asc' }
+      if (entry.direction !== 'asc' && entry.direction !== 'desc') {
+        throw new Error(`[RudderJS ORM native] selectWindow(): order direction must be 'asc' or 'desc', got '${String(entry.direction)}'.`)
+      }
+      return entry
+    })
+    this._windows.push({ fn, as: opts.as, partitionBy, orderBy })
     return this
   }
 

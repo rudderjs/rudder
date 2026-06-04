@@ -764,6 +764,7 @@ const FORWARDED_QB_METHODS = new Set([
   'withExpression', 'withRecursiveExpression',
   'whereExists', 'whereNotExists', 'orWhereExists', 'orWhereNotExists',
   'insertUsing',
+  'selectWindow',
 ])
 
 /** Clear error for a QB method the active adapter doesn't implement — thrown by
@@ -808,6 +809,11 @@ function assertJsonPathUpdates(qb: unknown, data: Record<string, unknown>): void
  * `guarded` the arrow key itself must be listed (Laravel parity).
  */
 export type UpdatePayload<T> = Partial<T> & { [key: `${string}->${string}`]: unknown }
+
+/** One ORDER BY entry for `selectWindow` — a bare column (asc) or an explicit
+ *  `{ column, direction }` object. Deliberately NOT a `[col, dir]` tuple: a
+ *  flat two-string array is ambiguous with "two columns". */
+export type WindowOrderEntry = string | { column: string; direction?: 'asc' | 'desc' }
 
 /**
  * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
@@ -1075,6 +1081,24 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * **Native engine only** — throws on Drizzle/Prisma.
    */
   insertUsing(columns: readonly string[], query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): Promise<number>
+  /**
+   * Typed window-function projection —
+   * `selectWindow('rowNumber', { as: 'rn', partitionBy: 'userId', orderBy: { column: 'createdAt', direction: 'desc' } })`
+   * → `ROW_NUMBER() OVER (PARTITION BY "userId" ORDER BY "createdAt" DESC) AS "rn"`.
+   * ADDITIVE — appends to the projection (rows still hydrate as full models;
+   * the alias lands as an extra attribute). Functions: `rowNumber` / `rank` /
+   * `denseRank` / `percentRank` / `cumeDist`. For aggregates OVER, lag/lead, or
+   * frame clauses use `selectRaw`; window results can't appear in WHERE — filter
+   * via a CTE/subquery. **Native engine only** — throws on Drizzle/Prisma.
+   */
+  selectWindow(
+    fn: 'rowNumber' | 'rank' | 'denseRank' | 'percentRank' | 'cumeDist',
+    opts: {
+      as: string
+      partitionBy?: string | readonly string[]
+      orderBy?: WindowOrderEntry | readonly WindowOrderEntry[]
+    },
+  ): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -2425,6 +2449,13 @@ export abstract class Model {
   }
   static insertUsing<T extends typeof Model>(this: T, columns: readonly string[], query: QueryBuilder<Model> | string, bindings?: readonly unknown[]): Promise<number> {
     return Model._q(this).insertUsing(columns, query, bindings)
+  }
+  static selectWindow<T extends typeof Model>(
+    this: T,
+    fn: 'rowNumber' | 'rank' | 'denseRank' | 'percentRank' | 'cumeDist',
+    opts: { as: string; partitionBy?: string | readonly string[]; orderBy?: WindowOrderEntry | readonly WindowOrderEntry[] },
+  ): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).selectWindow(fn, opts)
   }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)
