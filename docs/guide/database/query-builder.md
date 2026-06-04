@@ -9,9 +9,9 @@ and every identifier validated and quoted.
 Feature breadth depends on the engine. The **native engine** implements
 everything on this page; the **Drizzle adapter** implements most of it; the
 **Prisma adapter** intentionally routes builder-shaped SQL to
-`DB.select(sql, bindings)` from `@rudderjs/database` instead (its structured
-client can't map arbitrary projections back to a model). Anything unsupported throws a
-clear error naming the alternative — never a silent no-op.
+[`DB.select(sql, bindings)`](/guide/database#the-db-facade) instead (its
+structured client can't map arbitrary projections back to a model). Anything
+unsupported throws a clear error naming the alternative — never a silent no-op.
 
 | Feature | Native | Drizzle | Prisma |
 |---|:---:|:---:|:---:|
@@ -253,5 +253,6 @@ on SQLite the options are a no-op along with the lock itself. See
 `selectRaw` / `whereRaw` / `orWhereRaw` / `orderByRaw` accept raw fragments
 with `?` placeholder bindings, and `DB.raw(...)` splices a verbatim expression
 as a value — see [Raw SQL](/guide/database/models#raw-sql-selectraw-whereraw-orderbyraw-db-raw).
-For statement-level raw queries outside any model, use the `DB` facade from
-`@rudderjs/database` (`DB.select` / `DB.statement` / `DB.transaction`).
+For statement-level raw queries outside any model, use the
+[`DB` facade](/guide/database#the-db-facade)
+(`DB.select` / `DB.statement` / `DB.transaction`).

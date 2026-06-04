@@ -248,6 +248,30 @@ rudder.command('db:seed', async () => {
 
 Run with `pnpm rudder db:seed`.
 
+## The `DB` facade
+
+For SQL that doesn't belong to any model — reports, migration backfills, anything builder-shaped your adapter doesn't support — use the `DB` facade from `@rudderjs/database`. It runs on the **same connection your Models use** (never a second pool), so `DB` statements inside a `transaction()` join it like any Model query.
+
+```ts
+import { DB } from '@rudderjs/database'
+
+const rows    = await DB.select('SELECT city, COUNT(*) AS total FROM users GROUP BY city')
+const updated = await DB.update('UPDATE users SET active = ? WHERE lastSeen < ?', [0, cutoff])
+await DB.statement('VACUUM')                      // DDL / maintenance — returns affected count
+
+await DB.transaction(async () => {                // same transaction() Models join
+  const [acct] = await DB.select('SELECT balance FROM accounts WHERE id = ? FOR UPDATE', [id])
+  await DB.update('UPDATE accounts SET balance = ? WHERE id = ?', [next, id])
+})
+```
+
+- `select` / `insert` / `update` / `delete` / `statement` take parameterized SQL + bindings (`?` placeholders on every dialect — the native engine rebinds to `$n` on Postgres). The write methods return the affected-row count.
+- `DB.raw(value)` wraps a verbatim SQL expression for use as a query-builder value (`where('createdAt', '>', DB.raw('NOW()'))`).
+- `DB.listen(cb)` subscribes to query events (SQL, bindings, duration, connection, read/write target) across every adapter.
+- `DB.connection('name')` scopes any of the above to a [named connection](/guide/database/connections): `DB.connection('reporting').select(...)`.
+
+Available on all three adapters — on Prisma this is the designated escape hatch the query-builder guard errors point at.
+
 ## Transactions
 
 Wrap a unit of work in a database transaction with `transaction()` (or the `Model.transaction()` alias). Every Model query issued inside the callback — across any model — runs on the transaction and commits together; if the callback throws, the whole unit rolls back and the error re-throws.
