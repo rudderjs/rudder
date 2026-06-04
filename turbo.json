@@ -55,9 +55,20 @@
     "clean": {
       "cache": false
     },
+    // PG_TEST_URL / MYSQL_TEST_URL gate the live-database conformance suites
+    // (orm native drivers, orm-drizzle r/w split, json-where, …). They must be
+    // declared in `env` — turbo 2 runs tasks in strict env mode, so undeclared
+    // vars are STRIPPED from the child process and every live test silently
+    // skips (the CI orm-pg/orm-mysql jobs were green-by-skip before this).
+    // `env` (not `passThroughEnv`) so the vars are part of the cache key: a
+    // sqlite-only cached green can't be replayed for a live-enabled run.
     "test": {
       "dependsOn": [
         "^build"
+      ],
+      "env": [
+        "PG_TEST_URL",
+        "MYSQL_TEST_URL"
       ],
       "outputs": []
     },
