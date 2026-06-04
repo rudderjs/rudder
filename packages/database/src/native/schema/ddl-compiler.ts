@@ -15,12 +15,12 @@
 // migration authors — not end users — write them.
 
 import { Expression } from '@rudderjs/contracts'
-import { quoteSqlString, type Dialect } from '@rudderjs/database/native'
-import type { CompiledQuery } from '@rudderjs/database/native'
-import { NativeOrmError, NativeNotImplementedError } from '@rudderjs/database/native'
+import { quoteSqlString, type Dialect } from '../dialect.js'
+import type { CompiledQuery } from '../compiler.js'
+import { NativeOrmError, NativeNotImplementedError } from '../errors.js'
 import type { Blueprint, IndexDefinition } from './blueprint.js'
 import type { AlterBlueprint } from './alter-blueprint.js'
-import type { ColumnDefinition, ForeignKeyAction, ForeignKeyDefinition } from '@rudderjs/database/native'
+import type { ColumnDefinition, ForeignKeyAction, ForeignKeyDefinition } from './column.js'
 
 /** Render a column's DEFAULT value as a SQL literal (DDL can't bind). Only the
  *  literal-able types are allowed; a Date/object/function default throws so the

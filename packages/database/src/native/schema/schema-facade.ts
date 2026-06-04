@@ -14,7 +14,7 @@
 import type { Blueprint } from './blueprint.js'
 import type { AlterBlueprint } from './alter-blueprint.js'
 import { SchemaBuilder } from './schema-builder.js'
-import { NativeOrmError } from '@rudderjs/database/native'
+import { NativeOrmError } from '../errors.js'
 
 let current: SchemaBuilder | null = null
 

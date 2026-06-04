@@ -7,8 +7,8 @@
 
 import { describe, it, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { MysqlDriver } from '@rudderjs/database/native'
-import { MysqlDialect } from '@rudderjs/database/native'
+import { MysqlDriver } from '../drivers/mysql.js'
+import { MysqlDialect } from '../dialect-mysql.js'
 import { SchemaBuilder } from './schema-builder.js'
 import { Blueprint } from './blueprint.js'
 import { collectSchemaTypes } from './schema-types.js'

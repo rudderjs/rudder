@@ -4,11 +4,11 @@
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { SqliteDialect } from '@rudderjs/database/native'
-import { PgDialect } from '@rudderjs/database/native'
-import { MysqlDialect } from '@rudderjs/database/native'
-import type { Dialect } from '@rudderjs/database/native'
-import { NativeOrmError } from '@rudderjs/database/native'
+import { SqliteDialect } from '../dialect.js'
+import { PgDialect } from '../dialect-pg.js'
+import { MysqlDialect } from '../dialect-mysql.js'
+import type { Dialect } from '../dialect.js'
+import { NativeOrmError } from '../errors.js'
 import { Blueprint } from './blueprint.js'
 import { compileCreateTable } from './ddl-compiler.js'
 

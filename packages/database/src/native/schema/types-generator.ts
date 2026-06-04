@@ -14,7 +14,7 @@
 // directly unit-testable.
 
 import type { RawColumn } from './introspect.js'
-import type { BuiltInCast } from '../../cast.js'
+import type { BuiltInCast } from '@rudderjs/contracts'
 
 /** A column's resolved TypeScript type plus whether it's optional on read. */
 export interface GeneratedColumnType {

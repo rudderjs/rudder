@@ -13,8 +13,8 @@
 // rebuild-only helpers below (`readIndexSql`, `isAutoincrement`) stay
 // SQLite-specific — the rebuild dance is a SQLite workaround pg/mysql don't need.
 
-import type { Executor } from '@rudderjs/database/native'
-import type { Dialect } from '@rudderjs/database/native'
+import type { Executor } from '../driver.js'
+import type { Dialect } from '../dialect.js'
 
 /** One column as reported by `PRAGMA table_info`. */
 export interface RawColumn {

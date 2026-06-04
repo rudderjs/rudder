@@ -8,7 +8,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Model, ModelRegistry } from './index.js'
-import { NativeAdapter } from './native/adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
 

@@ -5,7 +5,7 @@ import { Model, ModelRegistry, ConnectionManager, transaction } from '../index.j
 // Side effect: registers the DB facade's resolvers (default adapter, named
 // connections, default + named transaction runners).
 import '../db-bridge.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 
 // Two in-memory sqlite databases standing in for two named connections —
 // `:memory:` adapters are fully isolated, so cross-connection leakage shows up

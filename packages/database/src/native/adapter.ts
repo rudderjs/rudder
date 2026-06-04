@@ -11,15 +11,16 @@
 // connection per re-boot. No-op in production (single boot).
 
 import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts, QueryListener } from '@rudderjs/contracts'
-// Engine core — relocated to @rudderjs/database (Phase-2 PR-A2); this adapter
-// (and the schema builder below) follow in PR-A3.
-import {
-  SqliteDialect, PgDialect, MysqlDialect,
-  NativeQueryBuilder,
-  BetterSqlite3Driver, PostgresDriver, MysqlDriver,
-  type Dialect, type Driver, type Executor, type Transaction, type Row, type AffectingExecutor,
-} from '@rudderjs/database/native'
+import type { Dialect } from './dialect.js'
+import { SqliteDialect } from './dialect.js'
+import { PgDialect } from './dialect-pg.js'
+import { MysqlDialect } from './dialect-mysql.js'
+import type { Driver, Executor, Transaction, Row, AffectingExecutor } from './driver.js'
 import { markWrote, stickyWrote } from '../sticky.js'
+import { NativeQueryBuilder } from './query-builder.js'
+import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
+import { PostgresDriver } from './drivers/postgres.js'
+import { MysqlDriver } from './drivers/mysql.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
 import type { ModelCastInfo } from './schema/schema-types.js'
 
@@ -501,7 +502,7 @@ async function openDriver(
  * database provider consumes (mirrors `drizzle(...)` / the prisma factory).
  *
  * @example
- * import { native } from '@rudderjs/orm/native'
+ * import { native } from '@rudderjs/database'
  * database({
  *   default: 'main',
  *   connections: { main: native({ driver: 'sqlite', url: 'file:./dev.db' }) },

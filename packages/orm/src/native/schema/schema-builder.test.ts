@@ -9,11 +9,11 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Model, ModelRegistry } from '../../index.js'
-import { NativeAdapter } from '../adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import { SqliteDialect } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
-import { SchemaBuilder } from './schema-builder.js'
+import { SchemaBuilder } from '@rudderjs/database/native'
 
 class User extends Model {
   static override table = 'users'

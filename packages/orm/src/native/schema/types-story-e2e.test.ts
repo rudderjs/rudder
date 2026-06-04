@@ -40,9 +40,9 @@ import { PostgresDriver } from '@rudderjs/database/native'
 import { SqliteDialect, type Dialect } from '@rudderjs/database/native'
 import { PgDialect } from '@rudderjs/database/native'
 import type { Executor } from '@rudderjs/database/native'
-import { SchemaBuilder } from './schema-builder.js'
-import type { Blueprint } from './blueprint.js'
-import { generateSchemaTypes, type ModelCastInfo } from './schema-types.js'
+import { SchemaBuilder } from '@rudderjs/database/native'
+import type { Blueprint } from '@rudderjs/database/native'
+import { generateSchemaTypes, type ModelCastInfo } from '@rudderjs/database/native'
 
 // node --test runs from the package dir (packages/orm); turbo keeps the same cwd.
 const ormRoot = process.cwd()

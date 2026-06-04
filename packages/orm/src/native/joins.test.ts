@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { compileSelect, compileCount, type NativeQueryState, type JoinNode } from '@rudderjs/database/native'
 import { SqliteDialect } from '@rudderjs/database/native'
 import { Model, ModelRegistry } from '../index.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
 

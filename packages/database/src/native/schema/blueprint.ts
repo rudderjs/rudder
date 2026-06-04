@@ -15,8 +15,8 @@ import {
   ColumnBuilder, makeColumn,
   normalizeForeignKeyAction,
   type ColumnDefinition, type ForeignKeyDefinition, type ForeignKeyActionInput,
-} from '@rudderjs/database/native'
-import { NativeOrmError } from '@rudderjs/database/native'
+} from './column.js'
+import { NativeOrmError } from '../errors.js'
 
 /** Validate that an `enum`/`set` column got a non-empty value list. The values
  *  themselves are quoted at compile time, so the only check here is presence. */

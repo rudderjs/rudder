@@ -14,7 +14,7 @@ import { compileSelect, type NativeQueryState, type ConditionNode } from '@rudde
 import { SqliteDialect } from '@rudderjs/database/native'
 import { PgDialect } from '@rudderjs/database/native'
 import { Model, ModelRegistry } from '../index.js'
-import { NativeAdapter } from './adapter.js'
+import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
 
