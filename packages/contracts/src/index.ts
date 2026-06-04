@@ -5,6 +5,31 @@
 import { Expression } from './expression.js'
 export { Expression, raw } from './expression.js'
 
+/**
+ * The built-in model cast names (`static casts` values that aren't a custom
+ * `CastUsing` class or an enum object). Lives here — not in `@rudderjs/orm` —
+ * because it is shared by orm's cast layer AND the native engine's schema→TS
+ * type generator (`@rudderjs/database`), and a `database → orm` import (even
+ * type-only) would cycle the package graph. Re-exported by `@rudderjs/orm`
+ * (`cast.ts`) so existing imports keep working.
+ */
+export type BuiltInCast =
+  | 'string'
+  | 'integer'
+  | 'float'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'json'
+  | 'array'
+  | 'collection'
+  | 'encrypted'
+  | 'encrypted:array'
+  | 'encrypted:object'
+  | 'hashed'
+  /** Fixed-precision decimal kept as a string with N fractional digits, e.g. `'decimal:2'`. */
+  | `decimal:${number}`
+
 export type WhereOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'NOT LIKE' | 'IN' | 'NOT IN'
 
 export interface WhereClause {

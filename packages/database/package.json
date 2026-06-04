@@ -21,6 +21,12 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./sticky": {
+      "node": "./dist/sticky.js",
+      "import": "./dist/sticky.js",
+      "default": "./dist/sticky.js",
+      "types": "./dist/sticky.d.ts"
     }
   },
   "scripts": {
