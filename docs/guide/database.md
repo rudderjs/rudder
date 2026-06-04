@@ -21,7 +21,7 @@ All three are first-party and feature-equivalent at the model layer. The choice 
 | Schema / migrations | **Built-in** (`Schema` builder + `migrate`) | `prisma/schema/*.prisma` + `prisma migrate` | TS schema + `drizzle-kit` |
 | Drivers | SQLite, PostgreSQL, MySQL | SQLite, PostgreSQL, MySQL, libSQL | SQLite, PostgreSQL, MySQL, libSQL |
 | `whereHas` setup | None | needs a declared `@relation` | needs a table registry |
-| Relations via `Model.with()` | Polymorphic only | Supported | Supported (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) |
+| Relations via `Model.with()` | Supported | Supported | Supported |
 | Transactions (`transaction()`) | Supported | Supported | Supported |
 | Read/write split + sticky | Supported | — ([extension](/guide/database/connections#adapter-support)) | Supported |
 

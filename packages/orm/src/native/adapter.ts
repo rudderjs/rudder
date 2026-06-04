@@ -277,6 +277,13 @@ export class NativeAdapter implements OrmAdapter {
    *  or as a transaction scope spawned from one) — the query-event tag. */
   private readonly splitTag: 'write' | undefined
 
+  /** Direct relations (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`) resolve
+   *  in the ORM's Model layer — one batched `WHERE … IN` per relation, stitched
+   *  onto the parents (same machinery as Drizzle and the polymorphic loader).
+   *  The native QB's own `with()` stays a warn-only no-op: the adapter contract
+   *  passes relation NAMES only, with no join shape to compile from. */
+  readonly eagerLoadStrategy = 'model-layer' as const
+
   /** Build a `NativeAdapter`, opening the configured driver (lazy import). */
   static async make(config: NativeConfig = {}): Promise<NativeAdapter> {
     const primaryKey = config.primaryKey ?? 'id'

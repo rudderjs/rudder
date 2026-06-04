@@ -619,23 +619,24 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   // ── write path (Phase 2) ─────────────────────────────────
 
   with(...relations: string[]): this {
-    // Direct (non-polymorphic) eager-load isn't expressible through the current
-    // adapter contract — the adapter receives relation NAMES only, with no join
-    // shape. Polymorphic relations are already resolved in the Model layer
-    // (polymorphic-eager-load.ts) and never reach here. So a direct `with()`
-    // here is a silent no-op that would return rows WITHOUT the relation
-    // populated. Warn once per relation in dev so it isn't mistaken for working;
-    // production stays silent. Real native direct-eager-load is a contract-gap
-    // decision reported at the end of Phase 3.
+    // Eager loading isn't expressible at THIS level — the adapter receives
+    // relation NAMES only, with no join shape to compile from. The Model layer
+    // never forwards here: the adapter advertises `eagerLoadStrategy:
+    // 'model-layer'`, so direct relations resolve via batched WHERE-IN
+    // (direct-eager-load.ts) and polymorphic ones via their own loader. The
+    // only remaining callers are `withWhereHas`'s constrained-eager fallback
+    // and direct adapter-QB use, where this IS a no-op — warn once per
+    // relation in dev so it isn't mistaken for working; production stays silent.
     const isProd = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'production'
     if (!isProd) {
       for (const rel of relations) {
         if (_warnedWith.has(rel)) continue
         _warnedWith.add(rel)
         console.warn(
-          `[RudderJS ORM native] with("${rel}") does not eager-load direct relations yet — ` +
-          `the row is returned without "${rel}" populated. Load it via the relation accessor ` +
-          `(await instance.related("${rel}").get()) for now. Polymorphic relations are unaffected.`,
+          `[RudderJS ORM native] adapter-level with("${rel}") is a no-op — the row is returned ` +
+          `without "${rel}" populated. Constrained eager-load (withWhereHas) isn't supported on ` +
+          `the native engine: chain .whereHas(...) for the filter plus .with("${rel}") for the ` +
+          `(unconstrained) load, or use instance.related("${rel}").`,
         )
       }
     }
