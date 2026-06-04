@@ -366,7 +366,7 @@ jobs:
   orm-pg:
     # Live Postgres conformance for the native ORM engine. The default
     # build-test matrix runs SQLite only (in-memory better-sqlite3); the pg
-    # round-trip tests (packages/orm/src/native/drivers/postgres.test.ts) skip
+    # round-trip tests (orm's drivers/postgres.test.ts + the relocated engine suites in packages/database) skip
     # themselves unless PG_TEST_URL is set. This job stands up a real Postgres
     # service and points the suite at it, so the pg dialect + driver are exercised
     # end-to-end in CI instead of only on a maintainer's machine. Linux-only —
@@ -416,12 +416,12 @@ jobs:
       - name: ORM tests against live Postgres
         env:
           PG_TEST_URL: postgres://rudder:rudder@localhost:5432/rudder_native_pg_test
-        run: pnpm turbo run test --filter @rudderjs/orm --force
+        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --force
 
   orm-mysql:
     # Live MySQL conformance for the native ORM engine — mirrors orm-pg. The
     # default build-test matrix runs SQLite only; the mysql round-trip tests
-    # (packages/orm/src/native/drivers/mysql.test.ts + schema/mysql-introspect.test.ts)
+    # (orm's drivers/mysql.test.ts + the relocated engine suites in packages/database)
     # skip themselves unless MYSQL_TEST_URL is set. This job stands up a real MySQL
     # service so the mysql dialect + driver (and the no-RETURNING write path) are
     # exercised end-to-end in CI. Linux-only — GitHub service containers don't run
@@ -469,7 +469,7 @@ jobs:
       - name: ORM tests against live MySQL
         env:
           MYSQL_TEST_URL: mysql://root:rudder@127.0.0.1:3306/rudder_native_mysql_test
-        run: pnpm turbo run test --filter @rudderjs/orm --force
+        run: pnpm turbo run test --filter @rudderjs/orm --filter @rudderjs/database --force
 
   docs-build:
     # Runs on EVERY PR (no `if:`), code or docs. The VitePress build is the

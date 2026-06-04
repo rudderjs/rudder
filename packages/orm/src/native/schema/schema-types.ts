@@ -9,8 +9,8 @@
 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { Executor } from '../driver.js'
-import type { Dialect } from '../dialect.js'
+import type { Executor } from '@rudderjs/database/native'
+import type { Dialect } from '@rudderjs/database/native'
 import { readTables, readColumns } from './introspect.js'
 import { buildTableTypes, emitRegistryDts, sqliteTypeToTs, pgTypeToTs, mysqlTypeToTs, type TableTypes } from './types-generator.js'
 

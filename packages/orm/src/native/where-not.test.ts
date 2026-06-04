@@ -10,13 +10,13 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { OrmAdapter, QueryBuilder } from '@rudderjs/contracts'
-import { compileSelect, type NativeQueryState, type ConditionNode } from './compiler.js'
-import { SqliteDialect } from './dialect.js'
-import { PgDialect } from './dialect-pg.js'
+import { compileSelect, type NativeQueryState, type ConditionNode } from '@rudderjs/database/native'
+import { SqliteDialect } from '@rudderjs/database/native'
+import { PgDialect } from '@rudderjs/database/native'
 import { Model, ModelRegistry } from '../index.js'
 import { NativeAdapter } from './adapter.js'
-import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
-import type { Driver } from './driver.js'
+import { BetterSqlite3Driver } from '@rudderjs/database/native'
+import type { Driver } from '@rudderjs/database/native'
 
 const sqlite = new SqliteDialect()
 

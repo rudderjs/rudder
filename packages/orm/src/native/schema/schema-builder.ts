@@ -12,9 +12,9 @@
 // (scoped to `current_schema()` / `DATABASE()` respectively). They branch on
 // `dialect.name`.
 
-import type { Executor } from '../driver.js'
-import type { Dialect } from '../dialect.js'
-import { NativeNotImplementedError } from '../errors.js'
+import type { Executor } from '@rudderjs/database/native'
+import type { Dialect } from '@rudderjs/database/native'
+import { NativeNotImplementedError } from '@rudderjs/database/native'
 import { Blueprint } from './blueprint.js'
 import { AlterBlueprint } from './alter-blueprint.js'
 import { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable } from './ddl-compiler.js'

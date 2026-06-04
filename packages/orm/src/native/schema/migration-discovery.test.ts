@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { NativeOrmError } from '../errors.js'
+import { NativeOrmError } from '@rudderjs/database/native'
 import { discoverMigrations } from './migrator.js'
 
 // The native barrel as THIS test build sees it (dist-test/native/index.js, the

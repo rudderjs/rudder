@@ -13,8 +13,8 @@ import {
   hasFlag, flagNumber, rollbackStep,
 } from './migrate.js'
 import { NativeAdapter } from '../native/adapter.js'
-import { BetterSqlite3Driver } from '../native/drivers/better-sqlite3.js'
-import type { Driver } from '../native/driver.js'
+import { BetterSqlite3Driver } from '@rudderjs/database/native'
+import type { Driver } from '@rudderjs/database/native'
 
 describe('migrate — detectORM()', () => {
   let tmpDir: string

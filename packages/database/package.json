@@ -27,6 +27,12 @@
       "import": "./dist/sticky.js",
       "default": "./dist/sticky.js",
       "types": "./dist/sticky.d.ts"
+    },
+    "./native": {
+      "node": "./dist/native/index.js",
+      "import": "./dist/native/index.js",
+      "default": "./dist/native/index.js",
+      "types": "./dist/native/index.d.ts"
     }
   },
   "scripts": {
@@ -40,8 +46,26 @@
   "dependencies": {
     "@rudderjs/contracts": "workspace:^"
   },
+  "peerDependencies": {
+    "better-sqlite3": "^12.0.0",
+    "postgres": "^3.0.0",
+    "mysql2": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "postgres": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
+    "better-sqlite3": "^12.0.0",
     "typescript": "^5.4.0",
     "tsx": "^4.0.0"
   },

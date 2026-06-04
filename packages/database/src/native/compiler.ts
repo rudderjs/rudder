@@ -1121,9 +1121,12 @@ export function compileScalarAggregate(
   return { sql, bindings: b.values }
 }
 
-/** @internal — exported for the query builder so it can share one `Bindings`
- *  run across the WHERE (clauses + EXISTS fragments) and the SELECT-list
- *  aggregate subselects. Construction is otherwise module-private. */
+/** Engine-internal seam — exported for the query builder so it can share one
+ *  `Bindings` run across the WHERE (clauses + EXISTS fragments) and the
+ *  SELECT-list aggregate subselects. Construction is otherwise module-private.
+ *  (Deliberately NOT tagged internal: `stripInternal` would drop it from the
+ *  emitted d.ts, and it is consumed cross-package by @rudderjs/orm's engine
+ *  suites until PR-A3.) */
 export function makeBindings(dialect: Dialect): Bindings {
   return new Bindings(dialect)
 }

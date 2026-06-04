@@ -10,12 +10,12 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { compileSelect, compileCount, type NativeQueryState, type JoinNode } from './compiler.js'
-import { SqliteDialect } from './dialect.js'
+import { compileSelect, compileCount, type NativeQueryState, type JoinNode } from '@rudderjs/database/native'
+import { SqliteDialect } from '@rudderjs/database/native'
 import { Model, ModelRegistry } from '../index.js'
 import { NativeAdapter } from './adapter.js'
-import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
-import type { Driver } from './driver.js'
+import { BetterSqlite3Driver } from '@rudderjs/database/native'
+import type { Driver } from '@rudderjs/database/native'
 
 const dialect = new SqliteDialect()
 
