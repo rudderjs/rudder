@@ -414,6 +414,26 @@ export class NativeAdapter implements OrmAdapter {
   }
 
   /**
+   * Database overview for `rudder db:show` — dialect, version, database name,
+   * and every user table (with sizes where the dialect can report them, row
+   * counts/views on request). Lazily imported like {@link generateSchemaTypes}
+   * to keep the adapter's static eval graph import-light.
+   */
+  async inspectDatabase(opts: { counts?: boolean; views?: boolean } = {}): Promise<import('./schema/inspect.js').DatabaseInfo> {
+    const { inspectDatabase } = await import('./schema/inspect.js')
+    return inspectDatabase(this.executor, this.dialect, opts)
+  }
+
+  /**
+   * Single-table detail for `rudder db:table <name>` — columns, indexes,
+   * foreign keys, row count. Null when the table doesn't exist.
+   */
+  async inspectTable(table: string): Promise<import('./schema/inspect.js').TableInfo | null> {
+    const { inspectTable } = await import('./schema/inspect.js')
+    return inspectTable(this.executor, this.dialect, table)
+  }
+
+  /**
    * Run `fn` inside a transaction (or a SAVEPOINT when already inside one),
    * passing it a transaction-scoped `NativeAdapter` whose queries execute on the
    * transaction's connection. The Model layer threads that scoped adapter

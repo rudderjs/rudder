@@ -136,6 +136,7 @@ The framework ships several built-in commands that show up automatically. The se
 | `make:seeder` | orm | Scaffold a `Seeder` subclass at `database/seeders/<Name>Seeder.ts` |
 | `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM) |
 | `model:prune` | orm | Walk `prunable()` models and delete matching rows. Honors `pruneMode: 'instance' \| 'mass'` |
+| `db:show`, `db:table` | orm (native engine) | Inspect the live database — `db:show` lists tables with sizes (`--counts` adds row counts, `--views` adds views); `db:table <name>` shows columns, indexes, and foreign keys. `--json` machine-readable. Prisma/Drizzle apps are pointed at `prisma studio` / `drizzle-kit studio`. See [Native Engine — Inspecting](./database/native.md#inspecting-the-database). |
 | `queue:work` | queue | Worker process |
 | `storage:link` | storage | Symlink `public/storage → storage/app/public` |
 | `schedule:work`, `schedule:run`, `schedule:list` | schedule | Task scheduler |

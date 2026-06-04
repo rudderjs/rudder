@@ -151,6 +151,41 @@ await transaction(async () => {
 })
 ```
 
+## Inspecting the database
+
+Laravel's `db:show` / `db:table`, over the native engine's live connection:
+
+```bash
+pnpm rudder db:show              # overview — dialect, version, every table + on-disk size
+pnpm rudder db:show --counts     # add row counts (runs one COUNT(*) per table)
+pnpm rudder db:show --views      # add the view list
+pnpm rudder db:table users      # one table — columns, indexes, foreign keys, row count
+```
+
+```
+  posts  1 row · 4.0 KB
+
+  COLUMN  TYPE     NULLABLE  DEFAULT
+  ──────  ───────  ────────  ───────
+  id      INTEGER  yes       —
+  title   TEXT     no        —
+  userId  INTEGER  no        0
+
+  INDEX              COLUMNS  ATTRIBUTES
+  ─────────────────  ───────  ──────────
+  PRIMARY            id       primary, unique
+  posts_title_index  title    —
+
+  Foreign Keys
+  userId → users (id)  on update NO ACTION · on delete CASCADE
+```
+
+Both take `--json` for machine-readable output. Notes:
+
+- **Native engine only** — Prisma and Drizzle apps are pointed at their own inspectors (`prisma studio` / `drizzle-kit studio`).
+- Per-table sizes come from `pg_total_relation_size` (Postgres) and `data_length + index_length` (MySQL). On SQLite they need the optional `dbstat` module — sizes show `—` on builds without it.
+- `db:table <name>` only ever inspects a name the catalog itself reports — an unknown table errors with the available-tables list.
+
 ## Standalone — without the framework
 
 `@rudderjs/orm` is a plain library; nothing on the query path imports `@rudderjs/core`. You can wire the native adapter by hand in any Node project — see [Database — Standalone](/guide/database#standalone-rudderjs-orm-in-any-node-app).

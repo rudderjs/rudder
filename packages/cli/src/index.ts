@@ -214,6 +214,13 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerSchemaTypesCommand'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
       register(rudder, { bootApp })
     },
+    // @rudderjs/orm → db:show, db:table. Resolves the native engine (via
+    // bootApp on demand, like schema:types) to inspect its live connection.
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/db-inspect')
+      const register = mod['registerDbInspectCommands'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
+      register(rudder, { bootApp })
+    },
     // @rudderjs/orm → model:prune
     async () => {
       const mod = await tryImport('@rudderjs/orm', 'commands/prune')

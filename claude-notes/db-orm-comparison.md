@@ -173,7 +173,7 @@
 
 **Tier 3 — ecosystem/positioning (not engine code):**
 11. Published comparative benchmark suite (Q3 deliverable).
-12. `db:show` / `db:table` CLI introspection commands (gap-doc carryover).
+12. ~~`db:show` / `db:table` CLI introspection commands~~ — **SHIPPED post-audit**: native-engine inspection (`inspectDatabase`/`inspectTable` in `@rudderjs/database` + orm `db-inspect` command; `--counts`/`--views`/`--json`; prisma/drizzle pointed at their studios).
 13. Studio/GUI story — likely "integrate, don't build" (Telescope already records queries; an admin data browser is a separate product call).
 14. Set operators intersect/except — low demand, log only.
 15. Tree entities (closure table) — niche; revisit on demand.
