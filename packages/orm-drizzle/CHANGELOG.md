@@ -1,5 +1,23 @@
 # @rudderjs/orm-drizzle
 
+## 1.9.0
+
+### Minor Changes
+
+- 06bef2c: JSON arrow-path keys in update payloads — `Model.update(id, { 'meta->prefs->lang': 'en' })` (and `updateAll`) now works on the Drizzle adapter, mirroring the native engine: sqlite `json_set(col, path, json(?))`, mysql `JSON_SET(col, path, CAST(? AS JSON))`, pg nested `jsonb_set((col)::jsonb, ARRAY[…], cast(? as text)::jsonb)` (the text cast sidesteps postgres-js re-stringifying jsonb-described params). Values bind as JSON text so every type (string/number/boolean/null/array/object) round-trips identically; multiple writes on one column merge into a single assignment; mixing a whole-column write and an arrow write on the same column throws; path segments run the same injection gate as JSON reads; plain payloads are untouched (zero-cost gate).
+- 8e3b928: JSON-path predicates on the Drizzle adapter (parity with the native engine): arrow paths in `where()` (`where('meta->prefs->lang', 'en')` — also in `orWhere`, group callbacks, `whereNot`, the `whereIn`/`whereNull`/`whereBetween` sugar, and `whereHas` constraint callbacks), plus `whereJsonContains` / `whereJsonDoesntContain` / `whereJsonLength` (+ `orWhere*` forms). Per-dialect SQL mirrors the native seams — sqlite `json_extract` + `json_each` EXISTS emulation, pg arrow chains with `::numeric`/`::boolean` casts + `@>` + `jsonb_array_length` (the containment candidate binds through `cast(? as text)::jsonb` so postgres-js can't double-encode it), mysql `JSON_UNQUOTE(JSON_EXTRACT)` + `JSON_CONTAINS` + `JSON_LENGTH` with booleans spliced as SQL literals. Path segments are validated (quotes/backslashes/backticks/control chars rejected); numeric segments address array indexes.
+
+### Patch Changes
+
+- 67cc342: Fix MySQL write paths — `Model.create()` / `update()` / `restore()` threw `TypeError: .returning is not a function` on MySQL (drizzle's mysql builders have no `.returning()`; it's a pg/sqlite method), and `updateAll()` / `deleteAll()` / `upsert()` always reported 0 affected rows on mysql2 (the result is the tuple `[ResultSetHeader, null]` — the count was read off the tuple itself). Writes now run without RETURNING and re-SELECT by primary key on the write connection (auto-increment `insertId` from the header, or the caller-supplied key for uuid/ulid models), mirroring the native engine; affected-row counts read the header through a tuple- and planetscale-aware normalizer. Went unnoticed because the live-MySQL tests seeded via SQL literals and never exercised Model writes — a proxy-based SQL-sequence suite plus a gated live-MySQL write round-trip now cover them.
+- Updated dependencies [39eec73]
+- Updated dependencies [135aa78]
+- Updated dependencies [5bfe9b1]
+- Updated dependencies [7c39c47]
+- Updated dependencies [0e0a9c5]
+  - @rudderjs/orm@1.15.0
+  - @rudderjs/contracts@1.11.0
+
 ## 1.8.0
 
 ### Minor Changes
