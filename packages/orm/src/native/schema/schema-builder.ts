@@ -8,8 +8,9 @@
 // binds a builder to the active connection.
 //
 // `hasTable` / `hasColumn` introspect the live database — SQLite via the
-// PRAGMA/`sqlite_master` catalog, Postgres via `information_schema` (7.7). They
-// branch on `dialect.name`; MySQL introspection lands with its DDL dialect (7.8).
+// PRAGMA/`sqlite_master` catalog, Postgres + MySQL via `information_schema`
+// (scoped to `current_schema()` / `DATABASE()` respectively). They branch on
+// `dialect.name`.
 
 import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
@@ -71,9 +72,10 @@ export class SchemaBuilder {
 
   /** Whether `table` exists (catalog lookup). */
   async hasTable(table: string): Promise<boolean> {
-    if (this.dialect.name === 'pg') {
+    const schemaFn = this.currentSchemaSql()
+    if (schemaFn) {
       const rows = await this.executor.execute(
-        `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ${this.dialect.placeholder(0)}`,
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = ${schemaFn} AND table_name = ${this.dialect.placeholder(0)}`,
         [table],
       )
       return rows.length > 0
@@ -88,9 +90,10 @@ export class SchemaBuilder {
 
   /** Whether `table` has a `column` (catalog lookup). */
   async hasColumn(table: string, column: string): Promise<boolean> {
-    if (this.dialect.name === 'pg') {
+    const schemaFn = this.currentSchemaSql()
+    if (schemaFn) {
       const rows = await this.executor.execute(
-        `SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ${this.dialect.placeholder(0)} AND column_name = ${this.dialect.placeholder(1)}`,
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = ${schemaFn} AND table_name = ${this.dialect.placeholder(0)} AND column_name = ${this.dialect.placeholder(1)}`,
         [table, column],
       )
       return rows.length > 0
@@ -101,9 +104,17 @@ export class SchemaBuilder {
     return rows.some(r => r['name'] === column)
   }
 
+  /** The SQL expression naming the active schema/database for dialects that
+   *  introspect via `information_schema`, or `null` for the sqlite path. */
+  private currentSchemaSql(): string | null {
+    if (this.dialect.name === 'pg')    return 'current_schema()'
+    if (this.dialect.name === 'mysql') return 'DATABASE()'
+    return null
+  }
+
   private requireSqlite(method: string): void {
     if (this.dialect.name !== 'sqlite') {
-      throw new NativeNotImplementedError(`SchemaBuilder.${method} on the "${this.dialect.name}" dialect`, 'a later phase (7.8 — MySQL)')
+      throw new NativeNotImplementedError(`SchemaBuilder.${method} on the "${this.dialect.name}" dialect`, 'a later phase')
     }
   }
 }
