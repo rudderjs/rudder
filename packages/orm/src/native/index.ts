@@ -9,9 +9,16 @@
 // imports a native driver and must stay out of any browser graph. The
 // `Client Bundle Smoke` gate enforces it (cross-phase rule 5).
 
+// Engine core (compiler, dialects, driver seam, concrete drivers, query
+// builder, errors, column definitions) — relocated to `@rudderjs/database`
+// (Phase-2 PR-A2, docs/plans/2026-06-04-database-extraction-phase-2.md).
+// Re-exported here so the `@rudderjs/orm/native` surface is unchanged; the
+// adapter + schema builder below follow in PR-A3, after which this barrel
+// becomes a pure shim of `@rudderjs/database/native`.
+
 export { NativeAdapter, native } from './adapter.js'
 export type { NativeConfig, NativeDriverName } from './adapter.js'
-export { NativeQueryBuilder } from './query-builder.js'
+export { NativeQueryBuilder } from '@rudderjs/database/native'
 
 // NOTE: the framework provider (`NativeDatabaseProvider` / `nativeDatabase`) is
 // deliberately NOT re-exported here. It `extends ServiceProvider` from
@@ -22,14 +29,14 @@ export { NativeQueryBuilder } from './query-builder.js'
 // importing the engine never drags the framework in.
 
 // Seams — exported so RN/browser drivers and alternate dialects can plug in.
-export { SqliteDialect, validateIdentifier } from './dialect.js'
-export { PgDialect } from './dialect-pg.js'
-export type { Dialect } from './dialect.js'
-export type { Driver, Executor, Transaction, Row } from './driver.js'
-export { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
-export type { BetterSqlite3DriverConfig } from './drivers/better-sqlite3.js'
-export { PostgresDriver } from './drivers/postgres.js'
-export type { PostgresDriverConfig } from './drivers/postgres.js'
+export { SqliteDialect, validateIdentifier } from '@rudderjs/database/native'
+export { PgDialect } from '@rudderjs/database/native'
+export type { Dialect } from '@rudderjs/database/native'
+export type { Driver, Executor, Transaction, Row } from '@rudderjs/database/native'
+export { BetterSqlite3Driver } from '@rudderjs/database/native'
+export type { BetterSqlite3DriverConfig } from '@rudderjs/database/native'
+export { PostgresDriver } from '@rudderjs/database/native'
+export type { PostgresDriverConfig } from '@rudderjs/database/native'
 
 // Compiler (pure) — exported for unit testing and advanced reuse.
 export {
@@ -43,8 +50,8 @@ export {
   compileAggregateSubselect,
   compileScalarAggregate,
   makeBindings,
-} from './compiler.js'
-export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from './compiler.js'
+} from '@rudderjs/database/native'
+export type { CompiledQuery, NativeQueryState, ConditionNode, Bindings } from '@rudderjs/database/native'
 
 // Schema builder (DDL) — Laravel-style `Blueprint` + per-dialect DDL compiler
 // (7.1) plus the migration runner: `Migration` base, static `Schema` facade, and
@@ -53,8 +60,8 @@ export { SchemaBuilder } from './schema/schema-builder.js'
 export { Blueprint } from './schema/blueprint.js'
 export { AlterBlueprint } from './schema/alter-blueprint.js'
 export type { RenameColumn } from './schema/alter-blueprint.js'
-export { ColumnBuilder, makeColumn } from './schema/column.js'
-export type { ColumnDefinition, ColumnType } from './schema/column.js'
+export { ColumnBuilder, makeColumn } from '@rudderjs/database/native'
+export type { ColumnDefinition, ColumnType } from '@rudderjs/database/native'
 export type { IndexDefinition } from './schema/blueprint.js'
 export { compileCreateTable, compileDropTable, compileAlterTable, compileRenameTable, compileColumnSpec } from './schema/ddl-compiler.js'
 export { rebuildTable } from './schema/rebuild.js'
@@ -79,4 +86,4 @@ export {
   NativeNotImplementedError,
   NativeIdentifierError,
   NativeDriverError,
-} from './errors.js'
+} from '@rudderjs/database/native'

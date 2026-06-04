@@ -8,8 +8,8 @@
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { PgDialect } from './dialect-pg.js'
-import { NativeIdentifierError, NativeOrmError } from './errors.js'
+import { PgDialect } from '@rudderjs/database/native'
+import { NativeIdentifierError, NativeOrmError } from '@rudderjs/database/native'
 import { Blueprint } from './schema/blueprint.js'
 import { compileCreateTable, compileDropTable, compileRenameTable } from './schema/ddl-compiler.js'
 

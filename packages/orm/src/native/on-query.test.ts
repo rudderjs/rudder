@@ -15,8 +15,8 @@ import { Model, ModelRegistry } from '../index.js'
 // Side effect: registers the DB facade's adapter resolver + transaction runner.
 import '../db-bridge.js'
 import { NativeAdapter } from './adapter.js'
-import type { Driver, Row, Transaction } from './driver.js'
-import type { AffectingResult } from './driver.js'
+import type { Driver, Row, Transaction } from '@rudderjs/database/native'
+import type { AffectingResult } from '@rudderjs/database/native'
 
 // ── Unit: fake driver ──────────────────────────────────────
 

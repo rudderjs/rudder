@@ -10,9 +10,9 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Model, ModelRegistry } from '../../index.js'
 import { NativeAdapter } from '../adapter.js'
-import { BetterSqlite3Driver } from '../drivers/better-sqlite3.js'
-import { SqliteDialect } from '../dialect.js'
-import type { Driver } from '../driver.js'
+import { BetterSqlite3Driver } from '@rudderjs/database/native'
+import { SqliteDialect } from '@rudderjs/database/native'
+import type { Driver } from '@rudderjs/database/native'
 import { SchemaBuilder } from './schema-builder.js'
 
 class User extends Model {

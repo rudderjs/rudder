@@ -7,8 +7,8 @@
 
 import { describe, it, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { PostgresDriver } from '../drivers/postgres.js'
-import { PgDialect } from '../dialect-pg.js'
+import { PostgresDriver } from '@rudderjs/database/native'
+import { PgDialect } from '@rudderjs/database/native'
 import { SchemaBuilder } from './schema-builder.js'
 import { Blueprint } from './blueprint.js'
 import { collectSchemaTypes } from './schema-types.js'
