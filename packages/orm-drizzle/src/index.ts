@@ -295,21 +295,30 @@ function emitQueryEvent(
 export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
 
 /**
+ * @internal — the write-result metadata a MySQL driver reports. mysql2 resolves
+ * a drizzle write to the TUPLE `[ResultSetHeader, FieldPacket[] | null]` (header
+ * at index 0, carrying `affectedRows` / `insertId`); planetscale-serverless
+ * resolves to a bare `{ rowsAffected, insertId }` object. Normalize both.
+ */
+function mysqlWriteHeader(result: unknown): { affectedRows?: number; rowsAffected?: number; insertId?: number } {
+  const header = Array.isArray(result) ? result[0] : result
+  return (header ?? {}) as { affectedRows?: number; rowsAffected?: number; insertId?: number }
+}
+
+/**
  * @internal — affected-row count for UPDATE/DELETE.
  *
  * Postgres + SQLite expose row counts via `.returning()` (which we then take
  * `.length` of). MySQL drivers don't support `RETURNING`; their result
- * metadata carries the count on `affectedRows` (mysql2) or `rowsAffected`
- * (planetscale-serverless). We branch on dialect rather than sniffing the
- * result shape because MySQL `.returning()` is a no-op that silently returns
- * the empty array — there's no way to distinguish "zero rows matched" from
- * "driver didn't support it" at the value level.
+ * metadata comes back via {@link mysqlWriteHeader}. We branch on dialect
+ * rather than sniffing the result shape because MySQL `.returning()` doesn't
+ * exist on drizzle's mysql builders — there's no way to distinguish "zero rows
+ * matched" from "driver didn't support it" at the value level.
  */
 async function affectedRowCount(q: unknown, dialect: DrizzleDialect): Promise<number> {
   if (dialect === 'mysql') {
-    const result = await (q as Promise<unknown>)
-    const r = result as { affectedRows?: number; rowsAffected?: number }
-    return r.affectedRows ?? r.rowsAffected ?? 0
+    const header = mysqlWriteHeader(await (q as Promise<unknown>))
+    return header.affectedRows ?? header.rowsAffected ?? 0
   }
   const r = (q as { returning: () => Promise<unknown[]> }).returning
   const result = await r.call(q)
@@ -1813,12 +1822,37 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
+  /** @internal — re-SELECT a row by primary key after a no-RETURNING (MySQL)
+   *  write. Deliberately stays on the WRITE connection — read-your-write; a
+   *  replica may not have the row yet (mirrors the native engine's
+   *  `_reselect`). */
+  private async _mysqlReselect(id: number | string, label: string): Promise<T> {
+    const pkCol = this.col(this.primaryKey) as Column
+    const rows = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1), this.split.tag)
+    if (!rows[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() could not re-select the written row.`)
+    return rows[0]
+  }
+
   async create(data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
-    const result = await this._run<T[]>(this._writeDb()
-      .insert(this.table)
-      .values(data)
-      .returning(), this.split.tag)
+    const insert = this._writeDb().insert(this.table).values(data)
+    if (this.dialect === 'mysql') {
+      // No RETURNING on MySQL (drizzle's mysql insert builder has no
+      // `.returning()`): run the INSERT, then re-SELECT by primary key — the
+      // auto-increment id from the result header, or the caller-supplied key
+      // (uuid/ulid models stamp it before insert). The returned row is the
+      // REAL stored row (DB defaults applied), consistent with the RETURNING
+      // dialects.
+      const header = mysqlWriteHeader(await this._run<unknown>(insert, this.split.tag))
+      const insertId = typeof header.insertId === 'number' && header.insertId > 0 ? header.insertId : null
+      const id = insertId ?? ((data as Record<string, unknown>)[this.primaryKey] as number | string | undefined)
+      if (id === undefined || id === null) {
+        // No way to identify the row — synthesize from the input (best effort).
+        return { ...(data as Record<string, unknown>) } as T
+      }
+      return this._mysqlReselect(id, 'create')
+    }
+    const result = await this._run<T[]>(insert.returning(), this.split.tag)
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] create() returned no rows.')
     return result[0]
   }
@@ -1826,11 +1860,13 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await this._run<T[]>(this._writeDb()
-      .update(this.table)
-      .set(data)
-      .where(eq(pkCol, id))
-      .returning(), this.split.tag)
+    const upd = this._writeDb().update(this.table).set(data).where(eq(pkCol, id))
+    if (this.dialect === 'mysql') {
+      // No RETURNING on MySQL — UPDATE, then re-SELECT by primary key.
+      await this._run<unknown>(upd, this.split.tag)
+      return this._mysqlReselect(id, 'update')
+    }
+    const result = await this._run<T[]>(upd.returning(), this.split.tag)
     if (!result[0]) throw new Error('[RudderJS ORM Drizzle] update() returned no rows.')
     return result[0]
   }
@@ -1850,11 +1886,13 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async restore(id: number | string): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const result = await this._run<T[]>(this._writeDb()
-      .update(this.table)
-      .set({ deletedAt: null })
-      .where(eq(pkCol, id))
-      .returning(), this.split.tag)
+    const upd = this._writeDb().update(this.table).set({ deletedAt: null }).where(eq(pkCol, id))
+    if (this.dialect === 'mysql') {
+      // No RETURNING on MySQL — UPDATE, then re-SELECT by primary key.
+      await this._run<unknown>(upd, this.split.tag)
+      return this._mysqlReselect(id, 'restore')
+    }
+    const result = await this._run<T[]>(upd.returning(), this.split.tag)
     return result[0] as T
   }
 
