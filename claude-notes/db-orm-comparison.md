@@ -55,7 +55,7 @@
 | Cursor pagination | ✅ cursorPaginate | ✅ cursor+take | ✅ (guide) | ❌ | ❌ (community libs) | ✅ findByCursor (richest) |
 | **CTEs** | ✅ withExpression + recursive (native; shipped post-audit) | ❌ | ✅ | ❌ | ✅ + recursive | ✅ + recursive (v7) |
 | **Window functions** | **❌** | ❌ | via sql`` | ❌ | ✅ typed | via sql`` |
-| INSERT…SELECT | ❌ | ❌ | ✅ | ✅ 1.0 | ✅ | ✅ insertFrom |
+| INSERT…SELECT | ✅ insertUsing (native; shipped post-audit) | ❌ | ✅ | ✅ 1.0 | ✅ | ✅ insertFrom |
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
 | whereColumn / column-vs-column | ✅ | ❌ | manual sql | manual | ✅ (ref) | manual |
 
@@ -165,7 +165,7 @@
 
 **Tier 2 — differentiated-but-real:**
 5. Optimistic locking (`static version` column, OptimisticLockError) — TypeORM/MikroORM precedent.
-6. INSERT…SELECT (`insertFrom`/`insertUsing`).
+6. ~~INSERT…SELECT~~ — **SHIPPED post-audit**: `insertUsing(columns, query)` (native engine).
 7. Window functions (at least `orderByRaw`-adjacent typed `rowNumber()/rank() OVER`) — or document the raw-expr recipe.
 8. Weighted/custom replica picker (Drizzle parity) — small seam on `readPick`.
 9. `Schema.connection()` + `migrate --connection` (multi-DB migrations; TypeORM has per-DataSource).

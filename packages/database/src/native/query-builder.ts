@@ -28,6 +28,7 @@ import {
   compileSelect,
   compileCount,
   compileInsert,
+  compileInsertUsing,
   compileUpdate,
   compileIncrement,
   compileDelete,
@@ -570,24 +571,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     opts: { bindings?: readonly unknown[]; columns?: readonly string[] },
     recursive: boolean,
   ): this {
-    let body: CteNode['body']
-    if (typeof query === 'string') {
-      body = { kind: 'raw', raw: { sql: query, bindings: opts.bindings ?? [] } }
-    } else {
-      if (opts.bindings !== undefined) {
-        throw new Error(
-          '[RudderJS ORM native] withExpression() bindings are only valid with a raw-SQL body — a query-builder body carries its own.',
-        )
-      }
-      // Same proxy unwrap as union() — accepts Model.query() chains.
-      const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
-      if (!(target instanceof NativeQueryBuilder)) {
-        throw new Error(
-          '[RudderJS ORM native] withExpression() requires a native query builder or a raw SQL string body.',
-        )
-      }
-      body = { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
-    }
+    const body = this._subqueryBody('withExpression', query, opts.bindings)
     this._ctes.push({ name, recursive, body, ...(opts.columns !== undefined ? { columns: opts.columns } : {}) })
     return this
   }
@@ -627,25 +611,29 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     query: QueryBuilder<unknown> | string,
     bindings?: readonly unknown[],
   ): this {
-    let body: SubqueryBody
-    if (typeof query === 'string') {
-      body = { kind: 'raw', raw: { sql: query, bindings: bindings ?? [] } }
-    } else {
-      if (bindings !== undefined) {
-        throw new Error(
-          '[RudderJS ORM native] whereExists() bindings are only valid with a raw-SQL body — a query-builder body carries its own.',
-        )
-      }
-      const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
-      if (!(target instanceof NativeQueryBuilder)) {
-        throw new Error(
-          '[RudderJS ORM native] whereExists() requires a native query builder or a raw SQL string body.',
-        )
-      }
-      body = { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
-    }
-    this._conditions.push({ kind: 'exists', boolean, negated, body })
+    this._conditions.push({ kind: 'exists', boolean, negated, body: this._subqueryBody('whereExists', query, bindings) })
     return this
+  }
+
+  /** @internal — resolve a builder-or-raw subquery argument to a `SubqueryBody`
+   *  (shared by `whereExists` and `insertUsing`). Raw strings carry their own
+   *  `?` bindings; builders are proxy-unwrapped and must be native. */
+  private _subqueryBody(method: string, query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): SubqueryBody {
+    if (typeof query === 'string') {
+      return { kind: 'raw', raw: { sql: query, bindings: bindings ?? [] } }
+    }
+    if (bindings !== undefined) {
+      throw new Error(
+        `[RudderJS ORM native] ${method}() bindings are only valid with a raw-SQL body — a query-builder body carries its own.`,
+      )
+    }
+    const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
+    if (!(target instanceof NativeQueryBuilder)) {
+      throw new Error(
+        `[RudderJS ORM native] ${method}() requires a native query builder or a raw SQL string body.`,
+      )
+    }
+    return { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
   }
 
   limit(n: number):  this { this._limitN  = n; return this }
@@ -947,6 +935,29 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       this._state(), this.dialect, rows as Record<string, unknown>[], { returning: false, upsert },
     )
     const { affectedRows } = await this._affecting(sql, bindings)
+    return affectedRows
+  }
+
+  /**
+   * `INSERT INTO table (cols) SELECT …` — insert rows produced by a subquery
+   * (another native query or a raw SQL string + bindings; same body forms as
+   * {@link whereExists}). The column list is required and maps the subquery's
+   * projection positionally. Returns the inserted-row count. Bulk data-plane
+   * write: no observer events, no fillable/guarded filtering, no key
+   * generation — like `insertMany`/`upsert`.
+   */
+  async insertUsing(columns: readonly string[], query: QueryBuilder<unknown> | string, bindings?: readonly unknown[]): Promise<number> {
+    this._assertNotSubBuilder()
+    const body = this._subqueryBody('insertUsing', query, bindings)
+    // SQLite/Postgres: RETURNING * — inserted = rows returned.
+    if (this.dialect.supportsReturning) {
+      const { sql, bindings: binds } = compileInsertUsing(this._state(), this.dialect, columns, body, { returning: true })
+      const out = await this.executor.execute(sql, binds)
+      return out.length
+    }
+    // MySQL: no RETURNING — read affectedRows off the driver metadata.
+    const { sql, bindings: binds } = compileInsertUsing(this._state(), this.dialect, columns, body, { returning: false })
+    const { affectedRows } = await this._affecting(sql, binds)
     return affectedRows
   }
 
