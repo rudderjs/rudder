@@ -9,7 +9,7 @@
 
 ```
 rudderjs/
-├── packages/           # 46 published packages (@rudderjs/*)
+├── packages/           # 49 published @rudderjs/* packages (+ vike-react-rsc-rudder)
 │   ├── contracts/      # Pure TypeScript types: AppRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, Str, Num, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── middleware/     # Middleware base, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware,

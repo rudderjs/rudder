@@ -9,7 +9,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
   <a href="https://www.npmjs.com/package/create-rudder"><img src="https://img.shields.io/npm/v/create-rudder?label=create-rudder&color=f5a623" alt="create-rudder" /></a>
-  <a href="https://github.com/rudderjs/rudder/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/rudderjs/rudder/ci.yml?branch=main&label=CI" alt="CI" /></a>
   <a href="https://github.com/rudderjs/rudder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
@@ -49,8 +48,8 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
 - **AI-native** — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage), agents with tools, streaming, MCP, queue-backed runs, approval gates.
 - **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
-- **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
-- **Pay-as-you-go** — 48 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (built-in native engine, or Prisma / Drizzle), one bootstrap file.
+- **Pay-as-you-go** — 49 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones. Introspection on tap — `route:list --verbose`, `event:list`, `config:show` for the "where is this wired up?" questions.
 - **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
@@ -207,28 +206,31 @@ Rudder Tinker — node v22.14.0, env=local
 
 Top-level `await`, persistent history in `~/.rudder-tinker-history`, `.boot` meta-command to pick up code changes.
 
-### 5. ORM — active record, Prisma or Drizzle
+### 5. ORM — active record on the built-in engine, Prisma, or Drizzle
 
 ```ts
-// app/Models/Post.ts
+// app/Models/Post.ts — column types GENERATED from your migrations (native engine)
 import { Model } from '@rudderjs/orm'
 
-export class Post extends Model {
-  static table    = 'post'
+export class Post extends Model.for<'posts'>() {
+  static table    = 'posts'
   static fillable = ['title', 'body', 'authorId']
-
-  id!: number
-  title!: string
-  body!: string
+  // no id!/title!/body! — they come from the migrated schema, so they can't drift
 }
 
 // Anywhere — query, mutate, paginate
-const recent = await Post.where('published', true).orderBy('createdAt', 'desc').paginate(1, 20)
+const recent = await Post.where('published', true).latest().paginate(1, 20)
 const post   = await Post.create({ title: 'Hello', body: 'World', authorId: 1 })
 await post.update({ title: 'Hello, Rudder' })
+
+// Full SQL when you need it — joins, CTEs, EXISTS subqueries, JSON paths, row locks
+const polyglots = await Post.where('meta->lang', 'en').orWhereJsonContains('meta->tags', 'i18n').get()
+const authors   = await User.whereExists(
+  Post.query().whereColumn('posts.authorId', '=', 'users.id'),
+).get()
 ```
 
-Same API on top of Prisma or Drizzle — swap adapters without touching model code.
+One Model API over three engines: the **built-in native engine** (`@rudderjs/database` — zero codegen, Laravel-style migrations + rollback, types generated from the schema as a migrate side effect) or **Prisma** / **Drizzle**. Swap engines in config without touching model code; relations (incl. polymorphic + through), soft deletes, observers, factories, casts, and read/write splitting with sticky reads work on all three.
 
 ### 6. AI agents — 15 providers, tools, streaming
 
@@ -459,7 +461,7 @@ pnpm create rudder my-app
 # or: bunx create-rudder my-app
 ```
 
-The installer asks one question — _"What are you building?"_ — and picks a recipe (Web app · SaaS · API service · Realtime · Minimal · Custom), a database, a frontend framework, and styling. Then it installs deps, generates the Prisma client, pushes the schema, publishes auth views, and initializes git — all without leaving the prompt.
+The installer asks one question — _"What are you building?"_ — and picks a recipe (Web app · SaaS · API service · Realtime · Minimal · Custom), a database, a frontend framework, and styling. Then it installs deps, sets up the database (native migrations by default; Prisma/Drizzle generate + push if you picked those), publishes auth views, and initializes git — all without leaving the prompt.
 
 ```bash
 cd my-app && pnpm dev
@@ -473,7 +475,7 @@ Visit `http://localhost:3000`. Done.
 
 ---
 
-## Packages (48)
+## Packages (49)
 
 > Three foundation packages get you running. The rest are opt-in.
 
@@ -481,7 +483,7 @@ Visit `http://localhost:3000`. Done.
 
 **HTTP & frontend** — [`view`](./packages/view) · [`vite`](./packages/vite) · [`session`](./packages/session)
 
-**Data** — [`orm`](./packages/orm) · [`orm-prisma`](./packages/orm-prisma) · [`orm-drizzle`](./packages/orm-drizzle) · [`cache`](./packages/cache) · [`storage`](./packages/storage)
+**Data** — [`orm`](./packages/orm) · [`database`](./packages/database) · [`orm-prisma`](./packages/orm-prisma) · [`orm-drizzle`](./packages/orm-drizzle) · [`cache`](./packages/cache) · [`storage`](./packages/storage)
 
 **Auth & security** — [`auth`](./packages/auth) · [`hash`](./packages/hash) · [`crypt`](./packages/crypt) · [`sanctum`](./packages/sanctum) · [`passport`](./packages/passport) · [`socialite`](./packages/socialite)
 
@@ -504,7 +506,7 @@ Visit `http://localhost:3000`. Done.
 | Layer | Default | Swap with |
 |---|---|---|
 | HTTP | Hono | pluggable server adapter |
-| ORM | Prisma | Drizzle |
+| ORM / database | Native engine (built-in, `@rudderjs/database`) | Prisma, Drizzle |
 | Auth | Native session | Sanctum (API tokens), Socialite (OAuth) |
 | Queue | BullMQ | Inngest |
 | Cache | In-memory | Redis |
