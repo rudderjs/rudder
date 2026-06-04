@@ -142,6 +142,19 @@ export interface RelationExistencePredicate {
     /** Pivot column projected as the inner select for the second step. */
     relatedPivotKey: string
   }
+  /**
+   * Optional child predicate for nested relation paths
+   * (`whereHas('posts.comments', cb)`) — the related rows must ALSO satisfy
+   * the child's existence, correlated against THIS predicate's related table
+   * (the child's `parentColumn` is a column on `relatedTable`). Chains
+   * recursively for deeper paths. Laravel `hasNested` semantics: every outer
+   * level is plain existence (`exists: true`, no `count`, empty
+   * `constraintWheres`); the constrain callback and any count comparison sit
+   * on the DEEPEST predicate; `whereDoesntHave` flips only the OUTERMOST
+   * `exists`. Adapters that can't express the recursion must reject predicates
+   * carrying `nested` rather than silently ignoring the field.
+   */
+  nested?: RelationExistencePredicate
 }
 
 export interface QueryBuilder<T> {

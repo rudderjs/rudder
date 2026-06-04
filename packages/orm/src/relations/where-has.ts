@@ -30,7 +30,8 @@ export type HasOrBelongsToDef = Exclude<
  * Run the constrain callback against a recording-only QueryBuilder that
  * captures `.where()` calls into a flat `WhereClause[]` and treats every
  * other chainable method as a no-op. Nested `whereHas` inside the callback
- * throws — recursive predicates are deferred to v2.
+ * throws — the dot-path form (`whereHas('parent.child', cb)`) covers that
+ * semantic instead.
  */
 export function captureConstraintWheres(
   constrain: (q: QueryBuilder<Model>) => void,
@@ -52,8 +53,8 @@ export function captureConstraintWheres(
       if (name === 'whereHas' || name === 'whereDoesntHave' || name === 'withWhereHas') {
         return (): QueryBuilder<Model> => {
           throw new Error(
-            `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is deferred to v2. ` +
-            `Filter on flat columns inside the callback for now.`,
+            `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is not supported — ` +
+            `use the dot-path form instead: whereHas('parent.child', cb) (native engine).`,
           )
         }
       }
@@ -262,6 +263,87 @@ export function buildRelationPredicate(
   }
 }
 
+// ─── Nested relation paths (`'posts.comments'`) ────────────
+
+/**
+ * Build the predicate chain for a dot-path relation
+ * (`whereHas('posts.comments', cb)`): each level resolves on the previous
+ * level's related model and wraps its child via the predicate's `nested`
+ * field. Laravel `hasNested` semantics — outer levels are plain existence,
+ * the constrain callback + any count comparison sit on the DEEPEST level,
+ * and `exists` flips only the OUTERMOST predicate (`whereDoesntHave('a.b')`
+ * = "has no `a` whose `b` exists"; an `a` without any `b` doesn't count
+ * against it).
+ *
+ * `morphTo` anywhere in the chain throws (dynamic related table); through
+ * relations throw inside {@link buildRelationPredicate} as before.
+ */
+export function buildNestedRelationPredicate(
+  Parent:           typeof Model,
+  path:             string,
+  exists:           boolean,
+  constraintWheres: WhereClause[],
+  count?:           { operator: WhereOperator; value: number },
+): RelationExistencePredicate {
+  const names = path.split('.')
+  if (names.some(n => n.length === 0)) {
+    throw new Error(`[RudderJS ORM] Malformed nested relation path "${path}" — empty segment.`)
+  }
+
+  // Resolve every level first (clear errors before any predicate is built).
+  const levels: Array<{ Owner: typeof Model; name: string; def: Exclude<RelationDefinition, { type: 'morphTo' }> }> = []
+  let Owner = Parent
+  for (const name of names) {
+    const def = Owner.relations[name]
+    if (!def) {
+      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${Owner.name} (nested path "${path}").`)
+    }
+    if (def.type === 'morphTo') {
+      throw new Error(
+        `[RudderJS ORM] morphTo "${name}" cannot appear in a nested whereHas path ("${path}") — the related ` +
+        `table is dynamic. Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
+      )
+    }
+    levels.push({ Owner, name, def })
+    Owner = def.model() as typeof Model
+  }
+
+  // Build deepest-first; each level wraps its child via `nested`.
+  let child: RelationExistencePredicate | undefined
+  for (let i = levels.length - 1; i >= 0; i--) {
+    const level   = levels[i]!
+    const deepest = i === levels.length - 1
+    const pred = buildRelationPredicate(
+      level.Owner, level.name, level.def,
+      i === 0 ? exists : true,
+      deepest ? constraintWheres : [],
+    )
+    if (deepest && count) pred.count = count
+    if (child) pred.nested = child
+    child = pred
+  }
+  return child!
+}
+
+/**
+ * Guard: nested predicate chains need adapter support (the native engine's
+ * recursive correlated-EXISTS compiler) — adapters without the
+ * `supportsNestedRelationPredicates` marker would silently ignore the
+ * `nested` field and return wrong rows, so throw a clear error instead.
+ *
+ * Deliberately falsy-based (not `=== true`): the deferred named-connection
+ * recorder answers every property access with a recorder function (truthy),
+ * so a not-yet-materialized native connection passes through and the
+ * materialized QB settles it.
+ */
+function assertNestedRelationSupport(q: unknown, path: string): void {
+  if ((q as { supportsNestedRelationPredicates?: unknown }).supportsNestedRelationPredicates) return
+  throw new Error(
+    `[RudderJS ORM] Nested whereHas ("${path}") is not supported on this adapter — it needs the native ` +
+    `engine's correlated-EXISTS chain. Filter one hop with whereHas and the rest in app code, or use DB.select(...).`,
+  )
+}
+
 // ─── Public attach helpers ─────────────────────────────────
 
 /**
@@ -281,6 +363,24 @@ export function attachWhereHas<TQ>(
   constrain?: (q: QueryBuilder<Model>) => void,
   opts?:     { boolean?: 'AND' | 'OR'; count?: { operator: WhereOperator; value: number } },
 ): QueryBuilder<TQ> {
+  // Dot-path = nested relation chain (`whereHas('posts.comments', cb)`).
+  if (relation.includes('.')) {
+    // Laravel `hasNested` doesntHave special case: `has('a.b', '<', 1)` is
+    // exactly "doesn't have" — flip the outermost EXISTS instead of putting
+    // the count on the deepest level.
+    let rootExists = exists
+    let count = opts?.count
+    if (count && count.operator === '<' && count.value === 1) {
+      rootExists = false
+      count = undefined
+    }
+    const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
+    const predicate = buildNestedRelationPredicate(Parent, relation, rootExists, constraintWheres, count)
+    if (opts?.boolean) predicate.boolean = opts.boolean
+    assertNestedRelationSupport(q, relation)
+    return q.whereRelationExists(predicate)
+  }
+
   const def = Parent.relations[relation]
   if (!def) {
     throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)

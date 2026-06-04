@@ -347,7 +347,7 @@ describe('Model.whereHas — nested whereHas inside callback', () => {
       () => User.whereHas('posts', (q) => {
         (q as unknown as { whereHas: (r: string) => void }).whereHas('author')
       }),
-      /Nested whereHas inside a whereHas constrain callback is deferred to v2/,
+      /Nested whereHas inside a whereHas constrain callback is not supported/,
     )
   })
 
