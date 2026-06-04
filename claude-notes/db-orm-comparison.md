@@ -59,7 +59,7 @@
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
 | whereColumn / column-vs-column | ✅ | ❌ | manual sql | manual | ✅ (ref) | manual |
 
-**Take:** post the 2026 query-builder arc we beat Prisma and TypeORM on builder breadth, match Drizzle/Kysely on the core, and lose only on CTEs / window functions / INSERT…SELECT / lock options (skipLocked, noWait) / optimistic locking.
+**Take:** post the 2026 query-builder arc (+ the post-audit Tier-1 round: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — remaining deltas: window functions and optimistic locking.
 
 ## Relations
 
