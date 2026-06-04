@@ -10,7 +10,7 @@
 // one on a signature change — so a `config/database.ts` edit doesn't leak a
 // connection per re-boot. No-op in production (single boot).
 
-import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts, QueryListener } from '@rudderjs/contracts'
+import type { OrmAdapter, OrmAdapterProvider, QueryBuilder, OrmAdapterQueryOpts, QueryListener, TransactionOptions } from '@rudderjs/contracts'
 import type { Dialect } from './dialect.js'
 import { SqliteDialect } from './dialect.js'
 import { PgDialect } from './dialect-pg.js'
@@ -420,8 +420,12 @@ export class NativeAdapter implements OrmAdapter {
    * through `AsyncLocalStorage` so existing `Model.query()` calls inside `fn`
    * transparently join the transaction. Commits on resolve; rolls back and
    * re-throws on reject.
+   *
+   * `opts.isolationLevel` is forwarded to the driver: SET TRANSACTION ISOLATION
+   * LEVEL at transaction start on Postgres/MySQL; SQLite throws (no isolation
+   * levels); any driver throws when this scope is already a SAVEPOINT.
    */
-  transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+  transaction<T>(fn: (tx: OrmAdapter) => Promise<T>, opts?: TransactionOptions): Promise<T> {
     return this.scope.transaction((txScope) => {
       // Shares `this.listeners` by reference — queries inside the transaction
       // report to the same listeners as top-level ones. No read drivers: every
@@ -432,7 +436,7 @@ export class NativeAdapter implements OrmAdapter {
         [], this.sticky, this.splitTag,
       )
       return fn(scoped)
-    })
+    }, opts)
   }
 
   /**

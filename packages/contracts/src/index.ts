@@ -505,12 +505,36 @@ export interface Executor {
 }
 
 /**
+ * SQL transaction isolation levels, lowest to highest. Lowercase ANSI names —
+ * the engine maps them to each backend's syntax (`SET TRANSACTION ISOLATION
+ * LEVEL …` on Postgres/MySQL, Prisma's PascalCase enum, Drizzle's config).
+ * SQLite has no isolation-level support; requesting one there throws.
+ */
+export type TransactionIsolationLevel =
+  | 'read uncommitted'
+  | 'read committed'
+  | 'repeatable read'
+  | 'serializable'
+
+/** Options accepted by `transaction()` across adapters and drivers. */
+export interface TransactionOptions {
+  /**
+   * Isolation level for THIS transaction (never the session). Only valid on the
+   * outermost call — a nested transaction maps to a SAVEPOINT, whose isolation
+   * cannot diverge from the enclosing transaction's, so implementations throw.
+   */
+  isolationLevel?: TransactionIsolationLevel
+}
+
+/**
  * A transaction scope: an {@link Executor} that can open a *nested* transaction
  * (mapped to a SAVEPOINT). The inner work executes on the scope; a nested
  * `scope.transaction(...)` rolls back only its own savepoint on failure.
+ * `opts.isolationLevel` is honored on a top-level call (a driver opening a
+ * fresh transaction) and rejected on a savepoint scope.
  */
 export interface Transaction extends Executor {
-  transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T>
+  transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T>
 }
 
 /**
@@ -568,8 +592,12 @@ export interface OrmAdapter {
    * Prisma/Drizzle adapters may not yet. The Model layer never calls the passed
    * adapter directly — it threads it through an `AsyncLocalStorage` so existing
    * `Model.query()` call sites inside `fn` transparently use the transaction.
+   *
+   * `opts.isolationLevel` sets the isolation level for this (outermost)
+   * transaction. Adapters reject it on a nested call (SAVEPOINT) and on
+   * backends without isolation-level support (SQLite).
    */
-  transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T>
+  transaction?<T>(fn: (tx: OrmAdapter) => Promise<T>, opts?: TransactionOptions): Promise<T>
 
   /**
    * Raw `SELECT` escape hatch — the read half of `@rudderjs/database`'s `DB`

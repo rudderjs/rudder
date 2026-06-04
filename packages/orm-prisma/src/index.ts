@@ -115,6 +115,8 @@ import type {
   QueryListener,
   RelationExistencePredicate,
   Row,
+  TransactionIsolationLevel,
+  TransactionOptions,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import {
@@ -1257,6 +1259,18 @@ function _aggregateDefault(fn: AggregateFn): unknown {
 /** Monotonic counter for unique nested-transaction SAVEPOINT names. */
 let savepointSeq = 0
 
+/**
+ * The contract's lowercase ANSI isolation-level names → Prisma's PascalCase
+ * `TransactionIsolationLevel` enum values (the enum members ARE these strings,
+ * so passing the literal avoids importing the generated client's namespace).
+ */
+const PRISMA_ISOLATION: Record<TransactionIsolationLevel, string> = {
+  'read uncommitted': 'ReadUncommitted',
+  'read committed':   'ReadCommitted',
+  'repeatable read':  'RepeatableRead',
+  'serializable':     'Serializable',
+}
+
 class PrismaAdapter implements OrmAdapter {
   private _driver: string
 
@@ -1386,17 +1400,45 @@ class PrismaAdapter implements OrmAdapter {
    * `RELEASE SAVEPOINT` (or `ROLLBACK TO SAVEPOINT` on failure) on the same
    * connection — matching the native engine's savepoint semantics. SAVEPOINT is
    * supported by SQLite, Postgres, and MySQL alike.
+   *
+   * `opts.isolationLevel` maps to Prisma's `$transaction(fn, { isolationLevel })`
+   * option (lowercase ANSI name → Prisma's PascalCase enum value). Outermost
+   * call only — a SAVEPOINT can't change the open transaction's isolation, so a
+   * nested call with the option throws. Prisma itself rejects levels the active
+   * database doesn't support (e.g. anything but Serializable on SQLite).
    */
-  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
-    if (this.txScoped) return this.savepoint(fn)
+  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    if (this.txScoped) {
+      if (opts?.isolationLevel) {
+        throw new Error(
+          '[RudderJS ORM Prisma] isolationLevel cannot be set on a nested transaction — ' +
+          'the nested call maps to a SAVEPOINT inside the open transaction, whose ' +
+          'isolation level is already fixed. Set it on the outermost transaction() call.',
+        )
+      }
+      return this.savepoint(fn)
+    }
 
     const client = this.prisma as unknown as {
-      $transaction<R>(fn: (tx: PrismaClient) => Promise<R>): Promise<R>
+      $transaction<R>(fn: (tx: PrismaClient) => Promise<R>, options?: { isolationLevel?: string }): Promise<R>
+    }
+    let options: { isolationLevel: string } | undefined
+    if (opts?.isolationLevel) {
+      const mapped = PRISMA_ISOLATION[opts.isolationLevel]
+      if (!mapped) {
+        // Unreachable for typed callers; guards untyped JS — a silent
+        // `isolationLevel: undefined` would make Prisma ignore the option.
+        throw new Error(
+          `[RudderJS ORM Prisma] Unknown transaction isolation level ${JSON.stringify(opts.isolationLevel)} — ` +
+          `expected 'read uncommitted', 'read committed', 'repeatable read', or 'serializable'.`,
+        )
+      }
+      options = { isolationLevel: mapped }
     }
     return client.$transaction((txClient) => {
       const scoped = new PrismaAdapter(txClient, this._driver, true, this.connectionName)
       return fn(scoped)
-    })
+    }, options)
   }
 
   /** Nested-transaction body: a SAVEPOINT on the current transaction connection.

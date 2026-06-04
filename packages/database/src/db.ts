@@ -11,7 +11,7 @@
 // active adapter doesn't implement the seam (older/partial adapters), each method
 // throws a clear error naming that adapter.
 
-import type { OrmAdapter, QueryListener, Row } from '@rudderjs/contracts'
+import type { OrmAdapter, QueryListener, Row, TransactionOptions } from '@rudderjs/contracts'
 import {
   resolveAdapter,
   resolveTransactionRunner,
@@ -67,7 +67,7 @@ export interface DBConnection {
   update(sql: string, bindings?: readonly unknown[]): Promise<number>
   delete(sql: string, bindings?: readonly unknown[]): Promise<number>
   statement(sql: string, bindings?: readonly unknown[]): Promise<number>
-  transaction<T>(fn: () => Promise<T>): Promise<T>
+  transaction<T>(fn: () => Promise<T>, opts?: TransactionOptions): Promise<T>
   listen(listener: QueryListener): Promise<void>
 }
 
@@ -114,11 +114,15 @@ export const DB = {
    * rejects. Nested `DB.transaction()` / `Model.transaction()` calls map to
    * savepoints where the driver supports them.
    *
+   * `opts.isolationLevel` sets the transaction's isolation level (`'read
+   * uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`) —
+   * outermost call only; SQLite-backed adapters throw (no isolation levels).
+   *
    * @throws if no transaction runner is registered (no database provider loaded),
    *   or if the active adapter doesn't implement `transaction()`.
    */
-  async transaction<T>(fn: () => Promise<T>): Promise<T> {
-    return resolveTransactionRunner()(fn)
+  async transaction<T>(fn: () => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    return resolveTransactionRunner()(fn, opts)
   },
 
   /**
@@ -173,8 +177,8 @@ export const DB = {
       async statement(sql, bindings = []) {
         return requireAffecting(await adapterFor())(sql, bindings)
       },
-      async transaction(fn) {
-        return resolveNamedTransactionRunner()(name, fn)
+      async transaction(fn, opts) {
+        return resolveNamedTransactionRunner()(name, fn, opts)
       },
       async listen(listener) {
         requireOnQuery(await adapterFor())(listener)

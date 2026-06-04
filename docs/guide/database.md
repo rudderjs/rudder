@@ -265,6 +265,23 @@ Queries join the transaction automatically — no handle to thread through. Nest
 
 Transactions work on all three adapters — native, Prisma, and Drizzle. To run one against a [named connection](/guide/database/connections#transactions-on-a-named-connection), pass `{ connection: 'name' }` as the second argument.
 
+### Isolation levels
+
+Pass `isolationLevel` to run the transaction at a specific SQL isolation level — `'read uncommitted'`, `'read committed'`, `'repeatable read'`, or `'serializable'`:
+
+```ts
+await transaction(async () => {
+  // runs under SERIALIZABLE — concurrent conflicting commits fail fast
+  const total = await Account.sum('balance')
+  await AuditLog.create({ total })
+}, { isolationLevel: 'serializable' })
+```
+
+All three adapters support it on Postgres and MySQL — the native engine emits `SET TRANSACTION ISOLATION LEVEL …` at transaction start, Drizzle receives it via its transaction config, and Prisma via `$transaction`'s `isolationLevel` option. Two constraints:
+
+- **Outermost call only.** A nested `transaction()` maps to a savepoint, whose isolation can't diverge from the enclosing transaction's — passing `isolationLevel` there throws.
+- **SQLite throws.** SQLite has no isolation levels (its single-writer model is already serializable), so requesting one fails loudly instead of silently meaning nothing.
+
 ## Pitfalls
 
 - **`static table` mismatch.** For Prisma, the value is the **delegate** name (camelCase, e.g. `blogPost`) — not the SQL table name (`blog_posts`). For Drizzle, it's the key in the `tables: {}` object passed to the adapter.

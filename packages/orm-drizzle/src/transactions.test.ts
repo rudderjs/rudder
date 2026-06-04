@@ -142,3 +142,50 @@ describe('Drizzle transaction() — nesting (savepoints)', () => {
     assert.equal(await Account.count(), 0)
   })
 })
+
+describe('Drizzle transaction() — isolation level', () => {
+  // The level must reach Drizzle's `db.transaction(fn, config)` second arg
+  // verbatim (Drizzle's pg/mysql drivers use the same lowercase ANSI names as
+  // the contract). A recording fake stands in for the db — no server needed.
+  function recordingDb() {
+    const seen: { config: unknown }[] = []
+    const db = {
+      transaction: async <T>(fn: (tx: unknown) => Promise<T>, config?: unknown): Promise<T> => {
+        seen.push({ config })
+        return fn({})
+      },
+    }
+    return { db, seen }
+  }
+
+  it('passes isolationLevel through to db.transaction config (pg)', async () => {
+    const { db: fake, seen } = recordingDb()
+    const adapter = await drizzleAdapter({ client: fake, dialect: 'pg' }).create()
+    await adapter.transaction!(async () => null, { isolationLevel: 'repeatable read' })
+    assert.deepEqual(seen, [{ config: { isolationLevel: 'repeatable read' } }])
+  })
+
+  it('passes NO config when no level is requested (back-compat)', async () => {
+    const { db: fake, seen } = recordingDb()
+    const adapter = await drizzleAdapter({ client: fake, dialect: 'mysql' }).create()
+    await adapter.transaction!(async () => null)
+    assert.deepEqual(seen, [{ config: undefined }])
+  })
+
+  it('throws a clear unsupported error on sqlite (never a silent drop)', async () => {
+    // The registered adapter is the real libsql/sqlite one from beforeEach.
+    await assert.rejects(
+      transaction(async () => {}, { isolationLevel: 'serializable' }),
+      /SQLite does not support transaction isolation levels/,
+    )
+  })
+
+  it('the ORM-level guard rejects isolationLevel on a nested transaction()', async () => {
+    await transaction(async () => {
+      await assert.rejects(
+        transaction(async () => {}, { isolationLevel: 'read committed' }),
+        /isolationLevel cannot be set on a nested transaction/,
+      )
+    })
+  })
+})

@@ -33,4 +33,4 @@ registerTransactionRunner(transaction)
 registerConnectionResolver(
   async (name) => ModelRegistry.getScopedAdapter(name) ?? ConnectionManager.ensure(name),
 )
-registerNamedTransactionRunner((name, fn) => transaction(fn, { connection: name }))
+registerNamedTransactionRunner((name, fn, opts) => transaction(fn, { connection: name, ...opts }))

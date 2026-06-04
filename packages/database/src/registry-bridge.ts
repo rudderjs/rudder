@@ -11,7 +11,7 @@
 // `Model.transaction()` callback transparently joins the open transaction —
 // `ModelRegistry.getAdapter()` already returns the transaction-scoped adapter.
 
-import type { OrmAdapter } from '@rudderjs/contracts'
+import type { OrmAdapter, TransactionOptions } from '@rudderjs/contracts'
 
 /**
  * Runs `fn` inside a database transaction, returning its result. Pushed in by
@@ -19,9 +19,10 @@ import type { OrmAdapter } from '@rudderjs/contracts'
  * the ORM's `AsyncLocalStorage` transaction scoping — every `Model.*` AND `DB.*`
  * call inside `fn` joins the *same* open transaction (one connection, not two).
  * `@rudderjs/database` can't import `@rudderjs/orm`, so the runner is injected the
- * same way the adapter resolver is.
+ * same way the adapter resolver is. `opts` (e.g. `isolationLevel`) flows through
+ * to the adapter untouched.
  */
-export type TransactionRunner = <T>(fn: () => Promise<T>) => Promise<T>
+export type TransactionRunner = <T>(fn: () => Promise<T>, opts?: TransactionOptions) => Promise<T>
 
 /**
  * Resolves the adapter for a NAMED connection (`DB.connection('reporting')`),
@@ -35,7 +36,7 @@ export type ConnectionResolver = (name: string) => Promise<OrmAdapter>
 
 /** Runs `fn` inside a transaction on a NAMED connection — the named
  *  counterpart of {@link TransactionRunner}, same injection rationale. */
-export type NamedTransactionRunner = <T>(name: string, fn: () => Promise<T>) => Promise<T>
+export type NamedTransactionRunner = <T>(name: string, fn: () => Promise<T>, opts?: TransactionOptions) => Promise<T>
 
 let resolver: (() => OrmAdapter) | null = null
 let txRunner: TransactionRunner | null = null

@@ -28,6 +28,7 @@
 // Engine core.
 export * from './errors.js'
 export * from './driver.js'
+export * from './isolation.js'
 export * from './dialect.js'
 export * from './dialect-pg.js'
 export * from './dialect-mysql.js'

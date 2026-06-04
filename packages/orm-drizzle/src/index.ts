@@ -20,6 +20,7 @@ import type {
   JoinClause,
   Row,
   QueryListener,
+  TransactionOptions,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
@@ -176,8 +177,10 @@ type DrizzleDb = {
   execute?(query: SQL): Promise<unknown>
   /** Open a transaction. Drizzle's tx object is itself a `DrizzleDb` whose own
    *  `transaction()` opens a nested SAVEPOINT — so the adapter gets cross-adapter
-   *  `transaction()` + nesting for free by re-binding to the scoped `tx`. */
-  transaction?<T>(fn: (tx: DrizzleDb) => Promise<T>): Promise<T>
+   *  `transaction()` + nesting for free by re-binding to the scoped `tx`. The
+   *  pg/mysql drivers accept an `isolationLevel` config (same lowercase ANSI
+   *  names as the contract's `TransactionIsolationLevel`). */
+  transaction?<T>(fn: (tx: DrizzleDb) => Promise<T>, config?: { isolationLevel?: string }): Promise<T>
   $client?: { end?: () => Promise<void> }
 }
 
@@ -2476,8 +2479,14 @@ export class DrizzleAdapter implements OrmAdapter {
    * engine. The `better-sqlite3` driver runs transactions synchronously and
    * rejects async callbacks; use `libsql` / Postgres / MySQL for async work
    * inside a transaction.
+   *
+   * `opts.isolationLevel` passes straight through to Drizzle's transaction
+   * config on pg/mysql (Drizzle uses the same lowercase ANSI names). SQLite
+   * throws — Drizzle's sqlite transaction config has no isolation level (its
+   * single-writer model is already serializable), so a silent drop would lie.
+   * Nested-call misuse is rejected upstream by the ORM's `transaction()` guard.
    */
-  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>): Promise<T> {
+  async transaction<T>(fn: (tx: OrmAdapter) => Promise<T>, opts?: TransactionOptions): Promise<T> {
     const run = this.db.transaction
     if (typeof run !== 'function') {
       throw new Error(
@@ -2485,6 +2494,13 @@ export class DrizzleAdapter implements OrmAdapter {
           'db.transaction() is unavailable on the configured client.',
       )
     }
+    if (opts?.isolationLevel && this.dialect === 'sqlite') {
+      throw new Error(
+        '[RudderJS ORM Drizzle] SQLite does not support transaction isolation levels — ' +
+          'drop the isolationLevel option, or use the pg/mysql Drizzle driver.',
+      )
+    }
+    const config = opts?.isolationLevel ? { isolationLevel: opts.isolationLevel } : undefined
     // `.call` drops the generic binding, so the callback result widens to
     // `unknown` — cast back to the declared `Promise<T>`.
     return run.call(this.db, (txDb: DrizzleDb) => {
@@ -2497,7 +2513,7 @@ export class DrizzleAdapter implements OrmAdapter {
         this.connectionName, [], this.sticky, this.splitTag,
       )
       return fn(scoped)
-    }) as Promise<T>
+    }, config) as Promise<T>
   }
 
   /**

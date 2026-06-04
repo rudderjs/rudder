@@ -16,7 +16,10 @@
 // here unchanged so every existing `./driver.js` import site keeps working — the
 // native engine implements the same contract.
 
-export type { Row, Executor, Transaction, Connection } from '@rudderjs/contracts'
+export type {
+  Row, Executor, Transaction, Connection,
+  TransactionOptions, TransactionIsolationLevel,
+} from '@rudderjs/contracts'
 
 import type { Connection } from '@rudderjs/contracts'
 
