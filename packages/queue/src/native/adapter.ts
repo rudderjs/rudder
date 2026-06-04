@@ -4,9 +4,10 @@
 // (`@rudderjs/database/native`; `@rudderjs/orm/native` re-exports it) — the
 // zero-infrastructure default tier, modeled on Laravel's `database` driver.
 // Jobs live in a `jobs` table; a worker poll loop reserves them atomically
-// (transaction + `lockForUpdate()` — `FOR UPDATE` on Postgres/MySQL, a
-// serializing write transaction on SQLite) and runs them through the shared
-// `executeJob` pipeline. Exhausted jobs move to `failed_jobs`.
+// (transaction + `lockForUpdate({ skipLocked: true })` — `FOR UPDATE SKIP
+// LOCKED` on Postgres/MySQL so concurrent workers never queue on the same
+// head-of-queue row; a serializing write transaction on SQLite) and runs them
+// through the shared `executeJob` pipeline. Exhausted jobs move to `failed_jobs`.
 //
 // The engine/ORM are reached via `resolveOptionalPeer(...)` so the queue
 // package keeps NO hard dependency on either — only the `database` driver path
@@ -38,7 +39,7 @@ interface QB {
   orWhere(column: string, operatorOrValue: unknown, value?: unknown): QB
   orderBy(column: string, direction?: 'ASC' | 'DESC'): QB
   limit(n: number): QB
-  lockForUpdate?(): QB
+  lockForUpdate?(opts?: { skipLocked?: boolean; noWait?: boolean }): QB
   get(): Promise<Array<Record<string, unknown>>>
   count(): Promise<number>
   create(data: Record<string, unknown>): Promise<Record<string, unknown>>
@@ -282,9 +283,17 @@ export class DatabaseQueueAdapter implements QueueAdapter {
 
   /**
    * Atomically reserve the next runnable job across `names` in priority order.
-   * One transaction per attempt: `SELECT … ORDER BY id LIMIT 1 FOR UPDATE` then
-   * stamp `reserved_at` + bump `attempts`. A job is runnable when it's unreserved
-   * and due, OR its reservation is older than `retry_after` (crashed worker).
+   * One transaction per attempt: `SELECT … ORDER BY id LIMIT 1 FOR UPDATE SKIP
+   * LOCKED` then stamp `reserved_at` + bump `attempts`. A job is runnable when
+   * it's unreserved and due, OR its reservation is older than `retry_after`
+   * (crashed worker).
+   *
+   * `skipLocked` is what makes multi-worker reservation scale: a worker whose
+   * top candidate is mid-reservation by another worker takes the NEXT runnable
+   * row immediately instead of blocking on the row lock and then re-evaluating
+   * to zero rows (the plain-FOR UPDATE behavior — safe, but every contender
+   * serialized on the same head-of-queue row). No-op on SQLite, where the
+   * write transaction already serializes the whole reservation.
    */
   private async _reserveNext(names: string[]): Promise<ReservedJob | null> {
     const adapter = await this._adapter()
@@ -300,7 +309,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
           })
           .orderBy('id', 'ASC')
           .limit(1)
-        if (typeof qb.lockForUpdate === 'function') qb = qb.lockForUpdate()
+        if (typeof qb.lockForUpdate === 'function') qb = qb.lockForUpdate({ skipLocked: true })
 
         const rows = await qb.get()
         const row  = rows[0]
