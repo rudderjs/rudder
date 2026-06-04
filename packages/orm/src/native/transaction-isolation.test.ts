@@ -9,9 +9,10 @@
 //     and the ORM-level nested guard fires before any driver is reached.
 //   • LIVE Postgres / MySQL (gated on PG_TEST_URL / MYSQL_TEST_URL, same
 //     pattern as drivers/postgres.test.ts) — prove the level is ACTUALLY in
-//     effect by reading it back inside the transaction (`SHOW TRANSACTION
-//     ISOLATION LEVEL` / `SELECT @@transaction_isolation`), that it does not
-//     leak past the transaction (MySQL pins a pooled connection — the next
+//     effect by reading it back inside the transaction (pg `SHOW TRANSACTION
+//     ISOLATION LEVEL`; mysql via performance_schema — see the in-suite note
+//     for why `@@transaction_isolation` cannot work), that it does not leak
+//     past the transaction (MySQL pins a pooled connection — the next
 //     transaction must see the server default again), and that a SAVEPOINT
 //     scope rejects a level change.
 
@@ -164,33 +165,68 @@ if (!MYSQL_URL) {
       await driver.close()
     })
 
-    // @@transaction_isolation reports hyphenated upper-case ('REPEATABLE-READ').
-    const mysqlName = (level: TransactionIsolationLevel): string =>
-      level.toUpperCase().replace(' ', '-')
+    // `SELECT @@transaction_isolation` is the WRONG probe here: the un-scoped
+    // `SET TRANSACTION` form sets a ONE-SHOT next-transaction value that BEGIN
+    // consumes, after which the variable reverts to the SESSION value — so
+    // inside the transaction it reports the default (REPEATABLE-READ) even
+    // though the transaction IS running at the requested level (caught live in
+    // CI: every non-default level "failed" with REPEATABLE-READ). Read the
+    // ACTIVE transaction's level from the performance schema instead — the
+    // transaction instrument + events_transactions_current consumer are
+    // enabled by default on MySQL 8 (the CI image).
+    const ACTIVE_LEVEL_SQL =
+      'SELECT ISOLATION_LEVEL AS iso FROM performance_schema.events_transactions_current ' +
+      "WHERE THREAD_ID = PS_CURRENT_THREAD_ID() AND STATE = 'ACTIVE'"
+
+    // events_transactions_current reports space-separated upper-case
+    // ('REPEATABLE READ').
+    const mysqlName = (level: TransactionIsolationLevel): string => level.toUpperCase()
+
+    async function activeLevel(): Promise<string> {
+      const rows = await scopedSelect(ACTIVE_LEVEL_SQL)
+      assert.equal(rows.length, 1, 'expected one ACTIVE instrumented transaction on this thread')
+      return String(rows[0]?.['iso'])
+    }
 
     for (const level of ALL_LEVELS) {
       it(`'${level}' is in effect inside the transaction`, async () => {
-        const seen = await transaction(async () => {
-          const rows = await scopedSelect('SELECT @@transaction_isolation AS iso')
-          return String(rows[0]?.['iso'])
-        }, { isolationLevel: level })
+        const seen = await transaction(async () => activeLevel(), { isolationLevel: level })
         assert.strictEqual(seen, mysqlName(level))
       })
     }
+
+    it('read uncommitted actually dirty-reads a concurrent uncommitted write (behavioral proof)', async () => {
+      // Belt and braces independent of the performance schema: only READ
+      // UNCOMMITTED can see another transaction's uncommitted row. Driver-level
+      // (not the ALS path) so txA and txB coexist on separate pooled connections.
+      const TABLE = 'rudder_iso_dirty_read'
+      await driver.execute(`DROP TABLE IF EXISTS \`${TABLE}\``, [])
+      await driver.execute(`CREATE TABLE \`${TABLE}\` (id int AUTO_INCREMENT PRIMARY KEY, name varchar(32))`, [])
+      try {
+        class Rollback extends Error {}
+        await assert.rejects(driver.transaction(async (txA) => {
+          await txA.execute(`INSERT INTO \`${TABLE}\` (name) VALUES ('dirty')`, [])
+          const count = async (opts?: { isolationLevel: TransactionIsolationLevel }) => {
+            const rows = await driver.transaction(
+              async (txB) => txB.execute(`SELECT COUNT(*) AS n FROM \`${TABLE}\``, []), opts)
+            return Number(rows[0]?.['n'])
+          }
+          assert.equal(await count({ isolationLevel: 'read uncommitted' }), 1, 'dirty read sees the uncommitted row')
+          assert.equal(await count(), 0, 'default REPEATABLE READ does not')
+          throw new Rollback('discard txA')
+        }), Rollback)
+      } finally {
+        await driver.execute(`DROP TABLE IF EXISTS \`${TABLE}\``, [])
+      }
+    })
 
     it('does not leak the level onto the released pooled connection', async () => {
       // The un-scoped SET TRANSACTION form applies only to the NEXT transaction
       // on the connection — after commit, a fresh transaction must see the
       // server default again, even when the pool hands back the same connection.
-      const defaultLevel = await transaction(async () => {
-        const rows = await scopedSelect('SELECT @@transaction_isolation AS iso')
-        return String(rows[0]?.['iso'])
-      })
+      const defaultLevel = await transaction(async () => activeLevel())
       await transaction(async () => {}, { isolationLevel: 'read uncommitted' })
-      const seen = await transaction(async () => {
-        const rows = await scopedSelect('SELECT @@transaction_isolation AS iso')
-        return String(rows[0]?.['iso'])
-      })
+      const seen = await transaction(async () => activeLevel())
       assert.strictEqual(seen, defaultLevel)
     })
 
