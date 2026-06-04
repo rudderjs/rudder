@@ -6,6 +6,7 @@ This file provides guidance to Claude Code when working in this repository.
 - `claude-notes/packages.md` — Full monorepo layout + package status table
 - `claude-notes/create-app.md` — create-rudder scaffolder details
 - `claude-notes/ai-sdk-comparison.md` — RudderJS vs Laravel AI vs Vercel AI SDK vs TanStack — feature matrix and design positioning
+- `claude-notes/db-orm-comparison.md` — RudderJS data layer vs Prisma/Drizzle/TypeORM/Kysely/MikroORM — feature matrices, positioning (§13), prioritized gap work-queue (§14)
 - `Architecture.md` — High-level package map + dependency flow (read for orientation; not exhaustive)
 - `ROADMAP.md` — Plans 1–9 status + remaining work (Nightwatch is the only ⬜ entry left)
 
