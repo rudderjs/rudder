@@ -752,6 +752,39 @@ function adapterMethodUnsupported(method: string): Error {
 }
 
 /**
+ * Guard for JSON arrow-path keys in `update()` / `updateAll()` payloads
+ * (`'meta->prefs->lang': 'en'`) — they need adapter support (the native
+ * engine's `jsonSet` seam), so the hydrating proxy throws a clear error on
+ * adapter QBs without the `supportsJsonPathUpdates` marker instead of letting
+ * the arrow key surface as a bogus column downstream.
+ *
+ * Deliberately falsy-based (not `=== true`): the deferred named-connection
+ * recorder answers every property access with a recorder function (truthy),
+ * so a not-yet-materialized native connection passes through and the
+ * materialized QB settles it.
+ */
+function assertJsonPathUpdates(qb: unknown, data: Record<string, unknown>): void {
+  const arrowKey = Object.keys(data).find(k => k.includes('->'))
+  if (arrowKey === undefined) return
+  if ((qb as { supportsJsonPathUpdates?: unknown }).supportsJsonPathUpdates) return
+  throw new Error(
+    `[RudderJS ORM] JSON-path update key "${arrowKey}" is not supported on this adapter — ` +
+      'write the whole JSON column instead (e.g. update(id, { meta: { ... } })), or use the native engine.',
+  )
+}
+
+/**
+ * Update payload: model attributes plus JSON arrow-path keys
+ * (`'meta->prefs->lang': 'en'` writes one path inside the `meta` column —
+ * `json_set` / `JSON_SET` / `jsonb_set` per dialect). The template-literal
+ * index signature admits exactly the `col->path` keys without disabling
+ * excess-property checking for everything else. Arrow-path writes are native
+ * engine only — other adapters throw a clear error; under `fillable` /
+ * `guarded` the arrow key itself must be listed (Laravel parity).
+ */
+export type UpdatePayload<T> = Partial<T> & { [key: `${string}->${string}`]: unknown }
+
+/**
  * The QueryBuilder shape that `Model.query()` / `Model._q()` / `where()` /
  * `with()` etc. actually return. Extends the adapter contract with the
  * ORM-side sugars added by the hydrating Proxy: relation predicates
@@ -763,6 +796,12 @@ function adapterMethodUnsupported(method: string): Error {
  * stub them.
  */
 export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
+  /** {@link QueryBuilder.update} accepting JSON arrow-path keys — see
+   *  {@link UpdatePayload}. */
+  update(id: number | string, data: UpdatePayload<T>): Promise<T>
+  /** {@link QueryBuilder.updateAll} accepting JSON arrow-path keys — see
+   *  {@link UpdatePayload}. */
+  updateAll(data: UpdatePayload<T>): Promise<number>
   whereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
   whereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
   /** OR-rooted {@link whereHas} — `... OR EXISTS(relation)`. */
@@ -2015,8 +2054,15 @@ export abstract class Model {
             return async (data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
               wrap(await (target as QueryBuilder<InstanceType<T>>).create(data))
           case 'update':
-            return async (id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
-              wrap(await (target as QueryBuilder<InstanceType<T>>).update(id, data))
+            return async (id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> => {
+              assertJsonPathUpdates(target, data as Record<string, unknown>)
+              return wrap(await (target as QueryBuilder<InstanceType<T>>).update(id, data))
+            }
+          case 'updateAll':
+            return async (data: Partial<InstanceType<T>>): Promise<number> => {
+              assertJsonPathUpdates(target, data as Record<string, unknown>)
+              return (target as QueryBuilder<InstanceType<T>>).updateAll(data)
+            }
           case 'restore':
             return async (id: number | string): Promise<InstanceType<T>> =>
               wrap(await (target as QueryBuilder<InstanceType<T>>).restore(id))
@@ -2770,7 +2816,7 @@ export abstract class Model {
     return Model._q(this).with(...relations)
   }
 
-  static async update<T extends typeof Model>(this: T, id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
+  static async update<T extends typeof Model>(this: T, id: number | string, data: UpdatePayload<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     const filtered = self._filterFillable(data as Record<string, unknown>)
     return Model._doUpdate.call(this, id, filtered) as Promise<InstanceType<T>>

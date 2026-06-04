@@ -14,7 +14,8 @@ import type {
   AggregateRequest,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
-import { parseJsonPath, type Dialect, type DatePart, type JsonPathSegment } from './dialect.js'
+import { parseJsonPath, type Dialect, type DatePart, type JsonPathSegment, type JsonPathWrite } from './dialect.js'
+import { NativeOrmError } from './errors.js'
 
 /** A raw SQL fragment + its `?`-placeholder bindings, threaded through a clause. */
 export interface RawFragment {
@@ -691,11 +692,72 @@ export function compileInsert(
 }
 
 /**
+ * Render the SET clause for an UPDATE payload containing arrow-path keys
+ * (`'meta->prefs->lang': 'en'` → `"meta" = json_set("meta", '$."prefs"."lang"', json(?))`).
+ *
+ * All arrow writes on one base column merge into a single assignment (the
+ * dialect's `jsonSet` seam takes the write list) — SQL forbids assigning the
+ * same column twice in one SET. Plain keys keep their original form. SET items
+ * appear in first-seen key order, values binding left-to-right in SQL-text
+ * order. Mixing a plain write and an arrow write to the same column throws —
+ * the two assignments would silently race, last-one-wins, per dialect.
+ */
+function compileJsonSetClause(
+  entries: Array<[string, unknown]>,
+  dialect: Dialect,
+  b: Bindings,
+): string {
+  type SetItem =
+    | { kind: 'plain'; column: string; value: unknown }
+    | { kind: 'json';  column: string; writes: JsonPathWrite[] }
+  const items: SetItem[] = []
+  const jsonByColumn = new Map<string, Extract<SetItem, { kind: 'json' }>>()
+  const plainColumns = new Set<string>()
+
+  const conflict = (column: string): never => {
+    throw new NativeOrmError(
+      'NATIVE_JSON_SET_CONFLICT',
+      `[RudderJS ORM native] Update payload writes both the whole column "${column}" and a JSON path inside it — ` +
+      `pick one (the two assignments would conflict in a single SET).`,
+    )
+  }
+
+  for (const [key, value] of entries) {
+    if (key.includes('->')) {
+      const { column, segments } = parseJsonPath(key)
+      if (plainColumns.has(column)) conflict(column)
+      let item = jsonByColumn.get(column)
+      if (!item) {
+        item = { kind: 'json', column, writes: [] }
+        jsonByColumn.set(column, item)
+        items.push(item)
+      }
+      item.writes.push({ segments, value })
+    } else {
+      if (jsonByColumn.has(key)) conflict(key)
+      plainColumns.add(key)
+      items.push({ kind: 'plain', column: key, value })
+    }
+  }
+
+  return items.map(item => {
+    const col = dialect.quoteId(item.column)
+    return item.kind === 'plain'
+      ? `${col} = ${b.add(item.value)}`
+      : `${col} = ${dialect.jsonSet(col, item.writes, v => b.add(v))}`
+  }).join(', ')
+}
+
+/**
  * Compile `UPDATE <table> SET col = ? [, …] [WHERE …] [RETURNING *]`.
  *
  * SET bindings are emitted before WHERE bindings, matching positional `?`
  * order. `undefined`-valued columns are dropped (see {@link definedEntries}).
  * Throws when there's nothing to set.
+ *
+ * Arrow-path keys (`'meta->prefs->lang'`) write into a JSON column via the
+ * dialect's `jsonSet` seam — see {@link compileJsonSetClause}. Payloads with
+ * no arrow key take the original plain path (byte-identical SQL).
  */
 export function compileUpdate(
   state: NativeQueryState,
@@ -709,7 +771,9 @@ export function compileUpdate(
   }
   const b = new Bindings(dialect)
   const table = dialect.quoteId(state.table)
-  const setClause = entries.map(([col, v]) => `${dialect.quoteId(col)} = ${b.add(v)}`).join(', ')
+  const setClause = entries.some(([col]) => col.includes('->'))
+    ? compileJsonSetClause(entries, dialect, b)
+    : entries.map(([col, v]) => `${dialect.quoteId(col)} = ${b.add(v)}`).join(', ')
 
   let sql = `UPDATE ${table} SET ${setClause}`
   const where = compileWhereWithExtra(state, dialect, b, opts.extraConditions)
