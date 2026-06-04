@@ -739,6 +739,7 @@ const FORWARDED_QB_METHODS = new Set([
   'whereJsonContains',     'orWhereJsonContains',
   'whereJsonDoesntContain', 'orWhereJsonDoesntContain',
   'whereJsonLength',       'orWhereJsonLength',
+  'withExpression', 'withRecursiveExpression',
 ])
 
 /** Clear error for a QB method the active adapter doesn't implement — thrown by
@@ -1014,6 +1015,20 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   union(other: QueryBuilder<Model>): this
   /** `… UNION ALL …` — like {@link union} but keeps duplicate rows. */
   unionAll(other: QueryBuilder<Model>): this
+  /**
+   * `WITH name AS (…)` — prepend a common table expression the query can
+   * reference (typically via `join('name', …)`). `query` is another native
+   * query (`Model.query()` chain) or a raw SQL string with `?` placeholders +
+   * `opts.bindings`; `opts.columns` emits the explicit column list.
+   * **Native engine only** — throws on Drizzle/Prisma.
+   */
+  withExpression(name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): this
+  /**
+   * `WITH RECURSIVE name [(cols)] AS (…)` — {@link withExpression} for a
+   * self-referencing body (usually a raw SQL string, since the body references
+   * the CTE's own name). **Native engine only** — throws on Drizzle/Prisma.
+   */
+  withRecursiveExpression(name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): this
   /**
    * Apply `callback` only when `value` is truthy (otherwise run `otherwise`, if
    * given). The callback receives this builder + the value, so clauses compose
@@ -2343,6 +2358,12 @@ export abstract class Model {
   }
   static havingRaw<T extends typeof Model>(this: T, sql: string, bindings?: readonly unknown[]): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).havingRaw(sql, bindings)
+  }
+  static withExpression<T extends typeof Model>(this: T, name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).withExpression(name, query, opts)
+  }
+  static withRecursiveExpression<T extends typeof Model>(this: T, name: string, query: QueryBuilder<Model> | string, opts?: { bindings?: readonly unknown[]; columns?: readonly string[] }): HydratingQueryBuilder<InstanceType<T>> {
+    return Model._q(this).withRecursiveExpression(name, query, opts)
   }
   static latest<T extends typeof Model>(this: T, column?: string): HydratingQueryBuilder<InstanceType<T>> {
     return Model._q(this).latest(column)

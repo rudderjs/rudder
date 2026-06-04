@@ -53,7 +53,7 @@
 | upsert | ✅ single-statement bulk | ✅ (per-row) | ✅ onConflict | ✅ (1.0: orUpdate) | ✅ onConflict | ✅ upsertMany |
 | chunk / streaming | ✅ chunk + lazy() generator | **❌ (Prisma Next promise)** | ✅ iterator | ✅ .stream() | ✅ .stream() | ✅ em.stream() (v7) |
 | Cursor pagination | ✅ cursorPaginate | ✅ cursor+take | ✅ (guide) | ❌ | ❌ (community libs) | ✅ findByCursor (richest) |
-| **CTEs** | **❌** | ❌ | ✅ | ❌ | ✅ + recursive | ✅ + recursive (v7) |
+| **CTEs** | ✅ withExpression + recursive (native; shipped post-audit) | ❌ | ✅ | ❌ | ✅ + recursive | ✅ + recursive (v7) |
 | **Window functions** | **❌** | ❌ | via sql`` | ❌ | ✅ typed | via sql`` |
 | INSERT…SELECT | ❌ | ❌ | ✅ | ✅ 1.0 | ✅ | ✅ insertFrom |
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -159,7 +159,7 @@
 
 **Tier 1 — table stakes we lack (most-cited features across all 5 competitors):**
 1. `transaction(fn, { isolationLevel })` — every competitor has it; native pg/mysql support is trivial (`SET TRANSACTION ISOLATION LEVEL`); sqlite n/a.
-2. CTEs — `qb.with(name, qb)` + recursive; Drizzle/Kysely/MikroORM all have it. Native compiler seam exists (`compileSelectBody` makes this tractable).
+2. ~~CTEs~~ — **SHIPPED post-audit**: `withExpression`/`withRecursiveExpression` (native engine; raw-or-builder body, recursive via raw SQL + bindings, `join('name', …)` to reference).
 3. Lock options — `lockForUpdate({ skipLocked: true, noWait: true })`; queue driver would benefit immediately (SKIP LOCKED is THE job-reservation pattern).
 4. `whereExists(cb)` / `whereNotExists(cb)` subquery callbacks (we only have relation-shaped EXISTS via whereHas).
 
