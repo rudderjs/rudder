@@ -6,7 +6,7 @@ Almost every modern web application talks to a database. Rudder makes that inter
 Model (from @rudderjs/orm)
   └── ModelRegistry.getAdapter()
         └── OrmAdapter (interface)
-              ├── NativeAdapter   (@rudderjs/orm/native — built in)
+              ├── NativeAdapter   (@rudderjs/database — built in)
               ├── PrismaAdapter   (@rudderjs/orm-prisma)
               └── DrizzleAdapter  (@rudderjs/orm-drizzle)
 ```
@@ -29,7 +29,7 @@ For setup details see [Native Engine](#native-engine-built-in) below, [Prisma Ad
 
 ## Native engine (built-in)
 
-The native engine ships **inside `@rudderjs/orm`** at the node-only `@rudderjs/orm/native` subpath — a first-party SQL query engine that talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), no external ORM. It's **opt-in**: a connection selects it with `engine: 'native'`, and the built-in `NativeDatabaseProvider` (auto-discovered) wires it up. Without that flag it stays dormant, so installing it alongside Prisma/Drizzle is harmless.
+The native engine lives in **`@rudderjs/database`** — the SQL data-layer foundation `@rudderjs/orm` is built on (installed automatically as orm's dependency; the historical `@rudderjs/orm/native` subpath still works as a re-export alias). It's a first-party SQL query engine that talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), no external ORM. It's **opt-in**: a connection selects it with `engine: 'native'`, and the built-in `NativeDatabaseProvider` (auto-discovered) wires it up. Without that flag it stays dormant, so installing it alongside Prisma/Drizzle is harmless.
 
 ```ts
 // config/database.ts
@@ -105,11 +105,11 @@ The native engine is decoupled from the Rudder framework: `@rudderjs/orm` is a p
 npm install @rudderjs/orm better-sqlite3
 ```
 
-`@rudderjs/core` and `@rudderjs/console` are **not** pulled in — they're optional peers, used only by the framework provider and the CLI subpaths. A standalone install is just `@rudderjs/orm` + its one runtime dep (`@rudderjs/contracts`) + the `better-sqlite3` peer.
+`@rudderjs/core` and `@rudderjs/console` are **not** pulled in — they're optional peers, used only by the framework provider and the CLI subpaths. A standalone install is just `@rudderjs/orm` + its two runtime deps (`@rudderjs/contracts` and `@rudderjs/database`, the engine's home) + the `better-sqlite3` peer.
 
 ```ts
 import { Model, ModelRegistry } from '@rudderjs/orm'
-import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/orm/native'
+import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/database'
 
 class Todo extends Model {
   static table = 'todos'

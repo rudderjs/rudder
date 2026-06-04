@@ -22,7 +22,10 @@ rudderjs/
 │   ├── router/         # Decorator routing + global router singleton, named routes, signed URLs
 │   ├── view/           # Controller views — view('id', props) factory, ViewResponse, html`` tagged template
 │   ├── vite/           # Vite plugin suite — view scanner, routes/bootstrap HMR, dev x-real-ip injection
-│   ├── orm/            # ORM contract/interface + Model base class (results ARE Model instances)
+│   ├── database/       # SQL data-layer foundation — DB facade, registry bridge, sticky scope, NATIVE ENGINE
+│   │                   #   (compiler, dialects, drivers, NativeQueryBuilder, NativeAdapter, schema/migrator)
+│   ├── orm/            # Eloquent Model layer on top of @rudderjs/database (results ARE Model instances);
+│   │                   #   ./native + ./sticky are re-export shims; NativeDatabaseProvider lives here
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
 │   ├── orm-drizzle/    # Drizzle adapter (multi-driver: sqlite, postgresql, libsql)
 │   ├── queue/          # Queue contract/interface + queue:work command, Chain, Bus.batch, job middleware
@@ -116,6 +119,7 @@ rudderjs/
 | `@rudderjs/queue` | Job, QueueAdapter, DispatchBuilder, SyncAdapter, queue:work/status/clear/failed/retry commands, `Chain.of()` (sequential execution, state sharing, `onFailure`), `Bus.batch()` (`then`/`catch`/`finally`, progress tracking, `allowFailures`), `ShouldBeUnique`/`ShouldBeUniqueUntilProcessing` (cache-backed locks), job middleware (`RateLimited`, `WithoutOverlapping`, `ThrottlesExceptions`, `Skip`), `dispatch(fn)` queued closures, `Queue.fake()` (FakeQueueAdapter: assertPushed/assertPushedOn/assertNotPushed/assertNothingPushed) |
 | `@rudderjs/queue-inngest` | Inngest adapter — events: `rudderjs/job.<ClassName>` |
 | `@rudderjs/queue-bullmq` | BullMQ Redis-backed queue — default prefix: `'rudderjs'`, per-queue id namespacing, worker-only metrics gate |
+| `@rudderjs/database` | DB facade (select/insert/update/delete/statement/transaction/raw/listen/connection), registry bridge, Expression/raw re-export, sticky-read scope (`./sticky`), the native SQL engine (`./native`: compiler, sqlite/pg/mysql dialects + drivers, NativeQueryBuilder, NativeAdapter, Blueprint/SchemaBuilder, Migration/Schema/Migrator, introspection, schema→TS type generator) |
 | `@rudderjs/orm` | Model, QueryBuilder (results ARE Model instances), ModelRegistry, Attribute casts (`boolean`, `date`, `json`, `encrypted`, custom `CastUsing`), `Attribute.make({ get, set })` accessors/mutators, `@Hidden`/`@Visible`/`@Appends`/`@Cast` decorators, instance `makeVisible()`/`makeHidden()`/`setVisible()`/`setHidden()`, mass assignment (`fillable`/`guarded`), `Model.increment()`/`decrement()`, `whereHas`/`whereDoesntHave`/`withWhereHas`, `JsonResource`/`ResourceCollection` (conditional: `when`/`whenLoaded`/`whenNotNull`/`mergeWhen`), `ModelCollection` (wrap/find/contains/except/only/diff/unique/fresh/load/toQuery), `ModelFactory`/`sequence()`, ModelObserver registry |
 | `@rudderjs/orm-prisma` | Prisma adapter, multi-driver |
 | `@rudderjs/orm-drizzle` | Drizzle adapter — multi-driver (sqlite, postgresql, libsql). Auto-discovered `DatabaseProvider`. |

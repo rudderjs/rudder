@@ -1,6 +1,6 @@
 # @rudderjs/orm
 
-Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, factories, and API resources.
+Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, factories, and API resources. **Built on `@rudderjs/database`** — the native engine (compiler, dialects, drivers, `NativeQueryBuilder`, `NativeAdapter`, schema builder/migrator) physically lives there since the Phase-2 relocation (#889/#891/#892); `src/native/` here keeps only the `index.ts` shim (`export * from '@rudderjs/database/native'`), `provider.ts` (`NativeDatabaseProvider` — wires `ModelRegistry`/`ConnectionManager`/db-bridge, so it stays orm-side), and the Model-coupled engine test suites. `@rudderjs/database` must NEVER depend on `@rudderjs/orm` (devDep included — turbo graph cycle); engine tests that need `Model` live here, pure engine tests live there. See `packages/database/CLAUDE.md`.
 
 ## Key Files
 
@@ -13,7 +13,7 @@ Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, f
 - `src/resource.ts` — `JsonResource` / `ResourceCollection` for API response transformation: conditional helpers (`when`/`whenNotNull`/`whenLoaded`/`mergeWhen`/`whenHas`/`whenCounted`/`whenAggregated`), paginator-aware `collection()`, `additional()`, `toResponse()` envelopes. Client-reachable — no `node:` imports, no Model imports (one-way dependency).
 - `src/connection-manager.ts` — `ConnectionManager`: lazy named-connection registry (multi-connection support)
 - `src/deferred-connection-qb.ts` — record-and-replay QB for lazily-opened named connections (`static connection` / `Model.on()` first query)
-- `src/sticky.ts` — sticky-read request scope (`@rudderjs/orm/sticky` subpath, node-only — NEVER re-export from the main entry)
+- `src/sticky.ts` — re-export shim of `@rudderjs/database/sticky` (the scope moved with the engine; same globalThis key `__rudderjs_orm_sticky__`, so both paths share one scope). Node-only — NEVER re-export from the main entry
 - `src/seeder.ts` — `Seeder` base class for `db:seed` runner
 - `src/commands/make-factory.ts` — `makeFactorySpec` MakeSpec for `pnpm rudder make:factory <Name>` (writes `app/Factories/<Name>Factory.ts`)
 - `src/commands/make-seeder.ts` — `makeSeederSpec` MakeSpec for `pnpm rudder make:seeder <Name>` (writes `database/seeders/<Name>Seeder.ts`)
