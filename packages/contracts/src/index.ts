@@ -182,6 +182,26 @@ export interface RelationExistencePredicate {
   nested?: RelationExistencePredicate
 }
 
+/**
+ * Wait-behavior options for the pessimistic-lock methods
+ * (`QueryBuilder.lockForUpdate` / `sharedLock`). **Mutually exclusive** — at
+ * most one may be set; implementations throw when both are. Engines without
+ * row locks (SQLite) ignore them along with the lock itself.
+ */
+export interface LockOptions {
+  /**
+   * Skip rows another transaction has locked instead of waiting for them
+   * (`FOR UPDATE SKIP LOCKED` on Postgres/MySQL) — THE pattern for concurrent
+   * job reservation: each worker grabs only unclaimed rows, no lock queueing.
+   */
+  skipLocked?: boolean
+  /**
+   * Fail immediately with a lock-conflict error when a target row is already
+   * locked, instead of waiting (`NOWAIT` on Postgres/MySQL).
+   */
+  noWait?: boolean
+}
+
 export interface QueryBuilder<T> {
   where(column: string, value: unknown): this
   where(column: string, operator: WhereOperator, value: unknown): this
@@ -326,16 +346,22 @@ export interface QueryBuilder<T> {
    * commits — the primitive behind a database-backed job queue's atomic
    * reservation. Only meaningful inside a `transaction()`.
    *
+   * `opts` tunes the wait behavior ({@link LockOptions}): `skipLocked` skips
+   * already-locked rows (`FOR UPDATE SKIP LOCKED` — THE job-reservation
+   * pattern), `noWait` fails immediately instead of blocking (`NOWAIT`).
+   * Mutually exclusive — implementations throw when both are set.
+   *
    * Optional capability. Engines without row-level pessimistic locking (e.g.
-   * SQLite, whose write transaction already serializes) implement it as a no-op;
-   * adapters that can't express it omit the method entirely.
+   * SQLite, whose write transaction already serializes) implement it as a no-op
+   * (options included); adapters that can't express it omit the method entirely.
    */
-  lockForUpdate?(): this
+  lockForUpdate?(opts?: LockOptions): this
   /**
    * Add a shared `FOR SHARE` row lock to the SELECT — readers may proceed but
-   * writers block until commit. Same optionality as {@link lockForUpdate}.
+   * writers block until commit. Same optionality and options as
+   * {@link lockForUpdate}.
    */
-  sharedLock?(): this
+  sharedLock?(opts?: LockOptions): this
   /**
    * Eager-load `relation` constrained to rows matching `constraintWheres`.
    * Adapters that don't support a constrained include (Drizzle today) may

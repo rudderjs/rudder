@@ -12,6 +12,7 @@ import type {
   OrderClause,
   RelationExistencePredicate,
   AggregateRequest,
+  LockOptions,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { parseJsonPath, type Dialect, type DatePart, type JsonPathSegment, type JsonPathWrite } from './dialect.js'
@@ -170,6 +171,10 @@ export interface NativeQueryState {
    *  the dialect's `FOR UPDATE` / `FOR SHARE` suffix after ORDER BY / LIMIT
    *  (no-op on SQLite). `null`/absent = no lock. */
   lock?: 'update' | 'shared' | null
+  /** Wait behavior for the lock (`SKIP LOCKED` / `NOWAIT` on pg/mysql) —
+   *  already validated mutually exclusive by the QueryBuilder. Only consulted
+   *  when `lock` is set. `null`/absent = default blocking wait. */
+  lockOptions?: LockOptions | null
 }
 
 /** A compiled statement: parameterized SQL + the positional bindings. */
@@ -556,7 +561,7 @@ export function compileSelect(
 
   // Pessimistic lock trails everything (standard SQL puts the locking clause
   // last). dialect.lockSql returns '' on engines without row locks (SQLite).
-  if (state.lock) sql += dialect.lockSql(state.lock)
+  if (state.lock) sql += dialect.lockSql(state.lock, state.lockOptions ?? undefined)
 
   return { sql, bindings: b.values }
 }

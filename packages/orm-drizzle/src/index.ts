@@ -21,6 +21,7 @@ import type {
   Row,
   QueryListener,
   TransactionOptions,
+  LockOptions,
 } from '@rudderjs/contracts'
 import { Expression } from '@rudderjs/contracts'
 import { resolveOptionalPeer } from '@rudderjs/support'
@@ -151,8 +152,10 @@ type DrizzleQB = {
   unionAll(other: DrizzleQB): DrizzleQB
   /** Pessimistic locking clause (`FOR UPDATE` / `FOR SHARE`) — present on the
    *  pg + mysql Drizzle select builders, ABSENT on sqlite (no row locks there;
-   *  the adapter no-ops the lock on the sqlite dialect, like the native engine). */
-  for(strength: 'update' | 'share'): DrizzleQB
+   *  the adapter no-ops the lock on the sqlite dialect, like the native engine).
+   *  `config` carries the wait behavior — both drivers accept `noWait` /
+   *  `skipLocked` booleans (pg's config also has an `of` member we don't use). */
+  for(strength: 'update' | 'share', config?: { noWait?: boolean; skipLocked?: boolean }): DrizzleQB
   orderBy(...cols: SQL[]): DrizzleQB
   limit(n: number): DrizzleQB
   offset(n: number): DrizzleQB
@@ -296,6 +299,20 @@ function emitQueryEvent(
 /** SQL dialect threaded through the adapter to drive capability branching —
  *  `RETURNING` support on Postgres/SQLite vs `affectedRows` on MySQL. */
 export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
+
+/** `skipLocked` skips conflicting rows; `noWait` errors on them — asking for
+ *  both is a contradiction, so `lockForUpdate()`/`sharedLock()` throw at the
+ *  call site (every dialect), not at query time. */
+function validateLockOpts(method: string, opts?: LockOptions): LockOptions | null {
+  if (!opts) return null
+  if (opts.skipLocked && opts.noWait) {
+    throw new Error(
+      `[RudderJS ORM Drizzle] ${method}() options skipLocked and noWait are mutually ` +
+      'exclusive — skip conflicting rows OR fail fast on them, not both. Pass at most one.',
+    )
+  }
+  return opts
+}
 
 /**
  * @internal — the write-result metadata a MySQL driver reports. mysql2 resolves
@@ -442,6 +459,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  locks — its write transaction already serializes; same as the native
    *  engine's `lockSql`). Only meaningful inside a `transaction()`. */
   private _lock: 'update' | 'share' | null = null
+  /** Wait behavior for `_lock` (`skipLocked` / `noWait`) — validated mutually
+   *  exclusive at the setter, passed as Drizzle's `.for(strength, config)`
+   *  second arg. Ignored on sqlite along with the lock itself. */
+  private _lockOpts: LockOptions | null = null
   /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
   private _isSubBuilder = false
 
@@ -1063,12 +1084,22 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   /** Pessimistic `FOR UPDATE` row lock — writers AND locking readers block until
    *  commit. Renders via Drizzle's `.for('update')` on pg/mysql; no-op on sqlite
    *  (no row locks — its write transaction already serializes, matching the
-   *  native engine). Only meaningful inside a `transaction()`. */
-  lockForUpdate(): this { this._lock = 'update'; return this }
+   *  native engine). Only meaningful inside a `transaction()`. `opts.skipLocked`
+   *  skips already-locked rows (`SKIP LOCKED`), `opts.noWait` errors instead of
+   *  blocking (`NOWAIT`) — mutually exclusive, both set throws. */
+  lockForUpdate(opts?: LockOptions): this {
+    this._lock = 'update'
+    this._lockOpts = validateLockOpts('lockForUpdate', opts)
+    return this
+  }
 
   /** Shared `FOR SHARE` row lock — readers proceed, writers block until commit.
-   *  Same dialect handling as {@link lockForUpdate}. */
-  sharedLock(): this { this._lock = 'share'; return this }
+   *  Same dialect handling and options as {@link lockForUpdate}. */
+  sharedLock(opts?: LockOptions): this {
+    this._lock = 'share'
+    this._lockOpts = validateLockOpts('sharedLock', opts)
+    return this
+  }
 
   // A normal `Model.with('relation')` no longer reaches this method: the
   // adapter advertises `eagerLoadStrategy = 'model-layer'`, so the ORM resolves
@@ -1575,6 +1606,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  set operation — Postgres rejects it). */
   private _applyLock(q: DrizzleQB): DrizzleQB {
     if (this._lock === null || this.dialect === 'sqlite' || this._unions.length > 0) return q
+    // Build the `.for()` config only from set flags — Drizzle renders nothing
+    // for an absent config, keeping the no-options SQL byte-identical.
+    if (this._lockOpts?.skipLocked) return q.for(this._lock, { skipLocked: true })
+    if (this._lockOpts?.noWait) return q.for(this._lock, { noWait: true })
     return q.for(this._lock)
   }
 
