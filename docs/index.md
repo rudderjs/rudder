@@ -31,10 +31,10 @@ features:
     details: WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy, no Pusher dependency.
   - icon: 🧱
     title: Service-oriented
-    details: DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle) — one bootstrap file wires everything.
+    details: DI container with ALS request scope, service providers, gates & policies, active-record ORM (built-in native engine, or Prisma / Drizzle) — one bootstrap file wires everything.
   - icon: 🪶
     title: Pay-as-you-go modularity
-    details: 48 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
+    details: 49 first-party packages. Start with three, bolt on what you need. Swap native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
   - icon: 🔒
     title: TypeScript-first, strict by default
     details: "`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime."
