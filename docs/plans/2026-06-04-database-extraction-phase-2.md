@@ -346,18 +346,17 @@ first, and B2 was *chosen* to run in the new home rather than racing the move.
 
 ### Lane B (machine 2)
 
-- **PR-B1 — `ci:` turbo live-env fix.** `turbo.json` `test` task gains
+- **PR-B1 — `ci:` turbo live-env fix.** ✅ **SHIPPED — #885 (2026-06-04).**
+  `turbo.json` `test` task gains
   `"env": ["PG_TEST_URL", "MYSQL_TEST_URL"]`. Restores real live coverage to
   `orm-pg`/`orm-mysql` **before** anything moves. Expect this PR to surface
   any live-suite rot that accumulated while the jobs were vacuous — budget for
   fixing those failures here (they are pre-existing bugs, not regressions).
   Files: `turbo.json` only. No changeset (`ci:`).
-- **PR-B2 — `feat(orm):`/`feat(database):` mysql JSON null-vs-missing-key
-  distinction** (the deferred gap from the JSON-where arc). Runs **after A3**
-  so it lands in the engine's new home (`packages/database/src/native/
-  dialect-mysql.ts` + `compiler.ts`) instead of racing the move; its
-  Model-level assertions extend `json-where.test.ts`, which stays orm-side.
-  Changeset: minor (database; orm only if the Model surface changes).
+- **PR-B2 — `feat(orm):` mysql JSON null-vs-missing-key distinction.**
+  ✅ **SHIPPED — #887 (2026-06-04),** ahead of schedule and in the engine's
+  *current* home (`packages/orm/src/native/`) — A2's `git mv` carries the
+  `jsonNullComparison` seam to database; no coordination needed after all.
 - **PR-B3 — `refactor(queue):` retarget the database queue driver** (after
   A3): `adapter.ts:163` tries `resolveOptionalPeer('@rudderjs/database/native')`
   first, falls back to `'@rudderjs/orm/native'`. No behavior change → no

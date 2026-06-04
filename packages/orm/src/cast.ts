@@ -1,23 +1,14 @@
+import type { BuiltInCast } from '@rudderjs/contracts'
 import { VectorDimensionMismatchError } from './vector-errors.js'
 
 // ─── Cast Types ────────────────────────────────────────────
 
-export type BuiltInCast =
-  | 'string'
-  | 'integer'
-  | 'float'
-  | 'boolean'
-  | 'date'
-  | 'datetime'
-  | 'json'
-  | 'array'
-  | 'collection'
-  | 'encrypted'
-  | 'encrypted:array'
-  | 'encrypted:object'
-  | 'hashed'
-  /** Fixed-precision decimal kept as a string with N fractional digits, e.g. `'decimal:2'`. */
-  | `decimal:${number}`
+// `BuiltInCast` is owned by `@rudderjs/contracts` (it's also consumed by the
+// native engine's schema→TS type generator, which must not import
+// `@rudderjs/orm` — a `database → orm` edge, even type-only, would cycle the
+// package graph). Re-exported here so every existing `./cast.js` /
+// `@rudderjs/orm` import keeps working.
+export type { BuiltInCast } from '@rudderjs/contracts'
 
 /** Interface for a custom cast class. */
 export interface CastUsing {
