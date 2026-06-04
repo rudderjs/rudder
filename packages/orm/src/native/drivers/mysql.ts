@@ -137,7 +137,22 @@ export class MysqlDriver implements Driver, AffectingExecutor {
       )
     }
 
-    const pool = mod.createPool({ uri: config.url, ...config.options })
+    const pool = mod.createPool({
+      uri: config.url,
+      // MySQL has no boolean type — `t.boolean()` columns are `tinyint(1)`
+      // (the BOOLEAN alias). Map them back to JS booleans on read so boolean
+      // columns round-trip like they do on Postgres (whose driver parses the
+      // native bool type). Only display-width-1 TINY columns qualify — a plain
+      // `t.tinyInt()` (width 4) stays numeric. `config.options` can override.
+      typeCast: (field: { type: string; length: number; string(): string | null }, next: () => unknown) => {
+        if (field.type === 'TINY' && field.length === 1) {
+          const value = field.string()
+          return value === null ? null : value === '1'
+        }
+        return next()
+      },
+      ...config.options,
+    })
     const driver = new MysqlDriver(pool)
     try {
       await pool.query('select 1')

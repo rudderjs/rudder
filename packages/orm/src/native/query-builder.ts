@@ -701,18 +701,25 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       if (!rows[0]) throw new Error('[RudderJS ORM native] create() returned no rows.')
       return rows[0] as T
     }
-    // No RETURNING (MySQL): INSERT, then synthesize the row from the input + the
-    // generated auto-increment id. Matches Eloquent's MySQL `create()` semantics —
-    // DB-applied defaults for omitted columns aren't reflected until a refresh.
+    // No RETURNING (MySQL): INSERT, then re-SELECT by primary key — same as the
+    // `update()` path — so the returned row is the REAL stored row (DB-applied
+    // defaults, driver type mapping), byte-consistent with the RETURNING
+    // dialects. The PK is the auto-increment `insertId`, or the caller-supplied
+    // key (uuid/ulid models stamp it before insert).
     const { sql, bindings } = compileInsert(
       this._state(), this.dialect, [data as Record<string, unknown>], { returning: false },
     )
     const { insertId } = await this._affecting(sql, bindings)
-    const created: Record<string, unknown> = { ...(data as Record<string, unknown>) }
-    if (insertId !== null && created[this.primaryKey] === undefined) {
-      created[this.primaryKey] = insertId
+    const suppliedKey = (data as Record<string, unknown>)[this.primaryKey]
+    const id = insertId ?? (suppliedKey as number | string | undefined)
+    if (id === undefined || id === null) {
+      // No way to identify the row (no auto-increment, no supplied key) —
+      // synthesize from the input as the best effort.
+      return { ...(data as Record<string, unknown>) } as T
     }
-    return created as T
+    const row = await this._reselect(id)
+    if (!row) throw new Error('[RudderJS ORM native] create() could not re-select the inserted row.')
+    return row
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {

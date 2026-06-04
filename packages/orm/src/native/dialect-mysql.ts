@@ -12,7 +12,8 @@
 //     (see `AffectingExecutor` in `driver.js`) and re-SELECTs by primary key.
 //   - **Backtick identifier quoting** (`` `id` ``), not double quotes.
 //   - **No real boolean type** — booleans store as `tinyint(1)` integers, so a
-//     boolean default renders as `1`/`0` (same as SQLite).
+//     boolean default renders as `1`/`0` (same as SQLite). On READ the driver's
+//     typeCast maps `tinyint(1)` back to JS booleans (Postgres parity).
 
 import { raw } from '@rudderjs/contracts'
 import { NativeOrmError } from './errors.js'
@@ -51,8 +52,8 @@ export class MysqlDialect implements Dialect {
   }
 
   // MySQL has no boolean type — `BOOLEAN` is an alias for `tinyint(1)`, stored as
-  // an integer. A boolean default renders as the matching integer literal (the
-  // `boolean` cast reads `0`/`1` back), same as SQLite.
+  // an integer, so a boolean default renders as the matching integer literal.
+  // On read the driver's typeCast maps `tinyint(1)` back to JS booleans.
   booleanLiteral(value: boolean): string {
     return value ? '1' : '0'
   }
