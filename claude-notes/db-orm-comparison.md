@@ -158,7 +158,7 @@
 ## §14 Gap list → work queue (priority-ordered draft)
 
 **Tier 1 — table stakes we lack (most-cited features across all 5 competitors):**
-1. `transaction(fn, { isolationLevel })` — every competitor has it; native pg/mysql support is trivial (`SET TRANSACTION ISOLATION LEVEL`); sqlite n/a.
+1. ✅ `transaction(fn, { isolationLevel })` — SHIPPED (quality-arc Tier-1): contracts `TransactionIsolationLevel`/`TransactionOptions`; native emits `SET TRANSACTION ISOLATION LEVEL` at txn begin (pg inside BEGIN, mysql before it — next-txn semantics), sqlite throws; drizzle passes through to its tx config (sqlite throws); prisma maps to `$transaction({ isolationLevel })` PascalCase. Nested call (savepoint) rejects the option everywhere (ORM-level + driver guards).
 2. ~~CTEs~~ — **SHIPPED post-audit**: `withExpression`/`withRecursiveExpression` (native engine; raw-or-builder body, recursive via raw SQL + bindings, `join('name', …)` to reference).
 3. Lock options — `lockForUpdate({ skipLocked: true, noWait: true })`; queue driver would benefit immediately (SKIP LOCKED is THE job-reservation pattern).
 4. ~~whereExists~~ — **SHIPPED post-audit**: `whereExists`/`whereNotExists`/`orWhere*` (native engine; builder-or-raw body, whereColumn correlation).

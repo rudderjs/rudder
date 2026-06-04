@@ -17,8 +17,9 @@
 // `affectedRows` from mysql2's `ResultSetHeader`, which the query builder's
 // no-RETURNING path consumes.
 
-import type { Driver, Transaction, Row, AffectingExecutor, AffectingResult } from '../driver.js'
+import type { Driver, Transaction, Row, AffectingExecutor, AffectingResult, TransactionOptions } from '../driver.js'
 import { NativeDriverError } from '../errors.js'
+import { isolationLevelSql, nestedIsolationError } from '../isolation.js'
 
 /** Monotonic counter for unique nested-transaction SAVEPOINT names. */
 let savepointSeq = 0
@@ -88,8 +89,11 @@ class MysqlScope implements Transaction, AffectingExecutor {
   }
 
   // Nested transaction → SAVEPOINT on the current (already-transactional)
-  // connection, so an inner failure rolls back only its own work.
-  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  // connection, so an inner failure rolls back only its own work. An isolation
+  // level is rejected — the open transaction's isolation is already fixed (MySQL
+  // itself errors on SET TRANSACTION while a transaction is in progress).
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    if (opts?.isolationLevel) throw nestedIsolationError()
     const name = `rudder_sp_${(savepointSeq = (savepointSeq + 1) % Number.MAX_SAFE_INTEGER)}`
     await this.conn.query(`SAVEPOINT ${name}`)
     try {
@@ -177,9 +181,15 @@ export class MysqlDriver implements Driver, AffectingExecutor {
 
   // Top-level transaction → reserve a connection, BEGIN, COMMIT (ROLLBACK on
   // throw), always release. Every query inside runs on the pinned connection.
-  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  // An isolation level is applied via `SET TRANSACTION ISOLATION LEVEL` BEFORE
+  // `beginTransaction` — on MySQL the un-scoped form applies only to the NEXT
+  // transaction started on the connection (issuing it inside one errors), and
+  // it does not persist, so the pooled connection is released clean.
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    const level = opts?.isolationLevel ? isolationLevelSql(opts.isolationLevel) : null
     const conn = await this.pool.getConnection()
     try {
+      if (level) await conn.query(`SET TRANSACTION ISOLATION LEVEL ${level}`)
       await conn.beginTransaction()
       try {
         const result = await fn(new MysqlScope(conn))

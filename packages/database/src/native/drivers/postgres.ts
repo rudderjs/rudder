@@ -11,8 +11,9 @@
 // for the whole scope, rather than issuing a bare `BEGIN` on the pool (which
 // could land BEGIN and the following statements on different connections).
 
-import type { Driver, Transaction, Row } from '../driver.js'
+import type { Driver, Transaction, Row, TransactionOptions } from '../driver.js'
 import { NativeDriverError } from '../errors.js'
+import { isolationLevelSql, nestedIsolationError } from '../isolation.js'
 
 /**
  * The structural slice of porsager's `postgres` API we depend on. Typed here
@@ -63,8 +64,10 @@ class PgScope implements Transaction {
   // Nested transaction → SAVEPOINT on the current (already-transactional)
   // connection. Reachable only from a scope created inside `begin` (the
   // top-level driver overrides `transaction` to open the BEGIN), so `savepoint`
-  // is always valid here.
-  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  // is always valid here. An isolation level is rejected — a savepoint runs
+  // inside the open transaction, whose isolation is already fixed.
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    if (opts?.isolationLevel) throw nestedIsolationError()
     return this.sql.savepoint((sp) => fn(new PgScope(sp)))
   }
 }
@@ -170,8 +173,16 @@ export class PostgresDriver extends PgScope implements Driver {
 
   // Top-level transaction → BEGIN/COMMIT (ROLLBACK on throw). porsager's `begin`
   // reserves a connection for the whole scope, so every query inside runs on it.
-  override async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return this.sql.begin((tx) => fn(new PgScope(tx)))
+  // An isolation level is applied via `SET TRANSACTION ISOLATION LEVEL` as the
+  // FIRST statement inside the transaction — Postgres allows it any time before
+  // the first query, and `isolationLevelSql` validates the level (the keyword is
+  // spliced, never bound).
+  override async transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    const level = opts?.isolationLevel ? isolationLevelSql(opts.isolationLevel) : null
+    return this.sql.begin(async (tx) => {
+      if (level) await tx.unsafe(`SET TRANSACTION ISOLATION LEVEL ${level}`)
+      return fn(new PgScope(tx))
+    })
   }
 
   async close(): Promise<void> {

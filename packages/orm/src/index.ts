@@ -1,4 +1,4 @@
-import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate, JoinClause } from '@rudderjs/contracts'
+import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate, JoinClause, TransactionIsolationLevel } from '@rudderjs/contracts'
 // Type-only — erased at compile, so no runtime `node:async_hooks` import lands in
 // the eval graph. The real module is lazy-imported in `ensureTxStorage()`, which
 // only runs from `transaction()` — never reached in a client bundle. Keeps the
@@ -82,7 +82,7 @@ import {
   type KeysetBuilder,
 } from './cursor-paginator.js'
 
-export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape, JoinClause } from '@rudderjs/contracts'
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape, JoinClause, TransactionOptions, TransactionIsolationLevel } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
 export { vector }                                  from './cast.js'
 export {
@@ -193,10 +193,20 @@ function _connKey(name?: string): string {
  *   await Account.create({ userId: user.id, balance: 0 })
  * }) // both rows commit together, or neither does
  *
+ * `opts.isolationLevel` sets the transaction's isolation level (`'read
+ * uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`).
+ * Outermost call only — a nested call maps to a SAVEPOINT, whose isolation
+ * can't diverge from the enclosing transaction's, so it throws here (for every
+ * adapter) before reaching the driver. SQLite-backed adapters throw too (no
+ * isolation levels; the single-writer model is already serializable).
+ *
  * @throws if the active adapter doesn't implement `transaction()` (capability is
  *   optional on the contract; the native engine supports it).
  */
-export async function transaction<T>(fn: () => Promise<T>, opts?: { connection?: string }): Promise<T> {
+export async function transaction<T>(
+  fn: () => Promise<T>,
+  opts?: { connection?: string; isolationLevel?: TransactionIsolationLevel },
+): Promise<T> {
   // Named connection → the outer tx-scoped adapter when nested (so nesting
   // opens a SAVEPOINT, mirroring the default path's ALS lookup), else resolve
   // through the ConnectionManager (opens lazily on first use). Default → the
@@ -214,6 +224,18 @@ export async function transaction<T>(fn: () => Promise<T>, opts?: { connection?:
   }
   const key = _connKey(opts?.connection)
   const storage = await ensureTxStorage()
+  // Adapter-agnostic nesting guard: an isolation level only applies when a
+  // fresh transaction opens. If THIS connection already has a tx scope, the
+  // call below maps to a SAVEPOINT — reject up front so every adapter (incl.
+  // ones whose driver can't detect nesting) fails the same clear way.
+  if (opts?.isolationLevel !== undefined && storage.getStore()?.has(key)) {
+    throw new Error(
+      '[RudderJS ORM] isolationLevel cannot be set on a nested transaction — the ' +
+      'nested call maps to a SAVEPOINT inside the open transaction, whose isolation ' +
+      'level is already fixed. Set it on the outermost transaction() call.',
+    )
+  }
+  const txOpts = opts?.isolationLevel !== undefined ? { isolationLevel: opts.isolationLevel } : undefined
   return adapter.transaction((txAdapter) => {
     // Layer this connection's tx scope over any outer scopes — a transaction
     // on 'reporting' inside a default-connection transaction leaves the
@@ -221,7 +243,7 @@ export async function transaction<T>(fn: () => Promise<T>, opts?: { connection?:
     const next = new Map(storage.getStore() ?? [])
     next.set(key, txAdapter)
     return storage.run(next, fn)
-  })
+  }, txOpts)
 }
 
 // ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
@@ -2124,8 +2146,11 @@ export abstract class Model {
    * calls map to SAVEPOINTs. Throws if the active adapter lacks transaction
    * support (native supports it).
    */
-  static transaction<T>(fn: () => Promise<T>): Promise<T> {
-    return transaction(fn)
+  static transaction<T>(
+    fn: () => Promise<T>,
+    opts?: { connection?: string; isolationLevel?: TransactionIsolationLevel },
+  ): Promise<T> {
+    return transaction(fn, opts)
   }
 
   static query<T extends typeof Model>(this: T): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } {

@@ -62,8 +62,13 @@ function makeFakeClient(log: Op[]) {
     ...makeRawSurface('root', log),
     $connect:    async () => {},
     $disconnect: async () => {},
-    $transaction: async <R>(fn: (tx: typeof txClient) => Promise<R>): Promise<R> => {
-      log.push({ client: 'root', kind: '$transaction:begin' })
+    $transaction: async <R>(
+      fn: (tx: typeof txClient) => Promise<R>,
+      options?: { isolationLevel?: string },
+    ): Promise<R> => {
+      // `detail` records the isolationLevel option (already mapped to Prisma's
+      // PascalCase enum value by the adapter), or 'none' when omitted.
+      log.push({ client: 'root', kind: '$transaction:begin', detail: options?.isolationLevel ?? 'none' })
       return fn(txClient)
     },
   }
@@ -156,5 +161,46 @@ describe('Prisma transaction() — nesting maps to SAVEPOINT', () => {
     assert.match(sql[0] ?? '', /^SAVEPOINT /)
     assert.match(sql[1] ?? '', /^ROLLBACK TO SAVEPOINT /)
     assert.equal(sql[0]?.replace('SAVEPOINT ', ''), sql[1]?.replace('ROLLBACK TO SAVEPOINT ', ''))
+  })
+})
+
+describe('Prisma transaction() — isolation level', () => {
+  it("maps 'repeatable read' to Prisma's PascalCase enum value on $transaction", async () => {
+    await transaction(async () => {
+      await Account.create({ owner: 'iso' })
+    }, { isolationLevel: 'repeatable read' })
+
+    const begin = log.find((o) => o.kind === '$transaction:begin')
+    assert.equal(begin?.detail, 'RepeatableRead')
+  })
+
+  it('maps every contract level', async () => {
+    const expected: Record<string, string> = {
+      'read uncommitted': 'ReadUncommitted',
+      'read committed':   'ReadCommitted',
+      'repeatable read':  'RepeatableRead',
+      'serializable':     'Serializable',
+    }
+    for (const [level, prismaName] of Object.entries(expected)) {
+      log.length = 0
+      await transaction(async () => {}, { isolationLevel: level as never })
+      assert.equal(log.find((o) => o.kind === '$transaction:begin')?.detail, prismaName)
+    }
+  })
+
+  it('passes NO isolationLevel option when none is requested (back-compat)', async () => {
+    await transaction(async () => {})
+    assert.equal(log.find((o) => o.kind === '$transaction:begin')?.detail, 'none')
+  })
+
+  it('rejects isolationLevel on a nested transaction (ORM-level guard, before the SAVEPOINT)', async () => {
+    await transaction(async () => {
+      await assert.rejects(
+        transaction(async () => {}, { isolationLevel: 'serializable' }),
+        /isolationLevel cannot be set on a nested transaction/,
+      )
+    })
+    // The guard fired before any SAVEPOINT was emitted.
+    assert.ok(!log.some((o) => o.kind === 'exec' && (o.detail ?? '').startsWith('SAVEPOINT')))
   })
 })

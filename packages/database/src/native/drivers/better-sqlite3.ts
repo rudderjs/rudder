@@ -8,7 +8,7 @@
 // better-sqlite3 is synchronous; we wrap its calls in resolved promises to
 // satisfy the async {@link Driver} contract shared with RN/WASM drivers.
 
-import type { Driver, Transaction, Row } from '../driver.js'
+import type { Driver, Transaction, Row, TransactionOptions } from '../driver.js'
 import { NativeDriverError } from '../errors.js'
 
 // Minimal structural types for the slice of better-sqlite3 we use — avoids a
@@ -120,7 +120,18 @@ export class BetterSqlite3Driver implements Driver {
    * assumes transactions are not run concurrently against one SQLite handle.
    * Pooled drivers (pg/mysql, Phase 5/6) pin a dedicated client per transaction.
    */
-  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>, opts?: TransactionOptions): Promise<T> {
+    // SQLite has no SQL-standard isolation levels (one writer; readers see a
+    // serializable snapshot) — a requested level would silently mean nothing,
+    // so throw rather than no-op. Checked before the nesting branch: the error
+    // is the same at any depth.
+    if (opts?.isolationLevel) {
+      throw new Error(
+        '[RudderJS ORM native] SQLite does not support transaction isolation levels — ' +
+        'its single-writer model is already serializable. Drop the isolationLevel ' +
+        'option, or use the Postgres/MySQL engine.',
+      )
+    }
     const top = this.depth === 0
     const savepoint = top ? null : `rudder_sp_${this.depth}`
     if (top) this.db.exec('BEGIN')
