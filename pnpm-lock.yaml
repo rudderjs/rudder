@@ -782,6 +782,9 @@ importers:
         specifier: workspace:^
         version: link:../support
     devDependencies:
+      '@prisma/client-runtime-utils':
+        specifier: ^7.4.2
+        version: 7.4.2
       '@rudderjs/database':
         specifier: workspace:^
         version: link:../database
