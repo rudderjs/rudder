@@ -1,5 +1,20 @@
 # @rudderjs/orm
 
+## 1.15.0
+
+### Minor Changes
+
+- 39eec73: JSON arrow-path keys in update payloads on the native engine — `Model.update(id, { 'meta->prefs->lang': 'en' })` (and `updateAll`) writes one path inside a JSON column via the new per-dialect `Dialect.jsonSet` seam: sqlite `json_set(col, path, json(?))`, mysql `JSON_SET(col, path, CAST(? AS JSON))`, pg nested `jsonb_set((col)::jsonb, ARRAY[…], $n::jsonb)`. Values bind as JSON text so every type (string/number/boolean/null/array/object) round-trips identically; multiple writes on one column merge into a single assignment; mixing a whole-column write and an arrow write on the same column throws; path segments run the same injection gate as JSON reads. Plain payloads compile byte-identical to before. Under `fillable`/`guarded` the arrow key itself must be listed (Laravel parity). Adapters without the capability (Drizzle/Prisma for now) throw a clear Model-layer error instead of leaking the arrow key downstream.
+- 135aa78: Arrow-path JSON predicates now work inside `whereHas` / `whereDoesntHave` / `has()` / `whereRelation` constrain callbacks (and aggregate constraints like `withCount`) on the native engine — `User.whereHas('posts', q => q.where('meta->lang', 'en'))` compiles the constraint through the same per-dialect `jsonExtract` seam as top-level arrow `where()`, with the base column qualified to the related table inside the correlated EXISTS body. Path segments are validated by the same injection gate; bindings stay in SQL-text order. Closes the whereHas-constraint deferral from the JSON-path arc.
+- 5bfe9b1: Nested whereHas on the native engine — dot-path relation chains (`User.whereHas('posts.comments', q => q.where('approved', true))`) compile as nested correlated EXISTS, with Laravel `hasNested` semantics: the constrain callback and any `has()` count comparison apply to the DEEPEST relation, outer levels are plain existence, `whereDoesntHave('a.b')` flips only the outermost EXISTS (a parent row with childless intermediates doesn't defeat it), and `has('a.b', '<', 1)` flips to doesn't-have. Works across `whereHas` / `whereDoesntHave` / `orWhereHas` / `orWhereDoesntHave` / `has` / `orHas` / `whereRelation`, any chain depth, and every relation type the single-level form supports (including belongsToMany pivot hops and arrow-path JSON constraints on the deepest level). `RelationExistencePredicate` (contracts) gains an optional `nested` child predicate. Adapters without support (Drizzle/Prisma for now) throw a clear Model-layer error instead of silently ignoring the field; the nested-whereHas-inside-a-constrain-callback error now points at the dot-path form.
+- 7c39c47: Native engine: `Model.with('relation')` now eager-loads direct relations (`hasOne`/`hasMany`/`belongsTo`/`belongsToMany`). The adapter advertises `eagerLoadStrategy: 'model-layer'` (same as Drizzle), so the ORM resolves them with one batched WHERE-IN query per relation, stitched onto the parents — previously a dev-warn no-op that returned rows without the relation populated. Constrained eager-load (`withWhereHas`) remains unsupported on native: chain `.whereHas(...)` for the filter plus `.with(...)` for the load.
+
+### Patch Changes
+
+- 0e0a9c5: Native MySQL engine fixes — `Schema.hasTable()` / `Schema.hasColumn()` now work on the mysql dialect (information_schema scoped to `DATABASE()`; previously threw `NATIVE_NOT_IMPLEMENTED`), `tinyint(1)` columns read back as JS booleans via a mysql2 `typeCast` (Postgres parity for `t.boolean()` columns; a plain `t.tinyInt()` stays numeric, override via driver `options`), and `create()` re-selects the inserted row by primary key instead of synthesizing it from the input — so the returned instance carries the real stored row (DB defaults, driver type mapping), consistent with the RETURNING dialects.
+- Updated dependencies [5bfe9b1]
+  - @rudderjs/contracts@1.11.0
+
 ## 1.14.0
 
 ### Minor Changes
