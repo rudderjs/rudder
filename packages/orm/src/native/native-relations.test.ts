@@ -193,12 +193,12 @@ describe('native relations — per-instance load aggregates (_aggregate)', () =>
 })
 
 describe('native relations — friction cases (CLAUDE.md)', () => {
-  it('nested whereHas inside a constrain callback throws (deferred to v2)', () => {
+  it('nested whereHas inside a constrain callback throws (use dot-path form)', () => {
     // The error is raised synchronously at query-build time (inside the
     // constrain callback), before any terminal — so it throws, not rejects.
     assert.throws(
       () => User.whereHas('posts', q => (q as unknown as { whereHas(r: string): unknown }).whereHas('author')),
-      /Nested whereHas inside a whereHas constrain callback is deferred to v2/,
+      /Nested whereHas inside a whereHas constrain callback is not supported/,
     )
   })
 

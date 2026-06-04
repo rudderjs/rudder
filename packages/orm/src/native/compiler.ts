@@ -952,22 +952,31 @@ export function compileExists(
     const pivotKeyExpr = `${qcol(pivot, predicate.through.foreignPivotKey, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`
     const extraExprs   = extraEqualsOn(pivot, predicate.extraEquals, dialect, b)
 
-    // Inner: the related row joined to this pivot row, plus constraint wheres.
+    // Inner: the related row joined to this pivot row, plus constraint wheres,
+    // plus the child predicate of a nested path (correlated against the
+    // related table, so it lives inside the related row's EXISTS — not the
+    // pivot's). Recursion handles arbitrarily deep chains; compiled LAST so
+    // its bindings follow the constraint values (SQL-text order).
     const innerExprs = [
       `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(pivot, predicate.through.relatedPivotKey, dialect)}`,
       ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
     ]
     const innerExists = `EXISTS (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(innerExprs)})`
 
     fromTable = pivot
     whereBody = andAll([pivotKeyExpr, ...extraExprs, innerExists])
   } else {
-    // Direct: one correlated subquery on the related table.
+    // Direct: one correlated subquery on the related table. A nested child
+    // predicate (`whereHas('posts.comments')`) appends its own correlated
+    // EXISTS to the body — compiled LAST in text order, after the constraint
+    // wheres, so the shared Bindings stay positionally aligned.
     fromTable = related
     whereBody = andAll([
       `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
       ...extraEqualsOn(related, predicate.extraEquals, dialect, b),
       ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
     ])
   }
 

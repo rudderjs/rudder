@@ -59,6 +59,12 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
    *  adapter QBs without it (Drizzle/Prisma until their follow-up). */
   readonly supportsJsonPathUpdates = true
 
+  /** Capability marker read by the Model layer — nested relation paths
+   *  (`whereHas('posts.comments')`) build a predicate chain (`nested` child
+   *  predicates) that only adapters with this marker can compile; others get
+   *  a clear Model-layer throw instead of a silently-ignored field. */
+  readonly supportsNestedRelationPredicates = true
+
   private readonly _conditions: ConditionNode[] = []
   private readonly _orders:     OrderItem[]     = []
   private readonly _selects:    string[]        = []
