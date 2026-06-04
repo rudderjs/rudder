@@ -169,3 +169,28 @@ test('dedicated engine connection auto-creates its own tables', { skip: !availab
     rmSync(`${file}-wal`, { force: true })
   }
 })
+
+test('reservation locks with { skipLocked: true } (concurrent workers never queue on one row)', async () => {
+  // A recording fake pins the lock arguments — the real engines no-op the lock
+  // on SQLite, so the option is not observable through the e2e suite above.
+  // Runs even when the native engine is unavailable (no `available` skip).
+  const lockCalls: unknown[] = []
+  function makeQb(): any {
+    const qb: any = {}
+    for (const m of ['where', 'whereGroup', 'orWhere', 'orderBy', 'limit']) qb[m] = () => qb
+    qb.lockForUpdate = (...args: unknown[]) => { lockCalls.push(args[0] ?? null); return qb }
+    qb.get = async () => []   // no runnable job → stopWhenEmpty exits after one pass
+    qb.count = async () => 0
+    qb.create = async (d: unknown) => d
+    qb.updateAll = async () => 0
+    qb.deleteAll = async () => 0
+    return qb
+  }
+  const fake: any = {
+    query: () => makeQb(),
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fake),
+  }
+  const q = database({ adapter: fake, jobs: [OkJob] }).create()
+  await q.work!('default', { stopWhenEmpty: true })
+  assert.deepEqual(lockCalls, [{ skipLocked: true }])
+})
