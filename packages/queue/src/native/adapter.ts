@@ -1,15 +1,16 @@
 // ─── DatabaseQueueAdapter ──────────────────────────────────
 //
-// Persistent, self-hosted queue driver backed by the native ORM engine
-// (`@rudderjs/orm/native`) — the zero-infrastructure default tier, modeled on
-// Laravel's `database` driver. Jobs live in a `jobs` table; a worker poll loop
-// reserves them atomically (transaction + `lockForUpdate()` — `FOR UPDATE` on
-// Postgres/MySQL, a serializing write transaction on SQLite) and runs them
-// through the shared `executeJob` pipeline. Exhausted jobs move to `failed_jobs`.
+// Persistent, self-hosted queue driver backed by the native SQL engine
+// (`@rudderjs/database/native`; `@rudderjs/orm/native` re-exports it) — the
+// zero-infrastructure default tier, modeled on Laravel's `database` driver.
+// Jobs live in a `jobs` table; a worker poll loop reserves them atomically
+// (transaction + `lockForUpdate()` — `FOR UPDATE` on Postgres/MySQL, a
+// serializing write transaction on SQLite) and runs them through the shared
+// `executeJob` pipeline. Exhausted jobs move to `failed_jobs`.
 //
-// The ORM is reached via `resolveOptionalPeer('@rudderjs/orm')` so the queue
-// package keeps NO hard dependency on it — only the `database` driver path needs
-// it, and only at runtime once selected.
+// The engine/ORM are reached via `resolveOptionalPeer(...)` so the queue
+// package keeps NO hard dependency on either — only the `database` driver path
+// needs them, and only at runtime once selected.
 
 import { randomUUID } from 'node:crypto'
 import { resolveOptionalPeer } from '@rudderjs/core'
@@ -158,9 +159,17 @@ export class DatabaseQueueAdapter implements QueueAdapter {
     }
 
     if (this.engine) {
-      const { NativeAdapter } = await resolveOptionalPeer<{
+      // The native engine's canonical home is @rudderjs/database (Phase-2
+      // relocation); @rudderjs/orm/native remains as a re-export shim. Try the
+      // canonical path first so this driver doesn't depend on the shim's
+      // continued existence, falling back for older @rudderjs/orm installs
+      // that predate @rudderjs/database.
+      type NativeAdapterModule = {
         NativeAdapter: { make(cfg: { driver: string; url?: string }): Promise<OrmAdapterLike> }
-      }>('@rudderjs/orm/native')
+      }
+      const { NativeAdapter } = await resolveOptionalPeer<NativeAdapterModule>(
+        '@rudderjs/database/native',
+      ).catch(() => resolveOptionalPeer<NativeAdapterModule>('@rudderjs/orm/native'))
       this._cachedAdapter = await NativeAdapter.make(
         this.url !== undefined ? { driver: this.engine, url: this.url } : { driver: this.engine },
       )
