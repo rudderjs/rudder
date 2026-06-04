@@ -387,6 +387,11 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
 // ─── Drizzle Query Builder ─────────────────────────────────
 
 class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
+  /** Capability marker read by the Model layer's hydrating proxy — arrow-path
+   *  update keys (`'meta->prefs->lang'`) throw a clear Model-layer error on
+   *  adapter QBs without it (Prisma, until/unless it grows an equivalent). */
+  readonly supportsJsonPathUpdates = true
+
   private _wheres:      WhereClause[] = []
   private _orWheres:    WhereClause[] = []
   /** Ordered list of ORDER BY entries — structured `{column,direction}` or a
@@ -1822,6 +1827,76 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
+  /**
+   * @internal — transform JSON arrow-path keys in an update payload
+   * (`'meta->prefs->lang': 'en'`) into per-column drizzle `SQL` set values.
+   * Mirrors the native engine's `compileJsonSetClause` (#879):
+   *
+   * - sqlite: `json_set("t"."meta", '$."prefs"."lang"', json(?))`
+   * - mysql:  `JSON_SET(`t`.`meta`, '$."prefs"."lang"', CAST(? AS JSON))`
+   * - pg:     nested `jsonb_set(("t"."meta")::jsonb, ARRAY['prefs','lang'],
+   *           cast(? as text)::jsonb)` — the value param binds as TEXT and is
+   *           re-typed in SQL, because a param the server describes as jsonb
+   *           gets re-stringified by postgres-js (the #874 double-encode trap;
+   *           node-pg would fail a bare string — the text cast works on both).
+   *
+   * Every value binds as JSON text (`JSON.stringify`) so all types
+   * (string/number/boolean/null/array/object) round-trip identically across
+   * dialects. Multiple arrow writes on one base column merge into a single
+   * assignment (SQL forbids assigning a column twice in one SET); mixing a
+   * whole-column write and an arrow write on the same column throws. Payloads
+   * with no arrow key are returned as-is (zero-cost plain path).
+   */
+  private _jsonSetValues(data: Record<string, unknown>): Record<string, unknown> {
+    if (!Object.keys(data).some(k => k.includes('->'))) return data
+
+    const out: Record<string, unknown> = {}
+    const jsonWrites = new Map<string, Array<{ segments: JsonPathSegment[]; value: unknown }>>()
+    const conflict = (column: string): never => {
+      throw new Error(
+        `[RudderJS ORM Drizzle] update() payload writes both the whole column "${column}" and a JSON ` +
+        `path inside it — the two assignments would race (last-one-wins per dialect). Use one or the other.`,
+      )
+    }
+
+    for (const [key, value] of Object.entries(data)) {
+      if (key.includes('->')) {
+        const { column, segments } = parseJsonPath(key)
+        if (column in out) conflict(column)
+        let writes = jsonWrites.get(column)
+        if (!writes) { writes = []; jsonWrites.set(column, writes) }
+        writes.push({ segments, value })
+      } else {
+        if (jsonWrites.has(key)) conflict(key)
+        out[key] = value
+      }
+    }
+
+    for (const [column, writes] of jsonWrites) {
+      const col = this.col(column)
+      if (col === undefined) {
+        throw new Error(`[RudderJS ORM Drizzle] Unknown column "${column}" in JSON-path update — not in the table schema.`)
+      }
+      if (this.dialect === 'pg') {
+        // jsonb_set takes a single text[] path — nest one wrap per write.
+        let expr = sql`(${col})::jsonb` as SQL
+        for (const w of writes) {
+          const path = `ARRAY[${w.segments.map(s => `'${s}'`).join(', ')}]`
+          expr = sql`jsonb_set(${expr}, ${sql.raw(path)}, cast(${JSON.stringify(w.value)} as text)::jsonb)` as SQL
+        }
+        out[column] = expr
+      } else {
+        // json_set / JSON_SET take (path, value) varargs — one call per column.
+        const fn = this.dialect === 'mysql' ? 'JSON_SET' : 'json_set'
+        const args = writes.map(w => this.dialect === 'mysql'
+          ? sql`${sql.raw(jsonPathLiteral(w.segments))}, CAST(${JSON.stringify(w.value)} AS JSON)`
+          : sql`${sql.raw(jsonPathLiteral(w.segments))}, json(${JSON.stringify(w.value)})`)
+        out[column] = sql`${sql.raw(fn)}(${col}, ${sql.join(args, sql`, `)})` as SQL
+      }
+    }
+    return out
+  }
+
   /** @internal — re-SELECT a row by primary key after a no-RETURNING (MySQL)
    *  write. Deliberately stays on the WRITE connection — read-your-write; a
    *  replica may not have the row yet (mirrors the native engine's
@@ -1860,7 +1935,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async update(id: number | string, data: Partial<T>): Promise<T> {
     this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
-    const upd = this._writeDb().update(this.table).set(data).where(eq(pkCol, id))
+    const upd = this._writeDb().update(this.table).set(this._jsonSetValues(data as Record<string, unknown>)).where(eq(pkCol, id))
     if (this.dialect === 'mysql') {
       // No RETURNING on MySQL — UPDATE, then re-SELECT by primary key.
       await this._run<unknown>(upd, this.split.tag)
@@ -1963,7 +2038,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   async updateAll(data: Partial<T>): Promise<number> {
     const cond = this.buildConditions()
-    let q = this._writeDb().update(this.table).set(data)
+    let q = this._writeDb().update(this.table).set(this._jsonSetValues(data as Record<string, unknown>))
     if (cond) q = q.where(cond)
     return affectedRowCount(q, this.dialect)
   }
