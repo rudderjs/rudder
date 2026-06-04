@@ -410,9 +410,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `--force` bypasses the turbo cache so the live tests actually run against
-      # the service (PG_TEST_URL isn't part of the cache key); turbo builds the
-      # workspace deps first via `^build`.
+      # PG_TEST_URL is declared in turbo.json's test `env`, so strict env mode
+      # passes it through AND it's part of the cache key. `--force` stays as a
+      # belt-and-braces guard; turbo builds the workspace deps first via `^build`.
       - name: ORM tests against live Postgres
         env:
           PG_TEST_URL: postgres://rudder:rudder@localhost:5432/rudder_native_pg_test
@@ -463,9 +463,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `--force` bypasses the turbo cache so the live tests actually run against
-      # the service (MYSQL_TEST_URL isn't part of the cache key); turbo builds the
-      # workspace deps first via `^build`.
+      # MYSQL_TEST_URL is declared in turbo.json's test `env`, so strict env mode
+      # passes it through AND it's part of the cache key. `--force` stays as a
+      # belt-and-braces guard; turbo builds the workspace deps first via `^build`.
       - name: ORM tests against live MySQL
         env:
           MYSQL_TEST_URL: mysql://root:rudder@127.0.0.1:3306/rudder_native_mysql_test
