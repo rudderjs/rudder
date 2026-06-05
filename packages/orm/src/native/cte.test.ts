@@ -113,6 +113,66 @@ if (!PG_URL) {
   })
 }
 
+// ── Live MySQL — WITH RECURSIVE on MySQL 8 (audit P2-10: was pg-only) ──
+
+const MYSQL_URL = process.env['MYSQL_TEST_URL']
+
+if (!MYSQL_URL) {
+  it('native CTE mysql round-trip (skipped — set MYSQL_TEST_URL to run)', { skip: true }, () => {})
+} else {
+  describe('CTE (live mysql)', () => {
+    class MyEmployee extends Model {
+      static override table = 'rudder_cte_employees'
+      id!:   number
+      name!: string
+    }
+    let myDriver: import('@rudderjs/database/native').MysqlDriver
+
+    before(async () => {
+      const { MysqlDriver, MysqlDialect, NativeAdapter: NA } = await import('@rudderjs/database/native')
+      myDriver = await MysqlDriver.open({ url: MYSQL_URL })
+      await myDriver.execute('DROP TABLE IF EXISTS rudder_cte_employees', [])
+      await myDriver.execute(
+        'CREATE TABLE rudder_cte_employees (id INT AUTO_INCREMENT PRIMARY KEY, name TEXT, managerId INT)', [])
+      for (const [name, managerId] of [['alice', null], ['bob', 1], ['carol', 2], ['dave', 1]] as const) {
+        await myDriver.execute('INSERT INTO rudder_cte_employees (name, managerId) VALUES (?, ?)', [name, managerId])
+      }
+      ModelRegistry.reset()
+      ModelRegistry.set(await NA.make({ driverInstance: myDriver, dialect: new MysqlDialect() }))
+    })
+    after(async () => {
+      await myDriver.execute('DROP TABLE IF EXISTS rudder_cte_employees', [])
+      await myDriver.close()
+    })
+
+    it('recursive CTE runs live on mysql 8', async () => {
+      const rows = await MyEmployee.withRecursiveExpression(
+        'subtree',
+        'SELECT id FROM rudder_cte_employees WHERE id = ? UNION ALL ' +
+          'SELECT e.id FROM rudder_cte_employees e JOIN subtree s ON e.managerId = s.id',
+        { bindings: [1], columns: ['id'] },
+      )
+        .join('subtree', 'rudder_cte_employees.id', '=', 'subtree.id')
+        .get()
+      assert.deepStrictEqual(rows.map(r => r.name).sort(), ['alice', 'bob', 'carol', 'dave'])
+    })
+
+    it('count()/paginate() wrap the CTE-prefixed body on mysql', async () => {
+      const base = () =>
+        MyEmployee.withRecursiveExpression(
+          'subtree',
+          'SELECT id FROM rudder_cte_employees WHERE id = ? UNION ALL ' +
+            'SELECT e.id FROM rudder_cte_employees e JOIN subtree s ON e.managerId = s.id',
+          { bindings: [1], columns: ['id'] },
+        ).join('subtree', 'rudder_cte_employees.id', '=', 'subtree.id')
+      assert.strictEqual(await base().count(), 4)
+      const page = await base().paginate(1, 2)
+      assert.strictEqual(page.total, 4)
+      assert.strictEqual(page.data.length, 2)
+    })
+  })
+}
+
 describe('CTE — unsupported-adapter guard', () => {
   it('throws the forward-or-throw error when the adapter QB lacks the method', () => {
     const bareQb = {} as QueryBuilder<unknown>

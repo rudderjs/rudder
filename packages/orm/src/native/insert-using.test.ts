@@ -111,6 +111,69 @@ if (!MYSQL_URL) {
   })
 }
 
+// ── Live Postgres — the RETURNING count path on INSERT…SELECT (audit P2-10: was mysql-only) ──
+
+const PG_URL = process.env['PG_TEST_URL']
+
+if (!PG_URL) {
+  it('insertUsing pg round-trip (skipped — set PG_TEST_URL to run)', { skip: true }, () => {})
+} else {
+  describe('insertUsing (live pg)', () => {
+    class PgOrder extends Model {
+      static override table = 'rudder_iu_orders'
+      id!:    number
+      name!:  string
+      total!: number
+    }
+    class PgArchive extends Model {
+      static override table = 'rudder_iu_archive'
+      id!:     number
+      name!:   string
+      amount!: number
+    }
+    let pgDriver: import('@rudderjs/database/native').PostgresDriver
+
+    before(async () => {
+      const { PostgresDriver, PgDialect, NativeAdapter: NA } = await import('@rudderjs/database/native')
+      pgDriver = await PostgresDriver.open({ url: PG_URL })
+      await pgDriver.execute('DROP TABLE IF EXISTS rudder_iu_orders', [])
+      await pgDriver.execute('DROP TABLE IF EXISTS rudder_iu_archive', [])
+      await pgDriver.execute('CREATE TABLE rudder_iu_orders (id SERIAL PRIMARY KEY, name TEXT, total INT)', [])
+      await pgDriver.execute('CREATE TABLE rudder_iu_archive (id SERIAL PRIMARY KEY, name TEXT, amount INT)', [])
+      for (const [name, total] of [['a', 120], ['b', 40], ['c', 300]] as const) {
+        await pgDriver.execute('INSERT INTO rudder_iu_orders (name, total) VALUES ($1, $2)', [name, total])
+      }
+      ModelRegistry.reset()
+      ModelRegistry.set(await NA.make({ driverInstance: pgDriver, dialect: new PgDialect() }))
+    })
+    after(async () => {
+      await pgDriver.execute('DROP TABLE IF EXISTS rudder_iu_orders', [])
+      await pgDriver.execute('DROP TABLE IF EXISTS rudder_iu_archive', [])
+      await pgDriver.close()
+    })
+
+    it('counts inserted rows via RETURNING (builder body, $n rebind)', async () => {
+      const inserted = await PgArchive.insertUsing(
+        ['name', 'amount'],
+        PgOrder.query().select('name', 'total').where('total', '>', 100),
+      )
+      assert.strictEqual(inserted, 2)
+      const rows = await PgArchive.query().orderBy('amount', 'ASC').get()
+      assert.deepStrictEqual(rows.map(r => [r.name, r.amount]), [['a', 120], ['c', 300]])
+    })
+
+    it('raw-SQL body with ? placeholders rebinds to $n', async () => {
+      await pgDriver.execute('DELETE FROM rudder_iu_archive', [])
+      const inserted = await PgArchive.insertUsing(
+        ['name', 'amount'],
+        'SELECT name, total FROM rudder_iu_orders WHERE total > ?',
+        [100],
+      )
+      assert.strictEqual(inserted, 2)
+    })
+  })
+}
+
 describe('insertUsing — unsupported-adapter guard', () => {
   it('throws the forward-or-throw error when the adapter QB lacks the method', () => {
     const bareQb = {} as QueryBuilder<unknown>
