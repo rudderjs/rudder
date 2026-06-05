@@ -121,9 +121,25 @@ OR-rooted — `orm/src/native/where-has-ops.test.ts`) are sqlite-only too; only 
   RETURNING-on-INSERT…SELECT unproven.
 - Date helpers, json suites, isolation: already two-dialect ✅ (good reference shape).
 
-### P2-11 · Schema/migration execution beyond CREATE is sqlite-only
+### P2-11 · Schema/migration execution beyond CREATE is sqlite-only — ✅ CLOSED (Wave-3 P2-11 PR)
 
-`migrator.test.ts`, `rebuild.test.ts`, `modifiers.test.ts`, `column-types.test.ts` are
+Closing this one surfaced (and fixed) THREE latent pg/mysql bugs — exactly the class of
+failure the audit predicted: `migrate:fresh` read `sqlite_master` unconditionally (threw on
+pg/mysql; `Migrator.dropAllTables()` now delegates to the new dialect-aware
+`SchemaBuilder.dropAllTables()`/`allTables()` with FK-safe sweeps — pg `CASCADE`, mysql
+`FOREIGN_KEY_CHECKS=0`); alter-time FKs (`constrained()`/`foreign()` in `Schema.table`)
+were SILENTLY DROPPED on pg/mysql (now `ADD CONSTRAINT`, + `dropForeign` → pg
+`DROP CONSTRAINT` / mysql `DROP FOREIGN KEY`); `dropIndex()` emitted the standalone form
+MySQL rejects (now `DROP INDEX … ON <table>` there). New suites:
+`schema/migrator-live.test.ts` (full lifecycle run→rollback→rollbackAll→fresh with an FK
+pair, in an ISOLATED namespace — dedicated pg schema via `search_path`, dedicated mysql
+database — because `dropAllTables` would otherwise sweep parallel test files' tables) and
+`schema/alter-live.test.ts` (rename/add(+mysql AFTER)/index add+drop/FK add+enforce+drop/
+drop column, verified via `inspectTable`). Compile-shape pins appended to
+`ddl-compiler.test.ts`. Column-type `.change()` on pg/mysql remains a FEATURE gap (7.4b),
+not a test gap.
+
+Original finding: `migrator.test.ts`, `rebuild.test.ts`, `modifiers.test.ts`, `column-types.test.ts` are
 sqlite-execution or compile-shape tests. Live pg/mysql DDL execution only happens incidentally
 in the introspect suites (`pg-introspect.test.ts`, `mysql-introspect.test.ts`) — CREATE only.
 ALTER TABLE paths (mysql `MODIFY` vs pg `ALTER COLUMN`, sqlite table-rebuild fallback vs real
