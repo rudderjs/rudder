@@ -237,5 +237,32 @@ if (!PG_URL) {
         })
       })
     })
+
+    describe('constraint error shapes (audit P1-6, prisma leg)', () => {
+      // Prisma MAPS driver errors — the contract here is its stable P-codes,
+      // not raw driver fields: unique violation → PrismaClientKnownRequestError
+      // P2002 with the offending columns on meta.target.
+      it('unique violation surfaces P2002 with meta.target', async () => {
+        await Account.create({ name: 'Dup', active: true, age: 1 })
+        await assert.rejects(
+          Account.create({ name: 'Dup', active: true, age: 2 }),
+          (err: unknown) => {
+            const e = err as { code?: string; meta?: { target?: unknown } }
+            return e.code === 'P2002' && JSON.stringify(e.meta?.target ?? '').includes('name')
+          },
+        )
+      })
+
+      it('a missing delegate surfaces the adapter pointer error, not a raw crash', async () => {
+        class Ghost extends Model {
+          static override table = 'prLiveGhost'
+          name!: string
+        }
+        await assert.rejects(
+          Ghost.create({ name: 'x' }),
+          /Prisma has no delegate for table "prLiveGhost"/,
+        )
+      })
+    })
   })
 }
