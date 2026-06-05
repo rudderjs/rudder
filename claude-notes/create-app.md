@@ -91,7 +91,8 @@ Inspired by Laravel Installer v5.27. When run inside an AI coding agent the prom
 ```
 <project-name>
 --recipe=web-app|saas|api-service|realtime|minimal|custom
---db=sqlite|postgresql|mysql           (omit when --recipe=minimal or --orm=none)
+--orm=native|prisma|drizzle|none       (optional — default native, matching the interactive prompt)
+--db=sqlite|postgresql|mysql           (only required with --orm=prisma|drizzle; the native default pins sqlite. --db=postgresql|mysql without --orm implies prisma — the explicit driver choice wins over the engine default)
 --framework=react|vue|solid|none       (omit when recipe doesn't need frontend)
 --styling=tailwind+shadcn|tailwind|plain  (optional, defaults to recipe-appropriate)
 --packages=...                         (only when --recipe=custom)

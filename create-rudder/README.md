@@ -8,7 +8,7 @@ cd my-app && pnpm dev
 # → http://localhost:3000 — welcome page + register/login working end-to-end
 ```
 
-The installer asks four to six questions, then runs `pnpm install`, generates the Prisma client, pushes the schema (for SQLite) or asks first (for Postgres/MySQL), publishes auth views, generates Passport keys (when selected), and initializes git — all in one shot.
+The installer asks four to six questions, then runs `pnpm install`, sets up the database — `rudder migrate` for the default native engine, or client generation + schema push for Prisma/Drizzle (immediately for SQLite, after asking for Postgres/MySQL) — publishes auth views, generates Passport keys (when selected), and initializes git — all in one shot.
 
 ---
 

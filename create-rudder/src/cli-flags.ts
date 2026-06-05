@@ -117,7 +117,7 @@ export function parseFlags(argv: string[]): ParsedFlags {
     for (const k of list) {
       if (!valid.has(k)) throw new FlagError(`--packages: unknown package "${k}". Valid: ${[...valid].join(', ')}`)
     }
-    partial.packages = packagesFromList(list, partial.orm ?? 'prisma')
+    partial.packages = packagesFromList(list, partial.orm ?? 'native')
   }
   if (flags['frameworks'] !== undefined) {
     const list = flags['frameworks'].split(',').map(s => s.trim()).filter(Boolean) as Frameworks
@@ -188,8 +188,10 @@ export function parseFlags(argv: string[]): ParsedFlags {
  * JSON-mode required-flags validation.
  *
  * Two valid call shapes:
- *   1. Recipe shortcut — `--recipe + --db + --install` (and `--framework`
- *      when the recipe has `needsFrontend: true`). Everything else inferred.
+ *   1. Recipe shortcut — `--recipe + --install` (and `--framework` when the
+ *      recipe has `needsFrontend: true`). The engine defaults to native
+ *      (sqlite, no driver needed); `--db` is only required when an explicit
+ *      `--orm=prisma|drizzle` needs a driver choice. Everything else inferred.
  *   2. Legacy explicit — `--orm + --packages + --frameworks + --tailwind +
  *      --install` (the pre-recipe contract; still supported for older
  *      scripts/CI).
@@ -199,8 +201,9 @@ export function validateJsonMode(name: string | undefined, p: PartialAnswers): s
   if (!name) missing.push('<project-name>')
 
   if (p.recipe) {
-    // Recipe path — most fields inferred from the preset.
-    if (p.recipe !== 'custom' && p.recipe !== 'minimal' && !p.db) missing.push('--db')
+    // Recipe path — most fields inferred from the preset. The default engine
+    // (native) pins sqlite, so --db is only needed for prisma/drizzle.
+    if ((p.orm === 'prisma' || p.orm === 'drizzle') && !p.db) missing.push('--db')
     const preset = p.recipe === 'custom' ? null : RECIPES[p.recipe]
     if (preset?.needsFrontend && !p.frameworks?.length && !p.primary) {
       missing.push('--framework')
@@ -230,9 +233,15 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
   if (p.recipe) {
     const recipe = p.recipe
     const preset = recipe === 'custom' ? null : RECIPES[recipe]
+    // Native is the default engine (matches the interactive prompt). It only
+    // scaffolds sqlite today, so an explicit --db=postgresql|mysql without
+    // --orm falls back to Prisma — the driver choice the user actually made
+    // wins over the engine default.
     const orm: Orm = p.orm !== undefined
       ? p.orm
-      : (preset?.needsOrm ? 'prisma' : false)
+      : preset?.needsOrm
+        ? (p.db && p.db !== 'sqlite' ? 'prisma' : 'native')
+        : false
     // native + no-orm both pin to sqlite; native supports no other driver yet
     const db: Db = (orm === false || orm === 'native' ? 'sqlite' : (p.db ?? 'sqlite')) as Db
 

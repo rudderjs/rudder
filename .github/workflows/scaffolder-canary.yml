@@ -54,10 +54,12 @@ jobs:
 
       - name: Scaffold via `pnpm create rudder-app` (real npm)
         working-directory: ${{ runner.temp }}
-        # `--json` flips into non-interactive mode; recipe + framework + db
-        # + install + git are required by validateJsonMode. `--install=true`
-        # is the load-bearing bit — it actually fetches all `@rudderjs/*`
-        # peer constraints from npm.
+        # `--json` flips into non-interactive mode; recipe + framework +
+        # install are required by validateJsonMode (--db is optional now that
+        # recipes default to the native engine, which pins sqlite — so this
+        # canary exercises the default native path on published versions).
+        # `--install=true` is the load-bearing bit — it actually fetches all
+        # `@rudderjs/*` peer constraints from npm.
         run: |
           pnpm create rudder-app smoke-canary \
             --json \

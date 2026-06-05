@@ -296,6 +296,37 @@ test('validateJsonMode — --recipe=api-service skips --framework', () => {
   assert.deepStrictEqual(missing, [])
 })
 
+test('validateJsonMode — recipe path never requires --db for the native default', () => {
+  const missing = validateJsonMode('app', {
+    recipe:     'web-app',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.ok(!missing.includes('--db'))
+  assert.deepStrictEqual(missing, [])
+})
+
+test('validateJsonMode — --recipe + --orm=native does not require --db (sqlite pin)', () => {
+  const missing = validateJsonMode('app', {
+    recipe:     'web-app',
+    orm:        'native',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.ok(!missing.includes('--db'))
+  assert.deepStrictEqual(missing, [])
+})
+
+test('validateJsonMode — --recipe + --orm=prisma still requires --db', () => {
+  const missing = validateJsonMode('app', {
+    recipe:     'web-app',
+    orm:        'prisma',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.ok(missing.includes('--db'))
+})
+
 test('validateJsonMode — --recipe=minimal skips --db', () => {
   const missing = validateJsonMode('app', {
     recipe:  'minimal',
@@ -314,18 +345,52 @@ test('validateJsonMode — --recipe=custom still requires --packages', () => {
   assert.ok(missing.includes('--packages'))
 })
 
-test('resolveJsonAnswers — recipe=web-app derives auth + prisma', () => {
+test('resolveJsonAnswers — recipe=web-app derives auth + native (documented default)', () => {
   const answers = resolveJsonAnswers('app', {
     recipe:     'web-app',
     db:         'sqlite',
     frameworks: ['react'],
     install:    true,
   })
-  assert.strictEqual(answers.orm, 'prisma')
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db,  'sqlite')
   assert.strictEqual(answers.packages.auth, true)
   assert.strictEqual(answers.tailwind, true)
   assert.strictEqual(answers.shadcn,   true)
   assert.strictEqual(answers.recipe,   'web-app')
+})
+
+test('resolveJsonAnswers — recipe without --db derives native + sqlite', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db,  'sqlite')
+})
+
+test('resolveJsonAnswers — recipe + explicit non-sqlite --db falls back to prisma', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    db:         'postgresql',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.orm, 'prisma', 'native cannot honor --db=postgresql; the explicit driver choice wins')
+  assert.strictEqual(answers.db,  'postgresql')
+})
+
+test('resolveJsonAnswers — recipe + explicit --orm overrides the native default', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    orm:        'drizzle',
+    db:         'mysql',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.orm, 'drizzle')
+  assert.strictEqual(answers.db,  'mysql')
 })
 
 test('resolveJsonAnswers — recipe=saas adds queue + mail + notifications', () => {

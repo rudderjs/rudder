@@ -59,10 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-30 — pnpm-workspace.yaml uses
-  // `dangerouslyAllowAllBuilds: true` (the setting that runs dependency build
-  // scripts on both pnpm 10 and 11) instead of an onlyBuiltDependencies
-  // allowlist; the dead package.json#pnpm field was dropped.
+  // Baseline last captured 2026-06-05 — tsconfig.json gained
+  // `types: ['node', 'vite/client']` so scaffolded apps type-check
+  // `import.meta.env` (and keep the global `process`) out of the box.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -72,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 61
-const EXPECTED_TOTAL_BYTES = 49578
-const EXPECTED_CONTENT_HASH = 'eda48eeaf76e557875837c17c31f0d9f5b2911b98ede66ba16816912077fdd06'
+const EXPECTED_TOTAL_BYTES = 49634
+const EXPECTED_CONTENT_HASH = '54d00dfba8a190ee372f4b587362d1dd944d5eb0677a629ca43d2a0e07b6e7d0'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
