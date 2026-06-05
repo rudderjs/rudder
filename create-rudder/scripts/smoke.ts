@@ -141,6 +141,16 @@ const profiles: Record<string, TemplateContext> = {
     packages: { ...emptyPackages(), auth: true },
   }),
 
+  // `native-pg` — the native engine against a live Postgres (7.9: pg/mysql in
+  // the scaffolder). Same shape as `native` but `rudder migrate` runs real DDL
+  // over the wire, so it needs PG_TEST_URL (or DATABASE_URL) pointing at a
+  // running server — CI provisions a postgres service container for this cell.
+  'native-pg': baseProfile({
+    orm:      'native',
+    db:       'postgresql',
+    packages: { ...emptyPackages(), auth: true },
+  }),
+
   // `saas` recipe — auth + queue + mail + notifications + ORM + frontend.
   saas: baseProfile({
     packages: { ...emptyPackages(), auth: true, queue: true, mail: true, notifications: true },
@@ -569,6 +579,22 @@ async function main(): Promise<void> {
         await writeFile(abs, content, 'utf8')
       }
       console.log(`  ${Object.keys(files).length} files written`)
+    }
+
+    // Native pg/mysql profiles run real DDL — point the scaffolded .env at the
+    // live test database (CI service container, or a local dev server). The
+    // template .env carries a placeholder URL that would otherwise fail at
+    // `rudder migrate`.
+    if (ctx.orm === 'native' && ctx.db !== 'sqlite') {
+      const envVar = ctx.db === 'postgresql' ? 'PG_TEST_URL' : 'MYSQL_TEST_URL'
+      const url = process.env[envVar] ?? process.env['DATABASE_URL']
+      if (!url) {
+        throw new Error(`profile "${PROFILE}" needs ${envVar} (or DATABASE_URL) pointing at a live ${ctx.db} server`)
+      }
+      const envPath = path.join(target, '.env')
+      const envFile = await readFile(envPath, 'utf8')
+      await writeFile(envPath, envFile.replace(/^DATABASE_URL=.*$/m, `DATABASE_URL="${url}"`))
+      console.log(`  DATABASE_URL overridden from ${envVar}`)
     }
 
     // Inject overrides so the project resolves @rudderjs/* + Prisma to the local

@@ -103,10 +103,14 @@ export function packageJson(ctx: TemplateContext): string {
     deps['@rudderjs/orm']         = 'latest'
     deps['@rudderjs/orm-drizzle'] = 'latest'
   } else if (ctx.orm === 'native') {
-    // The native engine ships inside @rudderjs/orm at the ./native subpath — no
-    // separate adapter package. better-sqlite3 (its only driver peer) is added
-    // via dbDeps[sqlite], since native forces the sqlite driver.
+    // The native engine ships inside @rudderjs/orm (via @rudderjs/database) — no
+    // separate adapter package. Its driver peers are lazy-loaded per connection:
+    // better-sqlite3 comes via dbDeps[sqlite]; pg/mysql need their driver added
+    // explicitly (postgres / mysql2 — neither has a postinstall, so no
+    // build-script allowlist entry needed).
     deps['@rudderjs/orm'] = 'latest'
+    if (ctx.db === 'postgresql') deps['postgres'] = '^3.4.0'
+    if (ctx.db === 'mysql')      deps['mysql2']   = '^3.0.0'
   }
 
   // Tier A — always installed silently. Required by default bootstrap (cache for

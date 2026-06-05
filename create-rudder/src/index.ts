@@ -70,13 +70,13 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
       message: 'Database',
       options: recipe === 'minimal' || recipe === 'custom'
         ? [
-            { value: 'native',  label: 'Native',  hint: 'built-in — zero-config SQLite, no extra ORM dep' },
+            { value: 'native',  label: 'Native',  hint: 'built-in — SQLite/Postgres/MySQL, no external ORM' },
             { value: 'prisma',  label: 'Prisma'  },
             { value: 'drizzle', label: 'Drizzle' },
             { value: 'none',    label: 'None',    hint: 'no database' },
           ]
         : [
-            { value: 'native',  label: 'Native',  hint: 'built-in — zero-config SQLite, no extra ORM dep' },
+            { value: 'native',  label: 'Native',  hint: 'built-in — SQLite/Postgres/MySQL, no external ORM' },
             { value: 'prisma',  label: 'Prisma'  },
             { value: 'drizzle', label: 'Drizzle' },
           ],
@@ -87,11 +87,7 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
   }
 
   let db: Db = p.db ?? 'sqlite'
-  if (orm === 'native') {
-    // The native engine supports the sqlite driver only today — skip the driver
-    // prompt and pin it. Postgres/MySQL still need Prisma or Drizzle.
-    db = 'sqlite'
-  } else if (orm && p.db === undefined) {
+  if (orm && p.db === undefined) {
     const dbAnswer = await select({
       message: 'Database driver',
       options: [
@@ -189,7 +185,7 @@ async function gatherInteractive(name: string | undefined, p: PartialAnswers): P
   else if (db === 'sqlite') dbReady = true
   else {
     const dbReadyAnswer = await confirm({
-      message:      `Is your ${db === 'postgresql' ? 'Postgres' : 'MySQL'} running now? (we'll push the schema for you)`,
+      message:      `Is your ${db === 'postgresql' ? 'Postgres' : 'MySQL'} running now? (we'll ${orm === 'native' ? 'run your migrations' : 'push the schema'} for you)`,
       initialValue: true,
     })
     if (isCancel(dbReadyAnswer)) { cancel('Cancelled.'); process.exit(0) }
@@ -384,15 +380,20 @@ async function scaffold(answers: Answers, opts: ScaffoldOptions): Promise<Scaffo
       // ── Auto-cascade — only when install + providers:discover both succeed ──
       if (discoverOk && answers.orm === 'native') {
         // Native engine: no client to generate, and db:push is prisma/drizzle-only.
-        // `migrate` creates the SQLite file, applies the scaffolded migrations, and
-        // writes the typed schema (app/Models/__schema/registry.d.ts). dbPushOk
-        // carries the result through to the manual-steps panel below.
-        const s4 = quiet ? null : spinner()
-        s4?.start('Applying migrations...')
-        dbPushOk = await runRudder(pm, 'migrate', target, logFile)
-        s4?.stop(dbPushOk
-          ? 'Migrations applied'
-          : `migrate failed — run \`${pmRun(pm, 'rudder')} migrate\` manually`)
+        // `migrate` creates/connects the database, applies the scaffolded
+        // migrations, and writes the typed schema (app/Models/__schema/
+        // registry.d.ts). dbPushOk carries the result through to the
+        // manual-steps panel below. On pg/mysql this needs a live server, so
+        // it honors dbReady the same way the db:push path does (sqlite is
+        // always "ready" — the driver creates the file).
+        if (answers.dbReady) {
+          const s4 = quiet ? null : spinner()
+          s4?.start('Applying migrations...')
+          dbPushOk = await runRudder(pm, 'migrate', target, logFile)
+          s4?.stop(dbPushOk
+            ? 'Migrations applied'
+            : `migrate failed — run \`${pmRun(pm, 'rudder')} migrate\` manually`)
+        }
       } else {
         if (discoverOk && answers.orm) {
           const s4 = quiet ? null : spinner()
@@ -637,8 +638,10 @@ async function main(): Promise<void> {
   }
   if (answers.orm === 'native') {
     // Native uses `migrate` instead of db:push. dbPushOk carries the migrate result.
-    if (result.dbPushOk === false) {
-      manual.push(`  ${pmRun(pm, 'rudder')} migrate   # retry`)
+    if (result.dbPushOk === null && !answers.dbReady) {
+      manual.push(`  ${pmRun(pm, 'rudder')} migrate   ${result.installOk ? '# once your database is running' : ''}`)
+    } else if (result.dbPushOk === false) {
+      manual.push(`  ${pmRun(pm, 'rudder')} migrate   # retry${answers.db === 'sqlite' ? '' : ' after starting your database'}`)
     } else if (result.dbPushOk === null && !answers.install) {
       manual.push(`  ${pmRun(pm, 'rudder')} migrate`)
     }

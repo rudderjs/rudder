@@ -24,11 +24,11 @@ The scaffolder asks a short recipe-driven sequence, then generates only the code
 |---|---|---|
 | 1 | Project name | — |
 | 2 | What are you building? *(recipe)* | Web app · SaaS · API service · Realtime · Minimal · Custom |
-| 3 | Database | Native *(default — built-in, zero-config SQLite)* · Prisma · Drizzle *(+ None for Minimal/Custom)* |
-| 4 | Database driver | SQLite · PostgreSQL · MySQL — only for Prisma/Drizzle; Native pins SQLite, so the prompt is skipped |
+| 3 | Database | Native *(default — built-in, no external ORM)* · Prisma · Drizzle *(+ None for Minimal/Custom)* |
+| 4 | Database driver | SQLite *(recommended — no setup)* · PostgreSQL · MySQL — asked for every engine, Native included |
 | 5 | Frontend framework | React · Vue · Solid · None — skipped for `api-service` / `minimal` |
 | 6 | Styling | Tailwind+shadcn · Tailwind · Plain CSS — only when a framework is selected |
-| 7 | Is your DB running now? | Only for PostgreSQL/MySQL — if yes, the installer pushes the schema for you |
+| 7 | Is your DB running now? | Only for PostgreSQL/MySQL — if yes, the installer runs your migrations (Native) or pushes the schema (Prisma/Drizzle) |
 | 8 | Install and run setup? | `yes` triggers the full auto-cascade described below |
 
 Each recipe is a curated bundle of packages — pick one of the five named recipes for the common shapes, or **Custom** to walk through the full 25-package multiselect.
@@ -42,7 +42,7 @@ Each recipe is a curated bundle of packages — pick one of the five named recip
 | **Minimal** | nothing beyond the framework core | no |
 | **Custom** | *(prompts the full multiselect)* | optional |
 
-When **Install and run setup** is `yes` (the default), the scaffolder runs the entire post-scaffold sequence for you — `pnpm install`, `rudder providers:discover`, the database setup (`rudder migrate` on the native engine; `rudder db:generate` + `rudder db:push` for Prisma/Drizzle — immediately on SQLite, after your confirmation on Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (when needed), `rudder passport:keys` (when Passport is selected), and `git init` + initial commit. On the happy path the final panel says one thing:
+When **Install and run setup** is `yes` (the default), the scaffolder runs the entire post-scaffold sequence for you — `pnpm install`, `rudder providers:discover`, the database setup (`rudder migrate` on the native engine; `rudder db:generate` + `rudder db:push` for Prisma/Drizzle — on every engine this runs immediately on SQLite, and after your confirmation on Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (when needed), `rudder passport:keys` (when Passport is selected), and `git init` + initial commit. On the happy path the final panel says one thing:
 
 ```bash
 cd my-app && pnpm dev
@@ -102,7 +102,7 @@ Every prompt has a corresponding flag. Each flag also works in interactive mode 
 |---|---|
 | `--recipe` | `web-app`, `saas`, `api-service`, `realtime`, `minimal`, `custom` |
 | `--orm` | `native` *(default)*, `prisma`, `drizzle`, `none` |
-| `--db` | `sqlite`, `postgresql`, `mysql` *(only needed with `--orm=prisma\|drizzle`; the native default pins SQLite — passing `--db=postgresql\|mysql` without `--orm` implies Prisma)* |
+| `--db` | `sqlite` *(default)*, `postgresql`, `mysql` — works with every engine; the native default scaffolds all three. Only required with an explicit `--orm=prisma\|drizzle` |
 | `--framework` | `react`, `vue`, `solid`, `none` *(omit for `api-service` / `minimal`)* |
 | `--styling` | `tailwind+shadcn`, `tailwind`, `plain` *(optional — recipe picks a sensible default)* |
 | `--packages` | comma-separated package names *(only when `--recipe=custom`)* |

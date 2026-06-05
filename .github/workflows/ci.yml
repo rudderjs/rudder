@@ -525,6 +525,25 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    # Only the native-pg cell talks to it, but GitHub services can't be gated
+    # per matrix cell — the container is small and starts in seconds, so every
+    # cell carries it. Stock postgres (no pgvector — the scaffold runs plain DDL).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rudder
+          POSTGRES_PASSWORD: rudder
+          POSTGRES_DB: rudder_scaffold_pg_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
       fail-fast: false
       matrix:
@@ -535,6 +554,12 @@ jobs:
           - { framework: react, profile: saas,        via: direct, pm: pnpm }
           - { framework: react, profile: api-service, via: direct, pm: pnpm }
           - { framework: react, profile: realtime,    via: direct, pm: pnpm }
+          # Native engine — the scaffolder's default data layer. sqlite is the
+          # zero-setup default; native-pg exercises the 7.9 pg scaffold
+          # (config driver names, postgres driver dep, `rudder migrate` DDL
+          # over the wire) against the job's postgres service.
+          - { framework: react, profile: native,      via: direct, pm: pnpm }
+          - { framework: react, profile: native-pg,   via: direct, pm: pnpm }
           # Vue / Solid — web-app only. minimal + api-service ignore the
           # framework axis (no-frontend → vanilla welcome shell shared across).
           - { framework: vue,   profile: web-app,     via: direct, pm: pnpm }
@@ -595,6 +620,10 @@ jobs:
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder'
 
       - name: Scaffold + boot + render-check
+        env:
+          # Consumed only by the native-pg profile (smoke.ts rewrites the
+          # scaffolded .env's DATABASE_URL with it); ignored by every other cell.
+          PG_TEST_URL: postgres://rudder:rudder@localhost:5432/rudder_scaffold_pg_test
         run: pnpm --filter create-rudder smoke --framework=${{ matrix.framework }} --profile=${{ matrix.profile }} --via=${{ matrix.via }} --pm=${{ matrix.pm }}
 
   rsc-e2e:
