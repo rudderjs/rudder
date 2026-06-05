@@ -1,10 +1,10 @@
-import { readFileSync, existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { readFileSync, existsSync, type Dirent } from 'node:fs'
+import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 import { CliError } from '@rudderjs/console'
-import { ModelRegistry, ConnectionManager } from '../index.js'
+import { Model, ModelRegistry, ConnectionManager } from '../index.js'
 import type { OrmAdapter } from '@rudderjs/contracts'
 import type { ModelCastInfo } from '@rudderjs/database/native'
 
@@ -404,13 +404,57 @@ export function migrationsDir(cwd: string, path?: string): string {
 }
 
 /**
+ * Import every model module under `app/Models/` so its classes land in the
+ * `ModelRegistry` before cast collection. Model registration is lazy — it
+ * happens on a model's first query (`query()` / `find()` / ...), which never
+ * fires during a `migrate` / `schema:types` run — so without this sweep the
+ * registry is empty at generation time and `static casts` would never fold
+ * into the generated registry types. Failures are tolerated per-file: a model
+ * module that can't load (or an export that isn't a Model subclass) simply
+ * doesn't contribute casts; its columns keep their storage types.
+ */
+export async function registerAppModels(cwd: string): Promise<void> {
+  const dir = join(cwd, 'app', 'Models')
+  let entries: Dirent[]
+  try {
+    entries = await readdir(dir, { recursive: true, withFileTypes: true })
+  } catch {
+    return // no app/Models — standalone script or bare project; nothing to sweep
+  }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    // Source modules only — skip declarations (incl. the generated
+    // __schema/registry.d.ts) and test files living alongside models.
+    if (!/\.(ts|mts|js|mjs)$/.test(entry.name)) continue
+    if (entry.name.endsWith('.d.ts') || /\.test\.[cm]?[tj]s$/.test(entry.name)) continue
+    try {
+      // Runtime-computed user-file import by design (same shape as the
+      // migration-file loader) — hence @vite-ignore.
+      const mod = await import(/* @vite-ignore */ pathToFileURL(join(entry.parentPath, entry.name)).href) as Record<string, unknown>
+      for (const exported of Object.values(mod)) {
+        // A fresh CLI process has a single import graph, so instanceof is
+        // reliable here (unlike dev-HMR re-import contexts).
+        if (typeof exported === 'function' && exported.prototype instanceof Model) {
+          ModelRegistry.register(exported as typeof Model)
+        }
+      }
+    } catch {
+      // Tolerate unloadable modules (client-only imports, syntax errors mid-edit).
+    }
+  }
+}
+
+/**
  * Collect each registered model's table + declared string casts, in the
  * {@link ModelCastInfo} shape the schema-types generator folds in (so a
  * `boolean`/`date`/`json` cast refines the generated column type). Class-based
  * casts (custom `CastUsing`, `vector(...)`) are skipped — the generator can't
- * name them, so the storage type wins, which is the correct fallback. Only
- * models imported during boot are registered; absent models simply don't
- * contribute casts (the column still gets its storage type).
+ * name them, so the storage type wins, which is the correct fallback. Models
+ * are swept into the registry from `app/Models/**` by {@link registerAppModels}
+ * before generation (lazy first-query registration never fires in a CLI run);
+ * models living elsewhere can self-register via `ModelRegistry.register()` in a
+ * provider. Absent models simply don't contribute casts (the column still gets
+ * its storage type).
  */
 export function collectRegisteredModelCasts(): ModelCastInfo[] {
   const out: ModelCastInfo[] = []
@@ -430,6 +474,7 @@ export function collectRegisteredModelCasts(): ModelCastInfo[] {
  * auto-gen hook. Logs the written path + table count.
  */
 export async function runNativeSchemaTypes(adapter: NativeAdapterLike, cwd: string): Promise<void> {
+  await registerAppModels(cwd)
   const { path, tableCount } = await adapter.generateSchemaTypes(cwd, collectRegisteredModelCasts())
   console.log(`  Schema types written to ${path.replace(cwd + '/', '')} (${tableCount} table${tableCount === 1 ? '' : 's'}).`)
 }
