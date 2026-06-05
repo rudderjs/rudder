@@ -49,7 +49,7 @@
 | Raw escape hatch | ✅ selectRaw/whereRaw/orderByRaw + `DB.raw` | ✅ $queryRaw + **TypedSQL** | ✅ sql`` | ✅ getRawMany | ✅ sql`` | ✅ raw()/sql`` |
 | **JSON path predicates** | ✅ arrow paths everywhere + contains/length + **arrow-path UPDATE** | ⚠️ PG/MySQL only, operator set limited | ⚠️ via sql`` (no DSL) | ⚠️ `JsonContains` PG-only | jsonb helpers | ✅ `$elemMatch`/`$size` (v7) |
 | Pessimistic locking | ✅ lockForUpdate/sharedLock | **❌ raw only** | ✅ `.for()` + **noWait/skipLocked** | ✅ setLock + skip_locked | ✅ forUpdate/forShare | ✅ 6 LockMode |
-| Optimistic locking | ❌ | ❌ | ❌ | ✅ @VersionColumn | ❌ | ✅ version prop |
+| Optimistic locking | ✅ `static version` + OptimisticLockError (all 3 adapters) | ❌ | ❌ | ✅ @VersionColumn | ❌ | ✅ version prop |
 | upsert | ✅ single-statement bulk | ✅ (per-row) | ✅ onConflict | ✅ (1.0: orUpdate) | ✅ onConflict | ✅ upsertMany |
 | chunk / streaming | ✅ chunk + lazy() generator | **❌ (Prisma Next promise)** | ✅ iterator | ✅ .stream() | ✅ .stream() | ✅ em.stream() (v7) |
 | Cursor pagination | ✅ cursorPaginate | ✅ cursor+take | ✅ (guide) | ❌ | ❌ (community libs) | ✅ findByCursor (richest) |
@@ -59,7 +59,7 @@
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
 | whereColumn / column-vs-column | ✅ | ❌ | manual sql | manual | ✅ (ref) | manual |
 
-**Take:** post the 2026 query-builder arc (+ the post-audit rounds: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait, typed window ranking) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — remaining delta: optimistic locking.
+**Take:** post the 2026 query-builder arc (+ the post-audit rounds: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait, typed window ranking) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — optimistic locking closed the last delta (shipped post-audit).
 
 ## Relations
 
