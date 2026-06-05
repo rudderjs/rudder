@@ -19,7 +19,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pgTable, serial, text as pgText, vector as pgVector } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text as pgText } from 'drizzle-orm/pg-core'
 import { Model, ModelRegistry, vector as vectorCast } from '@rudderjs/orm'
 import { DrizzleAdapter } from './index.js'
 
@@ -30,7 +30,13 @@ test('live pg: pgvector cast round-trip + whereVectorSimilarTo + selectVectorDis
   const docs = pgTable(table, {
     id:        serial('id').primaryKey(),
     body:      pgText('body').notNull(),
-    embedding: pgVector('embedding', { dimensions: 3 }),
+    // Deliberately TEXT, not drizzle's pgVector type: the Model-layer cast is
+    // the serializer under test, and drizzle's vector column would stack a
+    // second mapToDriverValue (JSON.stringify) on the cast's already-formatted
+    // '[1,0,0]' string → a quoted, invalid vector literal (caught live).
+    // postgres coerces the text param to vector(3) on insert; reads come back
+    // as pgvector's text output, which the cast parses to number[].
+    embedding: pgText('embedding'),
   })
   class Doc extends Model {
     static override table = table
