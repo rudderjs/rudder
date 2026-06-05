@@ -166,12 +166,22 @@ decomposition is dialect-sensitive). `chunk`/`lazy` run on real native **sqlite*
 (`orm/src/chunk-lazy.test.ts` uses `NativeAdapter`) but no pg/mysql, and have no
 drizzle/prisma adapter tests at all.
 
-### P2-13 · Type round-trips: thin beyond bool/int/string
+### P2-13 · Type round-trips: thin beyond bool/int/string — ✅ CLOSED (Wave-3 P2-13 PR)
 
-`drivers/postgres.test.ts` + `drivers/mysql.test.ts` cover boolean (incl. TINY(1)), int,
-string. Sparse-or-absent live round-trips: decimal precision (`decimal:N` cast vs pg string
-return), bigint range, timestamp/TZ write-read symmetry (the bound-timestamp TZ fix has
-compile tests, no live read-back on drizzle), JSON double-encode regression on drizzle PG.
+Shipped as `orm/src/native/type-roundtrips-live.test.ts` (shared scenario, sqlite always +
+gated live pg/mysql, Model-layer so the `decimal:N`/`json` casts fold in — NOTE: read-side
+casts apply at `toJSON()`, not hydration, so assertions go through the cast view; `seenAt`
+carries NO cast on purpose — the timestamp leg tests the DRIVER's native Date symmetry on
+pg/mysql, while sqlite writes the ISO string better-sqlite3 requires) and
+`orm-drizzle/src/type-roundtrips-live.test.ts` (live pg: numeric fixed-precision string,
+bigint at 2^53−1, timestamptz instant symmetry, jsonb parsed-object read-back — the
+double-encode regression would surface as a string).
+
+Original finding: `drivers/postgres.test.ts` + `drivers/mysql.test.ts` cover boolean (incl.
+TINY(1)), int, string. Sparse-or-absent live round-trips: decimal precision (`decimal:N`
+cast vs pg string return), bigint range, timestamp/TZ write-read symmetry (the
+bound-timestamp TZ fix has compile tests, no live read-back on drizzle), JSON double-encode
+regression on drizzle PG.
 
 ---
 
