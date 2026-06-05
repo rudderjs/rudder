@@ -307,6 +307,54 @@ await post.increment('viewCount')
 
 **Caveat — observers don't fire.** `increment` / `decrement` deliberately skip the `updating` / `updated` / `saving` / `saved` lifecycle. They're a pure data-plane operation: the observer payload would have to be either the delta (confusing) or the resolved value (would require a read, breaking atomicity). If you need observer hooks, read the row, set the resolved value, and call `Model.update()` instead.
 
+## Optimistic locking
+
+For read-modify-write cycles where two writers may race — admin form edits, status transitions, anything where "last write wins" silently loses data — enable optimistic locking with `static version`. Unlike a pessimistic `lockForUpdate()` (which holds a row lock for the transaction's duration), optimistic locking costs nothing until a conflict actually happens. TypeORM's `@VersionColumn` / MikroORM's version property are the same idea.
+
+```ts
+class Doc extends Model {
+  static version = true        // integer column named `version`
+  // static version = 'lockVersion'  — or name your own column
+  id!: number
+  title!: string
+  version!: number
+}
+```
+
+Add the column to your schema as an integer defaulting to `1` (`table.integer('version').notNull().default(1)`). With versioning on:
+
+- **`create()`** stamps the column with `1` when you didn't set it.
+- **`save()`** carries the version the instance was hydrated with and updates conditionally — `UPDATE ... SET version = v + 1 WHERE id = ? AND version = v`. Zero rows touched means another writer bumped it first: the save throws `OptimisticLockError` and **nothing is written**.
+- **`Model.update(id, data)`** with the version column in `data` does the same conditional check against that value. Without it there's no baseline to compare, so the column is bumped atomically (`version = version + 1`, via the same primitive as `increment`) with no stale check.
+
+```ts
+import { OptimisticLockError } from '@rudderjs/orm'
+
+const doc = await Doc.findOrFail(id)   // version 3
+doc.title = 'mine'
+
+try {
+  await doc.save()                     // ... WHERE id = ? AND version = 3 → version 4
+} catch (e) {
+  if (e instanceof OptimisticLockError) {
+    // e.code = 'OPTIMISTIC_LOCK', e.expectedVersion = 3, e.actualVersion = 4
+    await doc.refresh()                // re-read the winning row
+    doc.title = 'mine'                 // re-apply (or merge / surface a conflict UI)
+    await doc.save()                   // retry at the new version
+  } else throw e
+}
+```
+
+`OptimisticLockError` carries a stable `code: 'OPTIMISTIC_LOCK'`, the `model` / `id`, `expectedVersion` / `actualVersion`, and a duck-typed `httpStatus = 409` — unhandled, the framework's exception handler renders it as HTTP 409 Conflict. A conflicting write whose row was deleted outright throws `ModelNotFoundError` instead.
+
+Works identically on all three adapters — the conditional write is built on the `where().updateAll()` count primitive (Prisma `updateMany`, Drizzle/native `UPDATE ... WHERE`), so no adapter-specific support is needed.
+
+Notes:
+
+- The version column is **lock metadata, not data**: it survives a `fillable` list that omits it, `replicate()` strips it so clones start back at 1, and you never set it by hand after creation.
+- Mismatched expectations surface before any observer fires — `updated` / `saved` only run for writes that actually landed.
+- Bulk paths (`updateAll`, `upsert`, `increment` / `decrement` called directly) are data-plane and skip the version machinery, same as they skip observers.
+
 ## Relations
 
 For **direct** eager loading (`hasOne` / `hasMany` / `belongsTo` / `belongsToMany`), prefer your adapter's native relation engine — Prisma's `include` / `select`, Drizzle's `with()`. They're already type-safe and handle joins, depth, ordering, and selective columns out of the box.
