@@ -148,8 +148,8 @@ pair, in an ISOLATED namespace — dedicated pg schema via `search_path`, dedica
 database — because `dropAllTables` would otherwise sweep parallel test files' tables) and
 `schema/alter-live.test.ts` (rename/add(+mysql AFTER)/index add+drop/FK add+enforce+drop/
 drop column, verified via `inspectTable`). Compile-shape pins appended to
-`ddl-compiler.test.ts`. Column-type `.change()` on pg/mysql remains a FEATURE gap (7.4b),
-not a test gap.
+`ddl-compiler.test.ts`. Column-type `.change()` on pg/mysql was the one remaining FEATURE gap (7.4b) —
+closed by the follow-up 7.4b PR (native `ALTER COLUMN`/`MODIFY`, live-proven in alter-live).
 
 Original finding: `migrator.test.ts`, `rebuild.test.ts`, `modifiers.test.ts`, `column-types.test.ts` are
 sqlite-execution or compile-shape tests. Live pg/mysql DDL execution only happens incidentally
