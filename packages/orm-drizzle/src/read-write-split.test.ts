@@ -382,3 +382,44 @@ test('live pg: split connection opens, tags read/write targets, and closes both 
     await adapter.disconnect()
   }
 })
+
+// MySQL twin (audit P1-8) — TWO mysql2 pools per split connection, fluent +
+// raw seams tagged, both pools closed by disconnect(). The raw selectRaw read
+// also live-covers the [rows, fields] tuple unwrap (#914) on a split
+// connection's read path.
+const MYSQL_URL = process.env['MYSQL_TEST_URL']
+
+test('live mysql: split connection opens, tags read/write targets, and closes both pools', { skip: !MYSQL_URL }, async () => {
+  const { mysqlTable, serial: mysqlSerial, text: mysqlText } = await import('drizzle-orm/mysql-core')
+  const probe = `dz_rw_split_probe_my_${process.pid}`
+  const probeTable = mysqlTable(probe, {
+    id:  mysqlSerial('id').primaryKey(),
+    src: mysqlText('src'),
+  })
+  const adapter = await DrizzleAdapter.make({
+    driver: 'mysql',
+    url: MYSQL_URL!,
+    readUrls: [MYSQL_URL!],
+    connectionName: `dz-mysql-split-${process.pid}`,
+    tables: { [probe]: probeTable },
+  })
+  try {
+    const events: QueryEvent[] = []
+    adapter.onQuery((e) => events.push(e))
+
+    await adapter.affectingStatement(`create table if not exists ${probe} (id int auto_increment primary key, src text)`, [])
+    await adapter.query(probe).create({ src: 'live' })
+    await adapter.query<NoteRow>(probe).get()
+    const raw = await adapter.selectRaw(`select src from ${probe}`, [])
+    assert.deepEqual(raw.map((r) => r['src']), ['live'])
+    await adapter.affectingStatement(`drop table ${probe}`, [])
+
+    const targets = events.map((e) => e.target)
+    assert.ok(targets.includes('read'), 'select tagged read')
+    assert.ok(targets.includes('write'), 'write tagged write')
+    assert.ok(!targets.includes(undefined), 'every event tagged on a split connection')
+    assert.ok(events.every((e) => e.connection?.startsWith('dz-mysql-split-')), 'events carry the connection name')
+  } finally {
+    await adapter.disconnect()
+  }
+})

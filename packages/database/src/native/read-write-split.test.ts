@@ -257,3 +257,34 @@ test('live pg: split connection opens, tags read/write targets, and closes both 
     await adapter.disconnect()
   }
 })
+
+// Same shape on MySQL (audit P1-8: split routing had ZERO mysql live coverage
+// — pool semantics, target tagging, and the dual-pool teardown are
+// driver-specific). read=write (same server) — routing itself is proven by
+// the sqlite two-file suite; this covers the mysql2-specific risk.
+const MYSQL_URL = process.env['MYSQL_TEST_URL']
+
+test('live mysql: split connection opens, tags read/write targets, and closes both pools', { skip: !MYSQL_URL }, async () => {
+  const adapter = await NativeAdapter.make({
+    driver: 'mysql',
+    url: MYSQL_URL!,
+    readUrls: [MYSQL_URL!],
+    connectionName: `mysql-split-${process.pid}`,
+  })
+  try {
+    const events: QueryEvent[] = []
+    adapter.onQuery((e) => events.push(e))
+
+    await adapter.affectingStatement(`create table if not exists rw_split_probe_my_${process.pid} (id int auto_increment primary key, src text)`, [])
+    await adapter.query(`rw_split_probe_my_${process.pid}`).create({ src: 'live' })
+    await adapter.query<{ src: string }>(`rw_split_probe_my_${process.pid}`).get()
+    await adapter.affectingStatement(`drop table rw_split_probe_my_${process.pid}`, [])
+
+    const targets = events.map((e) => e.target)
+    assert.ok(targets.includes('read'), 'select tagged read')
+    assert.ok(targets.includes('write'), 'write tagged write')
+    assert.ok(!targets.includes(undefined), 'every event tagged on a split connection')
+  } finally {
+    await adapter.disconnect()
+  }
+})
