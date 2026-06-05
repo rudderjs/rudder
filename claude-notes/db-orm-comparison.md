@@ -168,7 +168,7 @@
 6. ~~INSERT…SELECT~~ — **SHIPPED post-audit**: `insertUsing(columns, query)` (native engine).
 7. ~~Window functions~~ — **SHIPPED post-audit**: `selectWindow(fn, { as, partitionBy, orderBy })` (native engine; typed zero-arg ranking set rowNumber/rank/denseRank/percentRank/cumeDist, ADDITIVE projection; aggregates-OVER/lag/lead documented as the selectRaw recipe).
 8. ~~Weighted/custom replica picker~~ — **SHIPPED post-audit**: `read.picker` = `'round-robin'` (default) / `'random'` / weights array (weighted random) / `(count) => index` custom fn; shared `makeReplicaPicker` in `@rudderjs/database` (native + Drizzle, same validation — weights fail at adapter construction, custom fn validated per call, picker runs after the sticky check).
-9. `Schema.connection()` + `migrate --connection` (multi-DB migrations; TypeORM has per-DataSource).
+9. ~~`Schema.connection()` + `migrate --connection`~~ — **SHIPPED post-audit**: `migrate*/--connection=<name>` (all six commands; state table on the named connection; `--path=<dir>` for per-database sets; works in prisma/drizzle-default apps with a named native connection; typed-registry regen default-only) + `Schema.connection(name)` (facade rides the DB-bridge connection resolver; non-native connections throw; refuses under `--pretend`; cross-connection DDL escapes the batch txn — documented).
 10. afterCommit hooks (`transaction()` queue + flush-on-commit).
 
 **Tier 3 — ecosystem/positioning (not engine code):**

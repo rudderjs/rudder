@@ -11,7 +11,9 @@ import {
   runNativeRollback, runNativeReset, runNativeRefresh, runNativeFresh,
   buildNativeMigrationStub, writeNativeMigration,
   hasFlag, flagNumber, rollbackStep,
+  flagString, migrationsDir, resolveNamedNativeAdapter, registerMigrateCommands,
 } from './migrate.js'
+import { ConnectionManager } from '../index.js'
 import { NativeAdapter } from '@rudderjs/database/native'
 import { BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
@@ -684,5 +686,140 @@ describe('migrate — writeNativeMigration()', () => {
 
   it('rejects an unsafe migration name', async () => {
     await assert.rejects(() => writeNativeMigration('x; rm -rf .', tmpDir, fixedNow), /Invalid migration name/)
+  })
+})
+
+// ── --connection / --path (multi-DB migrations) ───────────
+
+describe('migrate — flagString() / migrationsDir()', () => {
+  it('flagString reads --name=value and --name value', () => {
+    assert.equal(flagString(['--connection=reporting'], 'connection'), 'reporting')
+    assert.equal(flagString(['--connection', 'reporting'], 'connection'), 'reporting')
+  })
+
+  it('flagString is undefined for absent, bare, empty, or flag-followed forms', () => {
+    assert.equal(flagString([], 'connection'), undefined)
+    assert.equal(flagString(['--connection'], 'connection'), undefined)
+    assert.equal(flagString(['--connection='], 'connection'), undefined)
+    assert.equal(flagString(['--connection', '--step'], 'connection'), undefined)
+  })
+
+  it('migrationsDir defaults to database/migrations and resolves --path', () => {
+    assert.equal(migrationsDir('/app'), nodePath.join('/app', 'database', 'migrations'))
+    assert.equal(migrationsDir('/app', 'database/migrations/reporting'), nodePath.resolve('/app', 'database/migrations/reporting'))
+    const abs = nodePath.resolve('/elsewhere/migrations')
+    assert.equal(migrationsDir('/app', abs), abs)
+  })
+})
+
+describe('migrate — resolveNamedNativeAdapter()', () => {
+  const boot = async (): Promise<void> => {}
+  afterEach(() => { ConnectionManager.__reset() })
+
+  it('throws without an app context (no bootApp)', async () => {
+    await assert.rejects(() => resolveNamedNativeAdapter('reporting'), /requires an app context/)
+  })
+
+  it('throws for an unknown connection, listing registered names', async () => {
+    ConnectionManager.register('main', async () => ({}) as never)
+    await assert.rejects(() => resolveNamedNativeAdapter('reporting', boot), /Unknown connection "reporting".*main/)
+  })
+
+  it('throws for a non-native connection', async () => {
+    ConnectionManager.register('reporting', async () => ({}) as never)
+    await assert.rejects(() => resolveNamedNativeAdapter('reporting', boot), /does not use the native engine/)
+  })
+
+  it('resolves a registered native connection', async () => {
+    const driver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+    try {
+      const native = await NativeAdapter.make({ driverInstance: driver })
+      ConnectionManager.register('reporting', async () => native as never)
+      const resolved = await resolveNamedNativeAdapter('reporting', boot)
+      assert.equal(typeof resolved.schemaBuilder, 'function')
+    } finally {
+      await driver.close()
+    }
+  })
+})
+
+// E2E through the command layer: a stub `rudder` captures the handlers, two
+// in-memory native adapters stand in for the default + named connections, and
+// `migrate --connection=reporting --path=<abs>` must land the tables AND the
+// `migrations` state table on the named connection only.
+describe('migrate — migrate --connection (command layer E2E)', () => {
+  const nativeIndex = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), '../native/index.js')
+  const importBase = pathToFileURL(nativeIndex).href
+  const migration = (table: string) =>
+    `import { Migration, Schema } from ${JSON.stringify(importBase)}\n` +
+    `export default class extends Migration {\n` +
+    `  async up()   { await Schema.create(${JSON.stringify(table)}, (t) => { t.id() }) }\n` +
+    `  async down() { await Schema.dropIfExists(${JSON.stringify(table)}) }\n` +
+    `}\n`
+
+  let dir: string
+  let defaultDriver: Driver
+  let reportingDriver: Driver
+  let defaultAdapter: NativeAdapter
+  let reportingAdapter: NativeAdapter
+  let handlers: Map<string, (args: string[]) => void | Promise<void>>
+  const realLog = console.log
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-native-conn-'))
+    await fs.writeFile(nodePath.join(dir, '2026_01_01_000000_create_events.mjs'), migration('events'))
+    defaultDriver   = await BetterSqlite3Driver.open({ filename: ':memory:' })
+    reportingDriver = await BetterSqlite3Driver.open({ filename: ':memory:' })
+    defaultAdapter   = await NativeAdapter.make({ driverInstance: defaultDriver })
+    reportingAdapter = await NativeAdapter.make({ driverInstance: reportingDriver })
+    ConnectionManager.register('reporting', async () => reportingAdapter as never)
+
+    handlers = new Map()
+    const stub = {
+      command(name: string, handler: (args: string[]) => void | Promise<void>) {
+        handlers.set(name, handler)
+        return { description: () => ({}) }
+      },
+    }
+    registerMigrateCommands(stub, { bootApp: async () => {} })
+    console.log = () => {}
+  })
+  afterEach(async () => {
+    console.log = realLog
+    ConnectionManager.__reset()
+    await defaultDriver.close()
+    await reportingDriver.close()
+    await fs.rm(dir, { recursive: true, force: true })
+  })
+
+  it('migrate --connection runs on the named connection only (state table included)', async () => {
+    await handlers.get('migrate')!([`--connection=reporting`, `--path=${dir}`])
+
+    assert.equal(await reportingAdapter.schemaBuilder().hasTable('events'), true)
+    assert.equal(await reportingAdapter.schemaBuilder().hasTable('migrations'), true)
+    assert.equal(await defaultAdapter.schemaBuilder().hasTable('events'), false)
+    assert.equal(await defaultAdapter.schemaBuilder().hasTable('migrations'), false)
+  })
+
+  it('migrate:status --connection reports the named connection', async () => {
+    await handlers.get('migrate')!([`--connection=reporting`, `--path=${dir}`])
+    const lines: string[] = []
+    console.log = (s?: unknown) => { lines.push(String(s)) }
+    await handlers.get('migrate:status')!([`--connection=reporting`, `--path=${dir}`])
+    console.log = () => {}
+    assert.ok(lines.some(l => l.includes('Ran') && l.includes('create_events')))
+  })
+
+  it('migrate:rollback --connection unwinds on the named connection', async () => {
+    await handlers.get('migrate')!([`--connection=reporting`, `--path=${dir}`])
+    await handlers.get('migrate:rollback')!([`--connection=reporting`, `--path=${dir}`])
+    assert.equal(await reportingAdapter.schemaBuilder().hasTable('events'), false)
+  })
+
+  it('migrate --connection with an unknown name fails with the registered list', async () => {
+    await assert.rejects(
+      () => Promise.resolve(handlers.get('migrate')!([`--connection=nope`, `--path=${dir}`])),
+      /Unknown connection "nope".*reporting/,
+    )
   })
 })
