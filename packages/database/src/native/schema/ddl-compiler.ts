@@ -307,9 +307,31 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     out.push(compileCreateIndex(blueprint.table, idx, dialect))
   }
 
-  // 4. Drop indexes (by name — independent of the table identifier on SQLite).
+  // 3b. New foreign keys (pg/mysql only — the sqlite guard above already
+  // rejected them): `ADD CONSTRAINT … FOREIGN KEY … REFERENCES …`, reusing
+  // the create-table constraint renderer. Historically these were silently
+  // dropped on alter — a migration "succeeded" without its FK.
+  if (dialect.name !== 'sqlite') {
+    for (const fk of collectForeignKeys(blueprint)) {
+      out.push({ sql: `ALTER TABLE ${t} ADD ${compileForeignKey(blueprint.table, fk, dialect)}`, bindings: [] })
+    }
+    // Dropped FKs — by constraint name, or by the column list they cover
+    // (derived via the same default-name convention used at creation).
+    // mysql spells it DROP FOREIGN KEY; pg DROP CONSTRAINT.
+    for (const dropped of blueprint.droppedForeignKeys) {
+      const name = typeof dropped === 'string'
+        ? dropped
+        : `${blueprint.table}_${dropped.join('_')}_foreign`
+      const clause = dialect.name === 'mysql' ? 'DROP FOREIGN KEY' : 'DROP CONSTRAINT'
+      out.push({ sql: `ALTER TABLE ${t} ${clause} ${dialect.quoteId(name)}`, bindings: [] })
+    }
+  }
+
+  // 4. Drop indexes (by name). SQLite and pg address an index as a standalone
+  // schema object; MySQL scopes it to its table (`DROP INDEX … ON <table>`).
   for (const name of blueprint.droppedIndexes) {
-    out.push({ sql: `DROP INDEX ${dialect.quoteId(name)}`, bindings: [] })
+    const onTable = dialect.name === 'mysql' ? ` ON ${t}` : ''
+    out.push({ sql: `DROP INDEX ${dialect.quoteId(name)}${onTable}`, bindings: [] })
   }
 
   // 5. Drop columns last.

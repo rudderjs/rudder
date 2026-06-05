@@ -411,3 +411,77 @@ describe('DDL compiler — RENAME TABLE', () => {
     assert.strictEqual(compileRenameTable('users', 'accounts', dialect).sql, 'ALTER TABLE "users" RENAME TO "accounts"')
   })
 })
+
+// ─── ALTER on pg/mysql — FK emission + DROP INDEX scoping (audit P2-11) ──────
+//
+// Historically the alter compiler silently DROPPED foreign keys on pg/mysql
+// (collectForeignKeys was only consulted by CREATE TABLE) and emitted the
+// standalone `DROP INDEX "name"` form, which MySQL rejects (it scopes an
+// index to its table). These pins guard the fixed shapes; the live round-trips
+// are in alter-live.test.ts.
+
+describe('DDL compiler — ALTER on pg/mysql (FKs + DROP INDEX scoping)', async () => {
+  const { PgDialect } = await import('../dialect-pg.js')
+  const { MysqlDialect } = await import('../dialect-mysql.js')
+  const pg = new PgDialect()
+  const my = new MysqlDialect()
+
+  const alterOn = (d: import('../dialect.js').Dialect, table: string, build: (t: AlterBlueprint) => void): string[] => {
+    const bp = new AlterBlueprint(table)
+    build(bp)
+    return compileAlterTable(bp, d).map(s => s.sql)
+  }
+
+  it('mysql DROP INDEX is table-scoped; pg stays standalone', () => {
+    assert.deepStrictEqual(
+      alterOn(my, 'users', (t) => t.dropIndex('users_email_unique')),
+      ['DROP INDEX `users_email_unique` ON `users`'],
+    )
+    assert.deepStrictEqual(
+      alterOn(pg, 'users', (t) => t.dropIndex('users_email_unique')),
+      ['DROP INDEX "users_email_unique"'],
+    )
+  })
+
+  it('an added constrained() column emits its FK as ADD CONSTRAINT', () => {
+    const pgSql = alterOn(pg, 'books', (t) => t.foreignId('authorId').nullable().constrained('authors'))
+    assert.strictEqual(pgSql[0], 'ALTER TABLE "books" ADD COLUMN "authorId" bigint')
+    assert.strictEqual(
+      pgSql[1],
+      'ALTER TABLE "books" ADD CONSTRAINT "books_authorId_foreign" FOREIGN KEY ("authorId") REFERENCES "authors" ("id")',
+    )
+    const mySql = alterOn(my, 'books', (t) => t.foreignId('authorId').nullable().constrained('authors'))
+    assert.strictEqual(
+      mySql[1],
+      'ALTER TABLE `books` ADD CONSTRAINT `books_authorId_foreign` FOREIGN KEY (`authorId`) REFERENCES `authors` (`id`)',
+    )
+  })
+
+  it('a table-level foreign() on alter emits too, with actions', () => {
+    const sql = alterOn(pg, 'books', (t) => {
+      t.foreign('authorId').references('id').on('authors').onDelete('cascade')
+    })
+    assert.strictEqual(
+      sql[0],
+      'ALTER TABLE "books" ADD CONSTRAINT "books_authorId_foreign" FOREIGN KEY ("authorId") REFERENCES "authors" ("id") ON DELETE CASCADE',
+    )
+  })
+
+  it('dropForeign by name — pg DROP CONSTRAINT, mysql DROP FOREIGN KEY', () => {
+    assert.deepStrictEqual(
+      alterOn(pg, 'books', (t) => t.dropForeign('books_authorId_foreign')),
+      ['ALTER TABLE "books" DROP CONSTRAINT "books_authorId_foreign"'],
+    )
+    assert.deepStrictEqual(
+      alterOn(my, 'books', (t) => t.dropForeign('books_authorId_foreign')),
+      ['ALTER TABLE `books` DROP FOREIGN KEY `books_authorId_foreign`'],
+    )
+  })
+
+  it('dropForeign by column list derives the default constraint name', () => {
+    assert.deepStrictEqual(
+      alterOn(pg, 'books', (t) => t.dropForeign(['authorId'])),
+      ['ALTER TABLE "books" DROP CONSTRAINT "books_authorId_foreign"'],
+    )
+  })
+})

@@ -314,20 +314,15 @@ export class Migrator {
   }
 
   /**
-   * Drop every user table (used by `migrate:fresh`). Reads the SQLite catalog
-   * for `type='table'` names, skipping the internal `sqlite_*` tables, and drops
-   * each — including the `migrations` state table, so the next `run()` rebuilds
-   * from a clean slate. SQLite-only; pg/mysql introspection lands with their
-   * dialects (7.7 / 7.8).
+   * Drop every user table (used by `migrate:fresh`) — including the
+   * `migrations` state table, so the next `run()` rebuilds from a clean slate.
+   * Delegates to the dialect-aware {@link SchemaBuilder.dropAllTables}
+   * (`information_schema` + FK-safe drops on pg/mysql, `sqlite_master` on
+   * sqlite). Historically this read the SQLite catalog directly, which made
+   * `migrate:fresh` throw on pg/mysql native connections.
    */
   async dropAllTables(): Promise<void> {
-    const rows = await this.adapter.query<{ name: string; type: string }>('sqlite_master').get()
-    const tables = rows
-      .filter(r => r.type === 'table' && !r.name.startsWith('sqlite_'))
-      .map(r => r.name)
-    for (const name of tables) {
-      await this.schema.drop(name)
-    }
+    await this.schema.dropAllTables()
   }
 }
 
