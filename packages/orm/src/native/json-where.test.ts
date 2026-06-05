@@ -361,6 +361,18 @@ describe('json where (native sqlite E2E)', () => {
     )
   })
 
+  it('orWhereJsonDoesntContain OR-roots the negated containment', async () => {
+    assert.deepEqual(
+      names(await Pref.where('name', 'carol').orWhereJsonDoesntContain('meta->tags', 'php').get()),
+      ['bob', 'carol'],
+    )
+    // Array value: NOT(every element contained) — alice misses 'rust', bob misses both.
+    assert.deepEqual(
+      names(await Pref.query().where('meta->score', '>', 100).orWhereJsonDoesntContain('meta->tags', ['php', 'rust']).get()),
+      ['alice', 'bob'],
+    )
+  })
+
   it('whereJsonLength: 2-arg equality, 3-arg operator, orWhere form', async () => {
     assert.deepEqual(names(await Pref.whereJsonLength('meta->items', 0).get()), ['carol'])
     assert.deepEqual(names(await Pref.whereJsonLength('meta->tags', '>', 1).get()), ['alice', 'carol'])

@@ -195,6 +195,22 @@ describe('date helpers (native sqlite E2E)', () => {
     assert.deepEqual(names(rows), ['kickoff', 'retro'])
   })
 
+  it('orWhereDate OR-roots a calendar-date predicate (2-arg and 3-arg forms)', async () => {
+    const rows = await Event.where('name', 'retro').orWhereDate('happenedAt', '2026-01-15').get()
+    assert.deepEqual(names(rows), ['launch', 'retro'])
+
+    const ranged = await Event.where('name', 'launch').orWhereDate('happenedAt', '<', '2026-01-01').get()
+    assert.deepEqual(names(ranged), ['kickoff', 'launch'])
+  })
+
+  it('orWhereTime OR-roots a time predicate', async () => {
+    const rows = await Event.where('name', 'kickoff').orWhereTime('happenedAt', '11:20:45').get()
+    assert.deepEqual(names(rows), ['kickoff', 'summit'])
+
+    const ranged = await Event.where('name', 'retro').orWhereTime('happenedAt', '<', '10:00:00').get()
+    assert.deepEqual(names(ranged), ['launch', 'retro'])
+  })
+
   it('chains with other where clauses (shared binding order)', async () => {
     const rows = await Event.query()
       .where('name', '!=', 'launch')

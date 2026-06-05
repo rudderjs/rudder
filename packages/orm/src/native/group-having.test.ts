@@ -163,6 +163,33 @@ describe('groupBy / having (native, end-to-end)', () => {
     assert.deepEqual(ids, [1]) // only user 1 has > 2
   })
 
+  it('orHaving ORs into the HAVING group (alias comparisons, SQLite allows them)', async () => {
+    // total > 2 → user 1; OR total = 1 → user 2.
+    const rows = await Post.query()
+      .select('userId')
+      .selectRaw('COUNT(*) as total')
+      .groupBy('userId')
+      .having('total', '>', 2)
+      .orHaving('total', '=', 1)
+      .orderBy('userId')
+      .get()
+    const ids = (rows as unknown as Array<{ userId: number }>).map(r => r.userId)
+    assert.deepEqual(ids, [1, 2])
+  })
+
+  it('orHavingRaw ORs a raw aggregate predicate', async () => {
+    const rows = await Post.query()
+      .select('userId')
+      .selectRaw('COUNT(*) as total')
+      .groupBy('userId')
+      .havingRaw('COUNT(*) > ?', [2])
+      .orHavingRaw('COUNT(*) = ?', [1])
+      .orderBy('userId')
+      .get()
+    const ids = (rows as unknown as Array<{ userId: number }>).map(r => r.userId)
+    assert.deepEqual(ids, [1, 2])
+  })
+
   it('count() returns the number of groups, not rows', async () => {
     const n = await Post.query().groupBy('userId').count()
     assert.equal(n, 3) // three distinct users

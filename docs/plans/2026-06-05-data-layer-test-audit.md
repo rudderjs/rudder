@@ -147,7 +147,12 @@ compile tests, no live read-back on drizzle), JSON double-encode regression on d
 
 ---
 
-## 2. Untested public surface
+## 2. Untested public surface — ✅ CLOSED (Wave-3 surface PR)
+
+Shipped exactly as the closing note suggested: `orm/src/serialization-visibility.test.ts`
+covers the visibility block; the `orWhere*` variants were appended to `date-helpers` /
+`json-where` / `group-having` (inheriting their live gates). The two "low — note only"
+rows stay notes by design; `cursorPaginate` engine-level closed earlier via P2-12 (#918).
 
 Method: enumerate exports/public methods, grep all four packages' test files for call sites.
 "Zero refs" = no test anywhere invokes it.
