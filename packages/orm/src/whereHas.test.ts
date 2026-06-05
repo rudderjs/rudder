@@ -316,6 +316,42 @@ describe('Model.whereHas — morphTo', () => {
       /morphTo "target" cannot be used with whereHas/,
     )
   })
+
+  it('throws on the count-comparison form too (has)', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    assert.throws(
+      () => Comment.has('target', '>', 2),
+      /morphTo "target" cannot be used with whereHas/,
+    )
+  })
+
+  it('throws on the OR-rooted form too (orWhereHas)', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    assert.throws(
+      () => Comment.orWhereHas('target'),
+      /morphTo "target" cannot be used with whereHas/,
+    )
+  })
+})
+
+// ─── whereHas — malformed nested path ────────────────────────────────────────
+
+describe('Model.whereHas — malformed nested path', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('an empty segment ("a..b") throws before any predicate is built', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    assert.throws(
+      () => Comment.whereHas('target..body'),
+      /Malformed nested relation path "target\.\.body" — empty segment/,
+    )
+  })
 })
 
 // ─── whereHas — unknown relation ─────────────────────────────────────────────

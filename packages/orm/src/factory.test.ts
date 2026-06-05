@@ -370,4 +370,71 @@ describe('factory relationship building', () => {
       /relation "posts" on User is "hasMany", expected "belongsTo"/,
     )
   })
+
+  // ── guard errors (audit §3) — undefined names + ambiguous resolution ──
+
+  it('state("x") throws when the state is not defined', () => {
+    const { User } = setup()
+    assert.throws(
+      () => User.factory().state('vip'),
+      /Factory state "vip" is not defined on UserFactory/,
+    )
+  })
+
+  it('for() throws when the named relation does not exist', async () => {
+    const { User, Post } = setup()
+    await assert.rejects(
+      () => Post.factory().for(User.factory(), 'nope').create(),
+      /Factory\.for\(\): relation "nope" is not defined on Post/,
+    )
+  })
+
+  it('has() throws when the named relation does not exist', async () => {
+    const { User, Post } = setup()
+    await assert.rejects(
+      () => User.factory().has(Post.factory(), 1, 'nope').create(),
+      /Factory\.has\(\): relation "nope" is not defined on User/,
+    )
+  })
+
+  it('hasAttached() throws when the named relation does not exist', async () => {
+    const { User, Role } = setup()
+    await assert.rejects(
+      () => User.factory().hasAttached(Role.factory(), 1, {}, 'nope').create(),
+      /Factory\.hasAttached\(\): relation "nope" is not defined on User/,
+    )
+  })
+
+  it('implicit resolution throws when TWO relations point at the same model', async () => {
+    const { adapter } = memoryAdapter()
+    ModelRegistry.set(adapter)
+
+    class Comment extends Model {
+      static override table = 'comments'
+      id!: number; body!: string; userId!: number
+    }
+    class Author extends Model {
+      static override table = 'authors'
+      id!: number; name!: string
+      static override relations = {
+        comments:       { type: 'hasMany' as const, model: () => Comment, foreignKey: 'userId' },
+        recentComments: { type: 'hasMany' as const, model: () => Comment, foreignKey: 'userId' },
+      }
+    }
+    class CommentFactory extends ModelFactory<{ body: string }> {
+      protected modelClass = Comment
+      definition() { return { body: 'hi' } }
+    }
+    class AuthorFactory extends ModelFactory<{ name: string }> {
+      protected modelClass = Author
+      definition() { return { name: 'Ann' } }
+    }
+    Author.factoryClass = AuthorFactory
+    Comment.factoryClass = CommentFactory
+
+    await assert.rejects(
+      () => Author.factory().has(Comment.factory()).create(),
+      /Ambiguous hasMany\/hasOne relation on Author → Comment \(comments, recentComments\)\. Pass an explicit relation name/,
+    )
+  })
 })

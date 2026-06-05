@@ -179,7 +179,14 @@ One-test-fixes-five: a single `serialization-visibility.test.ts` covers the firs
 
 ---
 
-## 3. Error-path coverage (guards that no test asserts)
+## 3. Error-path coverage (guards that no test asserts) — ✅ CLOSED (Wave-3 guard PR)
+
+Shipped as one batch: new `orm/src/guard-errors.test.ts` (model-layer rows + the
+deferred-connection QB throws), factory rows appended to `factory.test.ts`, relation rows
+appended to `whereHas.test.ts` (the morphTo guard is one site reached by all three entry
+forms — `whereHas`/`has`/`orWhereHas` each asserted). The "Drizzle whereHas throw-paths
+parity" row was verified ALREADY COVERED (`orm-drizzle/src/where-column.test.ts:60,66`
+asserts both `has()` count and `orWhereHas()` throws) — moved to §4 in spirit.
 
 All confirmed by grep: the throw exists in source, no test matches its message. These are
 cheap sqlite/unit tests — good batch-PR material.
