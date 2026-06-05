@@ -175,6 +175,39 @@ DB.listen((e) => {
 
 The Prisma client owns a single URL, so `read:` / `write:` on a Prisma connection **throws at boot** (a silent ignore would silently serve every read from the writer). Use [`@prisma/extension-read-replicas`](https://github.com/prisma/extension-read-replicas) on your `PrismaClient`, or give that connection `engine: 'native'`. Named Prisma connections share the one generated client schema — point them only at schema-compatible databases.
 
-## Not yet
+## Multi-database migrations
 
-Migrations are **default-connection only** for now — `Schema.connection(name)` and `migrate --connection` are deferred by design. Run migrations against each database by pointing the default connection at it (e.g. a separate config/env per target).
+Native-engine migrations can target a named connection two ways (Laravel's `--database` / `Schema::connection`):
+
+**`migrate --connection=<name>`** runs a whole suite against the named connection — its `migrations` state table lives **on that connection**, so each database tracks its own applied set. Pair it with `--path` to keep per-database migration sets apart:
+
+```bash
+pnpm rudder make:migration create_events_table             # write it, then move it under the reporting set
+pnpm rudder migrate --connection=reporting --path=database/migrations/reporting
+pnpm rudder migrate:status --connection=reporting --path=database/migrations/reporting
+pnpm rudder migrate:rollback --connection=reporting --path=database/migrations/reporting
+```
+
+Both flags work on `migrate`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, and `migrate:fresh`. Without `--path` the default `database/migrations/` set runs on the named connection. The named connection must be `engine: 'native'` — but the app's **default** can be prisma/drizzle; an unknown name fails with the registered-connections list. The typed-model registry (`registry.d.ts`) regenerates only on default-connection runs — it reflects the default database's schema.
+
+**`Schema.connection(name)`** scopes one DDL operation to a named connection from inside any migration (or anywhere the app has booted):
+
+```ts
+export default class extends Migration {
+  async up() {
+    await Schema.connection('reporting').create('events', (t) => {
+      t.id()
+      t.string('kind')
+      t.timestamps()
+    })
+  }
+  async down() {
+    await Schema.connection('reporting').dropIfExists('events')
+  }
+}
+```
+
+Two boundaries to know:
+
+- A migration batch's transaction covers the connection the migrator runs on — `Schema.connection()` DDL on a *different* connection runs **outside** that transaction (a transaction can't span connections), so a failed batch rolls back the bound connection only.
+- `Schema.connection()` throws under `migrate --pretend` — the dry run records the bound connection's SQL without executing, and DDL on a second connection would execute for real.

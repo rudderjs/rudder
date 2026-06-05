@@ -121,6 +121,8 @@ Native columns are **camelCase** (`createdAt`, `userId`, `commentableType`) — 
 
 > There's no `db:push` or `db:generate` for the native engine — those are Prisma/Drizzle commands. Native uses tracked migration files for every change.
 
+Multi-database apps can run a suite against a named connection with `migrate --connection=<name>` (state table included; pair with `--path=<dir>` for per-database migration sets), or scope one DDL operation with `Schema.connection('reporting').create(…)` — see [Connections — Multi-database migrations](/guide/database/connections#multi-database-migrations).
+
 ## Typed models from migrations
 
 The native engine's headline feature: **a model's column types are generated from the migrated schema, so they can't drift.** After a `migrate`, the engine introspects the live database and writes `app/Models/__schema/registry.d.ts`. Bind it with `Model.for<'table'>()` and the model needs zero hand-declared fields:

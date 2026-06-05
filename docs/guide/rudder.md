@@ -134,7 +134,7 @@ The framework ships several built-in commands that show up automatically. The se
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
 | `make:factory` | orm | Scaffold a `ModelFactory` subclass at `app/Factories/<Name>Factory.ts` |
 | `make:seeder` | orm | Scaffold a `Seeder` subclass at `database/seeders/<Name>Seeder.ts` |
-| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM) |
+| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM). On the native engine, `migrate*` also take `--connection=<name>` (run against a named connection, state table included) and `--path=<dir>` (migrations directory) — see [Connections — Multi-database migrations](./database/connections.md#multi-database-migrations) |
 | `model:prune` | orm | Walk `prunable()` models and delete matching rows. Honors `pruneMode: 'instance' \| 'mass'` |
 | `db:show`, `db:table` | orm (native engine) | Inspect the live database — `db:show` lists tables with sizes (`--counts` adds row counts, `--views` adds views); `db:table <name>` shows columns, indexes, and foreign keys. `--json` machine-readable. Prisma/Drizzle apps are pointed at `prisma studio` / `drizzle-kit studio`. See [Native Engine — Inspecting](./database/native.md#inspecting-the-database). |
 | `queue:work` | queue | Worker process |

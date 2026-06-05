@@ -204,7 +204,7 @@ export class Migrator {
     for (const { name, migration } of pending) {
       const statements: string[] = []
       const schema = this.adapter.pretendSchemaBuilder((sql) => statements.push(sql))
-      await withSchema(schema, () => migration.up())
+      await withSchema(schema, () => migration.up(), { pretend: true })
       pretended.push({ name, statements })
     }
     return { batch: await this.nextBatch(), applied: [], pretended }

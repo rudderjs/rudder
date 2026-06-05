@@ -1,10 +1,10 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 import { CliError } from '@rudderjs/console'
-import { ModelRegistry } from '../index.js'
+import { ModelRegistry, ConnectionManager } from '../index.js'
 import type { OrmAdapter } from '@rudderjs/contracts'
 import type { ModelCastInfo } from '@rudderjs/database/native'
 
@@ -361,6 +361,49 @@ export async function resolveNativeAdapter(
 }
 
 /**
+ * Resolve a NAMED connection's native adapter for `migrate --connection=<name>`
+ * (Laravel `migrate --database`). Boots the app, opens the connection through
+ * `ConnectionManager` (lazy — this is where a config typo surfaces), and
+ * duck-types the native engine the same way {@link nativeAdapterOrNull} does.
+ *
+ * Deliberately NOT gated on `detectORM` — the native provider registers every
+ * `engine: 'native'` named connection even in prisma/drizzle apps, so a
+ * prisma-default app can still run native migrations on a named connection.
+ */
+export async function resolveNamedNativeAdapter(
+  name: string,
+  bootApp?: () => Promise<void>,
+): Promise<NativeAdapterLike> {
+  if (!bootApp) {
+    throw new CliError('--connection requires an app context (bootstrap/app.ts) to resolve named connections.', 1)
+  }
+  await bootApp()
+  if (!ConnectionManager.has(name)) {
+    const known = ConnectionManager.names()
+    throw new CliError(
+      `Unknown connection "${name}" — ${known.length > 0 ? `registered connections: ${known.join(', ')}` : 'no named connections are registered'}. ` +
+      `Declare it in config/database.ts with engine: 'native'.`,
+      1,
+    )
+  }
+  const adapter = await ConnectionManager.ensure(name) as OrmAdapter & { schemaBuilder?: unknown }
+  if (typeof adapter.schemaBuilder !== 'function') {
+    throw new CliError(
+      `Connection "${name}" does not use the native engine — migrate --connection is native-only ` +
+      `(prisma/drizzle migrations run through their own tooling on the default connection).`,
+      1,
+    )
+  }
+  return adapter as NativeAdapterLike
+}
+
+/** The migrations directory for a run: `--path=<dir>` (relative to the project
+ *  root, absolute respected) or the `database/migrations` convention. */
+export function migrationsDir(cwd: string, path?: string): string {
+  return path ? resolve(cwd, path) : join(cwd, 'database', 'migrations')
+}
+
+/**
  * Collect each registered model's table + declared string casts, in the
  * {@link ModelCastInfo} shape the schema-types generator folds in (so a
  * `boolean`/`date`/`json` cast refines the generated column type). Class-based
@@ -401,9 +444,10 @@ export async function runNativeMigrate(
   adapter: NativeAdapterLike,
   cwd: string,
   opts: { step?: boolean; pretend?: boolean } = {},
+  dir?: string,
 ): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const result = await new Migrator(adapter).run(migrations, (name) => console.log(`  ✓ ${name}`), opts)
   if (result.pretended) {
     if (result.pretended.length === 0) console.log('  Nothing to migrate.')
@@ -417,9 +461,9 @@ export async function runNativeMigrate(
 }
 
 /** Print native migration status (ran / pending per migration). */
-export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string): Promise<void> {
+export async function runNativeStatus(adapter: NativeAdapterLike, cwd: string, dir?: string): Promise<void> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const rows = await new Migrator(adapter).status(migrations)
   if (rows.length === 0) {
     console.log('  No migrations found in database/migrations.')
@@ -439,18 +483,19 @@ export async function runNativeRollback(
   adapter: NativeAdapterLike,
   cwd: string,
   opts: { step?: number; batch?: number } = {},
+  dir?: string,
 ): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const { reverted } = await new Migrator(adapter).rollback(migrations, (name) => console.log(`  ✓ rolled back ${name}`), opts)
   return reverted.length
 }
 
 /** Roll back EVERY native migration (Laravel `migrate:reset`). Returns the count
  *  reverted. */
-export async function runNativeReset(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+export async function runNativeReset(adapter: NativeAdapterLike, cwd: string, dir?: string): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const reverted = await new Migrator(adapter).rollbackAll(migrations)
   for (const name of reverted) console.log(`  ✓ rolled back ${name}`)
   return reverted.length
@@ -462,9 +507,10 @@ export async function runNativeRefresh(
   adapter: NativeAdapterLike,
   cwd: string,
   opts: { step?: boolean } = {},
+  dir?: string,
 ): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const migrator = new Migrator(adapter)
   await migrator.rollbackAll(migrations)
   const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`), opts)
@@ -473,9 +519,9 @@ export async function runNativeRefresh(
 
 /** Drop all tables (no `down()` needed), then re-run every native migration.
  *  Returns the count applied. */
-export async function runNativeFresh(adapter: NativeAdapterLike, cwd: string): Promise<number> {
+export async function runNativeFresh(adapter: NativeAdapterLike, cwd: string, dir?: string): Promise<number> {
   const { Migrator, discoverMigrations } = await import('../native/index.js')
-  const migrations = await discoverMigrations(join(cwd, 'database', 'migrations'))
+  const migrations = await discoverMigrations(dir ?? join(cwd, 'database', 'migrations'))
   const migrator = new Migrator(adapter)
   await migrator.dropAllTables()
   const { applied } = await migrator.run(migrations, (name) => console.log(`  ✓ ${name}`))
@@ -592,6 +638,24 @@ export function rollbackStep(args: readonly string[]): number | undefined {
   return hasFlag(args, 'step') ? (flagNumber(args, 'step') ?? 1) : undefined
 }
 
+/** Parse the string value of a `--name=value` or `--name value` flag. Returns
+ *  undefined when the flag is absent or carries no value (a bare `--name`, or
+ *  followed by another flag). */
+export function flagString(args: readonly string[], name: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === `--${name}`) {
+      const next = args[i + 1]
+      return next !== undefined && !next.startsWith('--') ? next : undefined
+    }
+    if (a.startsWith(`--${name}=`)) {
+      const v = a.slice(name.length + 3)
+      return v.length > 0 ? v : undefined
+    }
+  }
+  return undefined
+}
+
 // ─── Command Registration ─────────────────────────────────
 
 /**
@@ -615,6 +679,17 @@ export function registerMigrateCommands(
   // Boot the native engine on demand (migrate* skip app boot by default) and
   // return its adapter; null for prisma/drizzle apps → shell-out path.
   const resolveNative = (): Promise<NativeAdapterLike | null> => resolveNativeAdapter(cwd, opts.bootApp)
+
+  // `--connection=<name>` (Laravel `--database`): the named connection's native
+  // adapter — its migrations state table lives on THAT connection. Works even
+  // in prisma/drizzle apps (a named `engine: 'native'` connection is still
+  // registered there); throws when the connection is unknown or non-native.
+  // Returns null when the flag is absent → the default-connection path.
+  const resolveTarget = async (args: string[]): Promise<{ adapter: NativeAdapterLike; connection: string } | null> => {
+    const connection = flagString(args, 'connection')
+    if (connection === undefined) return null
+    return { adapter: await resolveNamedNativeAdapter(connection, opts.bootApp), connection }
+  }
 
   async function exec(
     orm: ORM,
@@ -641,34 +716,42 @@ export function registerMigrateCommands(
 
   // ── migrate ───────────────────────────────────────────
   // Flags (native engine): --step (each migration its own batch), --pretend
-  // (print SQL, run nothing), --force (accepted; we never prompt, so a no-op).
+  // (print SQL, run nothing), --force (accepted; we never prompt, so a no-op),
+  // --connection=<name> (run on a named native connection — state table
+  // included), --path=<dir> (migrations directory; default database/migrations).
   rudder.command('migrate', async (args: string[]) => {
-    const native = await resolveNative()
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
+    const dir = migrationsDir(cwd, flagString(args, 'path'))
     if (native) {
-      console.log('  ORM: native')
+      console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
       if (hasFlag(args, 'pretend')) {
-        await runNativeMigrate(native, cwd, { pretend: true })
+        await runNativeMigrate(native, cwd, { pretend: true }, dir)
         return // dry run — schema unchanged, skip type regen
       }
-      const count = await runNativeMigrate(native, cwd, { step: hasFlag(args, 'step') })
+      const count = await runNativeMigrate(native, cwd, { step: hasFlag(args, 'step') }, dir)
       console.log(count === 0 ? '  Nothing to migrate.' : `  Migrations complete (${count} applied).`)
-      await runNativeSchemaTypes(native, cwd)
+      // Typed-registry regen reflects the DEFAULT connection's schema — a named
+      // connection's tables would clobber it with another database's shape.
+      if (!target) await runNativeSchemaTypes(native, cwd)
       return
     }
     const orm = requireORM()
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate')
     console.log('  Migrations complete.')
-  }).description('Run pending database migrations — flags: --step, --pretend, --force (native)')
+  }).description('Run pending database migrations — flags: --step, --pretend, --force, --connection=<name>, --path=<dir> (native)')
 
   // ── migrate:fresh ─────────────────────────────────────
   rudder.command('migrate:fresh', async (args: string[]) => {
-    const native = await resolveNative()
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
+    const dir = migrationsDir(cwd, flagString(args, 'path'))
     if (native) {
-      console.log('  ORM: native')
-      const count = await runNativeFresh(native, cwd)
+      console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
+      const count = await runNativeFresh(native, cwd, dir)
       console.log(`  Database reset complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
-      await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd)
       if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }
@@ -676,21 +759,22 @@ export function registerMigrateCommands(
     console.log(`  ORM: ${orm}`)
     await exec(orm, 'migrate:fresh')
     console.log('  Database reset complete.')
-  }).description('Drop all tables and re-run all migrations — flag: --seed (native)')
+  }).description('Drop all tables and re-run all migrations — flags: --seed, --connection=<name>, --path=<dir> (native)')
 
   // ── migrate:rollback ──────────────────────────────────
   // Flags (native): --step[=N] (last N migrations across batches), --batch=N
   // (every migration in batch N). Default: the last batch.
   rudder.command('migrate:rollback', async (args: string[]) => {
-    const native = await resolveNative()
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
     if (native) {
-      console.log('  ORM: native')
+      console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
       const batch = flagNumber(args, 'batch')
       const step  = rollbackStep(args)
       const opts = batch !== undefined ? { batch } : step !== undefined ? { step } : {}
-      const count = await runNativeRollback(native, cwd, opts)
+      const count = await runNativeRollback(native, cwd, opts, migrationsDir(cwd, flagString(args, 'path')))
       console.log(count === 0 ? '  Nothing to roll back.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
-      await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd)
       return
     }
     // Prisma/Drizzle migrations are forward-only — neither tool reverses an
@@ -701,16 +785,17 @@ export function registerMigrateCommands(
       `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
       1,
     )
-  }).description('Roll back migrations — flags: --step[=N], --batch=N (native engine only)')
+  }).description('Roll back migrations — flags: --step[=N], --batch=N, --connection=<name>, --path=<dir> (native engine only)')
 
   // ── migrate:reset ─────────────────────────────────────
-  rudder.command('migrate:reset', async () => {
-    const native = await resolveNative()
+  rudder.command('migrate:reset', async (args: string[]) => {
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
     if (native) {
-      console.log('  ORM: native')
-      const count = await runNativeReset(native, cwd)
+      console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
+      const count = await runNativeReset(native, cwd, migrationsDir(cwd, flagString(args, 'path')))
       console.log(count === 0 ? '  Nothing to reset.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
-      await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd)
       return
     }
     const orm = requireORM()
@@ -719,17 +804,18 @@ export function registerMigrateCommands(
       `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
       1,
     )
-  }).description('Roll back all migrations (native engine only)')
+  }).description('Roll back all migrations — flags: --connection=<name>, --path=<dir> (native engine only)')
 
   // ── migrate:refresh ───────────────────────────────────
   // Flags (native): --step (re-apply each migration in its own batch), --seed.
   rudder.command('migrate:refresh', async (args: string[]) => {
-    const native = await resolveNative()
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
     if (native) {
-      console.log('  ORM: native')
-      const count = await runNativeRefresh(native, cwd, { step: hasFlag(args, 'step') })
+      console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
+      const count = await runNativeRefresh(native, cwd, { step: hasFlag(args, 'step') }, migrationsDir(cwd, flagString(args, 'path')))
       console.log(`  Refresh complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
-      await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd)
       if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }
@@ -739,13 +825,15 @@ export function registerMigrateCommands(
       `use \`rudder migrate:fresh\` to drop and re-apply (destructive).`,
       1,
     )
-  }).description('Roll back all migrations and re-run them — flags: --step, --seed (native engine only)')
+  }).description('Roll back all migrations and re-run them — flags: --step, --seed, --connection=<name>, --path=<dir> (native engine only)')
 
   // ── migrate:status ────────────────────────────────────
-  rudder.command('migrate:status', async () => {
-    const native = await resolveNative()
+  rudder.command('migrate:status', async (args: string[]) => {
+    const target = await resolveTarget(args)
+    const native = target?.adapter ?? await resolveNative()
     if (native) {
-      await runNativeStatus(native, cwd)
+      if (target) console.log(`  Connection: ${target.connection}`)
+      await runNativeStatus(native, cwd, migrationsDir(cwd, flagString(args, 'path')))
       return
     }
     const orm = requireORM()
