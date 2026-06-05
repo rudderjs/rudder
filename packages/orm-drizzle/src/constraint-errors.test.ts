@@ -12,7 +12,7 @@
 //
 // sqlite runs everywhere; pg/mysql blocks gate on PG_TEST_URL / MYSQL_TEST_URL.
 
-import { describe, it, test, before, after } from 'node:test'
+import { describe, it, test, before } from 'node:test'
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
