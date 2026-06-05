@@ -244,5 +244,30 @@ if (!MYSQL_URL) {
         })
       })
     })
+
+    describe('constraint error shapes (audit P1-6, prisma leg)', () => {
+      // Prisma MAPS driver errors — the contract is its stable P-codes
+      // (dialect-independent): unique violation → P2002. On mysql meta.target
+      // carries the index name rather than the column list, so only the code
+      // is pinned here.
+      it('unique violation surfaces P2002', async () => {
+        await Account.create({ name: 'Dup', active: true, age: 1 })
+        await assert.rejects(
+          Account.create({ name: 'Dup', active: true, age: 2 }),
+          (err: unknown) => (err as { code?: string }).code === 'P2002',
+        )
+      })
+
+      it('a missing delegate surfaces the adapter pointer error, not a raw crash', async () => {
+        class Ghost extends Model {
+          static override table = 'prLiveGhost'
+          name!: string
+        }
+        await assert.rejects(
+          Ghost.create({ name: 'x' }),
+          /Prisma has no delegate for table "prLiveGhost"/,
+        )
+      })
+    })
   })
 }
