@@ -107,7 +107,7 @@
 | | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Named connections | ✅ lazy menu + `Model.on()` | ❌ (separate clients) | ❌ (separate clients) | ✅ DataSources | ❌ | ✅ contextName |
-| Read replicas | ✅ round-robin (native+Drizzle) | extension (random) | ✅ withReplicas + **custom picker** | ✅ replication (random) | ❌ | ✅ replicas (random) |
+| Read replicas | ✅ round-robin/random/weighted/custom picker (native+Drizzle) | extension (random) | ✅ withReplicas + custom picker | ✅ replication (random) | ❌ | ✅ replicas (random) |
 | **Sticky read-your-writes** | ✅ ALS request scope + auto middleware | ⚠️ `$primary()` manual | ⚠️ custom picker manual | ❌ | ❌ | ⚠️ in-txn only |
 | Multi-DB migrations | ❌ (default conn only) | per-client | per-config | ✅ | per-instance | per-config |
 
@@ -167,7 +167,7 @@
 5. Optimistic locking (`static version` column, OptimisticLockError) — TypeORM/MikroORM precedent.
 6. ~~INSERT…SELECT~~ — **SHIPPED post-audit**: `insertUsing(columns, query)` (native engine).
 7. ~~Window functions~~ — **SHIPPED post-audit**: `selectWindow(fn, { as, partitionBy, orderBy })` (native engine; typed zero-arg ranking set rowNumber/rank/denseRank/percentRank/cumeDist, ADDITIVE projection; aggregates-OVER/lag/lead documented as the selectRaw recipe).
-8. Weighted/custom replica picker (Drizzle parity) — small seam on `readPick`.
+8. ~~Weighted/custom replica picker~~ — **SHIPPED post-audit**: `read.picker` = `'round-robin'` (default) / `'random'` / weights array (weighted random) / `(count) => index` custom fn; shared `makeReplicaPicker` in `@rudderjs/database` (native + Drizzle, same validation — weights fail at adapter construction, custom fn validated per call, picker runs after the sticky check).
 9. `Schema.connection()` + `migrate --connection` (multi-DB migrations; TypeORM has per-DataSource).
 10. afterCommit hooks (`transaction()` queue + flush-on-commit).
 

@@ -17,6 +17,8 @@ import { PgDialect } from './dialect-pg.js'
 import { MysqlDialect } from './dialect-mysql.js'
 import type { Driver, Executor, Transaction, Row, AffectingExecutor } from './driver.js'
 import { markWrote, stickyWrote } from '../sticky.js'
+import type { ReadReplicaPicker } from './replica-picker.js'
+import { makeReplicaPicker } from './replica-picker.js'
 import { NativeQueryBuilder } from './query-builder.js'
 import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
@@ -64,6 +66,13 @@ export interface NativeConfig {
    * write connection.
    */
   readUrls?: string[]
+  /**
+   * How reads pick a replica: `'round-robin'` (default), `'random'`, a
+   * weights array (one non-negative weight per replica, in `readUrls` order),
+   * or a custom `(count) => index` function. See {@link ReadReplicaPicker}.
+   * Only meaningful with `readUrls`.
+   */
+  readPicker?: ReadReplicaPicker
   /**
    * Sticky reads: after a write on this connection within the current request
    * scope (see `@rudderjs/orm/sticky`), subsequent reads in that scope route
@@ -216,9 +225,10 @@ export class NativeAdapter implements OrmAdapter {
    *  wrapped with query-listener instrumentation (see {@link instrumentExecutor}). */
   private readonly executor: Executor
 
-  /** Round-robin read-executor picker — set only on a split connection
-   *  (`readUrls`). Returns the write executor on a sticky hit. The QB calls it
-   *  per read terminal; locked selects bypass it (see `_readExecutor`). */
+  /** Read-executor picker — set only on a split connection (`readUrls`).
+   *  Strategy from `readPicker` (round-robin default). Returns the write
+   *  executor on a sticky hit. The QB calls it per read terminal; locked
+   *  selects bypass it (see `_readExecutor`). */
   private readonly readPick: (() => Executor) | null
 
   private constructor(
@@ -246,6 +256,9 @@ export class NativeAdapter implements OrmAdapter {
     private readonly readDrivers: Driver[] = [],
     /** Sticky reads enabled for this connection (only meaningful with a split). */
     private readonly sticky: boolean = false,
+    /** Replica-selection strategy for the read pool (round-robin when omitted);
+     *  see {@link ReadReplicaPicker}. Only meaningful with read drivers. */
+    readPicker: ReadReplicaPicker | undefined = undefined,
     /** Inherited split participation for transaction-scoped adapters: a tx
      *  spawned from a split adapter has no read drivers of its own but still
      *  tags its events `'write'` and marks sticky writes. */
@@ -261,12 +274,12 @@ export class NativeAdapter implements OrmAdapter {
     this.executor = instrumentExecutor(base, listeners, connection, this.splitTag)
     if (split && connection !== undefined) {
       const readExecs = readDrivers.map((d) => instrumentExecutor(d, listeners, connection, 'read'))
-      let rr = 0
+      // Builds the per-query index picker — weight lists validate here, so a
+      // bad config fails at adapter construction, not on the first read.
+      const pick = makeReplicaPicker(readPicker, readExecs.length)
       this.readPick = () => {
         if (this.sticky && stickyWrote(connection)) return this.executor
-        const exec = readExecs[rr % readExecs.length] ?? this.executor
-        rr++
-        return exec
+        return readExecs[pick()] ?? this.executor
       }
     } else {
       this.readPick = null
@@ -311,7 +324,7 @@ export class NativeAdapter implements OrmAdapter {
 
     const reused = reusableNativeClient(cacheKey, signature)
     if (reused) {
-      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, connection, reused.readDrivers, sticky)
+      return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, connection, reused.readDrivers, sticky, config.readPicker)
     }
 
     const { driver, dialect } = await openDriver(driverName, url)
@@ -320,7 +333,7 @@ export class NativeAdapter implements OrmAdapter {
       readDrivers.push((await openDriver(driverName, readUrl)).driver)
     }
     cacheNativeClient(cacheKey, { signature, driver, readDrivers, dialect })
-    return NativeAdapter._topLevel(driver, dialect, primaryKey, connection, readDrivers, sticky)
+    return NativeAdapter._topLevel(driver, dialect, primaryKey, connection, readDrivers, sticky, config.readPicker)
   }
 
   /** The adapter that owns the connection — queries and transactions both run
@@ -332,8 +345,9 @@ export class NativeAdapter implements OrmAdapter {
     connection: string | undefined,
     readDrivers: Driver[] = [],
     sticky = false,
+    readPicker: ReadReplicaPicker | undefined = undefined,
   ): NativeAdapter {
-    return new NativeAdapter(driver, driver, dialect, primaryKey, driver, [], connection, readDrivers, sticky)
+    return new NativeAdapter(driver, driver, dialect, primaryKey, driver, [], connection, readDrivers, sticky, readPicker)
   }
 
   query<T>(table: string, opts?: OrmAdapterQueryOpts): QueryBuilder<T> {
@@ -453,7 +467,7 @@ export class NativeAdapter implements OrmAdapter {
       // splitTag keeps event tagging + sticky marking intact.
       const scoped = new NativeAdapter(
         txScope, txScope, this.dialect, this.primaryKey, null, this.listeners, this.connection,
-        [], this.sticky, this.splitTag,
+        [], this.sticky, undefined, this.splitTag,
       )
       return fn(scoped)
     }, opts)

@@ -102,6 +102,7 @@ connections: {
 ```
 
 - `read.url` — one URL or an array; multiple replicas round-robin per query.
+- `read.picker` — optional replica-selection strategy (below).
 - `write.url` — optional; defaults to the top-level `url`.
 - `sticky` — read-your-writes within a request (below).
 
@@ -114,6 +115,23 @@ Routing is automatic and conservative:
 | | **Every statement inside a `transaction()`** — reads included |
 
 Anything that must see or hold the latest committed state stays on the writer; only plain reads ever touch a replica.
+
+### Picking a replica
+
+By default reads cycle through the replicas in order (round-robin). `read.picker` changes the strategy:
+
+```ts
+read: { url: [BIG_REPLICA, SMALL_REPLICA], picker: [3, 1] },   // weighted random — ~75% / ~25%
+read: { url: replicas, picker: 'random' },                     // uniform random per query
+read: { url: replicas, picker: (count) => myIndexFor(count) }, // custom — return the replica index
+```
+
+- `'round-robin'` (default) — cycle in `read.url` order.
+- `'random'` — uniform random per query.
+- `number[]` — weighted random: one non-negative weight per replica, in `read.url` order. Size weights to replica capacity. A malformed list (wrong length, negative entries, all zeros) fails fast when the connection opens, not per query.
+- `(count) => index` — full control (the equivalent of Drizzle's `getReplica`): called once per read query with the replica count; return the index to serve it. An out-of-range return rejects that query with a clear error.
+
+The picker runs **after** the sticky check — a sticky-routed read goes to the writer without consuming a pick. Works identically on the native engine and the Drizzle adapter.
 
 ### Sticky reads
 

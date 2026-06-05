@@ -22,6 +22,7 @@ import { ConfigRepository, setConfigRepository } from '@rudderjs/core'
 import type { Application } from '@rudderjs/core'
 import { ModelRegistry } from '@rudderjs/orm'
 import { runWithDatabaseContext } from '@rudderjs/orm/sticky'
+import type { ReadReplicaPicker } from '@rudderjs/orm/native'
 import { DrizzleAdapter, DatabaseProvider } from './index.js'
 
 const notes = sqliteTable('notes', {
@@ -87,6 +88,7 @@ async function splitAdapter(opts: {
   replicas?: number
   sticky?: boolean
   driver?: 'sqlite' | 'libsql'
+  picker?: ReadReplicaPicker
 } = {}): Promise<{ adapter: DrizzleAdapter; writeFile: string }> {
   const id = ++n
   const driver = opts.driver ?? 'sqlite'
@@ -104,6 +106,7 @@ async function splitAdapter(opts: {
     connectionName: `dz-split-${id}`,
     tables: { notes },
     ...(opts.sticky !== undefined && { sticky: opts.sticky }),
+    ...(opts.picker !== undefined && { readPicker: opts.picker }),
   })
   return { adapter, writeFile }
 }
@@ -200,6 +203,30 @@ test('multiple replicas round-robin per query', async () => {
     seen.push(rows[0]?.src as string)
   }
   assert.deepEqual(seen, ['replica-1', 'replica-2', 'replica-1', 'replica-2'])
+})
+
+test('weighted picker: a zero-weight replica is never read', async () => {
+  const { adapter } = await splitAdapter({ replicas: 2, picker: [0, 1] })
+  for (let i = 0; i < 4; i++) {
+    const rows = await adapter.query<NoteRow>('notes').get()
+    assert.deepEqual(rows.map((r) => r.src), ['replica-2'])
+  }
+})
+
+test('custom picker function routes each read to the index it returns', async () => {
+  let next = 0
+  const { adapter } = await splitAdapter({ replicas: 2, picker: () => next })
+  const first = await adapter.query<NoteRow>('notes').get()
+  next = 1
+  const second = await adapter.query<NoteRow>('notes').get()
+  assert.deepEqual([first[0]?.src, second[0]?.src], ['replica-1', 'replica-2'])
+})
+
+test('invalid weights fail at adapter construction (shared validation with the native engine)', async () => {
+  await assert.rejects(
+    () => splitAdapter({ replicas: 1, picker: [1, 1] }),
+    /2 entries for 1 replica/,
+  )
 })
 
 // ── raw DB-facade seams (execute-capable fake clients) ────
