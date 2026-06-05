@@ -1,6 +1,6 @@
 # RudderJS Feature Roadmap
 
-> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-18
+> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-06-05
 >
 > Legend: S = Small (1-2 days) | M = Medium (3-5 days) | L = Large (1-2 weeks)
 
@@ -389,6 +389,37 @@ Full OAuth2 server: authorization-code (with PKCE), client-credentials, refresh-
 
 ---
 
+## Plan 10: Data Layer & Native Engine ✅
+
+*Closes the Laravel DB/query-builder gap (2026-06-01 audit) and ships a first-party ORM engine — no Prisma/Drizzle required. ~120 PRs across 2026-05-23 → 2026-06-05.*
+
+**Status**: Complete except 10.13 (native pg/mysql scaffolding). Gap work-queue + feature matrices in `claude-notes/db-orm-comparison.md`; audit plan in `docs/plans/2026-06-01-*`.
+
+| # | Area | Feature | Status |
+|---|---|---|---|
+| 10.1 | `@rudderjs/database` (new) | Package extraction — `DB` facade (`DB.table`/`transaction`/`raw`/`listen`/`afterCommit`), cross-adapter `transaction()`, and the native engine's permanent home (compiler, dialects, drivers, schema builder, migrator). `@rudderjs/orm/native` + `/sticky` stay as re-export shims. | ✅ #823/#824 + #889–#892 |
+| 10.2 | Native engine | First-party engine at `@rudderjs/database/native` — SQLite + Postgres + MySQL dialects/drivers, read/write paths, relations, aggregates, transactions | ✅ #794–#802, #819, #827 |
+| 10.3 | Native engine | Schema builder + migration runner — `Schema.create`/`table`, `make:migration`, `migrate`/`rollback`/`refresh`/`fresh`, transactional batches, foreign keys, column `.change()` on all three drivers (native ALTER on pg/mysql, table rebuild on SQLite) | ✅ #808–#816, #929 |
+| 10.4 | Typed models | `rudder schema:types` — column types generated from migrations, `Model.for<'table'>()`, string casts folded in (with `app/Models/**` auto-discovery) | ✅ #817/#820/#821, #934 |
+| 10.5 | Query builder breadth | Joins, structured `select()`, `groupBy`/`having`, `distinct`, unions, CTEs (`withExpression`/`withRecursiveExpression`), `whereExists`, raw expressions, JSON-path predicates + arrow-path updates, typed window functions (`selectWindow`), `insertUsing`, `cursorPaginate`, `chunk`/`lazy`, `upsert`, date helpers, `whereColumn`, `whereX` sugar + terminals | ✅ #832–#900, #909 |
+| 10.6 | Relations breadth | `hasOneThrough`/`hasManyThrough`, `wherePivot` family, `whereRelation`, `withDefault`, nested `whereHas` (`'a.b'`), direct-relation eager loading on native + Drizzle (model-layer batched WHERE-IN) | ✅ #829, #845–#850, #880/#881 |
+| 10.7 | Multi-connection | Named connections on all three adapters, per-model `static connection` + `Model.on(name)`, read/write split + sticky reads (native + Drizzle), weighted/custom replica picker, multi-database migrations (`Schema.connection(name)` + `migrate --connection`/`--path`) | ✅ #863–#872, #919/#920 |
+| 10.8 | Transactions & locking | Isolation levels across native/Drizzle/Prisma, `afterCommit()` hooks (transaction-tree queue: flush on outermost commit, drop on rollback), pessimistic lock options (`skipLocked`/`noWait`), optimistic locking (`static version` + `OptimisticLockError`) | ✅ #897/#899/#923/#924 |
+| 10.9 | Model & resources breadth | Paginator-aware `Resource.collection()` + `additional()`, `whenHas`/`whenCounted`/`whenAggregated`, `toResource()` wiring, `make:resource`, casts breadth (`decimal:N`/`enum`/`hashed`), UUID/ULID primary keys, factory relationships + `Model.factory()` | ✅ #831, #840–#843, #862–#867 |
+| 10.10 | `@rudderjs/queue` | Native database-backed queue driver (`@rudderjs/queue/native`) with `FOR UPDATE SKIP LOCKED` reservation | ✅ #837/#901 |
+| 10.11 | CLI | `db:show` / `db:table` — database inspection over the native engine | ✅ #907 |
+| 10.12 | Scaffolder | Native engine is the `create-rudder` default — interactive Database prompt + non-interactive recipes | ✅ #830/#933 |
+| 10.13 | Scaffolder | Native pg/mysql scaffolding (today native scaffolds pin SQLite; pg/mysql via `--orm=prisma\|drizzle`) | 🔄 in progress |
+
+### Plan 10 Deliverables
+- [x] `@rudderjs/database` 1.2.x — `DB` facade + native engine home (published 2026-06-05)
+- [x] `@rudderjs/orm` 1.16.x — query-builder/relations/multi-connection/locking breadth across all three adapters
+- [x] `@rudderjs/orm-drizzle` 1.10.x — real joins/unions/groupBy/eager-loading/locks/sticky-reads (was throw-on-use stubs)
+- [x] Typed models from migrations (`schema:types`) — the headline differentiator
+- [ ] Native pg/mysql in the scaffolder (10.13)
+
+---
+
 ## Execution Order
 
 ```
@@ -412,6 +443,11 @@ Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mo
               │
 Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ DONE
               ├── Yjs CRDT, Lexical adapter, SSR hydration, onFirstConnect lifecycle
+              │
+Phase 8 ──── Plan 10 (Data Layer & Native Engine)                 ✅ DONE (except 10.13)
+              ├── @rudderjs/database + DB facade, native SQLite/pg/mysql engine,
+              ├── schema builder + migrations, typed models (schema:types),
+              ├── QB/relations breadth, multi-connection, afterCommit, locking
 ```
 
 ---
@@ -434,6 +470,8 @@ Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ 
 | `@rudderjs/mcp` | 8 | Core framework | ✅ |
 | `@rudderjs/passport` | 8 | Core framework | ✅ |
 | `@rudderjs/sync` | 9 | Core framework | ✅ |
+| `@rudderjs/database` | 10 | Core framework (DB facade + native engine home) | ✅ |
+| `@rudderjs/broadcast-redis` | — | Driver (multi-instance broadcast) | ✅ |
 | `@rudderjs/terminal` | — | Core framework (differentiator) | ✅ |
 | `@rudderjs/view` | — | Core framework (differentiator) | ✅ |
 | `@rudderjs/vite` | — | Core framework (build integration) | ✅ |
@@ -446,7 +484,7 @@ Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ 
 | `@rudderjs/contracts` | 1 | +typed request input | ✅ |
 | `@rudderjs/core` | 1, 5, 6 | +ExceptionHandler ✅ / +scoped/deferred/contextual bindings ✅ / +Event.fake() ✅ | ✅ |
 | `@rudderjs/router` | 1 | +URL generation, +signed URLs | ✅ |
-| `@rudderjs/orm` | 2 | +casts, +accessors, +resources, +factories, +serialization | ✅ |
+| `@rudderjs/orm` | 2, 10 | +casts, +accessors, +resources, +factories, +serialization ✅ / +native engine, QB breadth, multi-connection, locking (see Plan 10) ✅ | ✅ |
 | `@rudderjs/queue` | 3, 6 | +chains, +batches, +unique, +middleware, +closures ✅ / +fake ✅ | ✅ |
 | `@rudderjs/schedule` | 3 | +sub-minute, +hooks, +onOneServer | ✅ |
 | `@rudderjs/auth` | 4 | +email verification | ✅ |
@@ -458,7 +496,7 @@ Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ 
 
 ## Post-1.0 Enhancements (2026-05+)
 
-Continuous improvements after 1.0 graduated. Not part of plans 1–9 — these came from real-world use surfacing rough edges (most discovered while deploying `pilotiq-io` to production on Forge + MySQL).
+Continuous improvements after 1.0 graduated. Not part of plans 1–10 — these came from real-world use surfacing rough edges (many discovered while deploying `pilotiq-io` to production on Forge + MySQL, or via the `pilotiq-demo` downstream). Data-layer work has its own section — see Plan 10.
 
 | Area | Change | PR | Status |
 |---|---|---|---|
@@ -467,3 +505,17 @@ Continuous improvements after 1.0 graduated. Not part of plans 1–9 — these c
 | `@rudderjs/cli` | New `rudder add <pkg>` — installs + generates config + wires `config/index.ts` + refreshes provider manifest in one step. 25-package registry mirrors the scaffolder. | rudder #520 | ✅ |
 | `@rudderjs/cli` | New `rudder remove <pkg>` — reverses `add` end-to-end; refuses when dependents are still installed (`auth` blocked while `sanctum`/`passport` present); `--keep-config` flag preserves the local config | rudder #521 | ✅ |
 | `@rudderjs/orm-prisma` | **MySQL / MariaDB driver** via `@prisma/adapter-mariadb` — Forge (and any host that defaults to MySQL) is now a viable production target without installing Postgres alongside | rudder #523 | ✅ |
+| Typed routing | Template-literal path params + Zod query (`route()` lookups auto-populated by the routes scanner), typed request bodies (`.body(schema)` + `TypedRequest`), typed `view()` props | #482, #564, #568, #617 | ✅ |
+| `rudder doctor` | Diagnostic CLI — 36 checks / 11 categories, package-contributed checks, `--deep` runtime mode, `--fix` (3 fixers), `--production` pre-deploy mode | #554–#561, #771 | ✅ |
+| DX completion | `rudder tinker` REPL, editor-launch on dev error-page stack frames, `make:factory` / `make:seeder` / `make:test`, `key:generate`, `rudder about`, `rudder test` | #565–#569, #763–#770 | ✅ |
+| Upgrade UX | `rudder upgrade` — one-step bump of every `@rudderjs/*`, peer-dependency mismatch warnings, inline CHANGELOG snippets | #759–#766 | ✅ |
+| Prerender | `export const prerender = true \| [...] \| () => [...]` on view files — static + dynamic build-time HTML | #616, #620 | ✅ |
+| Testing breadth | Time travel (`travel`/`freezeTime`), TestResponse content/cookie/JSON/session/view/validation assertions, `actingAs` end-to-end + auth assertions, model-instance DB assertions, `AssertableJson` fluent DSL, `Http.fakeSequence` | #746–#755 | ✅ |
+| RSC (opt-in) | React Server Components via the published `vike-react-rsc-rudder` fork — dev + production builds, server actions; `@rudderjs/vite` auto-detects the renderer | #637–#642 | ✅ |
+| Eventing & realtime | Multi-instance broadcast driver interface + `@rudderjs/broadcast-redis`, WebSocket hardening (auth, origin, per-IP cap, heartbeat), unified queue `executeJob()` across drivers, `@rudderjs/sync/react` hooks (`useCollabRoom`/`useCollabSeed`), awareness lifecycle | #602–#614 | ✅ |
+| Dev HMR | Scoped SSR invalidation (edit→ready ~1.1 s → ~75 ms), `watch` option for linked-package HMR, re-boot single-flighting + request gating, DB client reuse across re-boots (fixes pooled-connection leaks) | #645–#652 | ✅ |
+| Provider-boot leak audit | Connection/listener reuse across dev re-boots swept through 10+ packages (orm adapters, cache, session, broadcast, queue-bullmq, sync, monitoring, vite enhancers) | #652–#684 | ✅ |
+| Build toolchain | Vite 8 + rolldown across the monorepo and scaffolded apps | #691 | ✅ |
+| Introspection | `event:list`, `config:show`, `route:list --verbose` | #631 | ✅ |
+| Brand | RudderJS → **Rudder** prose rebrand + orange quarter-arc logo; `create-rudder` (drop the `-app` suffix); ANSI-art installer wordmark; harmonized dev boot banner | #574, #577, #599/#600, #786–#789 | ✅ |
+| Client bundles | `@rudderjs/core/client` subpath + Client Bundle Smoke CI gate (browser-safe entries enforced) | #675 | ✅ |
