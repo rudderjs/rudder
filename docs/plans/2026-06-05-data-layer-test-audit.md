@@ -120,8 +120,13 @@ placeholder limits, pg array behavior) has no live proof. whereHas *ops* variant
 comparisons, OR-rooted — `orm/src/native/where-has-ops.test.ts`) are sqlite-only too; only
 plain nested `whereHas` has live PG+MySQL round-trips (`nested-where-has.test.ts:412,477`).
 
-### P2-10 · Single-dialect live coverage on native features
+### P2-10 · Single-dialect live coverage on native features — ✅ CLOSED (Wave-3 P2-10 PR)
 
+Both gaps closed in place: `cte.test.ts` gained a live-mysql block (WITH RECURSIVE on
+MySQL 8 + the count()/paginate() CTE-prefix wrap), `insert-using.test.ts` gained a live-pg
+block (RETURNING count on INSERT…SELECT, builder body + raw-`?`-rebind body).
+
+Original finding:
 - CTEs: live **PG only** (`orm/src/native/cte.test.ts:72`) — MySQL 8 recursive CTE
   (`cte_max_recursion_depth`, syntax) unproven.
 - `insertUsing`: live **MySQL only** (`orm/src/native/insert-using.test.ts:63`) — PG
