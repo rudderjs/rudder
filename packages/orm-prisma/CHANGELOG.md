@@ -1,5 +1,32 @@
 # @rudderjs/orm-prisma
 
+## 2.2.0
+
+### Minor Changes
+
+- eb3bdfe: feat: transaction isolation levels — `transaction(fn, { isolationLevel })` / `DB.transaction(fn, { isolationLevel })` / `Model.transaction(fn, { isolationLevel })` with `'read uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`. The native engine emits `SET TRANSACTION ISOLATION LEVEL …` at transaction start on Postgres/MySQL; the Drizzle adapter passes the level through to Drizzle's transaction config; the Prisma adapter maps it to `$transaction`'s `isolationLevel` option. SQLite throws a clear unsupported error (no isolation levels — single-writer is already serializable), and a nested `transaction()` call (savepoint) rejects the option on every adapter.
+
+### Patch Changes
+
+- 635d09e: Fix nested transactions (SAVEPOINT) failing on MySQL: the mariadb driver adapter now uses the text protocol. MySQL cannot prepare SAVEPOINT / ROLLBACK TO SAVEPOINT / RELEASE SAVEPOINT (error 1295), and the adapter's nested `transaction()` support emits those through `$executeRawUnsafe`, which the default binary protocol routes through a prepared statement — so every nested transaction on a `make()`-constructed mysql connection failed. If you pass your own PrismaClient on mysql, construct its `PrismaMariaDb` adapter with `{ useTextProtocol: true }`.
+- Updated dependencies [cfab7aa]
+- Updated dependencies [a5f7950]
+- Updated dependencies [c704a48]
+- Updated dependencies [345d805]
+- Updated dependencies [0d7c992]
+- Updated dependencies [ba50682]
+- Updated dependencies [f88660f]
+- Updated dependencies [d89d2cd]
+- Updated dependencies [255a755]
+- Updated dependencies [246f5b0]
+- Updated dependencies [8a53671]
+- Updated dependencies [1da0b39]
+- Updated dependencies [1b8474a]
+- Updated dependencies [ac3d8d0]
+- Updated dependencies [eb3bdfe]
+  - @rudderjs/orm@1.16.0
+  - @rudderjs/contracts@1.12.0
+
 ## 2.1.0
 
 ### Minor Changes

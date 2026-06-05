@@ -1,5 +1,35 @@
 # @rudderjs/orm-drizzle
 
+## 1.10.0
+
+### Minor Changes
+
+- d89d2cd: feat: lock wait-behavior options — `lockForUpdate(opts?)` / `sharedLock(opts?)` accept `{ skipLocked?: boolean }` (skip rows another transaction holds — `FOR UPDATE SKIP LOCKED`, the concurrent job-reservation pattern) or `{ noWait?: boolean }` (fail immediately instead of blocking — `NOWAIT`). Mutually exclusive — both set throws at the call site. The native engine emits the clauses via `Dialect.lockSql(mode, opts)` on Postgres/MySQL 8 (SQLite stays a no-op, options included); the Drizzle adapter maps to `.for(strength, { skipLocked | noWait })` on pg/mysql. Prisma keeps throwing on the lock methods (no `FOR UPDATE` in its query API).
+- 1da0b39: Weighted/custom read-replica picker on read/write-split connections. `read.picker` in `config/database.ts` selects the replica per query: `'round-robin'` (default, the previous behavior), `'random'`, a weights array (one non-negative weight per replica — `[3, 1]` sends ~75% of reads to the first), or a custom `(count) => index` function (Drizzle's `getReplica` equivalent). Shared `makeReplicaPicker` in `@rudderjs/database` powers both the native engine and the Drizzle adapter: malformed weight lists fail fast at adapter construction, a custom function's return is validated per call, and the picker runs after the sticky check so a sticky-routed read never consumes a pick.
+- eb3bdfe: feat: transaction isolation levels — `transaction(fn, { isolationLevel })` / `DB.transaction(fn, { isolationLevel })` / `Model.transaction(fn, { isolationLevel })` with `'read uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`. The native engine emits `SET TRANSACTION ISOLATION LEVEL …` at transaction start on Postgres/MySQL; the Drizzle adapter passes the level through to Drizzle's transaction config; the Prisma adapter maps it to `$transaction`'s `isolationLevel` option. SQLite throws a clear unsupported error (no isolation levels — single-writer is already serializable), and a nested `transaction()` call (savepoint) rejects the option on every adapter.
+
+### Patch Changes
+
+- 246f5b0: fix: `whereNull`/`where(col, null)` on a JSON arrow path now matches an explicit json `null` on MySQL, not just a missing key (Laravel parity). MySQL's `JSON_EXTRACT` returns a JSON null literal — not SQL NULL — for an explicit null, so null equality now compiles to Laravel's `(extract IS NULL OR JSON_TYPE(extract) = 'NULL')` grammar shape on both the native engine (new `Dialect.jsonNullComparison` seam) and the Drizzle adapter. sqlite/pg SQL is unchanged.
+- a5c9580: Fix the raw DB-facade seams on mysql: `DB.select()` returned mysql2's `[rows, fields]` tuple instead of the rows, and `DB.insert()`/`update()`/`delete()`/`statement()` reported the tuple's length (always 2) instead of `affectedRows`. Both seams now unwrap the mysql2 result tuple (`mysqlWriteHeader` for write counts), matching what the Model write paths already did.
+- Updated dependencies [cfab7aa]
+- Updated dependencies [a5f7950]
+- Updated dependencies [c704a48]
+- Updated dependencies [345d805]
+- Updated dependencies [0d7c992]
+- Updated dependencies [ba50682]
+- Updated dependencies [f88660f]
+- Updated dependencies [d89d2cd]
+- Updated dependencies [255a755]
+- Updated dependencies [246f5b0]
+- Updated dependencies [8a53671]
+- Updated dependencies [1da0b39]
+- Updated dependencies [1b8474a]
+- Updated dependencies [ac3d8d0]
+- Updated dependencies [eb3bdfe]
+  - @rudderjs/orm@1.16.0
+  - @rudderjs/contracts@1.12.0
+
 ## 1.9.0
 
 ### Minor Changes
