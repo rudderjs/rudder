@@ -50,7 +50,7 @@ Validate critical envs at startup with `defineEnv` (see [Configuration](/guide/c
 Run migrations as part of your deploy, before the server starts:
 
 ```bash
-pnpm rudder migrate     # Prisma → migrate deploy; Drizzle → drizzle-kit migrate
+pnpm rudder migrate     # native → built-in runner; Prisma → migrate deploy; Drizzle → drizzle-kit migrate
 pnpm rudder db:seed     # optional, only on first deploy
 ```
 
@@ -244,8 +244,10 @@ For each, the deploy command is the platform's standard tooling; the application
 Add a route that confirms upstream services are reachable:
 
 ```ts
+import { DB } from '@rudderjs/database'
+
 Route.get('/healthz', async (_req, res) => {
-  await app().make<PrismaClient>('prisma').$queryRaw`SELECT 1`
+  await DB.select('SELECT 1')        // engine-agnostic — native, Prisma, or Drizzle
   return res.json({ ok: true })
 })
 ```

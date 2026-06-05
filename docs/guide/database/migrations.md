@@ -1,6 +1,6 @@
 # Migrations
 
-Rudder unifies migration commands across the Prisma and Drizzle adapters. The same `pnpm migrate` works for both — the active ORM is auto-detected from your `package.json`.
+Rudder unifies migration commands across all three engines — the [native engine](/guide/database/native)'s first-party migration runner and the Prisma/Drizzle adapters' tooling. The same `pnpm migrate` works everywhere; the active engine is auto-detected.
 
 ```bash
 pnpm migrate              # apply pending migrations
@@ -9,7 +9,9 @@ pnpm migrate:status       # show what's applied
 pnpm db:seed              # run database/seeders/DatabaseSeeder
 ```
 
-The full command list:
+On the **native engine** these run the built-in runner over `database/migrations/` — plus `migrate:rollback`, `migrate:reset`, and `migrate:refresh`, which exist only there (see [Rollbacks](#rollbacks)), and `--connection=<name>` / `--path=<dir>` for [multi-database apps](/guide/database/connections#multi-database-migrations). A successful run also regenerates the [typed model registry](/guide/database#typed-models-from-migrations-schema-types).
+
+On **Prisma/Drizzle**, the commands delegate to the underlying tool:
 
 | Command | Prisma (dev) | Prisma (prod) | Drizzle |
 |---|---|---|---|
@@ -21,13 +23,51 @@ The full command list:
 | `db:generate` | `prisma generate` | same | (no-op) |
 | `db:seed` | run `database/seeders/DatabaseSeeder.ts` | same | same |
 
+`db:push` and `db:generate` are Prisma/Drizzle-only — the native engine has no push mode and no client to generate; every change is a tracked migration.
+
 Production vs development is selected by `NODE_ENV`. In production, `migrate` runs `prisma migrate deploy` (apply only — never generate, never prompt) instead of `migrate dev`.
 
 You can also run any of these via the `rudder` CLI directly: `pnpm rudder migrate`, `pnpm rudder db:seed`, etc.
 
 ## Adding a new table
 
-The flow has two adapter-specific steps (edit the schema, generate or push) and one shared step (write the model).
+The flow has engine-specific steps (describe the table) and one shared step (write the model).
+
+### Native
+
+```bash
+# 1. Create + edit the migration
+pnpm rudder make:migration create_posts_table
+# 2. Apply — also regenerates the typed registry
+pnpm rudder migrate
+
+# 3. Create the Model class
+pnpm rudder make:model Post
+```
+
+Fill in the generated stub with the Laravel-style blueprint:
+
+```ts
+// database/migrations/<timestamp>_create_posts_table.ts
+import { Migration, Schema } from '@rudderjs/database'
+
+export default class extends Migration {
+  async up() {
+    await Schema.create('posts', (t) => {
+      t.id()
+      t.string('title')
+      t.text('body').nullable()
+      t.timestamps()
+    })
+  }
+
+  async down() {
+    await Schema.dropIfExists('posts')
+  }
+}
+```
+
+Bind the model with `Model.for<'posts'>()` and the column types come from the migrated schema — no hand-declared fields. See the [Native Engine guide](/guide/database/native#migrations) for the full blueprint surface.
 
 ### Prisma
 
@@ -91,9 +131,16 @@ export const posts = sqliteTable('posts', {
 
 ## Adding a column to an existing table
 
-Same flow as creating a table — edit the schema, then `db:push` or `make:migration` + `migrate`. The `make:model` step is skipped (model already exists, just add the field to the class).
+Same flow as creating a table — describe the change, then apply it. The `make:model` step is skipped (the model already exists).
 
 ```bash
+# Native
+pnpm rudder make:migration add_excerpt_to_posts
+#   → up(): await Schema.table('posts', (t) => { t.string('excerpt').nullable() })
+pnpm rudder migrate
+# Models bound with Model.for<'posts'>() pick up the new column's type
+# automatically — the registry regenerated with the migrate.
+
 # Prisma
 # 1. Add `excerpt String?` to the Post model in app.prisma
 pnpm db:push                                       # dev
@@ -113,12 +160,12 @@ pnpm migrate
 
 ## `db:push` vs `migrate`
 
-Two workflows. Pick one per project:
+Two workflows on Prisma/Drizzle. Pick one per project:
 
 - **`db:push`** — fast prototype mode. Diffs your schema against the live database and applies the changes immediately. **No migration file.** No version history. Dev only.
-- **`migrate`** — production track. Records every change as a versioned SQL file in `prisma/migrations/` or `drizzle/migrations/`. Reviewable, replayable, deployable.
+- **`migrate`** — production track. Records every change as a versioned file (`prisma/migrations/`, `drizzle/migrations/`, or the native engine's `database/migrations/`). Reviewable, replayable, deployable.
 
-Use `db:push` while you're modeling. Switch to `migrate` once the schema stabilizes and you need a paper trail.
+Use `db:push` while you're modeling. Switch to `migrate` once the schema stabilizes and you need a paper trail. The **native engine** is migrate-only by design — there's no push mode, so the paper trail is always there.
 
 ## Seeders
 
@@ -175,17 +222,16 @@ The `db:seed` runner accepts either a class extending `Seeder` (instantiates and
 
 If you'd rather use Prisma's native seed integration, configure `prisma.seed` in `package.json` and skip the `DatabaseSeeder.ts` file — `db:seed` falls back to `prisma db seed` automatically.
 
-## Why no `migrate:rollback`
+## Rollbacks
 
-Laravel ships `migrate:rollback`, `migrate:reset`, and `migrate:refresh` because Laravel migrations have explicit `up()` and `down()` methods. Prisma and Drizzle don't — both produce forward-only SQL files.
+Rollback support depends on whether the engine's migrations carry a `down()` method:
 
-In dev: `pnpm migrate:fresh` drops everything and re-runs all migrations.
-
-In production: write a new forward migration that reverses the change. This is the same advice Prisma's docs give for "rolling back" a deployed migration.
+- **Native engine** — full Laravel parity. Migrations are classes with explicit `up()` / `down()`, so `migrate:rollback` (revert the last batch), `migrate:reset` (revert everything), and `migrate:refresh` (reset + re-run) all work, and batches are transactional where the driver supports it.
+- **Prisma / Drizzle** — forward-only SQL files, no `down()`, so those commands don't exist there. In dev, `pnpm migrate:fresh` drops everything and re-runs all migrations. In production, write a new forward migration that reverses the change — the same advice Prisma's docs give for "rolling back" a deployed migration.
 
 ## Common pitfalls
 
-- **`No ORM detected`** — install `@rudderjs/orm-prisma` or `@rudderjs/orm-drizzle` as a dependency. The migrate commands check `package.json`, not the installed runtime.
+- **`No ORM detected`** — the migrate commands look for the native engine (`engine: 'native'` on the default connection in `config/database.ts`) or an installed `@rudderjs/orm-prisma` / `@rudderjs/orm-drizzle`. Make sure one of the three is actually wired.
 - **`db:push` in production** — don't. It bypasses the migrations folder and can silently drop columns. Use `migrate` for anything you ship.
 - **Stale Prisma client** — after editing `schema.prisma`, run `pnpm rudder db:generate` (or it'll happen automatically as part of `migrate`) before importing new fields in TypeScript.
 - **Drizzle `make:migration` produces an empty SQL file** — that means your `db/schema.ts` is identical to the last applied snapshot. Edit the schema first, then run `make:migration`.
