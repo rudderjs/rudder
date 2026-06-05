@@ -105,13 +105,20 @@ adapter's vector suite.*
 semantics and the sticky ALS join have never run live on mysql for either engine. Query
 events (`target: 'read' | 'write'`) on drizzle: untested live.
 
-### P2-9 · Eager loading (`with()`) sqlite-only everywhere
+### P2-9 · Eager loading (`with()`) sqlite-only everywhere — ✅ CLOSED (Wave-3 P2-9 PR)
 
-`orm/src/native/eager-with.test.ts` and `orm-drizzle/src/eager-with.test.ts` both use the
-sqlite driver. The batched WHERE-IN model-layer strategy (large IN lists, mysql placeholder
-limits, pg array behavior) has no live proof. whereHas *ops* variants (count comparisons,
-OR-rooted — `orm/src/native/where-has-ops.test.ts`) are sqlite-only too; only plain nested
-`whereHas` has live PG+MySQL round-trips (`nested-where-has.test.ts:412,477`).
+Shipped as three shared-scenario suites (sqlite always + gated live pg/mysql, #918's shape):
+`orm/src/native/eager-with-live.test.ts` (all four direct relation types + whereHas
+composition + a 300-parent batch pinning the long WHERE-IN list), `orm/src/native/
+where-has-ops-live.test.ts` (count comparisons + OR-rooted forms live), and
+`orm-drizzle/src/eager-with-live.test.ts` (same shapes + 300-parent `inArray` batch on
+real pg/mysql DrizzleAdapter connections).
+
+Original finding: `orm/src/native/eager-with.test.ts` and `orm-drizzle/src/eager-with.test.ts`
+both use the sqlite driver. The batched WHERE-IN model-layer strategy (large IN lists, mysql
+placeholder limits, pg array behavior) has no live proof. whereHas *ops* variants (count
+comparisons, OR-rooted — `orm/src/native/where-has-ops.test.ts`) are sqlite-only too; only
+plain nested `whereHas` has live PG+MySQL round-trips (`nested-where-has.test.ts:412,477`).
 
 ### P2-10 · Single-dialect live coverage on native features
 
