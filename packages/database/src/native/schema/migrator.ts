@@ -347,7 +347,8 @@ export async function discoverMigrations(dir: string): Promise<LoadedMigration[]
   const loaded: LoadedMigration[] = []
   for (const file of files) {
     const name = file.replace(/\.(ts|js|mts|mjs)$/, '')
-    const mod = await import(pathToFileURL(join(dir, file)).href) as { default?: unknown }
+    // Runtime path by design (user migration files on disk) — Vite can't analyze it; suppress the dev warning.
+    const mod = await import(/* @vite-ignore */ pathToFileURL(join(dir, file)).href) as { default?: unknown }
     const Cls = mod.default
     if (typeof Cls !== 'function' || !(Cls.prototype instanceof Migration)) {
       throw new NativeOrmError(
