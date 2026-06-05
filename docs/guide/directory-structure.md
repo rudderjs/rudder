@@ -27,7 +27,8 @@ my-app/
 │   ├── +onCreatePageContext.ts  # Auto-generated stub re-exporting @rudderjs/vite — overwrite to customize
 │   ├── +onError.ts              # Auto-generated stub
 │   └── +headersResponse.ts      # Auto-generated stub (reads pageContext.viewHeaders)
-├── prisma/schema/          # Multi-file Prisma schema
+├── database/migrations/    # Native-engine migrations (default scaffold)
+├── prisma/schema/          # Multi-file Prisma schema — only when Prisma is selected
 ├── boost.json              # @rudderjs/boost agent + skill config (commit it)
 ├── src/index.css           # Stylesheet — only when Tailwind is selected
 ├── +server.ts              # Wires Vike to bootstrap/app.ts
@@ -122,11 +123,15 @@ Vike file-based SSR pages. The file extension matches your primary framework —
 
 This directory is **optional**. Pure API apps omit it entirely and remove Vike from `vite.config.ts`. See [Frontend](/guide/frontend) for the full Vike + controller-view model.
 
+### `database/migrations/`
+
+Native-engine migration files — the default scaffold. Timestamped classes with `up()` / `down()` using the `Schema` blueprint, applied with `pnpm rudder migrate` (which also regenerates the typed model registry at `app/Models/__schema/registry.d.ts`). See [Migrations](/guide/database/migrations) and the [Native Engine guide](/guide/database/native#migrations).
+
 ### `prisma/schema/`
 
-Multi-file Prisma schema. Each `@rudderjs/*` package that ships models (e.g. `@rudderjs/auth`) publishes its own `<name>.prisma` file via `pnpm rudder vendor:publish`. Your app-specific models live in `app.prisma`. The `datasource` and `generator` blocks live in `base.prisma`.
+Only present when Prisma is selected. Multi-file Prisma schema — each `@rudderjs/*` package that ships models (e.g. `@rudderjs/auth`) publishes its own `<name>.prisma` file via `pnpm rudder vendor:publish`. Your app-specific models live in `app.prisma`. The `datasource` and `generator` blocks live in `base.prisma`.
 
-Run `pnpm rudder db:generate` after any schema change (ORM-agnostic — on Prisma this shells to `prisma generate`; on Drizzle it's a no-op).
+Run `pnpm rudder db:generate` after any schema change (ORM-agnostic — on Prisma this shells to `prisma generate`; on Drizzle it's a no-op; the native engine has no client to generate).
 
 ## The entry point
 

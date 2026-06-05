@@ -24,7 +24,7 @@ Nothing here is throwaway — it's the same shape as a real feature.
 pnpm create rudder linkboard
 ```
 
-Pick **Web app** for the recipe, **Prisma** + **SQLite** for the database, **React** for the frontend, and let it install. When it finishes:
+Pick **Web app** for the recipe, accept **Native** for the database (the default — the built-in engine with zero-config SQLite), **React** for the frontend, and let it install. When it finishes:
 
 ```bash
 cd linkboard && pnpm dev
@@ -33,51 +33,64 @@ cd linkboard && pnpm dev
 Open `http://localhost:3000` — you'll see the welcome page. Leave `pnpm dev` running; every change below hot-reloads.
 
 ::: tip Non-interactively (CI / agents)
-`CLAUDECODE=1 npx create-rudder linkboard --recipe=web-app --db=sqlite --framework=react --install=true` produces the same project with no prompts.
+`CLAUDECODE=1 npx create-rudder linkboard --recipe=web-app --framework=react --install=true` produces the same project with no prompts.
 :::
 
-## 2. Define the model and its table
+## 2. Define the table and its model
 
-A model is a class that represents one row. Create `app/Models/Link.ts`:
+The table comes first — describe it with a migration, the native engine's tracked unit of schema change:
+
+```bash
+pnpm rudder make:migration create_links_table
+```
+
+That writes a timestamped stub into `database/migrations/`. Fill in the blueprint:
+
+```ts
+// database/migrations/<timestamp>_create_links_table.ts
+import { Migration, Schema } from '@rudderjs/database'
+
+export default class extends Migration {
+  async up() {
+    await Schema.create('links', (t) => {
+      t.id()                 // auto-increment integer primary key
+      t.string('title')
+      t.string('url')
+      t.timestamps()         // createdAt + updatedAt
+    })
+  }
+
+  async down() {
+    await Schema.dropIfExists('links')
+  }
+}
+```
+
+Apply it:
+
+```bash
+pnpm rudder migrate
+```
+
+`migrate` does two things: it creates the table, and it regenerates `app/Models/__schema/registry.d.ts` — a typed map of every table's columns, introspected from the real database.
+
+That second part is why the model is now tiny. Create `app/Models/Link.ts`:
 
 ```ts
 // app/Models/Link.ts
 import { Model } from '@rudderjs/orm'
 
-export class Link extends Model {
-  static table    = 'link'              // Prisma client delegate (camelCase of the model name)
+export class Link extends Model.for<'links'>() {
+  static table    = 'links'
   static fillable = ['title', 'url']    // columns mass-assignable from create()/update()
-
-  id!:        string
-  title!:     string
-  url!:       string
-  createdAt!: Date
+  // no id!/title!/url! fields — column types come from the generated registry
 }
 ```
 
-`static fillable` is the allowlist of columns a form can set — any other key in the request body is dropped before it reaches the database, so a crafted payload can't write columns you didn't intend.
+`Model.for<'links'>()` binds the class to the generated registry, so `link.id` (number), `link.title`, `link.url`, and `link.createdAt` (Date) are all typed from the migrated schema — they can't drift from the database. `static fillable` is the allowlist of columns a form can set — any other key in the request body is dropped before it reaches the database, so a crafted payload can't write columns you didn't intend.
 
-Now describe the table for Prisma. Add a `Link` model to `prisma/schema/modules.prisma` (the file the scaffolder reserves for your own models):
-
-```prisma
-// prisma/schema/modules.prisma
-model Link {
-  id        String   @id @default(cuid())
-  title     String
-  url       String
-  createdAt DateTime @default(now())
-}
-```
-
-Sync the schema to your dev database and regenerate the client:
-
-```bash
-pnpm rudder db:push
-pnpm rudder db:generate
-```
-
-::: tip `static table` is the *delegate*, not the SQL table
-On Prisma, `static table` is the camelCase client delegate (`link`), not the SQL table name. Getting this wrong surfaces as `Prisma has no delegate for table "..."`.
+::: tip Using Prisma or Drizzle instead?
+The same model API works on all three engines — only the schema step differs. On Prisma you'd add the `Link` model to `prisma/schema/modules.prisma` and run `pnpm rudder db:push && pnpm rudder db:generate`, then declare the model's fields by hand (`Model.for` is native-only; Prisma generates its own typed client). See [Prisma](/guide/database/prisma) and [Drizzle](/guide/database/drizzle).
 :::
 
 ## 3. Load the list — a controller view
@@ -121,7 +134,7 @@ import { getCsrfToken } from '@rudderjs/middleware/client'
 // Exporting `Props` opts this view into compile-time prop checks —
 // the view('links', { links }) call above is now type-checked.
 export interface Props {
-  links: { id: string; title: string; url: string }[]
+  links: { id: number; title: string; url: string }[]
 }
 
 export default function Links({ links }: Props) {

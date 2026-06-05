@@ -55,7 +55,7 @@ Rudder provides everything a typical web application needs:
 
 - **HTTP server** with routing, middleware groups, validation, and form requests
 - **DI container** with constructor injection, service providers, and auto-discovery
-- **ORM** with Prisma or Drizzle adapters and an Eloquent-style query API
+- **ORM** with an Eloquent-style query API on the built-in native engine (SQLite/Postgres/MySQL, typed models from migrations) — or Prisma/Drizzle adapters
 - **Auth** with guards, gates, policies, password reset, and email verification
 - **Sessions** backed by HMAC-signed cookies or Redis
 - **Queues** with BullMQ or Inngest, plus a built-in scheduler

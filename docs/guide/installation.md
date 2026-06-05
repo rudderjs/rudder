@@ -24,8 +24,8 @@ The scaffolder asks a short recipe-driven sequence, then generates only the code
 |---|---|---|
 | 1 | Project name | — |
 | 2 | What are you building? *(recipe)* | Web app · SaaS · API service · Realtime · Minimal · Custom |
-| 3 | Database | Prisma · Drizzle *(+ None for Minimal/Custom)* |
-| 4 | Database driver | SQLite · PostgreSQL · MySQL — only when an ORM is selected |
+| 3 | Database | Native *(default — built-in, zero-config SQLite)* · Prisma · Drizzle *(+ None for Minimal/Custom)* |
+| 4 | Database driver | SQLite · PostgreSQL · MySQL — only for Prisma/Drizzle; Native pins SQLite, so the prompt is skipped |
 | 5 | Frontend framework | React · Vue · Solid · None — skipped for `api-service` / `minimal` |
 | 6 | Styling | Tailwind+shadcn · Tailwind · Plain CSS — only when a framework is selected |
 | 7 | Is your DB running now? | Only for PostgreSQL/MySQL — if yes, the installer pushes the schema for you |
@@ -42,7 +42,7 @@ Each recipe is a curated bundle of packages — pick one of the five named recip
 | **Minimal** | nothing beyond the framework core | no |
 | **Custom** | *(prompts the full multiselect)* | optional |
 
-When **Install and run setup** is `yes` (the default), the scaffolder runs the entire post-scaffold sequence for you — `pnpm install`, `rudder providers:discover`, `rudder db:generate`, `rudder db:push` (for SQLite, or after your confirmation for Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (when needed), `rudder passport:keys` (when Passport is selected), and `git init` + initial commit. On the happy path the final panel says one thing:
+When **Install and run setup** is `yes` (the default), the scaffolder runs the entire post-scaffold sequence for you — `pnpm install`, `rudder providers:discover`, the database setup (`rudder migrate` on the native engine; `rudder db:generate` + `rudder db:push` for Prisma/Drizzle — immediately on SQLite, after your confirmation on Postgres/MySQL), `rudder vendor:publish --tag=auth-views-*` (when needed), `rudder passport:keys` (when Passport is selected), and `git init` + initial commit. On the happy path the final panel says one thing:
 
 ```bash
 cd my-app && pnpm dev
@@ -126,7 +126,11 @@ For an existing Vite project, install the foundation packages and wire them up b
 pnpm add @rudderjs/core @rudderjs/server-hono @rudderjs/router
 pnpm add -D vite typescript
 
-# Choose your ORM:
+# Choose your data layer — native engine (built-in, no external ORM):
+pnpm add @rudderjs/orm better-sqlite3
+pnpm add -D @types/better-sqlite3
+
+# …or the Prisma adapter:
 pnpm add @rudderjs/orm @rudderjs/orm-prisma @prisma/client
 pnpm add -D prisma
 ```

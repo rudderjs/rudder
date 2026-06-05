@@ -177,19 +177,26 @@ The `connections` map is a **menu** — entries are lazy, and an unused named co
 
 ## Unified rudder commands
 
-The framework wraps both ORMs' migration tooling behind a uniform set of `rudder` commands. They auto-detect which adapter is in use and delegate to the underlying tool:
+The framework wraps every engine's schema tooling behind a uniform set of `rudder` commands. They auto-detect which engine is in use and delegate to the underlying tool:
 
 ```bash
 pnpm rudder migrate              # apply pending migrations (production-safe)
 pnpm rudder migrate:fresh        # drop all tables and re-migrate from scratch (dev only)
 pnpm rudder migrate:status       # show migration status
 pnpm rudder make:migration <name>  # create a new migration file
-pnpm rudder db:push              # push schema directly without a migration file (dev only)
-pnpm rudder db:generate          # regenerate the Prisma client (no-op for Drizzle)
+pnpm rudder db:push              # push schema directly without a migration file (dev only — Prisma/Drizzle)
+pnpm rudder db:generate          # regenerate the Prisma client (no-op for Drizzle; native has no client to generate)
 pnpm rudder db:seed              # run the seed command from routes/console.ts
 ```
 
-A typical development loop:
+A typical development loop on the **native engine** — every change is a tracked migration, and the typed registry regenerates automatically:
+
+```bash
+pnpm rudder make:migration add_published_to_posts
+pnpm rudder migrate              # applies it + rewrites app/Models/__schema/registry.d.ts
+```
+
+On **Prisma/Drizzle**, fast iteration can skip the migration file:
 
 ```bash
 # 1. Edit your schema (prisma/schema/*.prisma or database/schema.ts)
@@ -199,18 +206,13 @@ pnpm rudder db:push
 pnpm rudder db:generate
 ```
 
-When the change is ready to ship, replace step 2 with a tracked migration:
-
-```bash
-pnpm rudder make:migration add_published_to_posts
-pnpm rudder migrate
-```
+When the change is ready to ship, replace step 2 with a tracked migration (`make:migration` + `migrate`).
 
 Production deploys run only `pnpm rudder migrate` — never `db:push` or `migrate:fresh`.
 
 ## Provider boot order
 
-The database provider must boot **before any provider whose `boot()` queries models**. The auto-discovery system already orders this correctly — `orm-prisma` (or `orm-drizzle`) sits in the `infrastructure` stage and runs ahead of `feature` providers like queues and notifications. If you list providers manually, put the database first:
+The database provider must boot **before any provider whose `boot()` queries models**. The auto-discovery system already orders this correctly — the database provider (`orm-prisma`, `orm-drizzle`, or the native engine's `NativeDatabaseProvider`) sits in the `infrastructure` stage and runs ahead of `feature` providers like queues and notifications. If you list providers manually, put the database first:
 
 ```ts
 import { DatabaseProvider } from '@rudderjs/orm-prisma'
@@ -223,7 +225,7 @@ export default [
 
 ## Schema publishing
 
-Packages that ship database tables publish their schema files into your project so Prisma's multi-file schema can pick them up:
+On **Prisma**, packages that ship database tables publish their schema files into your project so the multi-file schema can pick them up:
 
 ```bash
 pnpm rudder vendor:publish --tag=auth-schema          # → prisma/schema/auth.prisma
@@ -231,6 +233,8 @@ pnpm rudder vendor:publish --tag=notification-schema   # → prisma/schema/notif
 ```
 
 After publishing, run `pnpm rudder db:push` or create a migration to apply the new tables. Each package's documentation lists the right tag.
+
+On the **native engine** there's nothing to publish for the common case — `create-rudder` scaffolds the `users` table as a regular migration in `database/migrations/` when Auth is selected, and your own tables follow the same pattern.
 
 ## Seeding
 
