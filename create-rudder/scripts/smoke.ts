@@ -533,10 +533,16 @@ async function main(): Promise<void> {
         throw new Error(`--via=cli requires a profile that matches a recipe (one of: ${validRecipes.join(', ')}); got "${PROFILE}"`)
       }
       const cliEntry = path.join(REPO_ROOT, 'create-rudder', 'dist', 'index.js')
+      // Pin --orm to the profile's engine: the recipe default is `native`
+      // (since the non-interactive/interactive default unification), but the
+      // post-scaffold steps below branch on ctx.orm — without the pin a
+      // prisma profile would scaffold a native app and then run
+      // `prisma generate` against nothing.
       const args = [
         cliEntry, ctx.name,
         '--json',
         `--recipe=${PROFILE}`,
+        `--orm=${ctx.orm === false ? 'none' : ctx.orm}`,
         `--framework=${FRAMEWORK}`,
         '--db=sqlite',
         '--install=false',

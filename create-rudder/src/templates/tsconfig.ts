@@ -16,6 +16,10 @@ export function tsconfigJson(ctx: TemplateContext): string {
     emitDecoratorMetadata:      true,
     skipLibCheck:               true,
     noEmit:                     true,
+    // `types` replaces automatic @types inclusion: 'node' keeps the global
+    // `process` used by config/, 'vite/client' types `import.meta.env` so
+    // app code touching it passes `tsc --noEmit` out of the box.
+    types:                      ['node', 'vite/client'],
     baseUrl:                    '.',
     paths:                      { '@/*': ['./src/*'], 'App/*': ['./app/*'] },
     allowImportingTsExtensions: true,

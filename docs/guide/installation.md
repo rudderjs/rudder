@@ -76,7 +76,7 @@ When `create-rudder` runs inside an AI coding agent — Claude Code, Cursor, Git
 
 ```bash
 CLAUDECODE=1 npx create-rudder my-app \
-  --recipe=web-app --db=sqlite \
+  --recipe=web-app \
   --framework=react --styling=tailwind+shadcn \
   --install=true
 ```
@@ -87,7 +87,8 @@ CLAUDECODE=1 npx create-rudder my-app \
   "success": true, "name": "my-app", "directory": "/abs/path/my-app", "files": 36,
   "agent": "claude-code",
   "installed": true, "providersDiscovered": true,
-  "dbGenerated": true, "dbPushed": true,
+  "dbPushed": true,        // native engine: carries the `rudder migrate` result;
+                           // prisma/drizzle additionally report "dbGenerated"
   "gitInitialized": true
 }
 
@@ -100,7 +101,8 @@ Every prompt has a corresponding flag. Each flag also works in interactive mode 
 | Flag | Values |
 |---|---|
 | `--recipe` | `web-app`, `saas`, `api-service`, `realtime`, `minimal`, `custom` |
-| `--db` | `sqlite`, `postgresql`, `mysql` *(omit when `--recipe=minimal`)* |
+| `--orm` | `native` *(default)*, `prisma`, `drizzle`, `none` |
+| `--db` | `sqlite`, `postgresql`, `mysql` *(only needed with `--orm=prisma\|drizzle`; the native default pins SQLite — passing `--db=postgresql\|mysql` without `--orm` implies Prisma)* |
 | `--framework` | `react`, `vue`, `solid`, `none` *(omit for `api-service` / `minimal`)* |
 | `--styling` | `tailwind+shadcn`, `tailwind`, `plain` *(optional — recipe picks a sensible default)* |
 | `--packages` | comma-separated package names *(only when `--recipe=custom`)* |
@@ -110,7 +112,7 @@ Every prompt has a corresponding flag. Each flag also works in interactive mode 
 | `--json` | force JSON output regardless of detection |
 | `--interactive` | force the prompt UI even inside an agent |
 
-The legacy explicit-flag shape (`--orm`, `--packages`, `--frameworks`, `--primary-framework`, `--tailwind`, `--shadcn`) still parses for backwards-compat with pre-recipe scripts. The `--demos` flag is preserved as a silent no-op — demos were dropped from the default scaffolder.
+The legacy explicit-flag shape (`--orm` without `--recipe`, plus `--packages`, `--frameworks`, `--primary-framework`, `--tailwind`, `--shadcn`) still parses for backwards-compat with pre-recipe scripts. The `--demos` flag is preserved as a silent no-op — demos were dropped from the default scaffolder.
 
 Set `RUDDER_NONINTERACTIVE=1` in the environment to opt into JSON mode without an agent (e.g. CI scripts).
 
