@@ -17,6 +17,7 @@ import {
   resolveTransactionRunner,
   resolveConnectionResolver,
   resolveNamedTransactionRunner,
+  resolveAfterCommitRunner,
 } from './registry-bridge.js'
 import { Expression, raw } from './expression.js'
 
@@ -68,6 +69,7 @@ export interface DBConnection {
   delete(sql: string, bindings?: readonly unknown[]): Promise<number>
   statement(sql: string, bindings?: readonly unknown[]): Promise<number>
   transaction<T>(fn: () => Promise<T>, opts?: TransactionOptions): Promise<T>
+  afterCommit(fn: () => void | Promise<void>): Promise<void>
   listen(listener: QueryListener): Promise<void>
 }
 
@@ -126,6 +128,22 @@ export const DB = {
   },
 
   /**
+   * Queue `fn` to run after the transaction open in the current async context
+   * commits, mirroring Laravel's `DB::afterCommit` — the standard pattern for
+   * side effects that must not fire on a rollback (emails, webhooks, queue
+   * dispatches). Runs only when the OUTERMOST transaction commits; a rollback
+   * (or an enclosing savepoint's rollback) drops the callback. With no open
+   * transaction, `fn` runs immediately. Shares the queue with `transaction()` /
+   * `Model.transaction()` — the runner is `@rudderjs/orm`'s `afterCommit()`.
+   *
+   * @throws if no after-commit runner is registered (no database provider
+   *   loaded, or `@rudderjs/orm` predates after-commit support).
+   */
+  async afterCommit(fn: () => void | Promise<void>): Promise<void> {
+    return resolveAfterCommitRunner()(fn)
+  },
+
+  /**
    * Register a query listener, mirroring Laravel's `DB::listen`. The listener
    * fires once per executed query with `{ sql, bindings, duration }` (duration
    * in ms) — use it for app-level query logging or slow-query alerting.
@@ -179,6 +197,9 @@ export const DB = {
       },
       async transaction(fn, opts) {
         return resolveNamedTransactionRunner()(name, fn, opts)
+      },
+      async afterCommit(fn) {
+        return resolveAfterCommitRunner()(fn, { connection: name })
       },
       async listen(listener) {
         requireOnQuery(await adapterFor())(listener)

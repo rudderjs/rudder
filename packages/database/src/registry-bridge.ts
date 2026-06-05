@@ -38,10 +38,20 @@ export type ConnectionResolver = (name: string) => Promise<OrmAdapter>
  *  counterpart of {@link TransactionRunner}, same injection rationale. */
 export type NamedTransactionRunner = <T>(name: string, fn: () => Promise<T>, opts?: TransactionOptions) => Promise<T>
 
+/**
+ * Queues `fn` to run after the current transaction commits (drops it on
+ * rollback; runs immediately when no transaction is open). Pushed in by
+ * `@rudderjs/orm` (its `afterCommit()` free function, which owns the
+ * transaction-tree bookkeeping) so `DB.afterCommit()` shares the queue with
+ * `Model.*` / `transaction()` call sites.
+ */
+export type AfterCommitRunner = (fn: () => void | Promise<void>, opts?: { connection?: string }) => Promise<void>
+
 let resolver: (() => OrmAdapter) | null = null
 let txRunner: TransactionRunner | null = null
 let connectionResolver: ConnectionResolver | null = null
 let namedTxRunner: NamedTransactionRunner | null = null
+let afterCommitRunner: AfterCommitRunner | null = null
 
 /**
  * Register the function that resolves the active ORM adapter. Called once by
@@ -142,10 +152,33 @@ export function resolveNamedTransactionRunner(): NamedTransactionRunner {
   return namedTxRunner
 }
 
+/**
+ * Register the function that queues after-commit callbacks. Called by
+ * `@rudderjs/orm`'s `db-bridge` module. Idempotent — last registration wins.
+ */
+export function registerAfterCommitRunner(fn: AfterCommitRunner): void {
+  afterCommitRunner = fn
+}
+
+/** Resolve the after-commit runner. Throws a clear error when none has been
+ *  registered — i.e. `@rudderjs/orm` (and a database provider) wasn't loaded,
+ *  or the installed `@rudderjs/orm` predates after-commit support. */
+export function resolveAfterCommitRunner(): AfterCommitRunner {
+  if (!afterCommitRunner) {
+    throw new Error(
+      '[RudderJS DB] No after-commit runner is available. DB.afterCommit() runs ' +
+        'through @rudderjs/orm — make sure a database provider is registered (and ' +
+        '@rudderjs/orm installed) before calling DB.afterCommit().',
+    )
+  }
+  return afterCommitRunner
+}
+
 /** @internal — test-only reset of the registered resolvers + transaction runners. */
 export function __resetAdapterResolver(): void {
   resolver = null
   txRunner = null
   connectionResolver = null
   namedTxRunner = null
+  afterCommitRunner = null
 }

@@ -13,7 +13,7 @@ The SQL data-layer foundation (`Illuminate\Database` analog): the `DB` facade + 
 
 ## Layout
 
-- `src/db.ts` — `DB` facade (`select/insert/update/delete/statement/transaction/raw/listen/connection`); resolves the active adapter via the registry bridge — one connection shared with Models, never a second.
+- `src/db.ts` — `DB` facade (`select/insert/update/delete/statement/transaction/afterCommit/raw/listen/connection`); resolves the active adapter via the registry bridge — one connection shared with Models, never a second.
 - `src/registry-bridge.ts` — inversion seam: orm's `db-bridge.ts` *pushes* `ModelRegistry.getAdapter` / `transaction()` / the named-connection resolver in (database can't import orm). Module-scoped state, re-registered each boot by the providers.
 - `src/sticky.ts` — sticky-read request scope, exported at `./sticky` (node-only; orm re-exports it).
 - `src/expression.ts` / `src/execution.ts` — re-exports from `@rudderjs/contracts` (`Expression`/`raw`, `Row`/`Executor`/`Transaction`/`Connection`). Contracts owns them to avoid a build cycle and keep the QB raw methods client-safe.

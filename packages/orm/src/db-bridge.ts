@@ -22,11 +22,16 @@ import {
   registerTransactionRunner,
   registerConnectionResolver,
   registerNamedTransactionRunner,
+  registerAfterCommitRunner,
 } from '@rudderjs/database'
-import { ModelRegistry, ConnectionManager, transaction } from './index.js'
+import { ModelRegistry, ConnectionManager, transaction, afterCommit } from './index.js'
 
 registerAdapterResolver(() => ModelRegistry.getAdapter())
 registerTransactionRunner(transaction)
+// `DB.afterCommit(fn)` queues into the SAME per-transaction-tree callback
+// store the orm's `afterCommit()` / `transaction()` use — one queue shared by
+// every entry point (`Model.*`, `transaction()`, the DB facade).
+registerAfterCommitRunner(afterCommit)
 // Named connections: prefer the transaction-scoped adapter (so a
 // `DB.connection(name).select()` inside `transaction(fn, { connection: name })`
 // joins that open transaction), else open-or-reuse via the ConnectionManager.

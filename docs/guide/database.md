@@ -306,6 +306,32 @@ All three adapters support it on Postgres and MySQL — the native engine emits 
 - **Outermost call only.** A nested `transaction()` maps to a savepoint, whose isolation can't diverge from the enclosing transaction's — passing `isolationLevel` there throws.
 - **SQLite throws.** SQLite has no isolation levels (its single-writer model is already serializable), so requesting one fails loudly instead of silently meaning nothing.
 
+### After-commit hooks
+
+Side effects that belong to a unit of work — emails, webhooks, queue dispatches, cache invalidation — must not fire if the transaction rolls back, and must not fire *early* (a queued job racing the commit would read the old data). Queue them with `afterCommit()`:
+
+```ts
+import { transaction, afterCommit } from '@rudderjs/orm'
+// or: DB.afterCommit(fn) — same queue, mirroring Laravel's DB::afterCommit
+
+await transaction(async () => {
+  const order = await Order.create({ items, userId })
+  await Inventory.decrement(itemId, 'stock', qty)
+
+  await afterCommit(async () => {
+    await new OrderPlacedMail(order).send()   // runs only once the order is durable
+  })
+})  // commits, then flushes the queue; rolls back → the mail never sends
+```
+
+Semantics:
+
+- **Flush on commit, drop on rollback.** Callbacks run in registration order after the data is durable; the awaited `transaction(...)` resolves once they finish. On rollback the queue is discarded.
+- **Nested transactions queue up the tree** — callbacks registered inside a savepoint run only when the **outermost** transaction commits. A savepoint that rolls back discards the callbacks registered inside it (and only those); a savepoint that completes hands its callbacks to the enclosing level.
+- **No open transaction → runs immediately.** Code paths shared between transactional and plain contexts behave sensibly without branching.
+- **A throwing callback propagates** to the `transaction()` caller and skips the remaining callbacks. The transaction itself is already committed at that point — the error is the callback's, not the unit of work's.
+- Works on **all three adapters** (the queue lives in `transaction()` itself, above the adapter seam) and on named connections — each connection's transaction tree keeps its own queue; inside nested transactions on *different* connections, a bare call attaches to the innermost one (pass `{ connection: 'name' }` — or use `DB.connection('name').afterCommit(fn)` — to target an enclosing tree explicitly).
+
 ## Pessimistic locking
 
 Lock the selected rows for the rest of the transaction with `lockForUpdate()` (writers and locking readers block) or `sharedLock()` (writers block, readers proceed). Only meaningful inside a `transaction()`:

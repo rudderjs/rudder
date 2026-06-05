@@ -21,9 +21,11 @@ export {
   resolveConnectionResolver,
   registerNamedTransactionRunner,
   resolveNamedTransactionRunner,
+  registerAfterCommitRunner,
+  resolveAfterCommitRunner,
   __resetAdapterResolver,
 } from './registry-bridge.js'
-export type { TransactionRunner, ConnectionResolver, NamedTransactionRunner } from './registry-bridge.js'
+export type { TransactionRunner, ConnectionResolver, NamedTransactionRunner, AfterCommitRunner } from './registry-bridge.js'
 export type { Row, Executor, Transaction, Connection } from './execution.js'
 export type { QueryEvent, QueryListener } from '@rudderjs/contracts'
 
