@@ -69,9 +69,12 @@ test('live pg: pgvector cast round-trip + whereVectorSimilarTo + selectVectorDis
     await Doc.create({ body: 'beta',  embedding: [0, 1, 0] })
     await Doc.create({ body: 'close', embedding: [0.9, 0.1, 0] })
 
-    // Cast read path: pgvector's text output parses back to number[].
+    // Cast read path: castGet applies at SERIALIZATION (toJSON), not on raw
+    // property access — that's the ORM's cast contract. The stored value is
+    // pgvector's text output; toJSON parses it back to number[].
     const found = await Doc.find(alpha.id)
-    assert.deepEqual(found?.embedding, [1, 0, 0])
+    assert.equal(typeof (found as unknown as { embedding: unknown })?.embedding, 'string')
+    assert.deepEqual((found!.toJSON() as { embedding: number[] }).embedding, [1, 0, 0])
 
     // Similarity ranking (cosine): nearest-first to [1,0,0].
     const ranked = await adapter.query<{ body: string }>(table)
