@@ -35,15 +35,15 @@ export class SchemaBuilder {
     }
   }
 
-  /** `ALTER TABLE` — add/drop/rename columns + add/drop indexes via a callback.
-   *  A `.change()` (column type/constraint change) can't be done in place on
-   *  SQLite, so it routes through the table-rebuild dance (7.4b) instead of a
-   *  plain `ALTER`. */
+  /** `ALTER TABLE` — add/drop/rename/change columns + add/drop indexes and
+   *  foreign keys via a callback. A `.change()` (column type/constraint
+   *  change) is a native `ALTER COLUMN` / `MODIFY` on pg/mysql (7.4b); SQLite
+   *  can't change a column in place, so it routes through the table-rebuild
+   *  dance instead (which requires `change()` to be the only op in the call). */
   async table(table: string, build: (table: AlterBlueprint) => void): Promise<void> {
     const blueprint = new AlterBlueprint(table)
     build(blueprint)
-    if (blueprint.columns.some(c => c.change)) {
-      this.requireSqlite('Schema.table column change()')
+    if (this.dialect.name === 'sqlite' && blueprint.columns.some(c => c.change)) {
       await rebuildTable(this.executor, this.dialect, blueprint)
       return
     }

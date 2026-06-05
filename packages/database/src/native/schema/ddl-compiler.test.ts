@@ -485,3 +485,83 @@ describe('DDL compiler — ALTER on pg/mysql (FKs + DROP INDEX scoping)', async 
     )
   })
 })
+
+// ─── ALTER column change() on pg/mysql (7.4b) ────────────────────────────────
+//
+// pg/mysql express `.change()` natively — mysql as one `MODIFY` carrying the
+// FULL new spec, pg as a single comma-joined `ALTER COLUMN` statement where
+// the new definition REPLACES the old one (no default → DROP DEFAULT, no
+// nullable() → SET NOT NULL — Laravel semantics). SQLite keeps the
+// table-rebuild path in SchemaBuilder; reaching this compiler with a change
+// on sqlite is a direct-compile misuse and throws.
+
+describe('DDL compiler — column change() on pg/mysql (7.4b)', async () => {
+  const { PgDialect } = await import('../dialect-pg.js')
+  const { MysqlDialect } = await import('../dialect-mysql.js')
+  const pg = new PgDialect()
+  const my = new MysqlDialect()
+
+  const alterOn = (d: import('../dialect.js').Dialect, table: string, build: (t: AlterBlueprint) => void): string[] => {
+    const bp = new AlterBlueprint(table)
+    build(bp)
+    return compileAlterTable(bp, d).map(s => s.sql)
+  }
+
+  it('mysql MODIFY carries the full new spec (type, null, default)', () => {
+    assert.deepStrictEqual(
+      alterOn(my, 'users', (t) => t.string('email', 100).nullable().change()),
+      ['ALTER TABLE `users` MODIFY `email` varchar(100)'],
+    )
+    assert.deepStrictEqual(
+      alterOn(my, 'users', (t) => t.integer('votes').default(0).change()),
+      ['ALTER TABLE `users` MODIFY `votes` int NOT NULL DEFAULT 0'],
+    )
+  })
+
+  it('mysql MODIFY composes positional AFTER', () => {
+    assert.deepStrictEqual(
+      alterOn(my, 'users', (t) => t.string('email').nullable().change().after('name')),
+      ['ALTER TABLE `users` MODIFY `email` varchar(255) AFTER `name`'],
+    )
+  })
+
+  it('pg change is one comma-joined ALTER COLUMN statement, new definition replaces old', () => {
+    assert.deepStrictEqual(
+      alterOn(pg, 'users', (t) => t.string('email', 100).nullable().change()),
+      ['ALTER TABLE "users" ALTER COLUMN "email" TYPE varchar(100), ALTER COLUMN "email" DROP NOT NULL, ALTER COLUMN "email" DROP DEFAULT'],
+    )
+    assert.deepStrictEqual(
+      alterOn(pg, 'users', (t) => t.integer('votes').default(0).change()),
+      ['ALTER TABLE "users" ALTER COLUMN "votes" TYPE integer, ALTER COLUMN "votes" SET NOT NULL, ALTER COLUMN "votes" SET DEFAULT 0'],
+    )
+  })
+
+  it('pg useCurrent() becomes SET DEFAULT CURRENT_TIMESTAMP', () => {
+    const [sql] = alterOn(pg, 'users', (t) => t.timestamp('seenAt').useCurrent().change())
+    assert.match(sql ?? '', /SET DEFAULT CURRENT_TIMESTAMP/)
+  })
+
+  it('change() into a primary/auto-increment column throws', () => {
+    assert.throws(
+      () => alterOn(pg, 'users', (t) => t.increments('id').change()),
+      /Cannot change\(\) "id" into a primary-key\/auto-increment column/,
+    )
+  })
+
+  it('a change composes with other ops in one call (renames → changes → adds)', () => {
+    const sql = alterOn(my, 'users', (t) => {
+      t.string('slug').nullable()
+      t.string('email', 100).nullable().change()
+      t.renameColumn('a', 'b')
+    })
+    assert.match(sql[0] ?? '', /RENAME COLUMN/)
+    assert.match(sql[1] ?? '', /MODIFY `email`/)
+    assert.match(sql[2] ?? '', /ADD COLUMN `slug`/)
+  })
+
+  it('direct-compile change on sqlite throws the SchemaBuilder pointer', () => {
+    const bp = new AlterBlueprint('users')
+    bp.string('email').nullable().change()
+    assert.throws(() => compileAlterTable(bp, dialect), /table-rebuild path/)
+  })
+})

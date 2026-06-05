@@ -8,9 +8,9 @@
 //
 // SQLite supports ADD COLUMN, RENAME COLUMN, DROP COLUMN, and table RENAME
 // natively (modern SQLite, which better-sqlite3 ships); the DDL compiler emits
-// those directly. Changing an existing column's type (`t.string('x').change()`)
-// needs the table-rebuild dance and is deferred to 7.4b — the compiler throws a
-// clear error until then.
+// those directly. Changing an existing column (`t.string('x').change()`) is a
+// native `ALTER COLUMN` / `MODIFY` on pg/mysql (7.4b); on SQLite it needs the
+// table-rebuild dance, routed by SchemaBuilder before the compiler runs.
 
 import { Blueprint } from './blueprint.js'
 

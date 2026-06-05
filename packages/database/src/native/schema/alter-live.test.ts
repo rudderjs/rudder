@@ -81,7 +81,22 @@ function defineScenario(ctx: () => { driver: Driver; dialect: Dialect; schema: S
     info = (await inspectTable(driver, dialect, TABLE))!
     assert.ok(!info.indexes.some(i => i.name === `${TABLE}_isbn_index`), 'isbn index must be gone')
 
-    // 6. DROP COLUMN.
+    // 6. CHANGE COLUMN (7.4b) — int → bigint, NOT NULL → nullable, gains a
+    // default. pg = one comma-joined ALTER COLUMN; mysql = MODIFY full spec.
+    await schema.table(TABLE, (t) => t.bigInteger('age').nullable().default(18).change())
+    info = (await inspectTable(driver, dialect, TABLE))!
+    const aged = info.columns.find(c => c.name === 'age')
+    assert.ok(aged, 'age column still present after change')
+    assert.match(aged!.type.toLowerCase(), /bigint|int8/)
+    assert.strictEqual(aged!.notNull, false)
+    assert.ok(String(aged!.dflt).includes('18'), `default must carry 18, got ${String(aged!.dflt)}`)
+    // ... and the new default actually applies.
+    await driver.execute(`INSERT INTO ${dialect.quoteId(TABLE)} (title) VALUES ('defaulted')`, [])
+    const defaulted = await driver.execute(
+      `SELECT age FROM ${dialect.quoteId(TABLE)} WHERE title = 'defaulted'`, [])
+    assert.strictEqual(Number(defaulted[0]?.['age']), 18)
+
+    // 7. DROP COLUMN.
     await schema.table(TABLE, (t) => t.dropColumn('age'))
     assert.strictEqual(await schema.hasColumn(TABLE, 'age'), false)
   })

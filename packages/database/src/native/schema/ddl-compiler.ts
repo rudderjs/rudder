@@ -278,11 +278,56 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     out.push({ sql: `ALTER TABLE ${t} RENAME COLUMN ${dialect.quoteId(r.from)} TO ${dialect.quoteId(r.to)}`, bindings: [] })
   }
 
-  // 2. Add columns (one ALTER ... ADD COLUMN each), with SQLite's restrictions.
+  // 2. Column changes (`.change()`) — pg/mysql express them natively (7.4b);
+  // SQLite can't and routes through the table-rebuild dance in SchemaBuilder
+  // BEFORE this compiler runs, so reaching here on sqlite is a direct-compile
+  // misuse and throws the pointer.
   for (const col of blueprint.columns) {
-    if (col.change) {
-      throw new NativeNotImplementedError(`Schema.table column change() on "${blueprint.table}.${col.name}"`, 'a later phase (7.4b — the SQLite table-rebuild path)')
+    if (!col.change) continue
+    if (dialect.name === 'sqlite') {
+      throw new NativeNotImplementedError(
+        `compileAlterTable column change() on "${blueprint.table}.${col.name}" (SQLite)`,
+        'the SchemaBuilder table-rebuild path — drive changes through Schema.table()/SchemaBuilder.table(), not the compiler directly',
+      )
     }
+    if (col.autoIncrement || col.primary) {
+      throw new NativeOrmError(
+        'NATIVE_DDL_CHANGE_PRIMARY',
+        `[RudderJS ORM native] Cannot change() "${col.name}" into a primary-key/auto-increment column — recreate the table instead.`,
+      )
+    }
+    if (dialect.name === 'mysql') {
+      // MySQL MODIFY takes the FULL new column spec (type, nullability,
+      // default, comment) in one clause — anything omitted is RESET, exactly
+      // the "the new definition replaces the old one" semantics Laravel's
+      // change() documents. Positional FIRST/AFTER composes here too.
+      let sql = `ALTER TABLE ${t} MODIFY ${compileColumn(col, dialect, false)}`
+      if (col.first)      sql += ' FIRST'
+      else if (col.after) sql += ` AFTER ${dialect.quoteId(col.after)}`
+      out.push({ sql, bindings: [] })
+    } else {
+      // Postgres alters each facet separately; one statement with
+      // comma-joined actions keeps it atomic. The new definition replaces the
+      // old one (Laravel semantics): no `.default(...)` → DROP DEFAULT, no
+      // `.nullable()` → SET NOT NULL. Type changes rely on pg's implicit
+      // casts (varchar↔text, widenings); an incompatible change needs a raw
+      // `USING` statement — `DB.statement('ALTER TABLE … USING …')`.
+      const c = dialect.quoteId(col.name)
+      const actions = [`ALTER COLUMN ${c} TYPE ${dialect.columnTypeSql(col)}`]
+      actions.push(col.nullable ? `ALTER COLUMN ${c} DROP NOT NULL` : `ALTER COLUMN ${c} SET NOT NULL`)
+      if (col.useCurrent)        actions.push(`ALTER COLUMN ${c} SET DEFAULT CURRENT_TIMESTAMP`)
+      else if (col.hasDefault)   actions.push(`ALTER COLUMN ${c} SET DEFAULT ${defaultLiteral(col.default, dialect)}`)
+      else                       actions.push(`ALTER COLUMN ${c} DROP DEFAULT`)
+      out.push({ sql: `ALTER TABLE ${t} ${actions.join(', ')}`, bindings: [] })
+      // pg comments stay out-of-line on change too.
+      const comment = compileColumnComment(blueprint.table, col, dialect)
+      if (comment) out.push(comment)
+    }
+  }
+
+  // 3. Add columns (one ALTER ... ADD COLUMN each), with SQLite's restrictions.
+  for (const col of blueprint.columns) {
+    if (col.change) continue
     if (col.autoIncrement || col.primary) {
       throw new NativeOrmError('NATIVE_DDL_ADD_PRIMARY', `[RudderJS ORM native] Cannot ADD a primary-key column ("${col.name}") to an existing table on SQLite. Create the table with its primary key, or rebuild it.`)
     }
@@ -302,12 +347,12 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     if (comment) out.push(comment)
   }
 
-  // 3. New indexes (table-level + per-column unique()/index() on added columns).
+  // 4. New indexes (table-level + per-column unique()/index() on added/changed columns).
   for (const idx of collectIndexes(blueprint)) {
     out.push(compileCreateIndex(blueprint.table, idx, dialect))
   }
 
-  // 3b. New foreign keys (pg/mysql only — the sqlite guard above already
+  // 4b. New foreign keys (pg/mysql only — the sqlite guard above already
   // rejected them): `ADD CONSTRAINT … FOREIGN KEY … REFERENCES …`, reusing
   // the create-table constraint renderer. Historically these were silently
   // dropped on alter — a migration "succeeded" without its FK.
@@ -327,14 +372,14 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     }
   }
 
-  // 4. Drop indexes (by name). SQLite and pg address an index as a standalone
+  // 5. Drop indexes (by name). SQLite and pg address an index as a standalone
   // schema object; MySQL scopes it to its table (`DROP INDEX … ON <table>`).
   for (const name of blueprint.droppedIndexes) {
     const onTable = dialect.name === 'mysql' ? ` ON ${t}` : ''
     out.push({ sql: `DROP INDEX ${dialect.quoteId(name)}${onTable}`, bindings: [] })
   }
 
-  // 5. Drop columns last.
+  // 6. Drop columns last.
   for (const name of blueprint.droppedColumns) {
     out.push({ sql: `ALTER TABLE ${t} DROP COLUMN ${dialect.quoteId(name)}`, bindings: [] })
   }

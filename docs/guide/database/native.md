@@ -115,6 +115,16 @@ export default class extends Migration {
 
 The blueprint mirrors Laravel — `t.id()`, `t.string(name, len?)`, `t.text()`, `t.integer()`, `t.bigInteger()`, `t.foreignId()`, `t.uuid()`, `t.decimal()`, `t.float()`, `t.boolean()`, `t.dateTime()`, `t.timestamp()`, `t.json()`, `t.binary()`, plus the `t.timestamps()` / `t.softDeletes()` clusters. Column modifiers chain: `.nullable()`, `.unique()`, `.index()`, `.primary()`, `.default(v)`, `.unsigned()`, `.constrained(table?, col?)`. Constraints: `t.primary()`, `t.unique()`, `t.index()`, `t.foreign(cols).references(col).on(table).onDelete(action)`.
 
+Altering an existing table uses `Schema.table(...)` with the same blueprint — add/drop/rename columns, add/drop indexes and foreign keys, and **modify a column in place with `.change()`**:
+
+```ts
+await Schema.table('users', (t) => {
+  t.string('email', 100).nullable().change()   // new definition REPLACES the old one
+})
+```
+
+`.change()` semantics mirror Laravel: the chained definition is the column's **complete** new spec — omit `.default(...)` and any existing default is dropped, omit `.nullable()` and the column becomes `NOT NULL`. On Postgres this compiles to one comma-joined `ALTER TABLE … ALTER COLUMN` statement (type relies on pg's implicit casts — an incompatible conversion needs a raw `USING` via `DB.statement(...)`); on MySQL to a single `MODIFY` carrying the full spec (positional `.after(...)`/`.first()` compose). On SQLite, which can't alter a column in place, `.change()` triggers the table-rebuild dance and must be the only operation in its `Schema.table` call.
+
 ::: tip camelCase columns
 Native columns are **camelCase** (`createdAt`, `userId`, `commentableType`) — a deliberate divergence from Laravel's snake_case, matching the ORM's polymorphic-column and soft-delete defaults.
 :::
