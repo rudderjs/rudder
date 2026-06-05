@@ -74,6 +74,58 @@ export function spliceRudderVersion(line: string, version: string): string | nul
   return line.replace(tail, `$1${rudder} ${sep} $2`)
 }
 
+/** Minimal structural slice of `server.httpServer` used by {@link installBannerSplice}. */
+interface BannerHttpServer {
+  listening: boolean
+  once(event: 'listening' | 'close', listener: () => void): unknown
+}
+
+/**
+ * Wrap `console.log` so the next Vike startup banner gets the Rudder version
+ * spliced in, then restore. Exported for tests.
+ *
+ * The standalone-line fallback (printed when the banner never matches — i.e.
+ * Vike changed its format) is armed from the http server's `listening` event,
+ * NOT from install time: pre-bundling/codegen between `configureServer` and
+ * `listen()` can take arbitrarily long (a heavy `optimizeDeps.include` set is
+ * 3s+), and a fixed window from install time would fire early, restore
+ * `console.log`, and the real banner would print un-spliced. The banner prints
+ * on the tick after `listening`, so 2s from there is generous regardless of
+ * startup cost. Middleware mode (no http server) keeps the immediate arm. If
+ * the server closes before the banner ever matched, restore silently — the
+ * wrapper never outlives the server.
+ */
+export function installBannerSplice(version: string, httpServer?: BannerHttpServer | null): void {
+  const original = console.log
+  let done = false
+  const finish = (): void => { if (!done) { done = true; console.log = original } }
+  console.log = (...args: unknown[]): void => {
+    if (!done && typeof args[0] === 'string') {
+      const spliced = spliceRudderVersion(args[0], version)
+      if (spliced !== null) {
+        finish()
+        original(spliced, ...args.slice(1))
+        return
+      }
+    }
+    original(...(args as []))
+  }
+  const arm = (): void => {
+    setTimeout(() => {
+      if (done) return
+      finish()
+      original(`  \x1b[32m➜\x1b[39m  \x1b[38;5;208m\x1b[1mRudder\x1b[22m v${version}\x1b[39m`)
+    }, 2_000).unref?.()
+  }
+  if (httpServer) {
+    if (httpServer.listening) arm()
+    else httpServer.once('listening', arm)
+    httpServer.once('close', finish)
+  } else {
+    arm()
+  }
+}
+
 // ─── SSR / build externals ─────────────────────────────────
 
 const SSR_EXTERNALS = [
@@ -322,34 +374,14 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       // with no hook to extend it, so we wrap console.log here (installed in
       // configureServer, before the banner prints), rewrite the one banner
       // line, then restore. Fallback: if the banner never matches (Vike changed
-      // its format), print our own line so the version is never silently lost.
+      // its format), print our own line so the version is never silently lost —
+      // armed from `listening`, not from here (see installBannerSplice).
       name: 'rudderjs:banner',
       apply: 'serve',
-      configureServer() {
+      configureServer(server) {
         const version = resolveRudderVersion()
         if (!version) return
-        const original = console.log
-        let done = false
-        const finish = (): void => { if (!done) { done = true; console.log = original } }
-        console.log = (...args: unknown[]): void => {
-          if (!done && typeof args[0] === 'string') {
-            const spliced = spliceRudderVersion(args[0], version)
-            if (spliced !== null) {
-              finish()
-              original(spliced, ...args.slice(1))
-              return
-            }
-          }
-          original(...(args as []))
-        }
-        // Fallback: the banner prints synchronously right after `listen()`, so
-        // if we still haven't matched it on a later macrotask, Vike's format
-        // changed — restore and print our own line.
-        setTimeout(() => {
-          if (done) return
-          finish()
-          original(`  \x1b[32m➜\x1b[39m  \x1b[38;5;208m\x1b[1mRudder\x1b[22m v${version}\x1b[39m`)
-        }, 2_000).unref?.()
+        installBannerSplice(version, server.httpServer)
       },
     },
     {
