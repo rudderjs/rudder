@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { QueryEvent } from '@rudderjs/contracts'
 import { NativeAdapter } from './adapter.js'
+import type { ReadReplicaPicker } from './replica-picker.js'
 import { runWithDatabaseContext } from '../sticky.js'
 
 let dir: string
@@ -32,7 +33,7 @@ async function seedFile(name: string, marker: string): Promise<string> {
 
 /** A split adapter over fresh writer/replica files. Unique connection name per
  *  call — the dev-HMR client cache keys by name. */
-async function splitAdapter(opts: { replicas?: number; sticky?: boolean } = {}): Promise<{
+async function splitAdapter(opts: { replicas?: number; sticky?: boolean; picker?: ReadReplicaPicker } = {}): Promise<{
   adapter: NativeAdapter
   writeFile: string
   inspect: (file: string) => Promise<string[]>
@@ -49,6 +50,7 @@ async function splitAdapter(opts: { replicas?: number; sticky?: boolean } = {}):
     readUrls,
     connectionName: `split-${id}`,
     ...(opts.sticky !== undefined && { sticky: opts.sticky }),
+    ...(opts.picker !== undefined && { readPicker: opts.picker }),
   })
   const inspect = async (file: string): Promise<string[]> => {
     const direct = await NativeAdapter.make({ driver: 'sqlite', url: file })
@@ -168,6 +170,75 @@ test('multiple replicas round-robin per query', async () => {
       seen.push(rows[0]?.src as string)
     }
     assert.deepEqual(seen, ['replica-1', 'replica-2', 'replica-1', 'replica-2'])
+  } finally {
+    await adapter.disconnect()
+  }
+})
+
+test('weighted picker: a zero-weight replica is never read', async () => {
+  const { adapter } = await splitAdapter({ replicas: 2, picker: [0, 1] })
+  try {
+    for (let i = 0; i < 4; i++) {
+      const rows = await adapter.query<{ src: string }>('notes').get()
+      assert.deepEqual(rows.map((r) => r.src), ['replica-2'])
+    }
+  } finally {
+    await adapter.disconnect()
+  }
+})
+
+test("'random' picker stays within the replica pool", async () => {
+  const { adapter } = await splitAdapter({ replicas: 2, picker: 'random' })
+  try {
+    for (let i = 0; i < 8; i++) {
+      const rows = await adapter.query<{ src: string }>('notes').get()
+      assert.match(rows[0]?.src as string, /^replica-[12]$/)
+    }
+  } finally {
+    await adapter.disconnect()
+  }
+})
+
+test('custom picker function routes each read to the index it returns', async () => {
+  const picks: number[] = []
+  const { adapter } = await splitAdapter({
+    replicas: 2,
+    picker: (count) => { const i = picks.length % count; picks.push(i); return i },
+  })
+  try {
+    const first = await adapter.query<{ src: string }>('notes').get()
+    const second = await adapter.query<{ src: string }>('notes').get()
+    assert.deepEqual([first[0]?.src, second[0]?.src], ['replica-1', 'replica-2'])
+    assert.deepEqual(picks, [0, 1])
+  } finally {
+    await adapter.disconnect()
+  }
+})
+
+test('invalid weights fail at adapter construction, not on first read', async () => {
+  const id = ++n
+  const writeFile = await seedFile(`w${id}.db`, 'writer')
+  const readUrl = await seedFile(`r${id}-1.db`, 'replica-1')
+  await assert.rejects(
+    () => NativeAdapter.make({
+      driver: 'sqlite', url: writeFile, readUrls: [readUrl],
+      connectionName: `split-${id}`, readPicker: [1, 1],
+    }),
+    /2 entries for 1 replica/,
+  )
+  // The drivers were opened (and cached) before the picker validation threw —
+  // reuse them through a valid make() so disconnect() closes the file handles
+  // (Windows can't rmSync an open sqlite file).
+  const cleanup = await NativeAdapter.make({
+    driver: 'sqlite', url: writeFile, readUrls: [readUrl], connectionName: `split-${id}`,
+  })
+  await cleanup.disconnect()
+})
+
+test('a custom picker returning an out-of-range index rejects the read with a clear error', async () => {
+  const { adapter } = await splitAdapter({ picker: () => 7 })
+  try {
+    await assert.rejects(() => adapter.query('notes').get(), /returned 7/)
   } finally {
     await adapter.disconnect()
   }

@@ -28,6 +28,11 @@ import { resolveOptionalPeer } from '@rudderjs/support'
 // Sticky-read scope (read/write split) — node-only subpath of @rudderjs/orm,
 // shared with the native engine so `runWithDatabaseContext` covers both.
 import { markWrote, stickyWrote, databaseContextMiddleware } from '@rudderjs/orm/sticky'
+// Replica-selection strategies (read/write split) — shared with the native
+// engine via the `@rudderjs/orm/native` shim, so both adapters validate and
+// pick identically (`'round-robin'` / `'random'` / weights / custom fn).
+import { makeReplicaPicker } from '@rudderjs/orm/native'
+import type { ReadReplicaPicker } from '@rudderjs/orm/native'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter.
 import '@rudderjs/orm/db-bridge'
 
@@ -194,7 +199,8 @@ type DrizzleDb = {
  * `db` per terminal instead).
  */
 interface DrizzleSplitInfo {
-  /** Round-robin read-db picker — set only on a split connection (`readUrls`).
+  /** Read-db picker (strategy from `readPicker`, round-robin default) — set
+   *  only on a split connection (`readUrls`).
    *  Returns the write db (tagged `'write'`) on a sticky hit. `null` = unsplit. */
   readPick:   (() => { db: DrizzleDb; target: 'read' | 'write' }) | null
   /** `'write'` when this connection participates in a split (directly or as a
@@ -2380,6 +2386,9 @@ export class DrizzleAdapter implements OrmAdapter {
     private readonly readDbs:    DrizzleDb[] = [],
     /** Sticky reads enabled for this connection (only meaningful with a split). */
     private readonly sticky:     boolean = false,
+    /** Replica-selection strategy for the read pool (round-robin when omitted);
+     *  see {@link ReadReplicaPicker}. Only meaningful with read clients. */
+    readPicker: ReadReplicaPicker | undefined = undefined,
     /** Inherited split participation for transaction-scoped adapters: a tx
      *  spawned from a split adapter has no read clients of its own but still
      *  tags its events `'write'` and marks sticky writes. */
@@ -2394,12 +2403,12 @@ export class DrizzleAdapter implements OrmAdapter {
       : null
     let readPick: DrizzleSplitInfo['readPick'] = null
     if (isSplit && connectionName !== undefined) {
-      let rr = 0
+      // Builds the per-query index picker — weight lists validate here, so a
+      // bad config fails at adapter construction, not on the first read.
+      const pick = makeReplicaPicker(readPicker, readDbs.length)
       readPick = () => {
         if (this.sticky && stickyWrote(connectionName)) return { db: this.db, target: 'write' }
-        const db = readDbs[rr % readDbs.length] ?? this.db
-        rr++
-        return { db, target: 'read' }
+        return { db: readDbs[pick()] ?? this.db, target: 'read' }
       }
     }
     this.split = { readPick, tag: this.splitTag, markWrite, connection: connectionName }
@@ -2459,6 +2468,7 @@ export class DrizzleAdapter implements OrmAdapter {
     return new DrizzleAdapter(
       db, config.tables ?? {}, config.primaryKey ?? 'id', resolvedDialect ?? 'pg', [],
       config.connectionName, readDbs, config.sticky === true && readDbs.length > 0,
+      config.readPicker,
     )
   }
 
@@ -2545,7 +2555,7 @@ export class DrizzleAdapter implements OrmAdapter {
       // clients of its own — every tx statement runs on the write connection).
       const scoped = new DrizzleAdapter(
         txDb, this.tables, this.primaryKey, this.dialect, this.listeners,
-        this.connectionName, [], this.sticky, this.splitTag,
+        this.connectionName, [], this.sticky, undefined, this.splitTag,
       )
       return fn(scoped)
     }, config) as Promise<T>
@@ -2684,6 +2694,11 @@ export interface DrizzleConfig {
    *  url-based config (incompatible with a pre-built `client:`) and a
    *  `connectionName`. */
   readUrls?: string[]
+  /** How reads pick a replica: `'round-robin'` (default), `'random'`, a
+   *  weights array (one non-negative weight per replica, in `readUrls` order),
+   *  or a custom `(count) => index` function. Only meaningful with
+   *  `readUrls`. */
+  readPicker?: ReadReplicaPicker
   /** Sticky reads: after a write within the current database context (request),
    *  reads on this connection route to the write connection — read-your-writes
    *  under replication lag. Only meaningful with `readUrls`. */
@@ -2758,10 +2773,12 @@ export interface DatabaseConnectionConfig {
   engine?:  string
   /** Explicit write-side URL on a read/write split. Defaults to `url`. */
   write?:   { url?: string }
-  /** Read replica(s) — one URL or an array (round-robin per query). Un-locked
-   *  SELECTs route here; writes, DDL, locked selects, and transactions stay on
-   *  the write connection. */
-  read?:    { url: string | string[] }
+  /** Read replica(s) — one URL or an array. Un-locked SELECTs route here;
+   *  writes, DDL, locked selects, and transactions stay on the write
+   *  connection. `picker` selects the replica per query: `'round-robin'`
+   *  (default), `'random'`, a weights array (one non-negative weight per
+   *  replica), or a custom `(count) => index` function. */
+  read?:    { url: string | string[]; picker?: ReadReplicaPicker }
   /** Sticky reads: after a write within the current request scope, reads on
    *  this connection route to the writer (read-your-writes under replication
    *  lag). Requires `read`. */
@@ -2827,6 +2844,7 @@ export class DatabaseProvider extends ServiceProvider {
             connectionName: name,
             ...(writeUrl !== undefined && { url: writeUrl }),
             ...(readUrls.length > 0 && { readUrls }),
+            ...(conn.read?.picker !== undefined && { readPicker: conn.read.picker }),
             ...(sticky && { sticky }),
             ...(conn.dialect !== undefined && { dialect: conn.dialect }),
             ...(cfg.tables && { tables: cfg.tables }),

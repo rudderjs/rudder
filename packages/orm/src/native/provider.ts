@@ -22,7 +22,7 @@ import { ServiceProvider, config, appendToGroup } from '@rudderjs/core'
 import { ModelRegistry, ConnectionManager } from '../index.js'
 import { databaseContextMiddleware } from '@rudderjs/database/sticky'
 import { NativeAdapter } from '@rudderjs/database/native'
-import type { NativeDriverName } from '@rudderjs/database/native'
+import type { NativeDriverName, ReadReplicaPicker } from '@rudderjs/database/native'
 // Side effect: wires the DB facade to resolve this app's active ORM adapter and
 // pushes the transaction runner — mirrors the prisma/drizzle adapter entries, so
 // `DB.*` / `DB.transaction()` work in native-engine apps too. Node-only subpath,
@@ -48,10 +48,13 @@ export interface NativeDatabaseConnectionConfig {
   primaryKey?: string
   /** Explicit write-side URL on a read/write split. Defaults to `url`. */
   write?:      { url?: string }
-  /** Read replica(s) — one URL or an array (round-robin per query). Un-locked
-   *  SELECTs route here; writes, DDL, locked selects, and transactions stay on
-   *  the write connection. */
-  read?:       { url: string | string[] }
+  /** Read replica(s) — one URL or an array. Un-locked SELECTs route here;
+   *  writes, DDL, locked selects, and transactions stay on the write
+   *  connection. `picker` selects the replica per query: `'round-robin'`
+   *  (default), `'random'`, a weights array (one non-negative weight per
+   *  replica — `[3, 1]` sends ~75% of reads to the first), or a custom
+   *  `(count) => index` function. */
+  read?:       { url: string | string[]; picker?: ReadReplicaPicker }
   /** Sticky reads: after a write within the current request scope, reads on
    *  this connection route to the writer (read-your-writes under replication
    *  lag). Requires `read`. */
@@ -121,6 +124,7 @@ export class NativeDatabaseProvider extends ServiceProvider {
           connectionName: name,
           ...(writeUrl !== undefined && { url: writeUrl }),
           ...(readUrls.length > 0 && { readUrls }),
+          ...(conn.read?.picker !== undefined && { readPicker: conn.read.picker }),
           ...(sticky && { sticky }),
           ...(conn.primaryKey !== undefined && { primaryKey: conn.primaryKey }),
         }),
