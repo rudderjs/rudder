@@ -70,6 +70,62 @@ export class SchemaBuilder {
     await this.executor.execute(stmt.sql, stmt.bindings)
   }
 
+  /**
+   * Names of every user table (catalog lookup) — includes the `migrations`
+   * state table, excludes the engine's internal tables (`sqlite_*`).
+   * `information_schema` on pg/mysql, `sqlite_master` on sqlite.
+   */
+  async allTables(): Promise<string[]> {
+    const schemaFn = this.currentSchemaSql()
+    if (schemaFn) {
+      const rows = await this.executor.execute(
+        `SELECT table_name AS name FROM information_schema.tables WHERE table_schema = ${schemaFn} AND table_type = 'BASE TABLE' ORDER BY table_name`,
+        [],
+      )
+      // mysql2 may surface the alias upper-cased depending on server config.
+      return rows.map(r => String(r['name'] ?? r['NAME'] ?? r['TABLE_NAME']))
+    }
+    this.requireSqlite('allTables')
+    const rows = await this.executor.execute(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+      [],
+    )
+    return rows.map(r => String(r['name']))
+  }
+
+  /**
+   * Drop every user table — the `migrate:fresh` sweep (Laravel's
+   * `Schema::dropAllTables()` analog). Dialect-aware so foreign keys can't
+   * block it: pg drops with `CASCADE`, mysql disables `FOREIGN_KEY_CHECKS`
+   * for the batch (restored after, even on failure), sqlite drops in catalog
+   * order exactly as before.
+   */
+  async dropAllTables(): Promise<void> {
+    const tables = await this.allTables()
+    if (tables.length === 0) return
+    if (this.dialect.name === 'pg') {
+      for (const t of tables) {
+        // A table dropped by an earlier CASCADE is covered by IF EXISTS.
+        await this.executor.execute(`DROP TABLE IF EXISTS ${this.dialect.quoteId(t)} CASCADE`, [])
+      }
+      return
+    }
+    if (this.dialect.name === 'mysql') {
+      await this.executor.execute('SET FOREIGN_KEY_CHECKS = 0', [])
+      try {
+        for (const t of tables) {
+          await this.executor.execute(`DROP TABLE IF EXISTS ${this.dialect.quoteId(t)}`, [])
+        }
+      } finally {
+        await this.executor.execute('SET FOREIGN_KEY_CHECKS = 1', [])
+      }
+      return
+    }
+    for (const t of tables) {
+      await this.drop(t)
+    }
+  }
+
   /** Whether `table` exists (catalog lookup). */
   async hasTable(table: string): Promise<boolean> {
     const schemaFn = this.currentSchemaSql()
