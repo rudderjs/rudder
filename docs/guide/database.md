@@ -83,7 +83,7 @@ pnpm rudder schema:types     # rewrite app/Models/__schema/registry.d.ts from th
 
 A few rules worth knowing:
 
-- **`casts` refine the generated type.** The generator emits the column's storage type, then folds in any string `static casts` — so a `boolean`/`date`/`json` cast surfaces as `boolean`/`Date`/the cast's type rather than the raw column affinity. Class-based casts (custom `CastUsing`, `vector(...)`) keep the storage type.
+- **`casts` refine the generated type.** The generator emits the column's storage type, then folds in any string `static casts` — so a `boolean`/`date`/`json` cast surfaces as `boolean`/`Date`/the cast's type rather than the raw column affinity. Class-based casts (custom `CastUsing`, `vector(...)`) keep the storage type. Models under `app/Models/**` are discovered automatically at generation time; a model living elsewhere contributes its casts by self-registering via `ModelRegistry.register(TheModel)` in a provider.
 - **Nullable columns widen to `T | null`;** the primary key and `NOT NULL` columns stay non-null.
 - **Commit the generated file.** Treat `app/Models/__schema/registry.d.ts` as checked-in (like Drizzle's schema, not Prisma's gitignored client) so `tsc`/CI is green without a generate step. It's never hand-edited — `migrate` / `schema:types` overwrite it.
 - **Opt-in and additive.** Plain `extends Model` (with or without hand-declared fields) keeps working exactly as before; `.for()` is the only thing that pulls in generated columns. At runtime `.for()` returns the class unchanged.
