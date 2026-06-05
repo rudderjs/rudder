@@ -136,22 +136,59 @@ interface OrmRegistryStore {
    * transaction (and in non-Node runtimes that never call `transaction()`).
    */
   txStorage: AsyncLocalStorage<ReadonlyMap<string, OrmAdapter>> | null
+  /**
+   * Scopes the after-commit callback queues (see {@link afterCommit}) to the
+   * transaction tree open in the current async context. Same lazy-creation
+   * rationale as {@link OrmRegistryStore.txStorage} — `null` until the first
+   * `transaction()`, so `node:async_hooks` never loads at module-eval time.
+   */
+  txCallbacks: AsyncLocalStorage<AfterCommitCtx> | null
+}
+
+/** A queued {@link afterCommit} callback, tagged with the savepoint depth it was registered at. */
+interface AfterCommitEntry {
+  level: number
+  fn: () => void | Promise<void>
+}
+
+/**
+ * One connection-tree's after-commit queue. Created by the OUTERMOST
+ * `transaction()` on a connection and shared by reference with every nested
+ * savepoint — all levels queue into one place, and the outermost commit
+ * flushes whatever survived.
+ */
+interface AfterCommitTree {
+  callbacks: AfterCommitEntry[]
+}
+
+/**
+ * The after-commit ALS value: per-connection trees (keyed like the tx-adapter
+ * map, so a transaction on `'reporting'` keeps its own queue independent of
+ * the default connection's) plus the key of the innermost — most recently
+ * entered — transaction, which is where a bare `afterCommit(fn)` attaches.
+ */
+interface AfterCommitCtx {
+  entries: ReadonlyMap<string, { tree: AfterCommitTree; level: number }>
+  current: string
 }
 
 const _g = globalThis as Record<string, unknown>
 if (!_g['__rudderjs_orm_registry__']) {
   _g['__rudderjs_orm_registry__'] = {
-    adapter:   null,
-    models:    new Map(),
-    listeners: new Set(),
-    txStorage: null,
+    adapter:     null,
+    models:      new Map(),
+    listeners:   new Set(),
+    txStorage:   null,
+    txCallbacks: null,
   } satisfies OrmRegistryStore
 }
 const _store = _g['__rudderjs_orm_registry__'] as OrmRegistryStore
 
 // A pre-existing store from an older bundle of this module may lack `txStorage`
-// (added in the transactions phase). Normalize so the field is always present.
+// (added in the transactions phase) or `txCallbacks` (after-commit hooks).
+// Normalize so the fields are always present.
 _store.txStorage ??= null
+_store.txCallbacks ??= null
 
 /**
  * Lazily create the `AsyncLocalStorage` that scopes queries to an active
@@ -165,6 +202,14 @@ async function ensureTxStorage(): Promise<AsyncLocalStorage<ReadonlyMap<string, 
   // Re-check after the await — a concurrent caller may have set it.
   _store.txStorage ??= new AsyncLocalStorage<ReadonlyMap<string, OrmAdapter>>()
   return _store.txStorage
+}
+
+/** Lazily create the after-commit ALS — same pattern as {@link ensureTxStorage}. */
+async function ensureTxCallbackStorage(): Promise<AsyncLocalStorage<AfterCommitCtx>> {
+  if (_store.txCallbacks) return _store.txCallbacks
+  const { AsyncLocalStorage } = await import('node:async_hooks')
+  _store.txCallbacks ??= new AsyncLocalStorage<AfterCommitCtx>()
+  return _store.txCallbacks
 }
 
 /**
@@ -236,14 +281,90 @@ export async function transaction<T>(
     )
   }
   const txOpts = opts?.isolationLevel !== undefined ? { isolationLevel: opts.isolationLevel } : undefined
-  return adapter.transaction((txAdapter) => {
-    // Layer this connection's tx scope over any outer scopes — a transaction
-    // on 'reporting' inside a default-connection transaction leaves the
-    // default's scope intact (per-connection isolation, Laravel parity).
-    const next = new Map(storage.getStore() ?? [])
-    next.set(key, txAdapter)
-    return storage.run(next, fn)
-  }, txOpts)
+
+  // After-commit bookkeeping: the outermost transaction on this connection
+  // creates the callback tree; nested savepoints share it at level + 1.
+  const cbStorage  = await ensureTxCallbackStorage()
+  const outerCtx   = cbStorage.getStore()
+  const outerEntry = outerCtx?.entries.get(key)
+  const tree: AfterCommitTree = outerEntry?.tree ?? { callbacks: [] }
+  const level = (outerEntry?.level ?? 0) + 1
+
+  let result: T
+  try {
+    result = await adapter.transaction((txAdapter) => {
+      // Layer this connection's tx scope over any outer scopes — a transaction
+      // on 'reporting' inside a default-connection transaction leaves the
+      // default's scope intact (per-connection isolation, Laravel parity).
+      const next = new Map(storage.getStore() ?? [])
+      next.set(key, txAdapter)
+      const nextEntries = new Map(outerCtx?.entries ?? [])
+      nextEntries.set(key, { tree, level })
+      return storage.run(next, () => cbStorage.run({ entries: nextEntries, current: key }, fn))
+    }, txOpts)
+  } catch (err) {
+    // Rolled back — drop the callbacks this level (and anything nested under
+    // it) queued; an enclosing transaction's callbacks stay intact.
+    tree.callbacks = tree.callbacks.filter((e) => e.level < level)
+    throw err
+  }
+
+  if (level === 1) {
+    // Outermost commit — the work is durable; flush in registration order.
+    // The queue is drained before flushing so a callback opening a NEW
+    // transaction starts from a clean tree. A throwing callback propagates to
+    // the transaction() caller (the transaction itself is already committed)
+    // and skips the rest, mirroring Laravel's after-commit semantics.
+    const queued = tree.callbacks.splice(0)
+    for (const entry of queued) await entry.fn()
+  } else {
+    // Savepoint released — its callbacks now belong to the parent level, so a
+    // LATER sibling savepoint's rollback can't discard them.
+    for (const e of tree.callbacks) {
+      if (e.level >= level) e.level = level - 1
+    }
+  }
+  return result
+}
+
+/**
+ * Queue `fn` to run after the transaction open in the current async context
+ * commits — the standard pattern for side effects that must not fire on a
+ * rollback (emails, webhooks, queue dispatches, cache invalidation).
+ *
+ * Semantics (Laravel's `DB::afterCommit` parity):
+ * - **Inside `transaction()`** — `fn` is queued and runs only when the
+ *   OUTERMOST transaction on that connection commits. The awaited
+ *   `transaction(...)` call resolves after all queued callbacks ran.
+ * - **Nested transactions / savepoints** — callbacks queue up the tree; a
+ *   savepoint rollback discards the callbacks registered inside it (and only
+ *   those), a savepoint release hands them to the enclosing level.
+ * - **Rollback** — the queue is dropped; nothing runs.
+ * - **No open transaction** — `fn` runs immediately (there is nothing to wait
+ *   for), and the returned promise settles with it.
+ *
+ * Inside nested transactions on DIFFERENT connections, a bare call attaches to
+ * the innermost one; pass `{ connection }` to target an enclosing tree
+ * explicitly (no open transaction on that connection → runs immediately).
+ *
+ * A throwing callback propagates to the `transaction()` caller and skips the
+ * remaining callbacks — the transaction itself is already committed at that
+ * point; the error is the callback's, not the unit of work's.
+ */
+export async function afterCommit(
+  fn: () => void | Promise<void>,
+  opts?: { connection?: string },
+): Promise<void> {
+  // Sync read — no lazy ALS import needed: if the storage was never created,
+  // no transaction() ever ran, so there is nothing to queue behind.
+  const ctx = _store.txCallbacks?.getStore()
+  const key = opts?.connection !== undefined ? _connKey(opts.connection) : ctx?.current
+  const entry = key !== undefined ? ctx?.entries.get(key) : undefined
+  if (!entry) {
+    await fn()
+    return
+  }
+  entry.tree.callbacks.push({ level: entry.level, fn })
 }
 
 // ─── RUDDER_ORM_TRACE — dev diagnostic for the HMR re-boot wedge ──────────────
