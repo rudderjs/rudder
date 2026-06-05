@@ -381,7 +381,12 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector = the official postgres image + the pgvector
+        # extension preinstalled — needed by the vector live suites
+        # (orm-drizzle/src/vector-live.test.ts runs CREATE EXTENSION vector
+        # and skips itself when unavailable). Everything else is unchanged
+        # stock postgres 16.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: rudder
           POSTGRES_PASSWORD: rudder
