@@ -444,6 +444,42 @@ export class ModelNotFoundError extends Error {
   }
 }
 
+/**
+ * Thrown when an optimistic-lock-checked update finds the row's version column
+ * no longer matches the expected value — another writer updated (and bumped)
+ * the row after this one read it. Enable per model with `static version`.
+ *
+ * Catch and retry (re-read, re-apply, re-save), or surface as a conflict —
+ * `@rudderjs/core`'s exception handler picks up the duck-typed `httpStatus`
+ * and renders an HTTP 409 by default.
+ */
+export class OptimisticLockError extends Error {
+  /** Stable discriminator for app-level dispatch alongside `instanceof`. */
+  readonly code = 'OPTIMISTIC_LOCK' as const
+  readonly model: string
+  readonly id: string | number
+  /** The version this write expected the row to still have. */
+  readonly expectedVersion: number
+  /** The version actually found on the row at conflict time (when readable). */
+  readonly actualVersion?: number
+
+  /** Duck-typed signal to `@rudderjs/core`'s exception handler. */
+  readonly httpStatus = 409
+
+  constructor(model: string, id: string | number, expectedVersion: number, actualVersion?: number) {
+    super(
+      `[RudderJS ORM] Optimistic lock failed on ${model} ${String(id)}: expected version ${expectedVersion}` +
+      (actualVersion !== undefined ? `, found ${actualVersion}` : '') +
+      '. The row was modified by another writer — re-read it and retry the update.',
+    )
+    this.name = 'OptimisticLockError'
+    this.model = model
+    this.id = id
+    this.expectedVersion = expectedVersion
+    if (actualVersion !== undefined) this.actualVersion = actualVersion
+  }
+}
+
 // ─── Observer Types ─────────────────────────────────────────
 
 export type ModelEvent =
@@ -1498,6 +1534,25 @@ export abstract class Model {
    * - Use `forceDelete()` to permanently remove a record
    */
   static softDeletes = false
+
+  /**
+   * Enable optimistic locking for this model. `true` uses a column named
+   * `version`; a string names a custom column. The column must be an integer
+   * column in the schema (default it to `1`, or let `create()` stamp it).
+   *
+   * When enabled:
+   * - `create()` stamps the column with `1` when the caller didn't set it
+   * - `update()` / `save()` bump the column by 1 atomically
+   * - a write whose payload carries the column compares it against the row
+   *   (`... WHERE pk = ? AND version = ?`) and throws `OptimisticLockError`
+   *   when another writer got there first — catch it to re-read and retry
+   * - a write without the column (no baseline to compare) skips the stale
+   *   check and bumps via atomic `version = version + 1`
+   *
+   * `instance.save()` always carries the version the row was hydrated with,
+   * so the read-modify-write cycle is checked end to end.
+   */
+  static version: boolean | string = false
 
   // ── Instance-level serialization overrides ─────────────
   //
@@ -2904,11 +2959,33 @@ export abstract class Model {
     return { ...payload, [pk]: this.keyType === 'uuid' ? generateUuid() : generateUlid() }
   }
 
+  /**
+   * @internal — the optimistic-lock column name, or `null` when versioning
+   * is off. `static version = true` → `'version'`; a string names the column.
+   */
+  private static _versionColumn(): string | null {
+    if (this.version === false || this.version === undefined) return null
+    return this.version === true ? 'version' : this.version
+  }
+
+  /**
+   * @internal — stamp the optimistic-lock column with `1` on insert when the
+   * model is versioned and the caller didn't supply a value.
+   */
+  private static _ensureInitialVersion(payload: Record<string, unknown>): Record<string, unknown> {
+    const col = this._versionColumn()
+    if (!col) return payload
+    const existing = payload[col]
+    if (existing !== undefined && existing !== null) return payload
+    return { ...payload, [col]: 1 }
+  }
+
   /** @internal — create path that skips the fillable filter. Used by `save()`. */
   private static async _doCreate<T extends typeof Model>(this: T, data: Record<string, unknown>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data)
     payload = self._ensureGeneratedKey(payload)
+    payload = self._ensureInitialVersion(payload)
 
     const creatingResult = await self._fireEvent('creating', payload)
     if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
@@ -2932,6 +3009,14 @@ export abstract class Model {
   static async update<T extends typeof Model>(this: T, id: number | string, data: UpdatePayload<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     const filtered = self._filterFillable(data as Record<string, unknown>)
+    // The optimistic-lock column is lock metadata, not mass-assigned data —
+    // carry it across the fillable filter so a `fillable` list that omits it
+    // doesn't silently drop the stale-write check.
+    const versionCol = self._versionColumn()
+    if (versionCol) {
+      const expected = (data as Record<string, unknown>)[versionCol]
+      if (expected !== undefined) filtered[versionCol] = expected
+    }
     return Model._doUpdate.call(this, id, filtered) as Promise<InstanceType<T>>
   }
 
@@ -2948,10 +3033,72 @@ export abstract class Model {
     if (savingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by saving observer on ${self.name}.`)
     if (savingResult && typeof savingResult === 'object') payload = savingResult as Record<string, unknown>
 
-    const record = await Model._q(this).update(id, payload as Partial<InstanceType<T>>)
+    const versionCol = self._versionColumn()
+    const record = versionCol
+      ? await (Model._versionedUpdate.call(this, id, payload, versionCol) as Promise<InstanceType<T>>)
+      : await Model._q(this).update(id, payload as Partial<InstanceType<T>>)
 
     await self._fireEvent('updated', record as Record<string, unknown>)
     await self._fireEvent('saved',   record as Record<string, unknown>)
+    return record
+  }
+
+  /**
+   * @internal — update path for optimistically-locked models (`static version`).
+   *
+   * When the payload carries the version column, that value is the version this
+   * write EXPECTS the row to still have: the update runs conditionally
+   * (`... WHERE pk = ? AND version = expected`) writing `expected + 1`, and a
+   * zero-row result means another writer got there first → `OptimisticLockError`
+   * (or `ModelNotFoundError` when the row is gone entirely).
+   *
+   * Without the version column there's no baseline to compare — the column is
+   * bumped atomically (`version = version + 1`) alongside the other writes via
+   * the `increment` primitive, so concurrent unchecked writes never lose bumps.
+   *
+   * Built entirely on the `where().updateAll()` / `increment` contract
+   * primitives, so all three adapters support it with no adapter changes.
+   * The canonical row is re-read after the write (the conditional path returns
+   * a count, not the row) — observers receive that fresh record.
+   */
+  private static async _versionedUpdate<T extends typeof Model>(
+    this: T,
+    id: number | string,
+    payload: Record<string, unknown>,
+    versionCol: string,
+  ): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    const expectedRaw = payload[versionCol]
+    const rest: Record<string, unknown> = { ...payload }
+    delete rest[versionCol]
+
+    if (expectedRaw === undefined || expectedRaw === null) {
+      // No baseline to check against — atomic bump, no stale detection.
+      return Model._q(this).increment(id, versionCol, 1, rest)
+    }
+
+    const expected = Number(expectedRaw)
+    if (!Number.isInteger(expected)) {
+      throw new Error(
+        `[RudderJS ORM] ${self.name}.${versionCol} must be an integer for optimistic locking — got ${JSON.stringify(expectedRaw)}. ` +
+        `Declare the column as an integer defaulting to 1 (or let create() stamp it).`,
+      )
+    }
+
+    const count = await Model._q(this)
+      .where(self.primaryKey, id)
+      .where(versionCol, expected)
+      .updateAll({ ...rest, [versionCol]: expected + 1 } as Partial<InstanceType<T>>)
+
+    if (count === 0) {
+      const row = await Model._q(this).find(id)
+      if (!row) throw new ModelNotFoundError(self.name, id)
+      const actual = Number((row as Record<string, unknown>)[versionCol])
+      throw new OptimisticLockError(self.name, id, expected, Number.isNaN(actual) ? undefined : actual)
+    }
+
+    const record = await Model._q(this).find(id)
+    if (!record) throw new ModelNotFoundError(self.name, id) // deleted between write and re-read
     return record
   }
 
@@ -3344,6 +3491,9 @@ export abstract class Model {
   replicate(except: string[] = []): this {
     const ctor = this.constructor as typeof Model
     const exclude = new Set<string>([ctor.primaryKey, 'createdAt', 'updatedAt', 'deletedAt', ...except])
+    // A clone is a new row — it must not inherit the source's lock baseline.
+    const versionCol = ctor._versionColumn()
+    if (versionCol) exclude.add(versionCol)
     const Ctor = ctor as unknown as new () => this
     const clone = new Ctor()
     // Drop class-declared field defaults that fall under `exclude`, otherwise

@@ -49,7 +49,7 @@
 | Raw escape hatch | ✅ selectRaw/whereRaw/orderByRaw + `DB.raw` | ✅ $queryRaw + **TypedSQL** | ✅ sql`` | ✅ getRawMany | ✅ sql`` | ✅ raw()/sql`` |
 | **JSON path predicates** | ✅ arrow paths everywhere + contains/length + **arrow-path UPDATE** | ⚠️ PG/MySQL only, operator set limited | ⚠️ via sql`` (no DSL) | ⚠️ `JsonContains` PG-only | jsonb helpers | ✅ `$elemMatch`/`$size` (v7) |
 | Pessimistic locking | ✅ lockForUpdate/sharedLock | **❌ raw only** | ✅ `.for()` + **noWait/skipLocked** | ✅ setLock + skip_locked | ✅ forUpdate/forShare | ✅ 6 LockMode |
-| Optimistic locking | ❌ | ❌ | ❌ | ✅ @VersionColumn | ❌ | ✅ version prop |
+| Optimistic locking | ✅ `static version` + OptimisticLockError (all 3 adapters) | ❌ | ❌ | ✅ @VersionColumn | ❌ | ✅ version prop |
 | upsert | ✅ single-statement bulk | ✅ (per-row) | ✅ onConflict | ✅ (1.0: orUpdate) | ✅ onConflict | ✅ upsertMany |
 | chunk / streaming | ✅ chunk + lazy() generator | **❌ (Prisma Next promise)** | ✅ iterator | ✅ .stream() | ✅ .stream() | ✅ em.stream() (v7) |
 | Cursor pagination | ✅ cursorPaginate | ✅ cursor+take | ✅ (guide) | ❌ | ❌ (community libs) | ✅ findByCursor (richest) |
@@ -59,7 +59,7 @@
 | Date-part helpers | ✅ whereDate/Time/Day/Month/Year | ❌ | ❌ | ❌ | ❌ | ❌ |
 | whereColumn / column-vs-column | ✅ | ❌ | manual sql | manual | ✅ (ref) | manual |
 
-**Take:** post the 2026 query-builder arc (+ the post-audit rounds: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait, typed window ranking) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — remaining delta: optimistic locking.
+**Take:** post the 2026 query-builder arc (+ the post-audit rounds: CTEs, whereExists, insertUsing, isolation levels, skipLocked/noWait, typed window ranking) we beat Prisma and TypeORM on builder breadth and match Drizzle/Kysely on the core — optimistic locking closed the last delta (shipped post-audit).
 
 ## Relations
 
@@ -164,7 +164,7 @@
 4. ~~whereExists~~ — **SHIPPED post-audit**: `whereExists`/`whereNotExists`/`orWhere*` (native engine; builder-or-raw body, whereColumn correlation).
 
 **Tier 2 — differentiated-but-real:**
-5. Optimistic locking (`static version` column, OptimisticLockError) — TypeORM/MikroORM precedent.
+5. ~~Optimistic locking~~ — **SHIPPED post-audit**: `static version` (`true` → `version` column, string → custom name); create stamps 1, `save()`/`update()`-with-baseline do a conditional `WHERE pk AND version = expected` write (+1 bump) and throw `OptimisticLockError` (`code: 'OPTIMISTIC_LOCK'`, `httpStatus: 409`, expected/actual versions) on zero rows — `ModelNotFoundError` when the row is gone. No-baseline updates bump atomically via the `increment` primitive. Pure Model layer on `where().updateAll()` — all 3 adapters, zero adapter changes.
 6. ~~INSERT…SELECT~~ — **SHIPPED post-audit**: `insertUsing(columns, query)` (native engine).
 7. ~~Window functions~~ — **SHIPPED post-audit**: `selectWindow(fn, { as, partitionBy, orderBy })` (native engine; typed zero-arg ranking set rowNumber/rank/denseRank/percentRank/cumeDist, ADDITIVE projection; aggregates-OVER/lag/lead documented as the selectRaw recipe).
 8. ~~Weighted/custom replica picker~~ — **SHIPPED post-audit**: `read.picker` = `'round-robin'` (default) / `'random'` / weights array (weighted random) / `(count) => index` custom fn; shared `makeReplicaPicker` in `@rudderjs/database` (native + Drizzle, same validation — weights fail at adapter construction, custom fn validated per call, picker runs after the sticky check).
