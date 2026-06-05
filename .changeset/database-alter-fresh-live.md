@@ -1,5 +1,0 @@
----
-"@rudderjs/database": minor
----
-
-fix: make the schema ALTER + fresh paths real on Postgres/MySQL — three latent bugs surfaced by the first live DDL coverage: (1) `migrate:fresh` read `sqlite_master` unconditionally, so it threw on pg/mysql native connections — `Migrator.dropAllTables()` now delegates to the new dialect-aware `SchemaBuilder.dropAllTables()` (catalog via `information_schema`, FK-safe sweep: pg drops with `CASCADE`, mysql wraps the batch in `FOREIGN_KEY_CHECKS=0`, sqlite unchanged), with `SchemaBuilder.allTables()` exposed alongside; (2) foreign keys declared in a `Schema.table(...)` alter (`constrained()` columns or table-level `foreign()`) were silently dropped on pg/mysql — they now emit `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY`, and `dropForeign(nameOrColumns)` emits `DROP CONSTRAINT` (pg) / `DROP FOREIGN KEY` (mysql); (3) `dropIndex()` compiled to the standalone `DROP INDEX "name"` form, which MySQL rejects — it now emits the table-scoped `DROP INDEX … ON <table>` there.

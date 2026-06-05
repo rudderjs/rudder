@@ -1,5 +1,64 @@
 # @rudderjs/orm
 
+## 1.16.0
+
+### Minor Changes
+
+- cfab7aa: feat: common table expressions on the native engine — `withExpression(name, query, opts?)` / `withRecursiveExpression(...)` on query chains and as `Model` statics. The body is another native query (`Model.query()` chain) or a raw SQL string with `?` placeholders + `opts.bindings` (recursive bodies are usually raw — they reference the CTE's own name); `opts.columns` emits the explicit column list. Compiles to a `WITH [RECURSIVE] …` prefix on reads (`get`/`first`/`find`/`count`/`paginate`) with CTE bindings first (SQL text order); reference the CTE via `join('name', …)`. Native engine only — Drizzle/Prisma throw the forward-or-throw guard error.
+- a5f7950: feat: `insertUsing(columns, query)` on the native engine — `INSERT INTO table (cols) SELECT …` with rows produced by a subquery (another native query chain or a raw SQL string with `?` placeholders + bindings; same body forms as `whereExists`). The explicit column list maps the subquery projection positionally; returns the inserted-row count (`RETURNING *` on sqlite/pg, driver `affectedRows` on MySQL). Bulk data-plane write: no observer events, no `fillable`/`guarded` filtering, no key generation — like `insertMany`/`upsert`. Available on query chains and as a `Model.insertUsing` static. Native engine only — Drizzle/Prisma throw the forward-or-throw guard error.
+- c704a48: feat: arbitrary EXISTS subqueries on the native engine — `whereExists` / `whereNotExists` / `orWhereExists` / `orWhereNotExists` on query chains (+ `Model.whereExists`/`whereNotExists` statics). The subquery is another native query (`Model.query()` chain — correlate to the outer table via qualified `whereColumn('orders.userId', 'users.id')`) or a raw SQL string with `?` placeholders + bindings. Compiles to a `[NOT] EXISTS (…)` predicate at its position in the WHERE (composes with groups, `orWhere`, sugar); for relation-shaped checks prefer `whereHas`. Native engine only — Drizzle/Prisma throw the forward-or-throw guard error.
+- 345d805: Phase-2 engine relocation, step 1 (decouple): the sticky-read scope moves to `@rudderjs/database/sticky`, and `BuiltInCast` moves to `@rudderjs/contracts`.
+
+  - **`@rudderjs/database`** gains the node-only `./sticky` subpath — `runWithDatabaseContext()`, `hasDatabaseContext()`, `markWrote()`, `stickyWrote()`, and `databaseContextMiddleware()` relocate verbatim from `@rudderjs/orm/sticky`. The AsyncLocalStorage stays on `globalThis['__rudderjs_orm_sticky__']` (key unchanged), so the old and new import paths — and any mix of package versions across a dev re-boot — share one scope.
+  - **`@rudderjs/orm/sticky`** becomes a re-export shim of `@rudderjs/database/sticky`. Every existing import (including `@rudderjs/orm-drizzle` and app queue-job wrappers) keeps working unchanged; `@rudderjs/database/sticky` is the canonical path going forward.
+  - **`@rudderjs/contracts`** now owns the `BuiltInCast` cast-name union; `@rudderjs/orm` re-exports it from the same places as before (`@rudderjs/orm` main entry / `cast.ts`). Moved because the native engine's schema→TS type generator also consumes it, and the engine's new home (`@rudderjs/database`) must never import `@rudderjs/orm`.
+
+  No behavior change; no `native/**` files touched. Part of `docs/plans/2026-06-04-database-extraction-phase-2.md` (PR-A1).
+
+- 0d7c992: Phase-2 engine relocation, step 2: the native engine's core moves to `@rudderjs/database/native`.
+
+  The SQL compiler, the three dialects (sqlite/pg/mysql), the driver seam (`Driver`/`AffectingExecutor`), the concrete drivers (`BetterSqlite3Driver`/`PostgresDriver`/`MysqlDriver`), `NativeQueryBuilder`, the engine errors, and the schema column definitions relocate from `packages/orm/src/native/` to `@rudderjs/database`'s new node-only `./native` subpath. `@rudderjs/database` now declares the driver packages (`better-sqlite3`/`postgres`/`mysql2`) as optional peers, mirroring `@rudderjs/orm`.
+
+  **No public surface changes.** `@rudderjs/orm/native` re-exports every relocated name from `@rudderjs/database/native`, byte-compatible with the previous barrel — app migration files, `NativeAdapter` wiring, and standalone-Node consumers are unaffected. The dev-HMR driver cache key (`__rudderjs_native_client__`) and its signature format are unchanged, so a dev re-boot across this upgrade reuses (or cleanly disposes) live connections instead of leaking them.
+
+  `NativeAdapter`, the schema builder + migrator, and `NativeDatabaseProvider` still live in `@rudderjs/orm` and follow in the next step (PR-A3). Part of `docs/plans/2026-06-04-database-extraction-phase-2.md`.
+
+- ba50682: Phase-2 engine relocation, step 3 (final): `NativeAdapter` and the schema builder + migrator move to `@rudderjs/database` — the native engine now fully lives there.
+
+  - **`@rudderjs/database`** gains the rest of the engine: `NativeAdapter`/`native` (with the dev-HMR driver cache key `__rudderjs_native_client__` and its signature format unchanged — re-boots across this upgrade reuse or cleanly dispose live connections), `SchemaBuilder`, `Blueprint`/`AlterBlueprint`, the DDL compiler, `Migration`/`Schema`/`Migrator`, introspection, and the schema→TS type generator. The headline API (`Migration`, `Schema`, `NativeAdapter`, the drivers) is now also re-exported from the **main entry** — `import { Migration, Schema } from '@rudderjs/database'` is the canonical migration-file form going forward.
+  - **`@rudderjs/orm/native`** is now a pure re-export shim of `@rudderjs/database/native` — byte-compatible surface, every historical import keeps working (app migration files, standalone-Node consumers, the queue's database driver). `NativeDatabaseProvider` deliberately stays at `@rudderjs/orm/native/provider` (it wires `ModelRegistry`/`ConnectionManager`/the DB-facade bridge — orm-side state), so provider auto-discovery is untouched.
+
+  No behavior change and no consumer-visible API change. Completes the relocation arc of `docs/plans/2026-06-04-database-extraction-phase-2.md` (PR-A3).
+
+- f88660f: feat: `db:show` / `db:table` CLI commands — Laravel-parity database inspection over the native engine. `db:show` lists every table with on-disk sizes (`--counts` adds row counts, `--views` adds the view list); `db:table <name>` shows columns, indexes (incl. a synthesized PRIMARY entry on SQLite rowid tables), and foreign keys with update/delete rules. Both support `--json`. New `@rudderjs/database` exports: `inspectDatabase`/`inspectTable`/`readIndexes`/`readForeignKeys` (+ `NativeAdapter.inspectDatabase()`/`.inspectTable()`). Prisma/Drizzle apps get a friendly pointer to `prisma studio` / `drizzle-kit studio`.
+- 255a755: feat: after-commit hooks — `afterCommit(fn)` (orm) and `DB.afterCommit(fn)` / `DB.connection(name).afterCommit(fn)` (facade) queue side effects (emails, webhooks, queue dispatches) to run only after the transaction open in the current async context commits, mirroring Laravel's `DB::afterCommit`. Callbacks flush in registration order after the OUTERMOST transaction commits (the awaited `transaction()` resolves after they finish) and are dropped on rollback; a rolled-back savepoint discards only the callbacks registered inside it, a released savepoint hands its callbacks to the enclosing level. Named-connection transactions keep separate queues (pass `{ connection }` to target one explicitly); with no open transaction the callback runs immediately. The queue lives in the orm's `transaction()` wrapper itself — above the adapter seam — so it works identically on the native engine, Drizzle, and Prisma. `@rudderjs/database` gains the `registerAfterCommitRunner`/`resolveAfterCommitRunner` bridge seam and the facade methods.
+- 8a53671: feat: optimistic locking — `static version` on a Model (`true` → integer column `version`, string → custom column name). `create()` stamps the column with 1; `save()` and `Model.update()` with a version baseline write conditionally (`UPDATE ... SET version = v + 1 WHERE pk = ? AND version = v`) and throw the new `OptimisticLockError` (stable `code: 'OPTIMISTIC_LOCK'`, `expectedVersion`/`actualVersion`, duck-typed `httpStatus = 409`) when another writer got there first — nothing is written on a stale save. Updates without a baseline bump the column atomically with no stale check. Built on the `where().updateAll()` / `increment` contract primitives, so it works identically on the native engine, Drizzle, and Prisma with no adapter changes. The version column survives a `fillable` list that omits it (lock metadata, not data) and `replicate()` strips it so clones restart at version 1.
+- 1da0b39: Weighted/custom read-replica picker on read/write-split connections. `read.picker` in `config/database.ts` selects the replica per query: `'round-robin'` (default, the previous behavior), `'random'`, a weights array (one non-negative weight per replica — `[3, 1]` sends ~75% of reads to the first), or a custom `(count) => index` function (Drizzle's `getReplica` equivalent). Shared `makeReplicaPicker` in `@rudderjs/database` powers both the native engine and the Drizzle adapter: malformed weight lists fail fast at adapter construction, a custom function's return is validated per call, and the picker runs after the sticky check so a sticky-routed read never consumes a pick.
+- 1b8474a: Multi-database migrations on the native engine (Laravel `--database` / `Schema::connection` parity). `migrate`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, and `migrate:fresh` take `--connection=<name>` — the suite runs against the named connection with its `migrations` state table on that connection — plus `--path=<dir>` to keep per-database migration sets apart. Works even when the app's default engine is prisma/drizzle, as long as the named connection is `engine: 'native'`. Inside migrations (or anywhere the app has booted), `Schema.connection('reporting').create(…)` scopes one DDL operation to a named native connection through the same resolver seam as `DB.connection()`; non-native connections throw a clear error, and the call refuses under `migrate --pretend` (the dry run can't record a second connection). Cross-connection DDL runs outside the migrator's batch transaction — documented boundary.
+- ac3d8d0: feat: typed window functions on the native engine — `selectWindow(fn, { as, partitionBy, orderBy })` adds `ROW_NUMBER` / `RANK` / `DENSE_RANK` / `PERCENT_RANK` / `CUME_DIST` … `OVER (PARTITION BY … ORDER BY …)` projections. Additive (rows still hydrate as full models with the alias as an extra attribute), identifier-quoted throughout, identical SQL on SQLite 3.25+/Postgres/MySQL 8. Available as a `Model` static and on query chains; Drizzle/Prisma throw the forward-or-throw guard error. Aggregates-OVER / lag / lead / frames stay on the documented `selectRaw` recipe.
+- eb3bdfe: feat: transaction isolation levels — `transaction(fn, { isolationLevel })` / `DB.transaction(fn, { isolationLevel })` / `Model.transaction(fn, { isolationLevel })` with `'read uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`. The native engine emits `SET TRANSACTION ISOLATION LEVEL …` at transaction start on Postgres/MySQL; the Drizzle adapter passes the level through to Drizzle's transaction config; the Prisma adapter maps it to `$transaction`'s `isolationLevel` option. SQLite throws a clear unsupported error (no isolation levels — single-writer is already serializable), and a nested `transaction()` call (savepoint) rejects the option on every adapter.
+
+### Patch Changes
+
+- 246f5b0: fix: `whereNull`/`where(col, null)` on a JSON arrow path now matches an explicit json `null` on MySQL, not just a missing key (Laravel parity). MySQL's `JSON_EXTRACT` returns a JSON null literal — not SQL NULL — for an explicit null, so null equality now compiles to Laravel's `(extract IS NULL OR JSON_TYPE(extract) = 'NULL')` grammar shape on both the native engine (new `Dialect.jsonNullComparison` seam) and the Drizzle adapter. sqlite/pg SQL is unchanged.
+- Updated dependencies [f3cf833]
+- Updated dependencies [a0206a6]
+- Updated dependencies [cfab7aa]
+- Updated dependencies [a5f7950]
+- Updated dependencies [c704a48]
+- Updated dependencies [345d805]
+- Updated dependencies [0d7c992]
+- Updated dependencies [ba50682]
+- Updated dependencies [f88660f]
+- Updated dependencies [d89d2cd]
+- Updated dependencies [255a755]
+- Updated dependencies [1da0b39]
+- Updated dependencies [1b8474a]
+- Updated dependencies [ac3d8d0]
+- Updated dependencies [eb3bdfe]
+  - @rudderjs/database@1.2.0
+  - @rudderjs/contracts@1.12.0
+
 ## 1.15.0
 
 ### Minor Changes

@@ -1,5 +1,20 @@
 # @rudderjs/contracts
 
+## 1.12.0
+
+### Minor Changes
+
+- 345d805: Phase-2 engine relocation, step 1 (decouple): the sticky-read scope moves to `@rudderjs/database/sticky`, and `BuiltInCast` moves to `@rudderjs/contracts`.
+
+  - **`@rudderjs/database`** gains the node-only `./sticky` subpath — `runWithDatabaseContext()`, `hasDatabaseContext()`, `markWrote()`, `stickyWrote()`, and `databaseContextMiddleware()` relocate verbatim from `@rudderjs/orm/sticky`. The AsyncLocalStorage stays on `globalThis['__rudderjs_orm_sticky__']` (key unchanged), so the old and new import paths — and any mix of package versions across a dev re-boot — share one scope.
+  - **`@rudderjs/orm/sticky`** becomes a re-export shim of `@rudderjs/database/sticky`. Every existing import (including `@rudderjs/orm-drizzle` and app queue-job wrappers) keeps working unchanged; `@rudderjs/database/sticky` is the canonical path going forward.
+  - **`@rudderjs/contracts`** now owns the `BuiltInCast` cast-name union; `@rudderjs/orm` re-exports it from the same places as before (`@rudderjs/orm` main entry / `cast.ts`). Moved because the native engine's schema→TS type generator also consumes it, and the engine's new home (`@rudderjs/database`) must never import `@rudderjs/orm`.
+
+  No behavior change; no `native/**` files touched. Part of `docs/plans/2026-06-04-database-extraction-phase-2.md` (PR-A1).
+
+- d89d2cd: feat: lock wait-behavior options — `lockForUpdate(opts?)` / `sharedLock(opts?)` accept `{ skipLocked?: boolean }` (skip rows another transaction holds — `FOR UPDATE SKIP LOCKED`, the concurrent job-reservation pattern) or `{ noWait?: boolean }` (fail immediately instead of blocking — `NOWAIT`). Mutually exclusive — both set throws at the call site. The native engine emits the clauses via `Dialect.lockSql(mode, opts)` on Postgres/MySQL 8 (SQLite stays a no-op, options included); the Drizzle adapter maps to `.for(strength, { skipLocked | noWait })` on pg/mysql. Prisma keeps throwing on the lock methods (no `FOR UPDATE` in its query API).
+- eb3bdfe: feat: transaction isolation levels — `transaction(fn, { isolationLevel })` / `DB.transaction(fn, { isolationLevel })` / `Model.transaction(fn, { isolationLevel })` with `'read uncommitted' | 'read committed' | 'repeatable read' | 'serializable'`. The native engine emits `SET TRANSACTION ISOLATION LEVEL …` at transaction start on Postgres/MySQL; the Drizzle adapter passes the level through to Drizzle's transaction config; the Prisma adapter maps it to `$transaction`'s `isolationLevel` option. SQLite throws a clear unsupported error (no isolation levels — single-writer is already serializable), and a nested `transaction()` call (savepoint) rejects the option on every adapter.
+
 ## 1.11.0
 
 ### Minor Changes

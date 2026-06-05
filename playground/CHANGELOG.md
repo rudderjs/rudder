@@ -1,5 +1,33 @@
 # rudderjs-playground
 
+## 0.0.126
+
+### Patch Changes
+
+- Updated dependencies [cfab7aa]
+- Updated dependencies [a5f7950]
+- Updated dependencies [c704a48]
+- Updated dependencies [345d805]
+- Updated dependencies [0d7c992]
+- Updated dependencies [ba50682]
+- Updated dependencies [f88660f]
+- Updated dependencies [635d09e]
+- Updated dependencies [d89d2cd]
+- Updated dependencies [255a755]
+- Updated dependencies [246f5b0]
+- Updated dependencies [8a53671]
+- Updated dependencies [119cf9f]
+- Updated dependencies [1da0b39]
+- Updated dependencies [1b8474a]
+- Updated dependencies [ac3d8d0]
+- Updated dependencies [eb3bdfe]
+  - @rudderjs/orm@1.16.0
+  - @rudderjs/contracts@1.12.0
+  - @rudderjs/orm-prisma@2.2.0
+  - @rudderjs/queue@4.4.0
+  - @rudderjs/mail@1.4.0
+  - @rudderjs/notification@1.1.0
+
 ## 0.0.125
 
 ### Patch Changes
