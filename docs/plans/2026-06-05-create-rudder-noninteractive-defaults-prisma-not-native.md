@@ -44,3 +44,21 @@ scaffolding pilotiq-demo:
 - Add `"types": ["vite/client"]` to the scaffolded tsconfig template.
 - README on npm still says "generates the Prisma client, pushes the schema" —
   refresh alongside.
+
+## Addendum (same day): scaffolded `start` script lacks NODE_ENV=production
+
+`"start": "node ./dist/server/index.mjs"` — running the built server without
+`NODE_ENV=production` mixes React build flavors (the vike SSR bundle bakes
+production internals; the external `react` package resolves its development
+build from unset NODE_ENV) and every render 500s with
+`TypeError: dispatcher.getOwner is not a function`. Hit in pilotiq-demo CI the
+moment the dep graph grew real React-ecosystem packages. The scaffold's
+`start`/`preview` scripts should set `NODE_ENV=production` (Laravel-parity:
+prod entrypoints assume prod env).
+
+The scaffolder smoke (`scripts/smoke.ts` `bootServer`) never caught this
+because it injects `NODE_ENV: 'production'` into the spawn env itself —
+correct readiness check, but it masked the script gap on the actual user path.
+
+**Fixed:** `start`/`preview` in the package.json template (and both
+playgrounds) now prefix `NODE_ENV=production`.
