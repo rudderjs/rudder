@@ -188,8 +188,12 @@ export function packageJson(ctx: TemplateContext): string {
       dev:               'vike dev',
       'dev:clean':       'pids=$(lsof -ti :24678 -ti :3000 2>/dev/null); if [ -n "$pids" ]; then kill -9 $pids; fi; vike dev',
       build:             'vike build',
-      start:             'node ./dist/server/index.mjs',
-      preview:           'node ./dist/server/index.mjs',
+      // NODE_ENV=production is load-bearing: the vike SSR bundle bakes production
+      // React internals, but external React-ecosystem packages resolve their build
+      // flavor from NODE_ENV at import time — unset mixes flavors and every render
+      // 500s with `dispatcher.getOwner is not a function`.
+      start:             'NODE_ENV=production node ./dist/server/index.mjs',
+      preview:           'NODE_ENV=production node ./dist/server/index.mjs',
       typecheck:         'tsc --noEmit',
       rudder:            'tsx node_modules/@rudderjs/cli/dist/index.js',
       ...(ctx.orm ? {

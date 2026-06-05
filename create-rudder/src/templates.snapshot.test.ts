@@ -59,9 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-05 — tsconfig.json gained
-  // `types: ['node', 'vite/client']` so scaffolded apps type-check
-  // `import.meta.env` (and keep the global `process`) out of the box.
+  // Baseline last captured 2026-06-05 — `start`/`preview` scripts gained
+  // `NODE_ENV=production` so the built server doesn't mix React build flavors
+  // (external react resolves its dev build from unset NODE_ENV → render 500s).
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 61
-const EXPECTED_TOTAL_BYTES = 49634
-const EXPECTED_CONTENT_HASH = '54d00dfba8a190ee372f4b587362d1dd944d5eb0677a629ca43d2a0e07b6e7d0'
+const EXPECTED_TOTAL_BYTES = 49674
+const EXPECTED_CONTENT_HASH = '9188d1667aa1952379a3c63691b6ce9eb8a7f27aa171b0426b467c910af00f3e'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
