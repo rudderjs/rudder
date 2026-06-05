@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 
-import { rudderjs, invalidateBackendSubtree, performReboot, resolveWatchDir, spliceRudderVersion } from './index.js'
+import { EventEmitter } from 'node:events'
+
+import { rudderjs, invalidateBackendSubtree, performReboot, resolveWatchDir, spliceRudderVersion, installBannerSplice } from './index.js'
 
 /** Walk up from the test cwd (dist-test/) to the pnpm workspace root. */
 function repoRootDir(): string {
@@ -568,5 +570,81 @@ describe('spliceRudderVersion', () => {
   it('returns null for a non-banner line (so the caller leaves it untouched)', () => {
     assert.equal(spliceRudderVersion('  ➜  Local:   http://localhost:3000', '1.5.1'), null)
     assert.equal(spliceRudderVersion('[AppServiceProvider] booted', '1.5.1'), null)
+  })
+})
+
+describe('installBannerSplice fallback timing', () => {
+  const sep    = '\x1b[2m·\x1b[22m'
+  const banner = `\n  \x1b[35mVike\x1b[39m \x1b[33mv0.4.257\x1b[39m ${sep} \x1b[36mVite\x1b[39m \x1b[36mv8.0.14\x1b[39m ${sep} \x1b[2mready in \x1b[22m\x1b[1m3366\x1b[22m\x1b[2m ms\x1b[22m\n`
+  const strip  = (s: string): string => s.replace(new RegExp(`${'\x1b'}\\[[0-9;]*m`, 'g'), '')
+
+  /** Fake `server.httpServer` — an EventEmitter with a `listening` flag. */
+  const fakeHttpServer = () => Object.assign(new EventEmitter(), { listening: false })
+
+  /** Capture console.log output for the duration of `fn`, restoring after. */
+  function withCapturedLog(fn: (lines: string[], recorder: typeof console.log) => void): void {
+    const real = console.log
+    const lines: string[] = []
+    const recorder: typeof console.log = (...args: unknown[]) => { lines.push(String(args[0])) }
+    console.log = recorder
+    mock.timers.enable({ apis: ['setTimeout'] })
+    try { fn(lines, recorder) }
+    finally {
+      mock.timers.reset()
+      console.log = real
+    }
+  }
+
+  it('splices a banner that prints after the old 2s window (slow start: listen comes late)', () => {
+    withCapturedLog((lines, recorder) => {
+      const httpServer = fakeHttpServer()
+      installBannerSplice('1.7.0', httpServer)
+      // 3.4s of pre-bundling/codegen before the server listens (pilotiq-shaped
+      // start) — the fallback must NOT fire during this window.
+      mock.timers.tick(3_400)
+      assert.equal(lines.length, 0, 'fallback fired before listening')
+      httpServer.emit('listening')
+      console.log(banner)
+      assert.equal(lines.length, 1)
+      assert.match(strip(lines[0]!), /Vike v0\.4\.257 · Vite v8\.0\.14 · Rudder v1\.7\.0 · ready in 3366 ms/)
+      assert.equal(console.log, recorder, 'wrapper restored after splice')
+      // The (now-armed) fallback window elapsing later must stay silent.
+      mock.timers.tick(2_000)
+      assert.equal(lines.length, 1, 'standalone fallback printed despite a successful splice')
+    })
+  })
+
+  it('standalone fallback still fires 2s after listening when no banner ever matches', () => {
+    withCapturedLog((lines, recorder) => {
+      const httpServer = fakeHttpServer()
+      installBannerSplice('1.7.0', httpServer)
+      httpServer.emit('listening')
+      console.log('some unrelated line')
+      mock.timers.tick(2_000)
+      assert.equal(lines.length, 2)
+      assert.match(strip(lines[1]!), /➜\s+Rudder v1\.7\.0/)
+      assert.equal(console.log, recorder, 'wrapper restored after fallback')
+    })
+  })
+
+  it('middleware mode (no http server) keeps the immediate arm', () => {
+    withCapturedLog((lines, recorder) => {
+      installBannerSplice('1.7.0', null)
+      mock.timers.tick(2_000)
+      assert.equal(lines.length, 1)
+      assert.match(strip(lines[0]!), /➜\s+Rudder v1\.7\.0/)
+      assert.equal(console.log, recorder, 'wrapper restored after fallback')
+    })
+  })
+
+  it('server close before the banner restores console.log silently', () => {
+    withCapturedLog((lines, recorder) => {
+      const httpServer = fakeHttpServer()
+      installBannerSplice('1.7.0', httpServer)
+      httpServer.emit('close')
+      mock.timers.tick(5_000)
+      assert.equal(lines.length, 0, 'nothing should print after close')
+      assert.equal(console.log, recorder, 'wrapper restored on close')
+    })
   })
 })
