@@ -1,6 +1,5 @@
 # Generated files — collapsed in PR diffs and excluded from language stats.
 # The full list + regen commands: docs/guide/directory-structure.md "Generated files".
+**/.rudder/** linguist-generated=true
 **/pages/__view/** linguist-generated=true
-**/routes/__registry.d.ts linguist-generated=true
-**/app/Models/__schema/registry.d.ts linguist-generated=true
 pnpm-lock.yaml linguist-generated=true

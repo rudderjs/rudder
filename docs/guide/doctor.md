@@ -24,7 +24,7 @@ orm
   ✗ Prisma client             out of date — schema modified 2h ago, client 12d ago
      fix: pnpm rudder db:generate
 
-36 checks · 32 ok · 1 warn · 3 errors · 4ms
+37 checks · 33 ok · 1 warn · 3 errors · 4ms
 ```
 
 Exit code is `0` when no checks are red. Warnings don't block the exit code — they're noted but the command still passes. Use it in CI, in `predev` hooks, or as the first thing you run when a scaffolded app misbehaves.
@@ -143,6 +143,7 @@ A fixer that throws is reported as a red fix outcome; doctor itself never crashe
 | `structure:bootstrap-app` | `bootstrap/app.ts` exists and lexically parses. |
 | `structure:bootstrap-providers` | `bootstrap/providers.ts` exists and has a default export. |
 | `structure:routes` | At least one of `routes/web.ts`, `routes/api.ts`, `routes/console.ts` exists. |
+| `structure:rudder-types-tsconfig` | When `.rudder/types/` exists, the `tsconfig.json` `include` array covers it with the glob form (`".rudder/**/*"` — dot-directories are invisible to `**/*` globs and to bare-directory entries). Without it, typed `view()` / `route()` / `Model.for<>()` silently stop resolving. |
 | `structure:welcome-view` | `app/Views/Welcome.*` (or a `pages/index/+Page.*` for file-based routing) is present. |
 
 ### `deps`
@@ -178,7 +179,7 @@ Each `@rudderjs/*` package that ships a `doctor.ts` registers its own checks at 
 | `@rudderjs/mcp` | `mcp:route-mounted` (warns if `app/Mcp/` has tools but no MCP route is registered). |
 | `@rudderjs/telescope` / `@rudderjs/pulse` / `@rudderjs/horizon` | `{telescope,pulse,horizon}:dashboard` — warns if the package is installed but its dashboard route isn't registered. |
 
-Total: 36 checks across 11 categories.
+Total: 37 checks across 11 categories.
 
 ## Contributing a check
 

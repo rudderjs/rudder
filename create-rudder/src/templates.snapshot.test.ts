@@ -59,9 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-06 — scaffolded apps gained a
-  // `.gitattributes` marking the committed generated files (pages/__view,
-  // routes/__registry.d.ts, models __schema registry) linguist-generated.
+  // Baseline last captured 2026-06-06 — generated registries consolidated
+  // under .rudder/types/: tsconfig include gained ".rudder/**/*" and
+  // .gitattributes now marks .rudder/** + pages/__view/** linguist-generated.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 62
-const EXPECTED_TOTAL_BYTES = 49819
-const EXPECTED_CONTENT_HASH = 'a13986f9f1f4030b6a329d5ee5af51974f2de6d098e7ceffbae66fbd970b0f6a'
+const EXPECTED_TOTAL_BYTES = 49769
+const EXPECTED_CONTENT_HASH = '8dea4d69c894f3b3ca400a1a35d9e0272b32fd1d9464ed538e6f0a4a57a098a8'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

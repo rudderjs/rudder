@@ -7,8 +7,10 @@
  *   pages/__view/dashboard/+route.ts     → pins the route to /dashboard
  *   pages/__view/dashboard/+data.ts      → no-op; forces Vike client router to fetch pageContext
  *
- * The generated `pages/__view/` directory is gitignored. The plugin watches
- * `app/Views/**` and regenerates on add/remove/rename.
+ * The generated `pages/__view/` directory is committed (Vike discovers pages
+ * via `git ls-files`). The plugin watches `app/Views/**` and regenerates on
+ * add/remove/rename. The typed-view registry is emitted separately to
+ * `.rudder/types/views.d.ts` (see `rudder-dir.ts`).
  *
  * Framework selection is automatic — the scanner resolves `vike-react`,
  * `vike-react-rsc-rudder` (or the legacy `vike-react-rsc` name), `vike-vue`,
@@ -30,6 +32,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Plugin } from 'vite'
+import { VIEWS_DTS, ensureRudderReadme } from './rudder-dir.js'
 
 type Framework = 'react' | 'react-rsc' | 'vue' | 'solid' | 'vanilla'
 
@@ -724,7 +727,7 @@ function purgeStalePageFiles(outDir: string, keep: string): void {
 }
 
 /**
- * Emit `pages/__view/registry.d.ts` — one TypeScript module-augmentation
+ * Emit `.rudder/types/views.d.ts` — one TypeScript module-augmentation
  * entry per view that has an exported `Props` type.
  *
  * Uses `import('...').Props` rather than a top-level import so that
@@ -760,7 +763,6 @@ function generate(generatedRoot: string, pagesRoot: string, views: DiscoveredVie
   if (views.length === 0) return
   const isRsc = framework === 'react-rsc'
   writeIfChanged(path.join(generatedRoot, '+config.ts'), isRsc ? RSC_VIEW_ROOT_CONFIG : VIEW_ROOT_CONFIG)
-  writeIfChanged(path.join(generatedRoot, 'registry.d.ts'), registryFileSource(views))
   if (isRsc) {
     // RSC wires the framework hooks via import: strings in RSC_VIEW_ROOT_CONFIG;
     // physical pages/+<hook>.ts stubs would be stripped from the client bundle.
@@ -895,6 +897,17 @@ export function syncViewsFromDisk(cwd: string = process.cwd()): ViewsSyncResult 
   const views     = discover(viewsRoot, pagesRoot, framework)
   cleanStale(generatedRoot, views)
   generate(generatedRoot, pagesRoot, views, framework, rscPkg)
+
+  // Registry emit is unconditional (unlike the Vike stubs): when the last
+  // view is deleted it must shrink back to the empty interface, not linger
+  // with entries importing files that no longer exist.
+  writeIfChanged(path.join(cwd, VIEWS_DTS), registryFileSource(views))
+  // Pre-`.rudder/` emit location — best-effort removal so migrated apps
+  // don't keep a stale duplicate augmentation.
+  try {
+    fs.rmSync(path.join(generatedRoot, 'registry.d.ts'), { force: true })
+  } catch { /* a stale duplicate merges harmlessly until the next write */ }
+  ensureRudderReadme(cwd)
 
   const result: ViewsSyncResult = {
     viewsRootExists: true,

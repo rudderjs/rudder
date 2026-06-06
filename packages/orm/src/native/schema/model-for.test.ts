@@ -11,7 +11,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Model } from '../../index.js'
 
-// Augment the registry exactly like the generated `app/Models/__schema/registry.d.ts`
+// Augment the registry exactly like the generated `.rudder/types/models.d.ts`
 // would — one entry per migrated table. `email` is nullable; `active` is a
 // boolean (a cast-refined column, as the generator would emit it).
 declare module '../../index.js' {

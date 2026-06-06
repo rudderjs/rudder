@@ -423,7 +423,7 @@ export async function registerAppModels(cwd: string): Promise<void> {
   }
   for (const entry of entries) {
     if (!entry.isFile()) continue
-    // Source modules only — skip declarations (incl. the generated
+    // Source modules only — skip declarations (incl. any legacy generated
     // __schema/registry.d.ts) and test files living alongside models.
     if (!/\.(ts|mts|js|mjs)$/.test(entry.name)) continue
     if (entry.name.endsWith('.d.ts') || /\.test\.[cm]?[tj]s$/.test(entry.name)) continue
@@ -469,7 +469,7 @@ export function collectRegisteredModelCasts(): ModelCastInfo[] {
 }
 
 /**
- * Regenerate `app/Models/__schema/registry.d.ts` from a booted native adapter's
+ * Regenerate `.rudder/types/models.d.ts` from a booted native adapter's
  * live schema. Shared by the `schema:types` command and the post-`migrate`
  * auto-gen hook. Logs the written path + table count.
  */

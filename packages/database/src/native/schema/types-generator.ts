@@ -5,7 +5,7 @@
 // This module is the PURE core: it turns introspected columns (+ a model's
 // declared `casts`) into a `SchemaRegistry` `.d.ts` that augments `@rudderjs/orm`,
 // which `Model<'table'>` then resolves. Mirrors `@rudderjs/vite`'s scanner
-// emitting `pages/__view/registry.d.ts` (same "generated .d.ts augments framework
+// emitting `.rudder/types/views.d.ts` (same "generated .d.ts augments framework
 // types" pattern).
 //
 // PURE: string building only. The node-only orchestration (introspect every

@@ -1327,11 +1327,11 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
 /**
  * Generated schema registry — table name → column types. Empty by default;
  * `rudder schema:types` (run automatically after `migrate`) emits
- * `app/Models/__schema/registry.d.ts`, which augments this interface via
+ * `.rudder/types/models.d.ts`, which augments this interface via
  * `declare module '@rudderjs/orm'` with one entry per migrated table:
  *
  * ```ts
- * // AUTO-GENERATED — app/Models/__schema/registry.d.ts
+ * // AUTO-GENERATED — .rudder/types/models.d.ts
  * declare module '@rudderjs/orm' {
  *   interface SchemaRegistry {
  *     users: { id: number; name: string; email: string; createdAt: Date | null }
@@ -1341,7 +1341,7 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
  *
  * Columns become the single source of truth (the migration), so a model's field
  * types are generated rather than hand-maintained — they can't drift. Mirrors
- * `@rudderjs/vite`'s scanner emitting `pages/__view/registry.d.ts`. Until the
+ * `@rudderjs/vite`'s scanner emitting `.rudder/types/views.d.ts`. Until the
  * file exists this is empty and everything behaves exactly as before.
  *
  * Reference a generated table shape directly with {@link SchemaColumns} (e.g.
@@ -1358,7 +1358,7 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
  * ```
  */
 // Deliberately empty — this is the augmentation TARGET. The generated
-// `app/Models/__schema/registry.d.ts` fills it in via `declare module`, exactly
+// `.rudder/types/models.d.ts` fills it in via `declare module`, exactly
 // like @rudderjs/vite's RouteRegistry. An empty interface is the correct shape
 // here (a type alias can't be augmented by module declaration merging).
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -1895,7 +1895,7 @@ export abstract class Model {
    * ```
    *
    * The column shape comes from {@link SchemaRegistry}, which the generated
-   * `app/Models/__schema/registry.d.ts` augments (run `rudder schema:types`, or
+   * `.rudder/types/models.d.ts` augments (run `rudder schema:types`, or
    * let `migrate` do it). `static casts` refine the storage type — the generator
    * already folds them in, so a `boolean`/`date`/`json` cast surfaces as
    * `boolean`/`Date`/the cast's type rather than the raw column affinity.

@@ -113,7 +113,7 @@ describe('registerAppModels', () => {
 
       await runNativeSchemaTypes(adapter, cwd)
 
-      const dts = readFileSync(join(cwd, 'app', 'Models', '__schema', 'registry.d.ts'), 'utf8')
+      const dts = readFileSync(join(cwd, '.rudder', 'types', 'models.d.ts'), 'utf8')
       assert.match(dts, /articles: \{/)
       assert.match(dts, /featured: boolean/, 'cast must override the INTEGER storage type')
     } finally {
@@ -127,7 +127,7 @@ describe('runNativeSchemaTypes', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'rudder-st-runner-'))
     try {
       await runNativeSchemaTypes(adapter, cwd)
-      const path = join(cwd, 'app', 'Models', '__schema', 'registry.d.ts')
+      const path = join(cwd, '.rudder', 'types', 'models.d.ts')
       assert.ok(existsSync(path), 'registry.d.ts should be written')
       const dts = readFileSync(path, 'utf8')
       assert.match(dts, /declare module '@rudderjs\/orm'/)
@@ -159,7 +159,7 @@ describe('registerSchemaTypesCommand', () => {
       assert.ok(handler, 'command registered')
       await handler([])
 
-      const path = join(cwd, 'app', 'Models', '__schema', 'registry.d.ts')
+      const path = join(cwd, '.rudder', 'types', 'models.d.ts')
       assert.ok(existsSync(path), 'registry.d.ts should be written under cwd')
       assert.match(readFileSync(path, 'utf8'), /widgets: \{/)
     } finally {
@@ -188,7 +188,7 @@ describe('native migrate auto-regenerates schema types (post-apply hook)', () =>
       assert.ok(handler, 'migrate command registered')
       await handler([])
 
-      const path = join(cwd, 'app', 'Models', '__schema', 'registry.d.ts')
+      const path = join(cwd, '.rudder', 'types', 'models.d.ts')
       assert.ok(existsSync(path), 'migrate should auto-generate registry.d.ts')
       assert.match(readFileSync(path, 'utf8'), /widgets: \{/)
     } finally {

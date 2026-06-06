@@ -1,6 +1,6 @@
 // ─── schema:types command (GATE 7-types) ──────────────────
 //
-// `rudder schema:types` regenerates `app/Models/__schema/registry.d.ts` from the
+// `rudder schema:types` regenerates `.rudder/types/models.d.ts` from the
 // live native schema on demand — the same generation that runs automatically
 // after a native `migrate` / `migrate:fresh` / `migrate:refresh` / rollback.
 // Native-engine only: prisma/drizzle apps already produce a typed client
@@ -50,5 +50,5 @@ export function registerSchemaTypesCommand(
       'schema:types could not resolve the native engine. Ensure the default connection sets `engine: \'native\'` and the app boots.',
       1,
     )
-  }).description('Generate app/Models/__schema/registry.d.ts from the live native schema')
+  }).description('Generate .rudder/types/models.d.ts from the live native schema')
 }

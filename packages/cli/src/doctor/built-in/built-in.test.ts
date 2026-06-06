@@ -147,6 +147,42 @@ describe('built-in checks — broken state', () => {
     assert.strictEqual(o.status, 'error')
   })
 
+  it('structure:rudder-types-tsconfig is ok when no .rudder/ exists', async () => {
+    writeFile('package.json', '{}')
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:rudder-types-tsconfig')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('structure:rudder-types-tsconfig warns when .rudder/ exists but include misses it', async () => {
+    writeFile('package.json', '{}')
+    writeFile('.rudder/types/views.d.ts', 'export {}\n')
+    writeFile('tsconfig.json', JSON.stringify({ include: ['app/**/*'] }))
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:rudder-types-tsconfig')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.fix?.includes('.rudder/**/*'))
+  })
+
+  it('structure:rudder-types-tsconfig warns on the bare ".rudder" include form', async () => {
+    writeFile('package.json', '{}')
+    writeFile('.rudder/types/views.d.ts', 'export {}\n')
+    writeFile('tsconfig.json', JSON.stringify({ include: ['.rudder', 'app/**/*'] }))
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:rudder-types-tsconfig')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.message.includes('bare'))
+  })
+
+  it('structure:rudder-types-tsconfig is ok with the glob include form', async () => {
+    writeFile('package.json', '{}')
+    writeFile('.rudder/types/views.d.ts', 'export {}\n')
+    writeFile('tsconfig.json', JSON.stringify({ include: ['.rudder/**/*', 'app/**/*'] }))
+    const result = await runChecks()
+    const o = outcomeFor(result.outcomes, 'structure:rudder-types-tsconfig')
+    assert.strictEqual(o.status, 'ok')
+  })
+
   it('deps:providers-manifest warns when missing', async () => {
     writeFile('package.json', '{}')
     const result = await runChecks()

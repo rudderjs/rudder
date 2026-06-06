@@ -4,7 +4,7 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, rmSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BetterSqlite3Driver } from '../drivers/better-sqlite3.js'
@@ -59,16 +59,26 @@ describe('generateSchemaTypes — writes registry.d.ts', () => {
   beforeEach(() => { cwd = mkdtempSync(join(tmpdir(), 'rudder-schema-types-')) })
   afterEach(() => { rmSync(cwd, { recursive: true, force: true }) })
 
-  it('writes app/Models/__schema/registry.d.ts with the generated shape', async () => {
+  it('writes .rudder/types/models.d.ts with the generated shape', async () => {
     const { path, tableCount } = await generateSchemaTypes(driver, dialect, cwd, [
       { table: 'users', casts: { active: 'boolean' } },
     ])
     assert.equal(path, registryDtsPath(cwd))
+    assert.equal(path, join(cwd, '.rudder', 'types', 'models.d.ts'))
     assert.equal(tableCount, 2)
     const dts = readFileSync(path, 'utf8')
     assert.match(dts, /declare module '@rudderjs\/orm'/)
     assert.match(dts, /users: \{/)
     assert.match(dts, /active: boolean/)
     assert.doesNotMatch(dts, /migrations:/)   // bookkeeping table excluded
+  })
+
+  it('removes the legacy app/Models/__schema/registry.d.ts on write (migration)', async () => {
+    const legacyDir = join(cwd, 'app', 'Models', '__schema')
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(join(legacyDir, 'registry.d.ts'), '// stale legacy emit\n')
+    await generateSchemaTypes(driver, dialect, cwd, [])
+    assert.equal(existsSync(join(legacyDir, 'registry.d.ts')), false)
+    assert.equal(existsSync(legacyDir), false, 'empty __schema/ dir should be removed too')
   })
 })

@@ -55,7 +55,7 @@ The native engine ships its own Laravel-style schema builder + migration runner 
 
 The native engine's headline feature: **a model's column types are generated from the migrated schema, not hand-maintained — so they can't drift.** Write the migration once; the model's field types come for free.
 
-After a `migrate`, the engine introspects the live database and writes `app/Models/__schema/registry.d.ts`, which augments an internal `SchemaRegistry` with one entry per table. Bind it onto a model with `Model.for<'table'>()` and the model needs **zero** hand-declared column fields:
+After a `migrate`, the engine introspects the live database and writes `.rudder/types/models.d.ts`, which augments an internal `SchemaRegistry` with one entry per table. Bind it onto a model with `Model.for<'table'>()` and the model needs **zero** hand-declared column fields:
 
 ```ts
 // app/Models/User.ts — you write only intent + behavior
@@ -78,14 +78,14 @@ await User.create({ name, email })             // unknown columns fail `tsc`
 **Generation runs automatically** after a successful native `migrate`, `migrate:fresh`, `migrate:refresh`, or `migrate:rollback`. Regenerate on demand without a full migrate:
 
 ```bash
-pnpm rudder schema:types     # rewrite app/Models/__schema/registry.d.ts from the live schema
+pnpm rudder schema:types     # rewrite .rudder/types/models.d.ts from the live schema
 ```
 
 A few rules worth knowing:
 
 - **`casts` refine the generated type.** The generator emits the column's storage type, then folds in any string `static casts` — so a `boolean`/`date`/`json` cast surfaces as `boolean`/`Date`/the cast's type rather than the raw column affinity. Class-based casts (custom `CastUsing`, `vector(...)`) keep the storage type. Models under `app/Models/**` are discovered automatically at generation time; a model living elsewhere contributes its casts by self-registering via `ModelRegistry.register(TheModel)` in a provider.
 - **Nullable columns widen to `T | null`;** the primary key and `NOT NULL` columns stay non-null.
-- **Commit the generated file.** Treat `app/Models/__schema/registry.d.ts` as checked-in (like Drizzle's schema, not Prisma's gitignored client) so `tsc`/CI is green without a generate step. It's never hand-edited — `migrate` / `schema:types` overwrite it.
+- **Commit the generated file.** Treat `.rudder/types/models.d.ts` as checked-in (like Drizzle's schema, not Prisma's gitignored client) so `tsc`/CI is green without a generate step. It's never hand-edited — `migrate` / `schema:types` overwrite it.
 - **Opt-in and additive.** Plain `extends Model` (with or without hand-declared fields) keeps working exactly as before; `.for()` is the only thing that pulls in generated columns. At runtime `.for()` returns the class unchanged.
 - **prisma/drizzle apps** already generate a typed client (`db:generate`) / infer from their TS schema, so `schema:types` is a friendly no-op there.
 
@@ -193,7 +193,7 @@ A typical development loop on the **native engine** — every change is a tracke
 
 ```bash
 pnpm rudder make:migration add_published_to_posts
-pnpm rudder migrate              # applies it + rewrites app/Models/__schema/registry.d.ts
+pnpm rudder migrate              # applies it + rewrites .rudder/types/models.d.ts
 ```
 
 On **Prisma/Drizzle**, fast iteration can skip the migration file:

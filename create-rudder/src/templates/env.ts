@@ -109,12 +109,11 @@ declare module '@rudderjs/core' {
 }
 
 export function gitattributes(): string {
-  // Generated registries + Vike page stubs are committed (see the
-  // "Generated files" docs) — mark them linguist-generated so GitHub
+  // The generated-files home (.rudder/) + Vike page stubs are committed (see
+  // the "Generated files" docs) — mark them linguist-generated so GitHub
   // collapses them in PR diffs and skips them in language stats.
-  return `pages/__view/** linguist-generated=true
-routes/__registry.d.ts linguist-generated=true
-app/Models/__schema/registry.d.ts linguist-generated=true
+  return `.rudder/** linguist-generated=true
+pages/__view/** linguist-generated=true
 `
 }
 

@@ -81,7 +81,7 @@ Vue SFCs reject `export` statements inside `<script setup>` — put the `Props` 
 When the views scanner discovers an `export interface Props` (or `export type Props`) in a view file, it adds one line to a generated declaration file:
 
 ```ts
-// pages/__view/registry.d.ts — AUTO-GENERATED; commit it (Vike discovers pages via git ls-files)
+// .rudder/types/views.d.ts — AUTO-GENERATED; commit it
 declare module '@rudderjs/view' {
   interface ViewPropsRegistry {
     'dashboard': import('App/Views/Dashboard.tsx').Props
@@ -112,7 +112,7 @@ For an existing view, add the `Props` export:
   }
 ```
 
-Run `pnpm dev` (or `pnpm build`) once — the scanner regenerates `pages/__view/registry.d.ts`, and the corresponding `view('settings', ...)` calls are now type-checked.
+Run `pnpm dev` (or `pnpm build`) once — the scanner regenerates `.rudder/types/views.d.ts`, and the corresponding `view('settings', ...)` calls are now type-checked.
 
 ## Comparison
 

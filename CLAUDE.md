@@ -52,7 +52,7 @@ pnpm rudder      # RudderJS CLI (tsx node_modules/@rudderjs/cli/src/index.ts)
 
 > Always run `pnpm build` from root before `pnpm dev` in playground — packages must be compiled first.
 
-Database — `playground/` runs the **native engine** (migrations in `database/migrations/`, typed registry at `app/Models/__schema/registry.d.ts`, committed); its twin `playground-prisma/` is the same app on the **Prisma adapter**:
+Database — `playground/` runs the **native engine** (migrations in `database/migrations/`, typed registry at `.rudder/types/models.d.ts`, committed); its twin `playground-prisma/` is the same app on the **Prisma adapter**:
 ```bash
 # playground/ (native)
 pnpm rudder migrate             # Apply migrations + regenerate the typed registry
@@ -141,7 +141,7 @@ Routes return `view('id', props)` and the page is rendered through Vike's SSR pi
 - **Framework support**: React / Vue / Solid / vanilla (Blade equivalent — HTML-string functions, zero client JS). Scanner auto-detects the installed `vike-*` renderer. Vanilla views should use the `html\`\`` tagged template from `@rudderjs/view` for auto-escaping.
 - **Packages shipping views** follow the shape `packages/<name>/views/<framework>/<Name>.{tsx,vue}` + `src/routes.ts` exporting `registerXRoutes(router, opts)`. `@rudderjs/auth` is the reference implementation — see `feedback_package_ui_shape.md` in memory.
 - **Welcome page** (`app/Views/Welcome.tsx` with `export const route = '/'`) is the default landing page scaffolded by `create-rudder`. Auth-aware: shows Log in / Register links or a signed-in user with a Sign out button.
-- **Typed `view()` calls** — when a view file exports `interface Props` (or `type Props`), `@rudderjs/vite`'s scanner emits `pages/__view/registry.d.ts` mapping the view id to `import('App/Views/<file>').Props`. The corresponding `view('id', ...)` call is then type-checked at the controller. Views without `Props` keep the loose `Record<string, unknown>` behavior — opt in per view, no migration required. See `docs/guide/typed-views.md`.
+- **Typed `view()` calls** — when a view file exports `interface Props` (or `type Props`), `@rudderjs/vite`'s scanner emits `.rudder/types/views.d.ts` mapping the view id to `import('App/Views/<file>').Props`. The corresponding `view('id', ...)` call is then type-checked at the controller. Views without `Props` keep the loose `Record<string, unknown>` behavior — opt in per view, no migration required. See `docs/guide/typed-views.md`.
 
 ### Terminal Views (`@rudderjs/terminal`)
 
@@ -254,6 +254,7 @@ cd playground && pnpm dev   # :3000
 
 ```
 playground/
+├── .rudder/types/      # generated typed registries (committed; views/routes/models .d.ts)
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create()
 │   └── providers.ts    # [...(await defaultProviders()), eventsProvider({...}), AppServiceProvider]
@@ -270,7 +271,6 @@ playground/
 │   ├── Mail/DemoMail.ts          # mail demo
 │   ├── Mcp/                      # MCP servers + tools (Echo + secured)
 │   ├── Models/                   # User + demo models (Post/Video/Comment/Tag/Todo use Model.for<>())
-│   │   └── __schema/registry.d.ts  # generated typed registry (committed; rewritten on migrate)
 │   ├── Modules/Todo/             # self-contained module with service + test
 │   ├── Notifications/            # WelcomeNotification + others
 │   ├── Providers/AppServiceProvider.ts
@@ -290,7 +290,7 @@ playground/
 └── vite.config.ts
 ```
 
-(`playground-prisma/` keeps the pre-conversion shape: `prisma/schema/` multi-file schema instead of `database/migrations/`, no `__schema` registry.)
+(`playground-prisma/` keeps the pre-conversion shape: `prisma/schema/` multi-file schema instead of `database/migrations/`, no models registry.)
 
 **Provider boot order**: `DatabaseServiceProvider` (via `database()`) must come before any provider that uses ORM models.
 
@@ -358,4 +358,4 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **Node 22 `mock.module()` traps** (when writing tests that mock ESM imports — see [`feedback_node_mock_module_gotchas.md`](memory)): (1) Install at file/module scope, **not** inside a `before()` hook — top-level `before()` re-runs once per top-level describe in Node 22, which trips the duplicate-mock guard. (2) Node keys module mocks on the `file://` URL form, not the bare specifier — for peers loaded via `resolveOptionalPeer` (which does `createRequire().resolve()` first), mock the resolved URL, not the package name. (3) `mock.reset()` does **not** unregister module mocks — install one mock with shared capture arrays, and clear the arrays per-test instead of re-installing. Test scripts also need `--experimental-test-module-mocks` on the `node --test` invocation. Canonical example: `packages/mail/src/nodemailer-adapter.test.ts`.
 - **Broadcast drops half its messages on 2+ instance deployments**: the default `LocalDriver` walks an in-process subscriber map only, so a `broadcast()` call on instance B doesn't reach a subscriber on instance A. Install `@rudderjs/broadcast-redis` and set `config.broadcast.driver = () => new RedisDriver({ redis: env.REDIS_URL })` for any deployment with more than one Node process. `broadcast()` is `Promise<void>` since the driver refactor — `await` the call (or `void` it if you don't care about the round-trip).
 - **Prerender opt-in is `export const prerender = …`** at the top of a view file (`app/Views/Foo.tsx`). Two forms share the same exported name; the scanner picks output from the RHS shape: `= true` → static (single HTML at the view's URL), `= [...]` or `() => [...]` or `async () => [...]` → dynamic (one HTML per enumerated URL, for parameterized routes like `/blog/@slug`). Static emits `+prerender.ts`; dynamic emits both `+prerender.ts` AND `+onBeforePrerenderStart.ts`. Build-time only — dev still SSRs every request. The controller is NOT called at prerender time, so prerendered views read route params via `usePageContext().routeParams` (dynamic) or render from no per-request props (static). Variable-reference RHS (`= MY_LIST`) is intentionally not detected; inline the list or wrap in a function. Detection is anchored to the start of a logical line so `export const prerender = [...]` appearing inside a string elsewhere in the file (e.g. a `/demos` card description) doesn't false-positive.
-- **Typed `route(name, params)` lookups auto-populate**: the `@rudderjs/vite` routes scanner walks `routes/*.ts` for inline `.name('foo')` chains and emits `routes/__registry.d.ts` augmenting `RouteRegistry` — typo names + missing params fail `tsc`. Only literal-path AND literal-name chains are picked up; variable paths (`router.get(loginPath, ...).name(...)`) and runtime-registered routes (e.g. via `registerAuthRoutes(router, opts)`) are NOT auto-discovered — hand-augment the interface for those. Re-run on demand via `pnpm rudder routes:sync` (skip-boot, so it works before `pnpm dev` ever ran).
+- **Typed `route(name, params)` lookups auto-populate**: the `@rudderjs/vite` routes scanner walks `routes/*.ts` for inline `.name('foo')` chains and emits `.rudder/types/routes.d.ts` augmenting `RouteRegistry` — typo names + missing params fail `tsc`. Only literal-path AND literal-name chains are picked up; variable paths (`router.get(loginPath, ...).name(...)`) and runtime-registered routes (e.g. via `registerAuthRoutes(router, opts)`) are NOT auto-discovered — hand-augment the interface for those. Re-run on demand via `pnpm rudder routes:sync` (skip-boot, so it works before `pnpm dev` ever ran).
