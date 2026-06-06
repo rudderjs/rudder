@@ -917,6 +917,16 @@ export class SyncProvider extends ServiceProvider {
     this._persistence = syncGlobal('persistence', () => cfg.persistence ?? new MemoryPersistence())
     const persistence = this._persistence
     this.app.bind('sync.persistence', () => persistence)
+
+    // Publishable persistence schema — `pnpm rudder vendor:publish
+    // --tag=sync-schema` drops the SyncDocument model into prisma/schema/.
+    // The model name is load-bearing: the Prisma delegate must be
+    // `syncDocument`, syncPrisma()'s default. Prisma-only — syncRedis and
+    // in-memory need no schema, and there is no drizzle persistence adapter.
+    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
+    this.publishes([
+      { from: `${schemaDir}/sync.prisma`, to: 'prisma/schema', tag: 'sync-schema', orm: 'prisma' as const },
+    ])
   }
 
   async boot(): Promise<void> {

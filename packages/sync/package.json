@@ -18,6 +18,7 @@
   },
   "files": [
     "dist",
+    "schema",
     "boost"
   ],
   "main": "./dist/index.js",

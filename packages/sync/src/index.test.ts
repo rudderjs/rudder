@@ -1011,3 +1011,44 @@ describe('async message handler error containment', () => {
     unsub()
   })
 })
+
+// ─── sync-schema publishable ─────────────────────────────────
+
+describe('SyncProvider.register — sync-schema publishable', () => {
+  const G = globalThis as Record<string, unknown>
+  beforeEach(() => { delete G[SYNC_KEYS.persistence] })
+
+  it('registers the sync-schema publish group with an asset that exists on disk', async () => {
+    const core     = await import('@rudderjs/core')
+    const fs       = await import('node:fs')
+    const previous = core.getConfigRepository?.()
+    const fakeApp  = { bind: () => {} } as never
+    const registry = (globalThis as Record<string, unknown>)['__rudderjs_publish_registry__'] as
+      | Map<string, Array<{ from: string; to: string; tag: string; orm?: string }>>
+      | undefined
+    registry?.delete('SyncProvider')
+    try {
+      core.setConfigRepository?.(new core.ConfigRepository({ sync: {} }))
+      new SyncProvider(fakeApp).register()
+
+      const groups = ((globalThis as Record<string, unknown>)['__rudderjs_publish_registry__'] as
+        Map<string, Array<{ from: string; to: string; tag: string; orm?: string }>>).get('SyncProvider') ?? []
+      const entry = groups.find((g) => g.tag === 'sync-schema')
+      assert.ok(entry, 'sync-schema publish group must be registered')
+      assert.equal(entry.to, 'prisma/schema')
+      assert.equal(entry.orm, 'prisma')
+      // The asset must actually ship — a registered tag pointing at a missing
+      // file would make vendor:publish fail for every user (the docs sold
+      // this tag while nothing registered it; see the 2026-06-06 sweep).
+      assert.ok(fs.existsSync(entry.from), `published asset missing on disk: ${entry.from}`)
+      const model = fs.readFileSync(entry.from, 'utf8')
+      assert.match(model, /model SyncDocument/, 'model name is load-bearing (delegate syncDocument)')
+      assert.match(model, /docName/)
+      assert.match(model, /update\s+Bytes/)
+    } finally {
+      registry?.delete('SyncProvider')
+      delete G[SYNC_KEYS.persistence]
+      if (previous) core.setConfigRepository?.(previous)
+    }
+  })
+})
