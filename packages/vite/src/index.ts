@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import type { EnvironmentModuleNode, Plugin, ViteDevServer } from 'vite'
 import { viewsScannerPlugin } from './views-scanner.js'
 import { routesScannerPlugin } from './routes-scanner.js'
+import { envScannerPlugin } from './env-scanner.js'
 import { resetPageContextEnhancers } from './page-context-enhancers.js'
 
 /** Options for the {@link rudderjs} Vite plugin. */
@@ -367,6 +368,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
   return [
     viewsScannerPlugin(),
     routesScannerPlugin(),
+    envScannerPlugin(),
     {
       // Append `· Rudder vX.Y.Z` to Vike's `Vike v… · Vite v… · ready in N ms`
       // startup banner so the framework version shows alongside Vike's and

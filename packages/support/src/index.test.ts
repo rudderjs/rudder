@@ -400,6 +400,46 @@ describe('Env', () => {
   })
 })
 
+// ─── EnvRegistry (typed keys) ──────────────────────────────
+
+// Local augmentation, exactly what the generated `.rudder/types/env.d.ts`
+// emits. Proves the typed overload dispatches identically to the loose one
+// (same impl) and that a declared key compiles via the K-constrained overload.
+declare module './index.js' {
+  interface EnvRegistry {
+    'RUDDERJS_TEST_SUPPORT_TYPED': string
+  }
+}
+
+describe('Env — EnvRegistry typed overloads', () => {
+  const KEY = 'RUDDERJS_TEST_SUPPORT_TYPED'
+
+  beforeEach(() => { delete process.env[KEY] })
+  afterEach(()  => { delete process.env[KEY] })
+
+  it('declared keys resolve through the typed overload', () => {
+    process.env[KEY] = 'typed'
+    // Literal key — picked up by the K extends keyof EnvRegistry overload.
+    assert.strictEqual(Env.get('RUDDERJS_TEST_SUPPORT_TYPED'), 'typed')
+    assert.strictEqual(env('RUDDERJS_TEST_SUPPORT_TYPED'), 'typed')
+    assert.ok(Env.has('RUDDERJS_TEST_SUPPORT_TYPED'))
+  })
+
+  it('undeclared keys keep working via the loose overload', () => {
+    process.env['RUDDERJS_TEST_SUPPORT_LOOSE'] = 'loose'
+    try {
+      assert.strictEqual(Env.get('RUDDERJS_TEST_SUPPORT_LOOSE'), 'loose')
+    } finally {
+      delete process.env['RUDDERJS_TEST_SUPPORT_LOOSE']
+    }
+  })
+
+  it('typed overload honors fallbacks like the loose one', () => {
+    assert.strictEqual(Env.get('RUDDERJS_TEST_SUPPORT_TYPED', 'fb'), 'fb')
+    assert.strictEqual(Env.getNumber('RUDDERJS_TEST_SUPPORT_TYPED' as string, 9), 9)
+  })
+})
+
 // ─── env() helper ──────────────────────────────────────────
 
 describe('env()', () => {
