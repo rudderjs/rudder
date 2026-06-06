@@ -1,5 +1,24 @@
 # create-rudder
 
+## 1.8.0
+
+### Minor Changes
+
+- 7107ed9: Native engine pg/mysql scaffolding (7.9). The Database driver prompt (SQLite / PostgreSQL / MySQL) is now asked for the Native engine too instead of pinning SQLite — the choice wires through to the driver dependency (`postgres` / `mysql2`), `config/database.ts` (native driver names `pg` / `mysql`), `.env` `DATABASE_URL`, and the "Is your DB running now?" confirm (the auto-cascade's `rudder migrate` now honors `--db-ready` on pg/mysql). Non-interactive: `--orm=native --db=postgresql|mysql` works in both the recipe and legacy flag shapes.
+
+  Behavior change: `--db=postgresql|mysql` without `--orm` now stays on the native default engine. Before this release it implied `--orm=prisma` (a back-compat fallback from when native was SQLite-only) — scripts that relied on that must pass `--orm=prisma` explicitly.
+
+- bef393f: Generated type registries consolidate under the committed `.rudder/types/` directory: `views.d.ts` (was `pages/__view/registry.d.ts`), `routes.d.ts` (was `routes/__registry.d.ts`), `models.d.ts` (was `app/Models/__schema/registry.d.ts`). The Vike page stubs stay in `pages/__view/` (pinned by Vike's filesystem routing).
+
+  Migration is automatic — the first dev/build/`routes:sync`/`view:sync`/`migrate` after upgrading writes the new path and deletes the legacy file. One manual step for existing apps: add `".rudder/**/*"` to the `tsconfig.json` `include` array (dot-directories are invisible to `**/*` globs and to bare-directory include entries; new scaffolds ship it). A `.rudder/README.md` is generated alongside, describing each file and its regen command.
+
+- e137a22: Scaffolded apps now include a `.gitattributes` marking the committed generated files (`pages/__view/**`, `routes/__registry.d.ts`, `app/Models/__schema/registry.d.ts`) as `linguist-generated` — GitHub collapses them in PR diffs and excludes them from language stats.
+
+### Patch Changes
+
+- Updated dependencies [aaad9ad]
+  - @rudderjs/auth@6.4.1
+
 ## 1.7.1
 
 ### Patch Changes

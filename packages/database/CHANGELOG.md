@@ -1,5 +1,19 @@
 # @rudderjs/database
 
+## 1.3.0
+
+### Minor Changes
+
+- da07742: Automatic `createdAt`/`updatedAt` stamping (Laravel's `$timestamps`, `static timestamps = true` by default). On the native engine, `Model.create()` now stamps both columns and `update()`/`save()` bumps `updatedAt` — previously they were written NULL unless the migration added DB defaults. Stamping is schema-gated via the new optional `OrmAdapter.tableColumns()` capability (implemented by `NativeAdapter` with cached introspection): tables without the columns are silently skipped, and Prisma/Drizzle are untouched (their schemas own timestamp defaults). Opt out per model with `static timestamps = false`.
+- bef393f: Generated type registries consolidate under the committed `.rudder/types/` directory: `views.d.ts` (was `pages/__view/registry.d.ts`), `routes.d.ts` (was `routes/__registry.d.ts`), `models.d.ts` (was `app/Models/__schema/registry.d.ts`). The Vike page stubs stay in `pages/__view/` (pinned by Vike's filesystem routing).
+
+  Migration is automatic — the first dev/build/`routes:sync`/`view:sync`/`migrate` after upgrading writes the new path and deletes the legacy file. One manual step for existing apps: add `".rudder/**/*"` to the `tsconfig.json` `include` array (dot-directories are invisible to `**/*` globs and to bare-directory include entries; new scaffolds ship it). A `.rudder/README.md` is generated alongside, describing each file and its regen command.
+
+### Patch Changes
+
+- Updated dependencies [da07742]
+  - @rudderjs/contracts@1.13.0
+
 ## 1.2.1
 
 ### Patch Changes

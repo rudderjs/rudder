@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/horizon",
-  "version": "6.2.0",
+  "version": "6.2.1",
   "rudderjs": {
     "provider": "HorizonProvider",
     "stage": "monitoring"

@@ -1,5 +1,25 @@
 # @rudderjs/cli
 
+## 4.12.0
+
+### Minor Changes
+
+- bef393f: New doctor check `structure:rudder-types-tsconfig`: warns when `.rudder/types/` exists but the `tsconfig.json` `include` array doesn't cover it (or uses the bare `".rudder"` form, which tsc ignores for dotted directories) — the silent failure mode where typed `view()`/`route()`/`Model.for<>()` stop resolving.
+- 00e3b83: Typed `Env`: `Env.get('APP_NAME')` (and `getNumber`/`getBool`/`has`/`env()`) now autocompletes the keys your app declares. `@rudderjs/vite`'s new env scanner parses `.env.example` — the committed contract, never the secret `.env` — and emits `.rudder/types/env.d.ts` augmenting the new `EnvRegistry` interface in `@rudderjs/support`. Runs on dev/build, re-emits when `.env.example` changes, and the loose `string` overload stays for keys packages read that apps don't declare.
+
+  New `rudder env:sync` command (skip-boot): regenerates the registry AND diffs `.env` against `.env.example` — missing keys are flagged, `--fix` appends them with their example values (or creates `.env` wholesale when absent). Keys only your `.env` carries are reported but never deleted.
+
+- 940406d: `vendor:publish` now detects the native database engine: an app with `@rudderjs/orm` / `@rudderjs/database` but no orm-prisma/orm-drizzle adapter resolves as `orm: 'native'`, and `PublishGroup.orm` accepts `'native'` so packages can ship native-engine assets (e.g. `@rudderjs/sync`'s `syncDocument` migration under `--tag=sync-schema`).
+
+### Patch Changes
+
+- 166895c: `rudder add notifications` no longer suggests running `make:notification` — that command doesn't exist. The hint now shows the real API (extend `Notification`, dispatch via `notify(...)`).
+- 51d6026: `module:publish` now merges module Prisma shards into `prisma/schema/modules.prisma` when the app uses Prisma's multi-file layout (the scaffolder default — `prisma.config.ts` points `schema` at the `prisma/schema/` directory). Previously it always wrote a sibling `prisma/schema.prisma`, a file Prisma never reads on that layout, so the publish was a silent no-op for every scaffolded app. Legacy single-file projects keep the `prisma/schema.prisma` target.
+- 7107ed9: One-shot `rudder` commands no longer hang on a native pg/mysql connection. The pooled drivers (`postgres` / `mysql2`) hold sockets that keep the event loop alive after a command's handler resolves, so `rudder migrate` (and any command booting an app whose default connection is native pg/mysql) never exited — sqlite was unaffected because better-sqlite3 is synchronous. The CLI now closes every cached native driver after the command completes; long-running commands (`queue:work`, `schedule:work`) are unaffected since they only reach the exit path on shutdown.
+- Updated dependencies [87783f7]
+- Updated dependencies [940406d]
+  - @rudderjs/core@1.8.0
+
 ## 4.11.0
 
 ### Minor Changes

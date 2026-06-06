@@ -1,5 +1,14 @@
 # @rudderjs/broadcast
 
+## 1.3.1
+
+### Patch Changes
+
+- aaad9ad: `vendor:publish` assets now resolve on Windows. Every provider registered its publish sources via `new URL(...).pathname`, which yields `/D:/...` on Windows (leading slash + percent-encoding) — so `vendor:publish --tag=auth-views` / `notification-schema` / `broadcast-client` / `cashier-*` / the boost guidelines all failed there with missing-source errors. Paths now convert via `fileURLToPath`. Surfaced by the new asset-on-disk test added with the sync-schema tag (#952), which went red on Windows CI.
+- Updated dependencies [87783f7]
+- Updated dependencies [940406d]
+  - @rudderjs/core@1.8.0
+
 ## 1.3.0
 
 ### Minor Changes
