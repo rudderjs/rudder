@@ -157,6 +157,10 @@ registerPageContextEnhancer(async (pageContext) => {
 
 Enhancers run in registration order on every render — keep them fast.
 
+::: warning Enhancers require `app/Views/`
+Enhancers run through the `pages/+onCreatePageContext.ts` hook, which the view scanner emits only when `app/Views/` contains at least one view. In an app that uses Vike pages directly with no controller views, registered enhancers (including the framework's `pageContext.user` / `flash` / `locale`) never run.
+:::
+
 The first sync also writes `pages/+onCreatePageContext.ts`, `pages/+onError.ts`, and `pages/+headersResponse.ts` re-export stubs. They're stock Vike hooks; you can overwrite any of them in place to customize, and the scanner won't replace your edits on subsequent runs.
 
 ## Client-safe imports
