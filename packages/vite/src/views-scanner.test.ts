@@ -756,3 +756,53 @@ describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
     })
   })
 })
+
+describe('views-scanner — framework hook emission contract', () => {
+  // pageContext enhancers (session/auth/localization push user/flash/locale
+  // enhancers unconditionally in their provider boot()) only ever RUN because
+  // the scanner emits pages/+onCreatePageContext.ts — Vike calls the hook,
+  // the hook drains the enhancer registry. Emission is gated on app/Views/
+  // containing views: that is the documented contract (enhancers require the
+  // view() system). These tests pin BOTH sides so a refactor can't silently
+  // orphan the enhancer registry (#934 shape: registered into a registry
+  // whose production reader is never wired).
+  const prevCwd = process.cwd()
+  let root = ''
+
+  afterEach(() => {
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('emits pages/+onCreatePageContext.ts (and +onError/+headersResponse) when views exist', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    syncViewsFromDisk()
+    assert.ok(fs.existsSync(path.join(root, 'pages', '+onCreatePageContext.ts')),
+      'the enhancer hook stub must be emitted for an app with views')
+    assert.ok(fs.existsSync(path.join(root, 'pages', '+onError.ts')))
+    assert.ok(fs.existsSync(path.join(root, 'pages', '+headersResponse.ts')))
+  })
+
+  it('does NOT emit the hook with no app/Views/ — enhancers are documented as views-only', () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'views-hooks-none-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+    process.chdir(root)
+    syncViewsFromDisk()
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '+onCreatePageContext.ts')),
+      'no views → no hook stub (pageContext.user/flash/locale enhancers do not run)')
+  })
+
+  it('does NOT emit the hook for an empty app/Views/ directory', () => {
+    root = scaffold('react')
+    // Remove every view but keep the directory — generate() early-returns on
+    // zero views, so the hook must stay absent.
+    for (const f of fs.readdirSync(path.join(root, 'app', 'Views'))) {
+      fs.rmSync(path.join(root, 'app', 'Views', f), { recursive: true, force: true })
+    }
+    process.chdir(root)
+    syncViewsFromDisk()
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '+onCreatePageContext.ts')))
+  })
+})
