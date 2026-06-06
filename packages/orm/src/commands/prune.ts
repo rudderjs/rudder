@@ -1,4 +1,5 @@
 import { pruneModels } from '../prune.js'
+import { registerAppModels } from './migrate.js'
 
 type Rudder = {
   command(
@@ -15,8 +16,15 @@ type Rudder = {
  * `--model=A,B`, exclude with `--except=A`, change batch size with
  * `--chunk=N`, dry-run with `--pretend`.
  */
-export function registerPruneCommand(rudder: Rudder): void {
+export function registerPruneCommand(rudder: Rudder, cmdOpts: { cwd?: string } = {}): void {
   rudder.command('model:prune', async (args: string[]) => {
+    // Model registration is lazy — it happens on a model's first query, which
+    // never fires before discovery in a prune run — so without this sweep the
+    // registry is empty for every real CLI invocation and the command always
+    // prints "No prunable models registered." (same shape as the schema:types
+    // cast-folding fix, #934).
+    await registerAppModels(cmdOpts.cwd ?? process.cwd())
+
     const opts: import('../prune.js').PruneOptions = { pretend: args.includes('--pretend') }
     const models = arg(args, '--model')?.split(',').map(s => s.trim()).filter(Boolean)
     const except = arg(args, '--except')?.split(',').map(s => s.trim()).filter(Boolean)
