@@ -3,7 +3,7 @@ import { syncRoutesFromDisk } from '../routes-scanner.js'
 /**
  * Register the `routes:sync` command with the rudder CLI.
  *
- * Regenerates `pages/__view/routes.d.ts` from `routes/*.ts` without booting
+ * Regenerates `routes/__registry.d.ts` from `routes/*.ts` without booting
  * the app or starting Vite. Useful when:
  *
  * - Running `tsc` in CI before any Vite step (typecheck-before-build order)
@@ -32,7 +32,7 @@ export function registerRoutesSyncCommand(
         return
       }
 
-      console.log(`✓ Scanned ${result.routeCount} named route${result.routeCount === 1 ? '' : 's'} → pages/__view/routes.d.ts`)
+      console.log(`✓ Scanned ${result.routeCount} named route${result.routeCount === 1 ? '' : 's'} → routes/__registry.d.ts`)
     } catch (err) {
       console.error('routes:sync failed:', err instanceof Error ? err.message : err)
       process.exit(1)

@@ -532,6 +532,10 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
         server.watcher.on('change', (file) => {
           if (!allWatchDirs.some(d => file.startsWith(d))) return
           if (file.startsWith(viewsRoot)) return
+          // The routes scanner's own emit (routes/__registry.d.ts) — a type
+          // augmentation, never imported at runtime; re-bootstrapping on its
+          // write would chain a second reboot after every route edit.
+          if (file.endsWith(`${path.sep}__registry.d.ts`)) return
 
           pending.add(file)
           if (timer) clearTimeout(timer)

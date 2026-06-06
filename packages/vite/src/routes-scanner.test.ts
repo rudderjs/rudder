@@ -255,15 +255,35 @@ describe('routes-scanner — syncRoutesFromDisk', () => {
     root = ''
   })
 
-  it('writes the registry to pages/__view/routes.d.ts and returns the count', () => {
+  it('writes the registry to routes/__registry.d.ts and returns the count', () => {
     root = scaffold()
     write(root, 'routes/web.ts', `Route.get('/about', h).name('about')`)
     process.chdir(root)
     const result = syncRoutesFromDisk()
     assert.equal(result.routesDirExists, true)
     assert.equal(result.routeCount, 1)
-    const out = fs.readFileSync(path.join(root, 'pages', '__view', 'routes.d.ts'), 'utf8')
+    const out = fs.readFileSync(path.join(root, 'routes', '__registry.d.ts'), 'utf8')
     assert.match(out, /'about':\s*'\/about'/)
+  })
+
+  it('removes the legacy pages/__view/routes.d.ts on write (migration)', () => {
+    root = scaffold()
+    write(root, 'routes/web.ts', `Route.get('/about', h).name('about')`)
+    write(root, 'pages/__view/routes.d.ts', `// stale legacy emit`)
+    process.chdir(root)
+    syncRoutesFromDisk()
+    assert.equal(fs.existsSync(path.join(root, 'pages', '__view', 'routes.d.ts')), false)
+    assert.equal(fs.existsSync(path.join(root, 'routes', '__registry.d.ts')), true)
+  })
+
+  it('does not scan its own emitted registry on a re-run', () => {
+    root = scaffold()
+    write(root, 'routes/web.ts', `Route.get('/about', h).name('about')`)
+    process.chdir(root)
+    const first = syncRoutesFromDisk()
+    const second = syncRoutesFromDisk()           // __registry.d.ts now on disk
+    assert.equal(first.routeCount, 1)
+    assert.equal(second.routeCount, 1)            // not double-counted / re-parsed
   })
 
   it('returns routesDirExists=false when there is no routes/ folder', () => {
@@ -291,7 +311,7 @@ describe('routes-scanner — plugin', () => {
     write(root, 'routes/web.ts', `Route.get('/eager', h).name('eager')`)
     process.chdir(root)
     routesScannerPlugin()
-    const out = fs.readFileSync(path.join(root, 'pages', '__view', 'routes.d.ts'), 'utf8')
+    const out = fs.readFileSync(path.join(root, 'routes', '__registry.d.ts'), 'utf8')
     assert.match(out, /'eager':\s*'\/eager'/)
   })
 })

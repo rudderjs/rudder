@@ -25,9 +25,13 @@
  *   the interface; the scanner's emit MERGES with manual augmentations via
  *   declaration merging.
  *
- * Output: `pages/__view/routes.d.ts` (sibling to the existing views `registry.d.ts`).
- * The single shared `pages/__view/` directory keeps both registries together —
- * conceptually they're both "type augmentations the scanner emits for app code".
+ * Output: `routes/__registry.d.ts` — domain-adjacent to the `routes/*.ts` files
+ * it types (the `__` prefix marks it generated, same convention as
+ * `pages/__view/` and `app/Models/__schema/`). It used to live at
+ * `pages/__view/routes.d.ts`, but route names aren't view-related — an
+ * API-only app with typed routes shouldn't grow a `pages/` directory for them.
+ * The scanner deletes the legacy file when it writes the new one, so existing
+ * apps migrate on their next dev / build / `routes:sync`.
  */
 
 import fs from 'node:fs'
@@ -81,7 +85,9 @@ function walkRouteFiles(dir: string): string[] {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
       out.push(...walkRouteFiles(full))
-    } else if (/\.(?:ts|mts|tsx|js|mjs)$/.test(entry.name)) {
+    } else if (/\.(?:ts|mts|tsx|js|mjs)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
+      // `.d.ts` excluded so the scanner never re-scans its own emitted
+      // `routes/__registry.d.ts` (declarations can't register routes anyway).
       out.push(full)
     }
   }
@@ -230,7 +236,19 @@ function writeIfChanged(file: string, contents: string): boolean {
 // ─── Plugin ────────────────────────────────────────────────
 
 const DEFAULT_ROUTES_DIR = 'routes'
-const DEFAULT_OUT_FILE   = path.join('pages', '__view', 'routes.d.ts')
+const DEFAULT_OUT_FILE   = path.join('routes', '__registry.d.ts')
+/** Pre-2026-06 output location — removed on write so migrated apps don't keep
+ *  a stale duplicate augmentation. */
+const LEGACY_OUT_FILE    = path.join('pages', '__view', 'routes.d.ts')
+
+/** Remove the legacy emit location (when it isn't the active out file). */
+function removeLegacyOutFile(cwd: string, outFile: string): void {
+  const legacy = path.resolve(cwd, LEGACY_OUT_FILE)
+  if (legacy === outFile) return
+  try {
+    fs.rmSync(legacy, { force: true })
+  } catch { /* best effort — a stale duplicate merges harmlessly until the next write */ }
+}
 
 // ─── One-shot sync (CLI surface) ──────────────────────────
 
@@ -252,6 +270,7 @@ export function syncRoutesFromDisk(cwd: string = process.cwd()): RoutesSyncResul
   }
   const routes = scanRouteFiles(routesDir)
   writeIfChanged(outFile, routesRegistrySource(routes))
+  removeLegacyOutFile(cwd, outFile)
   return { routesDirExists: true, routeCount: routes.length }
 }
 
@@ -263,7 +282,7 @@ export interface RoutesScannerOptions {
   routesDir?: string
   /**
    * App-relative output path for the augmentation `.d.ts`. Defaults to
-   * `pages/__view/routes.d.ts` — same parent dir as the views registry.
+   * `routes/__registry.d.ts` — domain-adjacent to the route files it types.
    */
   outFile?:   string
 }
@@ -276,6 +295,7 @@ export function routesScannerPlugin(opts: RoutesScannerOptions = {}): Plugin {
   function sync(): void {
     const routes = scanRouteFiles(routesDir)
     writeIfChanged(outFile, routesRegistrySource(routes))
+    removeLegacyOutFile(cwd, outFile)
   }
 
   // Eager sync at plugin construction so tests + first dev start get the

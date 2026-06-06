@@ -137,10 +137,12 @@ The opts form accepts `body` on every verb, including `GET` / `DELETE`. HTTP all
 
 ## Typed `route()` URL generator
 
-The `route(name, params)` URL helper can type-check its params against the path's `:params` once you declare your named routes in the `RouteRegistry` interface. The declaration is hand-written — there's no scanner, no codegen, no sync command. Put it in `env.d.ts` (or any `.d.ts` your tsconfig picks up):
+The `route(name, params)` URL helper type-checks its params against the path's `:params` for every name in the `RouteRegistry` interface — and the registry **populates itself**: `@rudderjs/vite`'s routes scanner walks `routes/*.ts` for inline `.name('foo')` chains (literal path + literal name) and emits `routes/__registry.d.ts` with the augmentation. It runs on dev/build, or on demand with `pnpm rudder routes:sync` (no app boot — works before the first `pnpm dev`). Commit the generated file so `tsc`/CI stay green without a scan step.
+
+Routes the scanner can't see — variable paths/names, or routes registered inside helper functions like `registerAuthRoutes(router)` — are hand-augmented; your declarations **merge** with the generated file (put them in `env.d.ts` or any `.d.ts` your tsconfig picks up):
 
 ```ts
-// env.d.ts
+// env.d.ts — hand-written entries merge with routes/__registry.d.ts
 declare module '@rudderjs/router' {
   interface RouteRegistry {
     'users.show':    '/users/:id'
