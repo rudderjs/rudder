@@ -59,7 +59,7 @@ export class MyAdapter implements ServerAdapter {
 }
 ```
 
-The reference implementation is `@rudderjs/server-hono`. Read its source — it's the canonical way to plug a new runtime in.
+The reference implementation is `@rudderjs/server-hono`. Read its source — it's the canonical way to plug a new runtime in. It is also the default: when `Application.configure()` receives no `server:` option, the framework auto-resolves `@rudderjs/server-hono` and constructs it with `config('server')`; a custom adapter is plugged in by passing `server:` explicitly.
 
 ## Why a separate types package
 

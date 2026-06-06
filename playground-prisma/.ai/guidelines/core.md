@@ -14,13 +14,10 @@ Every RudderJS app is wired in `bootstrap/app.ts` using the builder pattern:
 import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 import providers from './providers.ts'
 
-export default Application.configure({
-  server: hono(configs.server), config: configs, providers,
-})
+export default Application.configure({ config, providers })
   .withRouting({
     web: () => import('../routes/web.ts'),
     api: () => import('../routes/api.ts'),
@@ -31,7 +28,7 @@ export default Application.configure({
   .create()
 ```
 
-There is no `rudderjs.config.ts` -- `bootstrap/app.ts` is the framework wiring file.
+There is no `rudderjs.config.ts` -- `bootstrap/app.ts` is the framework wiring file. The `server:` option is optional: omitted, the framework auto-resolves `@rudderjs/server-hono` and constructs it with `config('server')`. Pass `server: hono(config.server)` explicitly to override the adapter (or when bundling to a single file).
 
 ### Service Providers
 
@@ -63,7 +60,7 @@ export default [
 ]
 ```
 
-To register manually, list each `*Provider` class explicitly (`CacheProvider`, `QueueProvider`, etc.) and read config from a `config: configs` object passed to `Application.configure()` — the providers resolve their config keys via the DI container.
+To register manually, list each `*Provider` class explicitly (`CacheProvider`, `QueueProvider`, etc.) and read config from the `config` object passed to `Application.configure()` — the providers resolve their config keys via the DI container.
 
 Providers can also be registered dynamically at runtime via `app().register(ProviderClass)`. Duplicates are silently skipped (guarded by class reference and class name).
 

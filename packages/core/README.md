@@ -12,14 +12,11 @@ pnpm add @rudderjs/core
 
 ```ts
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import { RateLimit } from '@rudderjs/middleware'
 
-export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
-  providers,
-})
+// The HTTP adapter is auto-resolved (@rudderjs/server-hono + config('server')).
+// Pass `server: hono(config.server)` explicitly to override.
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.js'),
     api:      () => import('../routes/api.js'),

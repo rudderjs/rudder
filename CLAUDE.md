@@ -175,17 +175,14 @@ If any item fails, keep packages separate.
 import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
 import { requestIdMiddleware } from 'App/Http/Middleware/RequestIdMiddleware.ts'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 import providers from './providers.ts'
 
-export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
-  providers,
-})
+// `server:` is optional — omitted, core auto-resolves @rudderjs/server-hono
+// with config('server'). Pass `server: hono(config.server)` to override.
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),

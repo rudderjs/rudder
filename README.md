@@ -66,12 +66,11 @@ Thirteen features, thirteen snippets. Each one is real code from the playground 
 // bootstrap/app.ts
 import 'reflect-metadata'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 import providers from './providers.ts'
 
-export default Application.configure({ server: hono(configs.server), config: configs, providers })
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
@@ -85,7 +84,7 @@ export default Application.configure({ server: hono(configs.server), config: con
   .create()
 ```
 
-One file — server adapter, config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. No nested config trees, no decorators-at-the-root, no surprise files. And the config layer is typed end-to-end: `config('app.name')` autocompletes dot-paths from your own `config/` directory, `Env.get('DATABASE_URL')` autocompletes the keys declared in `.env.example` — no codegen to remember for the former, one auto-regenerated registry for the latter.
+One file — config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. The HTTP server adapter resolves itself (`@rudderjs/server-hono`, configured from `config/server.ts`) — pass `server: hono(...)` only to override it. No nested config trees, no decorators-at-the-root, no surprise files. And the config layer is typed end-to-end: `config('app.name')` autocompletes dot-paths from your own `config/` directory, `Env.get('DATABASE_URL')` autocompletes the keys declared in `.env.example` — no codegen to remember for the former, one auto-regenerated registry for the latter.
 
 ### 2. Routing — web & API in one router, end-to-end typed
 

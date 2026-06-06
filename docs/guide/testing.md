@@ -14,11 +14,11 @@ Define a base test case for your project once. Other test files extend it:
 // tests/TestCase.ts
 import { TestCase } from '@rudderjs/testing'
 import providers from '../bootstrap/providers.js'
-import configs from '../config/index.js'
+import config from '../config/index.js'
 
 export class AppTestCase extends TestCase {
   providers() { return providers }
-  config()    { return configs }
+  config()    { return config }
 }
 ```
 
@@ -284,7 +284,7 @@ import { TestCase, RefreshDatabase, WithFaker } from '@rudderjs/testing'
 export class AppTestCase extends TestCase {
   use = [RefreshDatabase, WithFaker]
   providers() { return providers }
-  config()    { return configs }
+  config()    { return config }
 }
 ```
 

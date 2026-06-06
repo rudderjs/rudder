@@ -144,15 +144,10 @@ pnpm add -D prisma
 import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import providers from './providers.ts'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 
-export default Application.configure({
-  server: hono(configs.server),
-  config: configs,
-  providers,
-})
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),

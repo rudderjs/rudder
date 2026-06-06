@@ -133,16 +133,12 @@ export default { app, server, database, auth }
 `bootstrap/app.ts` then imports it as one object:
 
 ```ts
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 
-Application.configure({
-  server: hono(configs.server),
-  config: configs,
-  providers,
-})
+Application.configure({ config, providers })
 ```
 
-Passing `config: configs` binds the config repository in the DI container, so any service can retrieve a config slice on demand:
+Passing `config` binds the config repository in the DI container, so any service can retrieve a config slice on demand:
 
 ```ts
 import { config } from '@rudderjs/core'
@@ -203,22 +199,17 @@ Typed `config()` joins [typed views](/guide/typed-views), [typed routes](/guide/
 
 ## Framework wiring
 
-`bootstrap/app.ts` is where the framework comes together. It contains structural decisions only — server adapter, registered providers, route loaders — never environment values or business logic.
+`bootstrap/app.ts` is where the framework comes together. It contains structural decisions only — registered providers, route loaders, middleware — never environment values or business logic.
 
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import { RateLimit } from '@rudderjs/middleware'
 import providers from './providers.ts'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 
-export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
-  providers,
-})
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
@@ -234,7 +225,7 @@ export default Application.configure({
 
 | Option | Description |
 |---|---|
-| `server` | HTTP adapter (e.g. `hono(...)`) |
+| `server` | HTTP adapter — optional. Omitted, the framework auto-resolves `@rudderjs/server-hono` with `config('server')`. Pass `hono(...)` (or another adapter) explicitly to override — see [Application](/guide/application#server-adapter) |
 | `config` | Config objects to bind in the container |
 | `providers` | Service provider classes, in boot order |
 

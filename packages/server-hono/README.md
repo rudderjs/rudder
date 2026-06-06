@@ -10,16 +10,18 @@ pnpm add @rudderjs/server-hono
 
 ## Usage
 
+This adapter is the framework default: when `Application.configure()` receives no `server:` option, `@rudderjs/core` auto-resolves this package and constructs it with `config('server')` — no wiring needed beyond having it installed. Pass it explicitly to customize construction (or when bundling to a single file, where the runtime lookup can't be traced):
+
 ```ts
 // bootstrap/app.ts
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
-import configs from '../config/index.js'
+import config from '../config/index.js'
 import providers from './providers.js'
 
 export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
+  server:    hono(config.server),
+  config,
   providers,
 })
   .withRouting({
