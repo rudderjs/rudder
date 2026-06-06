@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, Auth, runWithAuth, runWithTestUser, type AuthConfig } from './auth-manager.js'
@@ -217,11 +218,11 @@ export class AuthProvider extends ServiceProvider {
   register(): void {
     // Auth views — vendored into the consumer's `app/Views/Auth/` directory.
     // Consumers then wire routes via `registerAuthRoutes(Route)` from `@rudderjs/auth/routes`.
-    this.publishes({ from: new URL(/* @vite-ignore */ '../views/react', import.meta.url).pathname, to: 'app/Views/Auth', tag: 'auth-views' })
-    this.publishes({ from: new URL(/* @vite-ignore */ '../views/react', import.meta.url).pathname, to: 'app/Views/Auth', tag: 'auth-views-react' })
+    this.publishes({ from: fileURLToPath(new URL(/* @vite-ignore */ '../views/react', import.meta.url)), to: 'app/Views/Auth', tag: 'auth-views' })
+    this.publishes({ from: fileURLToPath(new URL(/* @vite-ignore */ '../views/react', import.meta.url)), to: 'app/Views/Auth', tag: 'auth-views-react' })
 
     // Auth schema (ORM + driver-specific)
-    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
+    const schemaDir = fileURLToPath(new URL(/* @vite-ignore */ '../schema', import.meta.url))
     this.publishes([
       { from: `${schemaDir}/auth.prisma`,            to: 'prisma/schema',   tag: 'auth-schema', orm: 'prisma' as const },
       { from: `${schemaDir}/auth.drizzle.sqlite.ts`, to: 'database/schema', tag: 'auth-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },

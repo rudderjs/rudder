@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, config } from '@rudderjs/core'
 import { MemoryStorage, SqliteStorage } from './storage.js'
 import { RequestRecorder } from './recorders/request.js'
@@ -79,7 +80,7 @@ export class Pulse {
 export class PulseProvider extends ServiceProvider {
   register(): void {
     this.publishes({
-      from: new URL('../../boost/guidelines.md', import.meta.url).pathname,
+      from: fileURLToPath(new URL('../../boost/guidelines.md', import.meta.url)),
       to:   'boost',
       tag:  'pulse-boost',
     })

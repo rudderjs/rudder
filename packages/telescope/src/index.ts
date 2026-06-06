@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, config } from '@rudderjs/core'
 import { MemoryStorage, SqliteStorage } from './storage.js'
 import { RequestCollector } from './collectors/request.js'
@@ -128,7 +129,7 @@ export class Telescope {
 export class TelescopeProvider extends ServiceProvider {
   register(): void {
     this.publishes({
-      from: new URL('../../boost/guidelines.md', import.meta.url).pathname,
+      from: fileURLToPath(new URL('../../boost/guidelines.md', import.meta.url)),
       to:   'boost',
       tag:  'telescope-boost',
     })

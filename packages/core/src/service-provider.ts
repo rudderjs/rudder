@@ -55,7 +55,7 @@ export abstract class ServiceProvider {
    *
    * @example
    * this.publishes({
-   *   from: new URL('../pages', import.meta.url).pathname,
+   *   from: fileURLToPath(new URL('../pages', import.meta.url)),  // NOT .pathname — yields /D:/... on Windows
    *   to:   'pages/(panels)',
    *   tag:  'panels-pages',
    * })

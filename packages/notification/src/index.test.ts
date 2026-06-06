@@ -524,3 +524,32 @@ describe('ChannelRegistry store on globalThis', () => {
     assert.equal(store.channels.get('custom'), channel)
   })
 })
+
+// ─── notification-schema publishable ───────────────────────
+
+describe('NotificationProvider.register — notification-schema publishable', () => {
+  it('every registered publish asset exists on disk (Windows-real paths)', async () => {
+    // Regression for the URL.pathname → fileURLToPath conversion: pathname
+    // yields `/D:/...` on Windows (leading slash + percent-encoding), so every
+    // vendor:publish asset registered through it was unreachable there. This
+    // asserts the registered `from` paths resolve to real files/dirs on the
+    // running platform — green on POSIX, red on Windows under .pathname.
+    const fs = await import('node:fs')
+    const registry = (globalThis as Record<string, unknown>)['__rudderjs_publish_registry__'] as
+      | Map<string, Array<{ from: string; tag: string }>>
+      | undefined
+    registry?.delete('NotificationProvider')
+    try {
+      new NotificationProvider(fakeApp).register()
+      const groups = ((globalThis as Record<string, unknown>)['__rudderjs_publish_registry__'] as
+        Map<string, Array<{ from: string; tag: string }>>).get('NotificationProvider') ?? []
+      assert.ok(groups.length >= 4, 'prisma + 3 drizzle variants registered')
+      for (const g of groups) {
+        assert.equal(g.tag, 'notification-schema')
+        assert.ok(fs.existsSync(g.from), `published asset missing on disk: ${g.from}`)
+      }
+    } finally {
+      registry?.delete('NotificationProvider')
+    }
+  })
+})

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import {
   initWsServer,
@@ -134,7 +135,7 @@ export class BroadcastingProvider extends ServiceProvider {
       ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = handler
 
       this.publishes({
-        from: new URL(/* @vite-ignore */ '../client', import.meta.url).pathname,
+        from: fileURLToPath(new URL(/* @vite-ignore */ '../client', import.meta.url)),
         to:   'src',
         tag:  'broadcast-client',
       })

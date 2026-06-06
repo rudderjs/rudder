@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider } from '@rudderjs/core'
 import { MailRegistry, type Mailable } from '@rudderjs/mail'
 import { ModelRegistry } from '@rudderjs/orm'
@@ -389,7 +390,7 @@ export type { SentNotification } from './fake.js'
 
 export class NotificationProvider extends ServiceProvider {
   register(): void {
-    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
+    const schemaDir = fileURLToPath(new URL(/* @vite-ignore */ '../schema', import.meta.url))
     this.publishes([
       { from: `${schemaDir}/notification.prisma`,            to: 'prisma/schema',   tag: 'notification-schema', orm: 'prisma' as const },
       { from: `${schemaDir}/notification.drizzle.sqlite.ts`, to: 'database/schema', tag: 'notification-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },
