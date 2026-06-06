@@ -163,7 +163,7 @@ route('comments.show', { slug: 'x' })            // ✗ TS: missing 'cid'
 route('users.show', { id: true })                // ✗ TS: id must be string|number
 ```
 
-`route()`'s **name** parameter stays `string` regardless of the registry — that keeps framework-internal callers and runtime-registered routes (`router.get(path).name(dynamicName)`) working without forcing every name into the type registry. Names not in the registry get the loose `Record<string, string | number>` params type (today's behavior). Typos in registered names fall through to that loose path and surface at runtime instead of compile time — `getNamedRoute(name)` throws on unknown names, so the failure is loud at first use.
+`route()`'s **name** parameter stays `string` regardless of the registry — that keeps framework-internal callers and runtime-registered routes (`router.get(path).name(dynamicName)`) working without forcing every name into the type registry. Names not in the registry get the loose `Record<string, string | number>` params type (today's behavior). Typos in registered names fall through to that loose path and surface at runtime instead of compile time — `getNamedRoute(name)` returns `undefined` on unknown names and `route()` throws on the miss, so the failure is loud at first use.
 
 If you want stricter compile-time name checking in your own code, wrap `route()` in a helper:
 
@@ -218,6 +218,6 @@ This is Rudder's equivalent of:
 
 - **Closure typing requires the opts form.** `Route.get(path, handler).query(schema)` validates at runtime but does *not* re-type the handler's closure. Use `Route.get(path, { query: schema }, handler)` when you want both.
 - **Decorator-based controllers don't get typed params today.** `@Get('/users/:id')` loses the literal type through the decorator metadata pipeline. Use the fluent API for typed params; the decorator API still works without types.
-- **`route()` name strictness is soft, params strictness is hard.** Typos in registered names (`route('users.shwo', ...)`) fall through to the loose params type and surface at runtime via `getNamedRoute(name)` throwing. Wrap `route()` in a helper that constrains `N extends keyof RouteRegistry` if you want compile-time name checking. See "Typed `route()` URL generator" above for the rationale (framework internals + runtime-registered routes).
+- **`route()` name strictness is soft, params strictness is hard.** Typos in registered names (`route('users.shwo', ...)`) fall through to the loose params type and surface at runtime — `getNamedRoute(name)` returns `undefined` and `route()` throws on the miss. Wrap `route()` in a helper that constrains `N extends keyof RouteRegistry` if you want compile-time name checking. See "Typed `route()` URL generator" above for the rationale (framework internals + runtime-registered routes).
 - **Template-literal recursion is bounded.** TypeScript permits ~50 recursive template-literal expansions. A path with more than ~50 `:params` would hit the limit, but that's not a realistic case.
 - **`exactOptionalPropertyTypes`** is enabled in the base tsconfig. An optional param `:name?` types as `{ name?: string }` — passing `{ name: undefined }` explicitly to anything reading the shape is rejected. Omit the key instead.

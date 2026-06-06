@@ -89,10 +89,10 @@ router.post('/api/users', async (req, res) => {
 
 ## Lifecycle hooks
 
-`FormRequest` exposes five optional hooks that run around `rules()`. Pipeline order:
+`FormRequest` exposes six optional hooks that run around `rules()`. Pipeline order:
 
 ```
-authorize → prepareForValidation → rules.parse → after → passedValidation
+prepareForValidation → authorize → rules.parse → after → passedValidation
               ↓                       ↓             ↓
               ─────── failedValidation(errors) ───────
 ```
