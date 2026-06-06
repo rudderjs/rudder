@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
@@ -923,7 +924,10 @@ export class SyncProvider extends ServiceProvider {
     // The model name is load-bearing: the Prisma delegate must be
     // `syncDocument`, syncPrisma()'s default. Prisma-only — syncRedis and
     // in-memory need no schema, and there is no drizzle persistence adapter.
-    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
+    // fileURLToPath, NOT URL.pathname — pathname yields `/D:/...` on Windows
+    // (leading slash + percent-encoding), which breaks the copy. Caught by the
+    // asset-on-disk test on Windows CI.
+    const schemaDir = fileURLToPath(new URL(/* @vite-ignore */ '../schema', import.meta.url))
     this.publishes([
       { from: `${schemaDir}/sync.prisma`, to: 'prisma/schema', tag: 'sync-schema', orm: 'prisma' as const },
     ])
