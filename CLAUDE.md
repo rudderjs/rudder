@@ -8,7 +8,7 @@ This file provides guidance to Claude Code when working in this repository.
 - `claude-notes/ai-sdk-comparison.md` — RudderJS vs Laravel AI vs Vercel AI SDK vs TanStack — feature matrix and design positioning
 - `claude-notes/db-orm-comparison.md` — RudderJS data layer vs Prisma/Drizzle/TypeORM/Kysely/MikroORM — feature matrices, positioning (§13), prioritized gap work-queue (§14)
 - `Architecture.md` — High-level package map + dependency flow (read for orientation; not exhaustive)
-- `ROADMAP.md` — Plans 1–10 status + remaining work (Nightwatch ⬜ and native pg/mysql scaffolding 🔄 are all that's left)
+- `ROADMAP.md` — Plans 1–10 all ✅ DONE (Nightwatch dropped 2026-06-06 — standalone product, not framework work)
 
 ---
 
@@ -242,7 +242,7 @@ For third-party package authors writing their own provider, see `docs/guide/serv
 
 `playground/` is the framework's own demo app — exercises auth, routing, ORM, queue, mail, cache, storage, scheduling, broadcast, sync, telescope/pulse/horizon, Agents (`@rudderjs/ai`). Pure framework, no extra dependencies.
 
-**Two ORM twins**: `playground/` runs the **native engine** (sqlite, `database/migrations/`, `Model.for<>()` typed models, committed registry); `playground-prisma/` is the same app on the **Prisma adapter** (`prisma/schema/`, delegate table names, cuid ids). Package tables on native use literal delegate-style SQL names (`oAuthClient`, `userMemory`, `notification`, `paddle*`) so package models run unchanged on both. Sync persistence is in-memory on native (`syncPrisma()`/`syncRedis()` are the only adapters — known gap).
+**Two ORM twins**: `playground/` runs the **native engine** (sqlite, `database/migrations/`, `Model.for<>()` typed models, committed registry); `playground-prisma/` is the same app on the **Prisma adapter** (`prisma/schema/`, delegate table names, cuid ids). Package tables on native use literal delegate-style SQL names (`oAuthClient`, `userMemory`, `notification`, `paddle*`, `syncDocument`) so package models run unchanged on both. Sync persistence on native uses `syncDatabase()` (rides the app's ORM adapter; same `syncDocument` table layout as `syncPrisma()` on the twin).
 
 ```bash
 cd playground && pnpm dev   # :3000
