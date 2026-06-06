@@ -30,7 +30,7 @@ QUEUE_DRIVER=sync
 MAIL_DRIVER=log
 ```
 
-Never commit `.env`. Provide `.env.example` as a template for teammates.
+Never commit `.env`. Provide `.env.example` as a template for teammates — it's also the source of [typed `Env` keys](#typed-env) and what [`rudder env:sync`](#rudder-envsync) diffs your `.env` against.
 
 ## Runtime config
 
@@ -76,6 +76,46 @@ export const env = defineEnv(
 ```
 
 This throws at boot if any required variable is missing or malformed — before your app starts serving traffic.
+
+### Typed Env
+
+`Env.get('…')` autocompletes the keys your app declares — and a declared key's read is checked at the call site:
+
+```ts
+Env.get('DATABASE_URL')    // autocompleted from .env.example
+Env.get('DATABASE_URI')    // typo — not rejected (loose overload), but throws
+                           // "Missing environment variable" at first read
+```
+
+The keys come from **`.env.example`** — the committed contract of what your app expects — never from `.env` itself (secret, per-machine, absent in CI). `@rudderjs/vite`'s env scanner parses it on every dev/build and emits `.rudder/types/env.d.ts`:
+
+```ts
+// .rudder/types/env.d.ts — AUTO-GENERATED; commit it
+declare module '@rudderjs/support' {
+  interface EnvRegistry {
+    'APP_NAME': string
+    'DATABASE_URL': string
+    'AUTH_SECRET': string
+  }
+}
+```
+
+Three rules worth knowing:
+
+- **Commented-out keys are not declared.** `# OPENAI_API_KEY=` in the example is an optional suggestion, not contract — uncomment it to declare it.
+- **Unknown keys don't error.** `Env.get()` keeps its loose `string` overload because framework packages read keys your app doesn't declare (`Env.get('REDIS_URL')`). Same softness as [`route()` names](/guide/typed-routes#limitations) and [typed `config()`](#typed-config). For a hard-rejecting wrapper: `const envStrict = <K extends keyof EnvRegistry & string>(key: K) => Env.get(key)`.
+- **All values are typed `string`** — that's the runtime truth of `process.env`. Parse at the edge with `Env.getNumber` / `Env.getBool` / `defineEnv`.
+
+### `rudder env:sync`
+
+The same scan, on demand and with a second job — diffing your `.env` against the contract:
+
+```bash
+pnpm rudder env:sync         # regenerate env.d.ts + report drift
+pnpm rudder env:sync --fix   # …and append missing keys to .env with their example values
+```
+
+A teammate adds `STRIPE_KEY` to `.env.example`, you pull, your `.env` silently lacks it — `env:sync` flags exactly that. `--fix` appends the missing lines (or creates `.env` wholesale from the example when you don't have one yet). Keys that exist only in your `.env` are reported but never deleted. Skip-boot, like `routes:sync` — works before the first `pnpm dev`.
 
 ### Barrel export
 
@@ -147,10 +187,19 @@ Apps created before this template existed can paste the two snippets above — t
 
 Two things to know about the edges:
 
-- **Unknown keys don't error.** `config()` keeps a loose `config<T>(key: string)` overload, because framework packages read keys your app may not declare. A typo'd key falls through to it and returns `unknown` — which any concrete use of the value will surface as a type error. Same softness as [`route()` name lookups](/guide/typed-routes#limitations).
+- **Unknown keys don't error.** `config()` keeps a loose `config<T>(key: string)` overload, because framework packages read keys your app may not declare. A typo'd key falls through to it and returns `unknown` — which any concrete use of the value will surface as a type error. Same softness as [`route()` name lookups](/guide/typed-routes#limitations). If you want hard rejection inside your own app code, wrap it:
+
+  ```ts
+  import { config, type ConfigKey, type ConfigValue } from '@rudderjs/core'
+
+  export const configStrict = <K extends ConfigKey>(key: K): ConfigValue<K> => config(key)
+
+  configStrict('app.name')      // ✓
+  configStrict('app.typo')      // tsc error — not a declared dot-path
+  ```
 - **Mismatched fallbacks degrade, they don't error.** `config('server.port', 3000)` matches the typed overload and returns `number`. `config('server.port', 'oops')` doesn't fail at the call site — it falls through to the loose overload and the return type follows the fallback, so the mismatch surfaces wherever the value is actually used as a number.
 
-Typed `config()` joins [typed views](/guide/typed-views), [typed routes](/guide/typed-routes), and [typed models](/guide/database#typed-models-from-migrations-schema-types) — the same convention everywhere: declare the shape once where it lives, and every call site is checked with no generate step in between.
+Typed `config()` joins [typed views](/guide/typed-views), [typed routes](/guide/typed-routes), [typed models](/guide/database#typed-models-from-migrations-schema-types), and [typed `Env`](#typed-env) — the same convention everywhere: declare the shape once where it lives, and every call site is checked.
 
 ## Framework wiring
 

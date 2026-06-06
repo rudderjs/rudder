@@ -52,7 +52,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **Pay-as-you-go** — 49 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, run `pnpm rudder providers:discover`, done. No imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones. Introspection on tap — `route:list --verbose`, `event:list`, `config:show` for the "where is this wired up?" questions.
-- **TypeScript-first** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, incremental builds, WinterCG-compatible runtime.
+- **TypeScript-first** — typed everything from one convention each: views (`view('id', props)` checked against the component's `Props`), routes (path params + `route()` lookups), models (column types generated from migrations), `config()` (dot-paths from your own `config/`), and `Env.get()` (keys from `.env.example`). Plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, WinterCG-compatible runtime.
 
 ---
 
@@ -85,7 +85,7 @@ export default Application.configure({ server: hono(configs.server), config: con
   .create()
 ```
 
-One file — server adapter, config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. No nested config trees, no decorators-at-the-root, no surprise files.
+One file — server adapter, config, providers, routing, middleware groups, exception handlers (`.withExceptions(...)`), all in a fluent chain. No nested config trees, no decorators-at-the-root, no surprise files. And the config layer is typed end-to-end: `config('app.name')` autocompletes dot-paths from your own `config/` directory, `Env.get('DATABASE_URL')` autocompletes the keys declared in `.env.example` — no codegen to remember for the former, one auto-regenerated registry for the latter.
 
 ### 2. Routing — web & API in one router, end-to-end typed
 

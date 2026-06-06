@@ -1,6 +1,6 @@
 # Typed Env + the `.rudder/types/` generated-types home
 
-**Status**: Phases 0–2 shipped; Phase 3 (docs + release) remains
+**Status**: ALL PHASES SHIPPED (release + rudderjs.com sync are post-merge follow-ups)
 **Date**: 2026-06-06
 **Context**: Generated-files discussion (items 1+2 shipped in #953). Item 3 — consolidating
 generated type registries into one directory — was parked with a trigger condition: *the next
@@ -112,7 +112,19 @@ Implementation deltas from the design below:
 4. **Dev watcher**: `@rudderjs/vite` watches `.env.example`, re-emits on change (exempt from
    the re-boot watcher like the routes registry).
 
-## Phase 3 — docs + release
+## Phase 3 — docs + release — ✅ SHIPPED (docs side)
+
+Implementation deltas:
+
+- Typed Env documented as **sections in configuration.md** ("Typed Env" + "rudder env:sync"),
+  not a separate page — it sits naturally next to the Env helper + the new typed-config()
+  section; the typed-family blocks on typed-views/typed-routes grew to five entries.
+- The Phase-0 candidate landed: **`ConfigKey` / `ConfigValue` are now exported from core**
+  (main + /client, type-only, core minor) and the strict-wrapper recipe is documented + probe-verified.
+- README: existing-example updates only (TypeScript-first highlight + bootstrap section line),
+  per the showcase bar — no new section.
+- Release (`pnpm release` via the changesets flow) + the rudderjs.com 4-step sync happen
+  after the PRs merge — they're operational steps, not part of this PR.
 
 - Guide: "Typed env & config" page (or section in configuration.md) joining the typed-views /
   typed-routes / typed-models family; README showcase candidate (existing-example update, not a
