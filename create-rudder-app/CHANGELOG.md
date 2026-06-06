@@ -1,5 +1,12 @@
 # create-rudder-app
 
+## 1.9.0
+
+### Patch Changes
+
+- Updated dependencies [f0fc21f]
+  - create-rudder@1.9.0
+
 ## 1.8.0
 
 ### Patch Changes
