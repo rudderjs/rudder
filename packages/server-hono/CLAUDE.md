@@ -6,7 +6,7 @@ Normalizes Hono requests/responses, handles Vike SSR integration, WebSocket upgr
 
 Peer of `@rudderjs/core` — never add core to `dependencies` (same cycle rule as router).
 
-`req.ip` is set by `extractIp(c, trustProxy)` in `normalizeRequest()` — only reads `x-forwarded-for` / `x-real-ip` when `trustProxy: true`; returns `undefined` otherwise. Normalizes `::1` → `127.0.0.1`. In dev mode, the `rudderjs:ip` Vite plugin injects `x-real-ip` from the Node socket before universal-middleware converts to Web Request.
+`req.ip` is set by `extractIp(c, trustProxy)` in `normalizeRequest()` — Laravel `Request::ip()` parity. Proxy headers (`x-forwarded-for` first hop, then `x-real-ip`) only when `trustProxy: true`; the direct socket address is the universal fallback (srvx's `request.ip`/`runtime.node` in the vike prod server, `env.incoming` under `@hono/node-server`), plus a dev-only `x-real-ip` stand-in injected by the `rudderjs:ip` Vite plugin (gated off `NODE_ENV=production` — the vite pipeline hands the adapter a plain web Request with no socket). Client-sent proxy headers are never read when `trustProxy` is off. Normalizes `::1` → `127.0.0.1` and strips `::ffff:` IPv4-mapping.
 
 WebSocket upgrade must be patched at module load time, not lazily.
 
