@@ -202,7 +202,9 @@ export function validateJsonMode(name: string | undefined, p: PartialAnswers): s
 
   if (p.recipe) {
     // Recipe path — most fields inferred from the preset. The default engine
-    // (native) pins sqlite, so --db is only needed for prisma/drizzle.
+    // (native) supports every driver and defaults to sqlite, so --db is only
+    // required for an explicit prisma/drizzle choice (no sensible default there
+    // would match what the user's schema tooling expects).
     if ((p.orm === 'prisma' || p.orm === 'drizzle') && !p.db) missing.push('--db')
     const preset = p.recipe === 'custom' ? null : RECIPES[p.recipe]
     if (preset?.needsFrontend && !p.frameworks?.length && !p.primary) {
@@ -215,7 +217,7 @@ export function validateJsonMode(name: string | undefined, p: PartialAnswers): s
 
   // Legacy explicit path
   if (p.orm === undefined)        missing.push('--orm')
-  // native forces sqlite (its only supported driver), so --db is never required
+  // native defaults to sqlite (--db optional); prisma/drizzle must pick a driver
   if (p.orm !== false && p.orm !== 'native' && !p.db) missing.push('--db')
   if (p.packages === undefined)   missing.push('--packages')
   if (!p.frameworks)              missing.push('--frameworks')
@@ -233,17 +235,13 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
   if (p.recipe) {
     const recipe = p.recipe
     const preset = recipe === 'custom' ? null : RECIPES[recipe]
-    // Native is the default engine (matches the interactive prompt). It only
-    // scaffolds sqlite today, so an explicit --db=postgresql|mysql without
-    // --orm falls back to Prisma — the driver choice the user actually made
-    // wins over the engine default.
-    const orm: Orm = p.orm !== undefined
-      ? p.orm
-      : preset?.needsOrm
-        ? (p.db && p.db !== 'sqlite' ? 'prisma' : 'native')
-        : false
-    // native + no-orm both pin to sqlite; native supports no other driver yet
-    const db: Db = (orm === false || orm === 'native' ? 'sqlite' : (p.db ?? 'sqlite')) as Db
+    // Native is the default engine (matches the interactive prompt) and
+    // supports sqlite/pg/mysql, so an explicit --db rides on it directly.
+    // (Pre-7.9 this fell back to Prisma for --db=postgresql|mysql because
+    // native was sqlite-only — that back-compat shim is gone; old scripts
+    // that want Prisma must say --orm=prisma.)
+    const orm: Orm = p.orm !== undefined ? p.orm : (preset?.needsOrm ? 'native' : false)
+    const db: Db = (orm === false ? 'sqlite' : (p.db ?? 'sqlite')) as Db
 
     const packages = recipe === 'custom'
       ? p.packages!
@@ -273,7 +271,8 @@ export function resolveJsonAnswers(name: string, p: PartialAnswers): Answers {
 
   // Legacy explicit path (pre-recipe)
   const orm        = p.orm!
-  const db         = (orm === false || orm === 'native' ? 'sqlite' : p.db!) as Db
+  // prisma/drizzle had --db validated as required; native defaults to sqlite
+  const db         = (orm === false ? 'sqlite' : (p.db ?? 'sqlite')) as Db
   const packages   = p.packages!
   const frameworks = p.frameworks!
   const primary    = p.primary ?? frameworks[0]!

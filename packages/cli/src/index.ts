@@ -4,6 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { makeCommand } from './commands/make.js'
+import { disposeNativeDriverCache } from './native-driver-cache.js'
 import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
@@ -525,6 +526,14 @@ async function main(): Promise<void> {
   })
 
   await program.parseAsync()
+
+  // Native pg/mysql drivers hold pooled sockets that keep the event loop alive
+  // after a one-shot command's handler resolves — without this, `rudder migrate`
+  // (and any command booting an app whose default connection is native pg/mysql)
+  // hangs until killed. sqlite never hangs (better-sqlite3 is synchronous), which
+  // is why this only surfaced with native pg scaffolds. Long-running commands
+  // (queue:work, schedule:work) only reach here on shutdown.
+  await disposeNativeDriverCache()
 }
 
 main().catch((err) => {

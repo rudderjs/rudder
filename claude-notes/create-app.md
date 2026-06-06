@@ -10,11 +10,11 @@
 1. Project name — skipped if passed as argv
 2. **What are you building?** — `web-app` (default) · `saas` · `api-service` · `realtime` · `minimal` · `custom`. Single-select recipe picker that drives the next prompts.
 3. Database ORM — **Native** (default, pre-highlighted) · Prisma · Drizzle (+ **None** when recipe is `minimal` or `custom`). Native is the built-in engine (`@rudderjs/database`, re-exported at `@rudderjs/orm/native`).
-4. Database driver — SQLite (default) · PostgreSQL · MySQL — only when ORM is Prisma/Drizzle. **Skipped for Native** (forced to `sqlite`; the native provider throws for other drivers).
+4. Database driver — SQLite (default) · PostgreSQL · MySQL — asked for every engine, Native included (7.9). Native maps the choice to its driver names (`sqlite`/`pg`/`mysql`) and adds the driver dep (`better-sqlite3`/`postgres`/`mysql2`).
 5. **Packages** — categorized multiselect (8 sections, 25 visible rows, Authentication pre-checked). **Only shown for recipe = `custom`.** When ORM=None, the three DB-gated rows (Authentication, Sanctum, Passport) are hidden — Socialite stays.
 6. Frontend framework — single select: React (default) · Vue · Solid · None. Skipped for recipe = `api-service` or `minimal`. Multi-framework picks live behind the legacy `--frameworks` flag only.
 7. Styling — single select: Tailwind+shadcn (default for React) · Tailwind · Plain CSS. Skipped when no framework / API service / Minimal. shadcn row only shown for React.
-8. Is your DB running now? — yes/no — **only when DB is Postgres/MySQL.** If no, the auto-cascade skips `db:push` and adds it to the manual steps panel.
+8. Is your DB running now? — yes/no — **only when DB is Postgres/MySQL** (any engine). If no, the auto-cascade skips `db:push` (Prisma/Drizzle) / `migrate` (Native) and adds it to the manual steps panel.
 9. Install and run setup? — yes/no (default yes). When yes, the post-install cascade fires (see below).
 
 ### Recipe → preset map
@@ -56,7 +56,7 @@ Package-specific scaffolded behavior:
 When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:discover`, the scaffolder also runs:
 
 1. `pnpm rudder db:generate` — when ORM is Prisma/Drizzle (no-op for Drizzle). **Skipped for Native** (no client to generate; db:generate/db:push throw for native).
-2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed). **For Native, runs `pnpm rudder migrate` instead** — applies the scaffolded `database/migrations/*` (creates dev.db + the typed `app/Models/__schema/registry.d.ts`). `dbPushOk` carries the migrate result.
+2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed). **For Native, runs `pnpm rudder migrate` instead** (same `dbReady` gating) — applies the scaffolded `database/migrations/*` (creates dev.db on sqlite / runs DDL on the live pg/mysql + the typed `app/Models/__schema/registry.d.ts`). `dbPushOk` carries the migrate result.
 3. `pnpm rudder vendor:publish --tag=auth-views-<framework>` — only when auth was selected AND `fs.cp` couldn't vendor the views
 4. `pnpm rudder passport:keys` — only when passport selected
 5. `git init` + `git add . && git commit -m "Initial commit (create-rudder)"` — controlled by `--git=true|false`, default true
@@ -92,7 +92,7 @@ Inspired by Laravel Installer v5.27. When run inside an AI coding agent the prom
 <project-name>
 --recipe=web-app|saas|api-service|realtime|minimal|custom
 --orm=native|prisma|drizzle|none       (optional — default native, matching the interactive prompt)
---db=sqlite|postgresql|mysql           (only required with --orm=prisma|drizzle; the native default pins sqlite. --db=postgresql|mysql without --orm implies prisma — the explicit driver choice wins over the engine default)
+--db=sqlite|postgresql|mysql           (optional — defaults to sqlite; works with every engine. Only required with an explicit --orm=prisma|drizzle. Since 7.9, --db=postgresql|mysql without --orm stays on the native default — the pre-7.9 Prisma fallback is gone)
 --framework=react|vue|solid|none       (omit when recipe doesn't need frontend)
 --styling=tailwind+shadcn|tailwind|plain  (optional, defaults to recipe-appropriate)
 --packages=...                         (only when --recipe=custom)
@@ -229,6 +229,7 @@ node dist/index.js                          # launches the full interactive CLI
 pnpm test                                   # template tests + snapshot baseline
 pnpm smoke                                  # default profile (web-app — Prisma + auth + react)
 pnpm smoke --profile=native                 # built-in native engine (SQLite) + auth + react — runs `rudder migrate`
+pnpm smoke --profile=native-pg              # native engine on live Postgres — needs PG_TEST_URL (or DATABASE_URL)
 pnpm smoke --profile=minimal                # no packages, no ORM, no frontend (vanilla welcome)
 pnpm smoke --profile=saas                   # web-app + queue + mail + notifications
 pnpm smoke --profile=api-service            # auth + http, no frontend

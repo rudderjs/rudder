@@ -29,7 +29,7 @@ pnpm add @rudderjs/orm mysql2
 
 :::
 
-With `create-rudder`, choose **Native** at the Database prompt (it's the default) and this is all wired for you.
+With `create-rudder`, choose **Native** at the Database prompt (it's the default), then pick SQLite, PostgreSQL, or MySQL at the driver prompt — the driver dependency, `config/database.ts`, `.env`, and a starter migration are all wired for you. Non-interactively: `--orm=native --db=postgresql|mysql` (or just `--db=…` — native is the default engine).
 
 ## Configure
 

@@ -393,7 +393,7 @@ Full OAuth2 server: authorization-code (with PKCE), client-credentials, refresh-
 
 *Closes the Laravel DB/query-builder gap (2026-06-01 audit) and ships a first-party ORM engine — no Prisma/Drizzle required. ~120 PRs across 2026-05-23 → 2026-06-05.*
 
-**Status**: Complete except 10.13 (native pg/mysql scaffolding). Gap work-queue + feature matrices in `claude-notes/db-orm-comparison.md`; audit plan in `docs/plans/2026-06-01-*`.
+**Status**: Complete. Gap work-queue + feature matrices in `claude-notes/db-orm-comparison.md`; audit plan in `docs/plans/2026-06-01-*`.
 
 | # | Area | Feature | Status |
 |---|---|---|---|
@@ -409,14 +409,14 @@ Full OAuth2 server: authorization-code (with PKCE), client-credentials, refresh-
 | 10.10 | `@rudderjs/queue` | Native database-backed queue driver (`@rudderjs/queue/native`) with `FOR UPDATE SKIP LOCKED` reservation | ✅ #837/#901 |
 | 10.11 | CLI | `db:show` / `db:table` — database inspection over the native engine | ✅ #907 |
 | 10.12 | Scaffolder | Native engine is the `create-rudder` default — interactive Database prompt + non-interactive recipes | ✅ #830/#933 |
-| 10.13 | Scaffolder | Native pg/mysql scaffolding (today native scaffolds pin SQLite; pg/mysql via `--orm=prisma\|drizzle`) | 🔄 in progress |
+| 10.13 | Scaffolder | Native pg/mysql scaffolding — driver prompt for Native, `--orm=native --db=postgresql\|mysql`, driver deps (`postgres`/`mysql2`), db-ready-gated `migrate`, native-pg CI smoke. `--db=postgresql\|mysql` without `--orm` now stays native (pre-7.9 Prisma fallback removed) | ✅ |
 
 ### Plan 10 Deliverables
 - [x] `@rudderjs/database` 1.2.x — `DB` facade + native engine home (published 2026-06-05)
 - [x] `@rudderjs/orm` 1.16.x — query-builder/relations/multi-connection/locking breadth across all three adapters
 - [x] `@rudderjs/orm-drizzle` 1.10.x — real joins/unions/groupBy/eager-loading/locks/sticky-reads (was throw-on-use stubs)
 - [x] Typed models from migrations (`schema:types`) — the headline differentiator
-- [ ] Native pg/mysql in the scaffolder (10.13)
+- [x] Native pg/mysql in the scaffolder (10.13)
 
 ---
 
@@ -444,7 +444,7 @@ Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mo
 Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ DONE
               ├── Yjs CRDT, Lexical adapter, SSR hydration, onFirstConnect lifecycle
               │
-Phase 8 ──── Plan 10 (Data Layer & Native Engine)                 ✅ DONE (except 10.13)
+Phase 8 ──── Plan 10 (Data Layer & Native Engine)                 ✅ DONE
               ├── @rudderjs/database + DB facade, native SQLite/pg/mysql engine,
               ├── schema builder + migrations, typed models (schema:types),
               ├── QB/relations breadth, multi-connection, afterCommit, locking

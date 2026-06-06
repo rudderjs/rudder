@@ -137,18 +137,37 @@ test('validateJsonMode — orm=false skips --db', () => {
   assert.ok(missing.includes('--packages'))
 })
 
-test('validateJsonMode — orm=native skips --db (sqlite-only)', () => {
+test('validateJsonMode — orm=native skips --db (defaults to sqlite)', () => {
   const missing = validateJsonMode('app', { orm: 'native' })
   assert.ok(!missing.includes('--db'))
 })
 
-test('resolveJsonAnswers — orm=native coerces db to sqlite', () => {
+test('resolveJsonAnswers — orm=native without --db defaults to sqlite', () => {
   const answers = resolveJsonAnswers('app', {
     orm: 'native', packages: packagesFromList(['auth'], 'native'),
     frameworks: ['react'], tailwind: false, install: false,
   })
   assert.strictEqual(answers.orm, 'native')
   assert.strictEqual(answers.db, 'sqlite')
+})
+
+test('resolveJsonAnswers — orm=native honors explicit --db=postgresql (legacy path)', () => {
+  const answers = resolveJsonAnswers('app', {
+    orm: 'native', db: 'postgresql', packages: packagesFromList(['auth'], 'native'),
+    frameworks: ['react'], tailwind: false, install: false,
+  })
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db, 'postgresql')
+  assert.strictEqual(answers.dbReady, false, 'pg defaults to dbReady=false — migrate needs a live server')
+})
+
+test('resolveJsonAnswers — orm=native honors explicit --db=mysql (legacy path)', () => {
+  const answers = resolveJsonAnswers('app', {
+    orm: 'native', db: 'mysql', packages: packagesFromList(['auth'], 'native'),
+    frameworks: ['react'], tailwind: false, install: false,
+  })
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db, 'mysql')
 })
 
 test('validateJsonMode — single framework skips --primary-framework', () => {
@@ -306,7 +325,7 @@ test('validateJsonMode — recipe path never requires --db for the native defaul
   assert.deepStrictEqual(missing, [])
 })
 
-test('validateJsonMode — --recipe + --orm=native does not require --db (sqlite pin)', () => {
+test('validateJsonMode — --recipe + --orm=native does not require --db (defaults to sqlite)', () => {
   const missing = validateJsonMode('app', {
     recipe:     'web-app',
     orm:        'native',
@@ -370,15 +389,28 @@ test('resolveJsonAnswers — recipe without --db derives native + sqlite', () =>
   assert.strictEqual(answers.db,  'sqlite')
 })
 
-test('resolveJsonAnswers — recipe + explicit non-sqlite --db falls back to prisma', () => {
+test('resolveJsonAnswers — recipe + explicit non-sqlite --db stays on native', () => {
   const answers = resolveJsonAnswers('app', {
     recipe:     'web-app',
     db:         'postgresql',
     frameworks: ['react'],
     install:    true,
   })
-  assert.strictEqual(answers.orm, 'prisma', 'native cannot honor --db=postgresql; the explicit driver choice wins')
+  assert.strictEqual(answers.orm, 'native', 'native supports pg/mysql since 7.9 — the pre-7.9 Prisma fallback is gone')
   assert.strictEqual(answers.db,  'postgresql')
+})
+
+test('resolveJsonAnswers — recipe + --orm=native + --db=mysql resolves native on mysql', () => {
+  const answers = resolveJsonAnswers('app', {
+    recipe:     'web-app',
+    orm:        'native',
+    db:         'mysql',
+    frameworks: ['react'],
+    install:    true,
+  })
+  assert.strictEqual(answers.orm, 'native')
+  assert.strictEqual(answers.db,  'mysql')
+  assert.strictEqual(answers.dbReady, false)
 })
 
 test('resolveJsonAnswers — recipe + explicit --orm overrides the native default', () => {

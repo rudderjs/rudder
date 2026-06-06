@@ -700,6 +700,63 @@ describe('getTemplates() — native engine', () => {
   })
 })
 
+// ─── native engine — pg / mysql drivers (7.9) ───────────────
+
+describe('getTemplates() — native engine on pg/mysql', () => {
+  const pgCtx    = ctx({ orm: 'native', db: 'postgresql' })
+  const mysqlCtx = ctx({ orm: 'native', db: 'mysql' })
+
+  it('pg: config/database.ts uses the native driver name `pg`, not `postgresql`', () => {
+    const cfg = getTemplates(pgCtx)['config/database.ts']!
+    assert.ok(cfg.includes("engine: 'native' as const"))
+    assert.ok(cfg.includes("driver: 'pg' as const"))
+    assert.ok(!cfg.includes("driver: 'postgresql'"), 'native rejects the prisma-style driver name')
+    assert.ok(cfg.includes("Env.get('DB_CONNECTION', 'pg')"))
+    assert.ok(cfg.includes("Env.get('DATABASE_URL', '')"))
+  })
+
+  it('mysql: config/database.ts uses the native driver name `mysql`', () => {
+    const cfg = getTemplates(mysqlCtx)['config/database.ts']!
+    assert.ok(cfg.includes("engine: 'native' as const"))
+    assert.ok(cfg.includes("driver: 'mysql' as const"))
+    assert.ok(cfg.includes("Env.get('DB_CONNECTION', 'mysql')"))
+  })
+
+  it('pg: adds the postgres driver, drops better-sqlite3', () => {
+    const pkg = JSON.parse(getTemplates(pgCtx)['package.json']!)
+    assert.ok('postgres' in pkg.dependencies)
+    assert.ok(!('better-sqlite3' in pkg.dependencies))
+    assert.ok(!('mysql2' in pkg.dependencies))
+    assert.ok(!('@types/better-sqlite3' in pkg.devDependencies))
+  })
+
+  it('mysql: adds the mysql2 driver, drops better-sqlite3', () => {
+    const pkg = JSON.parse(getTemplates(mysqlCtx)['package.json']!)
+    assert.ok('mysql2' in pkg.dependencies)
+    assert.ok(!('better-sqlite3' in pkg.dependencies))
+    assert.ok(!('postgres' in pkg.dependencies))
+  })
+
+  it('pg/mysql: .env carries the matching DATABASE_URL scheme', () => {
+    assert.ok(getTemplates(pgCtx)['.env']!.includes('DATABASE_URL="postgresql://'))
+    assert.ok(getTemplates(mysqlCtx)['.env']!.includes('DATABASE_URL="mysql://'))
+  })
+
+  it('pg/mysql: the dialect-agnostic users migration is scaffolded unchanged', () => {
+    const path = 'database/migrations/0001_01_01_000000_create_users_table.ts'
+    const pg    = getTemplates(pgCtx)[path]!
+    const mysql = getTemplates(mysqlCtx)[path]!
+    assert.equal(pg, mysql, 'blueprint is dialect-agnostic — same file on every driver')
+    assert.ok(pg.includes("Schema.create('users'"))
+  })
+
+  it('pg/mysql: no postinstall allowlist entries needed (postgres/mysql2 have no build scripts)', () => {
+    const pg = getTemplates(pgCtx)['pnpm-workspace.yaml']!
+    // dangerouslyAllowAllBuilds stays (esbuild), but nothing driver-specific is required
+    assert.ok(pg.includes('dangerouslyAllowAllBuilds: true'))
+  })
+})
+
 // ─── +server.ts + vike-photon removal ─────────────────────
 
 describe('getTemplates() — +server.ts and vike-photon removal', () => {
