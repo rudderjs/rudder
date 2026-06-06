@@ -127,9 +127,9 @@ chat.emit('typing', { user: 'Alice' })
 
 // Presence — track who's in a room
 const room = socket.presence('room.lobby', userToken)
-room.on('presence.members', ({ members }) => console.log('Online:', members))
-room.on('presence.joined',  ({ user })    => console.log(`${user.name} joined`))
-room.on('presence.left',    ({ user })    => console.log(`${user.name} left`))
+room.on('presence.members', (members) => console.log('Online:', members))
+room.on('presence.joined',  (user)    => console.log(`${user.name} joined`))
+room.on('presence.left',    (user)    => console.log(`${user.name} left`))
 
 orders.leave()
 ```

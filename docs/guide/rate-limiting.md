@@ -55,7 +55,7 @@ RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)
 RateLimit.perMinute(60).by((req) => `${req.ip}:${req.path}`)
 ```
 
-Always use `req.ip`, not raw headers. The server adapter normalizes IPv6 loopback (`::1` → `127.0.0.1`) and respects `TRUST_PROXY` when reading `x-forwarded-for`. Reading raw headers in `.by()` produces inconsistent results across dev and production.
+Always use `req.ip`, not raw headers. The server adapter normalizes IPv6 loopback (`::1` → `127.0.0.1`) and respects `TRUST_PROXY` (Laravel `Request::ip()` parity): with it on, proxy headers win (`x-forwarded-for`'s first hop, then `x-real-ip`); with it off, client-sent proxy headers are ignored and the direct socket address is used. Reading raw headers in `.by()` produces inconsistent results across dev and production.
 
 ## Multi-process deployments
 
@@ -71,7 +71,7 @@ The limiter is **cache-backed**. To share counts across processes, register a Re
 
 With the in-memory cache (default), each process has its own counter — a 60/min limit becomes 60/min × N processes. That's fine for single-instance deployments and bad for everything else.
 
-If no cache is registered when `RateLimit` runs, it **fails open** (allows everything). The framework prints a one-time warning at boot to surface this.
+If no cache is registered when `RateLimit` runs, it **fails open** (allows everything). The framework prints a one-time warning the first time a limiter runs without a cache adapter to surface this.
 
 ## Group middleware
 
@@ -100,7 +100,7 @@ Retry-After: 32
 Too many login attempts.
 ```
 
-`Retry-After` is the seconds until the next allowed request. The body comes from `.message(...)` (default: `"Too many requests."`).
+`Retry-After` is the seconds until the next allowed request. The body comes from `.message(...)` (default: `"Too many requests. Please slow down."`).
 
 ## Pitfalls
 

@@ -64,15 +64,7 @@ TTL values are always in **seconds**.
 
 ## Multiple stores
 
-Configure additional stores under `stores: {}` and switch between them at the call site:
-
-```ts
-import { Cache } from '@rudderjs/cache'
-
-await Cache.store('redis').set('key', value, 60)
-```
-
-This is useful when you want one store for short-lived response caching (memory) and another for cross-process state (Redis).
+Multiple named stores aren't supported yet — the `Cache` facade has no per-name store routing. Exactly one store, the configured default, is active for every call. Configure that single default store in `config/cache.ts`.
 
 ## Atomic locks
 
@@ -147,11 +139,11 @@ Backed by `ioredis`. Persistent, multi-process, supports clustering.
   // Optional:
   password: 'secret',
   db:       0,
-  keyPrefix: 'app:',
+  prefix:   'app:',
 }
 ```
 
-For TLS, point `tls: true` (Redis Cloud, ElastiCache with TLS). For Cluster mode, use `redis://` URLs and the standard ioredis cluster config.
+The `url` field is passed straight to ioredis, so for TLS (Redis Cloud, ElastiCache with TLS) use a `rediss://` URL. For Cluster mode, use `redis://` URLs and the standard ioredis cluster config.
 
 ## Custom drivers
 

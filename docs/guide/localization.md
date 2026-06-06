@@ -65,24 +65,22 @@ __('messages.greeting', { name: 'Alice' })
 
 ## Pluralization
 
-Three forms are supported, in increasing complexity:
+Two shapes are supported:
 
 ```json
 {
   "apple_count": "one apple|many apples",
-  "items":       "{0} no items|{1} one item|{n} :count items",
-  "shoes":       "{0} no shoes|{1} one shoe|{2,4} a few shoes|{n} :count shoes"
+  "items":       "{0} no items|{1} one item|{n} :count items"
 }
 ```
 
 ```ts
-await trans('messages.shoes', 0)   // 'no shoes'
-await trans('messages.shoes', 1)   // 'one shoe'
-await trans('messages.shoes', 3)   // 'a few shoes' — matches {2,4}
-await trans('messages.shoes', 12)  // '12 shoes'
+await trans('messages.items', 0)   // 'no items'
+await trans('messages.items', 1)   // 'one item'
+await trans('messages.items', 12)  // '12 items'
 ```
 
-`{n}` is the fallback for any count not matched by a more specific rule. Counts pass as the second argument; if you need both a count and named placeholders, pass `{ count: 3, name: 'Alice' }`.
+`{0}` and `{1}` match those exact counts; `{n}` is the fallback for any other count. The two-form `one|many` shape selects `one` for a count of `1` and `many` otherwise. Counts pass as the second argument; if you need both a count and named placeholders, pass `{ count: 3, name: 'Alice' }`.
 
 ## Per-request locale
 
@@ -144,4 +142,4 @@ The validator passes `:field` automatically. See [Validation](/guide/validation)
 
 - **`__()` in `+data.ts`.** Sync lookup miss returns the key, not the translation. Use `trans()` (async) so the namespace can load on first access.
 - **Locale leaking across requests.** Don't call `setLocale()` per-request — it mutates the global default, not request-scoped state. Use `LocalizationMiddleware()` (auto) or `runWithLocale()` (manual) for per-request scoping.
-- **Plural matching order.** Specific ranges (`{2,4}`) must come before `{n}` — the matcher takes the first matching segment.
+- **Plural matching order.** Specific counts (`{0}`, `{1}`) must come before the `{n}` fallback — the matcher takes the first matching segment.

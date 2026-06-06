@@ -82,7 +82,7 @@ The pipeline runs in this order:
 
 ## Dev error page
 
-In development (`APP_ENV=local|dev`), uncaught errors render an Ignition-style HTML page with the message, parsed stack trace, source-code context around the throw, and the request envelope. The page is browser-rendered for HTML requests; JSON requests still get a structured error response.
+In development (`APP_ENV=local|development`, with `APP_DEBUG` on / outside production), uncaught errors render an Ignition-style HTML page with the message, parsed stack trace, source-code context around the throw, and the request envelope. The page is browser-rendered for HTML requests; JSON requests still get a structured error response.
 
 The **stack frames are clickable** — click any frame's `file:line` and your editor jumps to that location. The URL scheme is picked by the `APP_EDITOR` env var:
 
@@ -160,7 +160,7 @@ e.reportUsing((err) => {
 
 | Export | Description |
 |---|---|
-| `HttpException` | Error subclass with `status`, `message`, optional `headers` |
+| `HttpException` | Error subclass with `statusCode`, `message`, optional `headers` |
 | `abort(status, message?, headers?)` | Throws `HttpException` |
 | `abort_if(cond, status, …)` | Throws if `cond` is truthy |
 | `abort_unless(cond, status, …)` | Throws if `cond` is falsy |

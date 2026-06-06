@@ -24,7 +24,7 @@ schedule.call(async () => {
 
 schedule.call(async () => {
   await sendMorningDigest()
-}).weekdays().dailyAt('9:00').timezone('America/New_York').description('Morning digest')
+}).cron('0 9 * * 1-5').timezone('America/New_York').description('Morning digest')
 ```
 
 `schedule.call(fn)` returns a `ScheduledTask` with a fluent API. Chain frequency, time, timezone, and constraints; finish with `.description(...)` for the schedule listing.
@@ -43,7 +43,7 @@ To list everything scheduled:
 
 ```bash
 pnpm rudder schedule:list
-# 0 */5 * * *    Sync external data
+# */5 * * * *    Sync external data
 # 0 0 * * *      Generate daily report
 # 0 9 * * 1-5    Morning digest (America/New_York)
 ```
@@ -68,7 +68,7 @@ The full set of fluent helpers, most-used first:
 | `.yearly()` | `0 0 1 1 *` | Jan 1st |
 | `.cron(expr)` | custom | Raw cron expression |
 
-For weekday filtering: `.weekdays()`, `.weekends()`, `.mondays()` … `.sundays()`. These chain with time helpers — `.weekdays().dailyAt('9:00')` is "9am Monday through Friday."
+For weekday filtering: `.weekdays()`, `.weekends()`, `.mondays()` … `.sundays()`. Each of these sets a complete cron expression — they do **not** compose with a time helper. Chaining `.weekdays().dailyAt('9:00')` overwrites the day filter and yields `0 9 * * *` (every day). For "9am Monday through Friday" use a raw expression: `.cron('0 9 * * 1-5')`.
 
 ## Timezones
 

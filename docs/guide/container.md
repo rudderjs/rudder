@@ -45,7 +45,7 @@ app().instance('config.app', { name: 'MyApp', debug: true })
 Multiple keys can resolve to the same binding:
 
 ```ts
-app().alias('log', Logger)
+app().alias('log', 'Logger')   // alias → the string token the binding is registered under
 const logger = app().make<Logger>('log')
 ```
 

@@ -16,8 +16,9 @@ Plus the driver for your database:
 | SQLite | `better-sqlite3` | `pnpm add better-sqlite3` and `pnpm add -D @types/better-sqlite3` |
 | libSQL / Turso | `@libsql/client` | `pnpm add @libsql/client` |
 | PostgreSQL | `postgres` | `pnpm add postgres` |
+| MySQL | `mysql2` | `pnpm add mysql2` |
 
-MySQL is not supported by this adapter.
+For PostgreSQL, import from `drizzle-orm/pg-core` (`pgTable`); for MySQL, import from `drizzle-orm/mysql-core` (`mysqlTable`).
 
 ## Define the schema
 
@@ -162,7 +163,7 @@ users[0].posts   // Post[]  — eagerly loaded
 |---|---|
 | `with(relation)` | Supported for `hasOne` / `hasMany` / `belongsTo` / `belongsToMany` (Model-layer batched load) |
 | `connect()` | No-op — Drizzle connects lazily |
-| `disconnect()` | PostgreSQL only — closes the pool |
+| `disconnect()` | PostgreSQL and MySQL — closes the pool; no-op on SQLite/libSQL |
 
 For nested eager loads (`'a.b'`) or constrained eager loading (`withWhereHas`), drop down to raw Drizzle queries or the `related()` accessor — see the [drizzle-orm docs](https://orm.drizzle.team/docs/rqb).
 
@@ -171,4 +172,3 @@ For nested eager loads (`'a.b'`) or constrained eager loading (`withWhereHas`), 
 - **`static table` mismatch.** It must match the key in `tables: {}`, not the SQL table name. `tables: { user: users }` → `static table = 'user'` (even though the SQL table is `users`).
 - **Eager loading needs the related table registered.** `User.with('posts')` fires a query against the `posts` table — register it via `tables: { posts }` or `DrizzleTableRegistry.register('posts', posts)`, or you'll get a clear "No table schema registered" error. (This is the same registry `whereHas` uses.)
 - **`withWhereHas` still throws on Drizzle.** Plain `with()` works, but the *constrained*-eager variant (`withWhereHas`) routes through a code path Drizzle can't satisfy. Use `whereHas(relation)` to filter (it never eager-loads) and load the constrained children explicitly via `parent.related(relation).where(...).get()`.
-- **MySQL not supported.** Use Prisma for MySQL apps.

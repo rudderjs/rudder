@@ -58,14 +58,26 @@ export default {
 } satisfies SyncConfig
 ```
 
-The Prisma adapter requires the `sync_documents` schema:
+The Prisma adapter requires a `SyncDocument` model. Add it to your schema by hand — it **must** be named `SyncDocument` so the Prisma delegate is `syncDocument` (the `syncPrisma()` default):
+
+```prisma
+model SyncDocument {
+  id        String   @id @default(cuid())
+  docName   String
+  update    Bytes
+  createdAt DateTime @default(now())
+
+  @@index([docName])
+}
+```
+
+Then run the migration:
 
 ```bash
-pnpm rudder vendor:publish --tag=sync-schema
 pnpm rudder migrate
 ```
 
-Both adapters store the document as a sequence of binary updates, replaying them on first load. Snapshots happen periodically to keep load time bounded.
+Persistence is append-only: each update is stored as a separate binary row (Prisma: one row per update; Redis: `rpush` onto a per-document list). On load, the full update log is replayed — there is no snapshotting or compaction.
 
 ## Auth and change hooks
 
@@ -104,17 +116,19 @@ The core `@rudderjs/sync` package handles transport and persistence. For server-
 | Adapter | Subpath | Status |
 |---|---|---|
 | Lexical | `@rudderjs/sync/lexical` | Available |
-| Tiptap  | `@rudderjs/sync/tiptap`  | Scaffolded — implementation forthcoming |
+| Tiptap  | —                        | Forthcoming (no subpath exported yet) |
 
 ```ts
 import { Sync } from '@rudderjs/sync'
 import { editBlock, insertBlock } from '@rudderjs/sync/lexical'
 
-const doc = await Sync.document('article:42:body')
+const doc = Sync.document('article:42:body')
 insertBlock(doc, 'callToAction', { title: 'Subscribe' })
 ```
 
 The adapter operates against the live `Y.Doc`, so connected clients see the change instantly through their own Lexical/Tiptap binding.
+
+`Sync.document()` is synchronous and returns the in-process `Y.Doc` without awaiting persistence — fine for a doc that already has connected clients. When you need the persisted state hydrated first (e.g. mutating a cold document on the server), use `const doc = await Sync.load('article:42:body')`.
 
 ## Browser client
 

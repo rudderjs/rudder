@@ -477,8 +477,8 @@ fake.respondWithTranscription('hello world')  // STT text
 fake.respondWithEmbedding([[0.1, 0.2, 0.3]])
 fake.respondWithRanking([{ index: 0, score: 0.99 }])
 
-fake.assertGeneratedImage()
-fake.assertGeneratedAudio()
+fake.assertImageGenerated()
+fake.assertAudioGenerated()
 fake.assertTranscribed()
 ```
 

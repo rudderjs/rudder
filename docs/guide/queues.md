@@ -149,9 +149,11 @@ Best for serverless deployments (Vercel, Netlify, Cloudflare) where running a lo
 By default, jobs retry `static retries` times with exponential backoff. After the final failure, the job moves to a "failed" set (BullMQ) or is reported as failed (Inngest). Inspect failures with the adapter's tooling:
 
 ```bash
-# BullMQ — uses the `bullmq` CLI directly
-pnpm exec bullmq queue inspect default
+# List failed jobs on a queue
+pnpm rudder queue:failed default
 ```
+
+Retry a failed job with `pnpm rudder queue:retry`, or check throughput and depth with `pnpm rudder queue:status`.
 
 For granular retry control, override `static retries` or implement `failed(error)` on the job class:
 
@@ -172,12 +174,12 @@ export class SendWelcomeEmail extends Job {
 import { Queue } from '@rudderjs/queue'
 import { SendWelcomeEmail } from '../app/Jobs/SendWelcomeEmail.js'
 
-Queue.fake()
+const fake = Queue.fake()
 await UserService.signup({ email: 'a@b.com' })
 
-Queue.assertPushed(SendWelcomeEmail)
-Queue.assertPushed(SendWelcomeEmail, (j) => j.userId === '42')
-Queue.assertNothingPushed()
+fake.assertPushed(SendWelcomeEmail)
+fake.assertPushed(SendWelcomeEmail, (j) => j.userId === '42')
+fake.assertNothingPushed()
 ```
 
 `Queue.fake()` captures dispatched jobs in memory and never invokes the adapter — assertions pass or fail without side effects.

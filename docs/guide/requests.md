@@ -26,7 +26,7 @@ router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
 | `req.params` | `Record<string, string>` | Route parameters captured by `:slug` segments |
 | `req.headers` | `Record<string, string>` | Request headers (lowercased keys) |
 | `req.body` | `unknown` | Parsed body (JSON, form-encoded, or raw) |
-| `req.ip` | `string` | Client IP, normalized — see below |
+| `req.ip` | `string \| undefined` | Client IP, normalized — see below |
 | `req.raw` | `unknown` | Adapter-specific raw request (escape hatch) |
 
 ## Typed input accessors
@@ -58,7 +58,7 @@ These are the right tool for a quick endpoint or controller. For complex validat
 
 ## Client IP
 
-`req.ip` is set by the server adapter. It reads `x-forwarded-for` and `x-real-ip` (when `TRUST_PROXY=true`), normalizes IPv6 loopback (`::1` → `127.0.0.1`), and falls back to the socket address.
+`req.ip` is set by the server adapter (Laravel `Request::ip()` parity). With `TRUST_PROXY=true`, proxy headers win — `x-forwarded-for`'s first hop, then `x-real-ip`; with it off, client-sent proxy headers are ignored. In every case the direct socket address is the fallback wherever the runtime exposes one (the production vike server and `adapter.listen()` both do; in dev the `rudderjs:ip` Vite plugin injects a stand-in header). It normalizes IPv6 loopback (`::1` → `127.0.0.1`). The type is `string | undefined` — undefined only on edge runtimes with no socket and no trusted header.
 
 ```ts
 const limiter = RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)
@@ -86,8 +86,8 @@ When `@rudderjs/session` is installed, the session middleware (auto-installed on
 ```ts
 import { Session } from '@rudderjs/session'
 
-const flash = await Session.pull('flash.success')
-await Session.put('lastViewedAt', Date.now())
+const flash = Session.getFlash('flash.success')
+Session.put('lastViewedAt', Date.now())
 ```
 
 The facade reads from AsyncLocalStorage, so it works inside controllers, services, and helpers without threading `req` through every call.

@@ -67,7 +67,7 @@ await Storage.disk('s3').put('uploads/file.pdf', buffer)
 
 | Method | Returns | Description |
 |---|---|---|
-| `put(path, content)` | `Promise<void>` | Write — `string`, `Buffer`, or `Uint8Array` |
+| `put(path, content)` | `Promise<void>` | Write — `Buffer \| string` |
 | `get(path)` | `Promise<Buffer \| null>` | Read as Buffer |
 | `text(path)` | `Promise<string \| null>` | Read as UTF-8 |
 | `exists(path)` | `Promise<boolean>` | Check existence |
@@ -121,7 +121,7 @@ AWS_URL=http://localhost:9000/my-app
 For pre-signed URLs (temporary direct browser access):
 
 ```ts
-const url = await Storage.disk('s3').temporaryUrl('uploads/file.pdf', 3600)  // 1-hour link
+const url = await Storage.disk('s3').temporaryUrl('uploads/file.pdf', new Date(Date.now() + 3600_000))  // 1-hour link
 ```
 
 ## Temporary URLs on the local disk
@@ -135,7 +135,7 @@ import { serveTemporaryUrls } from '@rudderjs/storage'
 await serveTemporaryUrls(router, { disk: 'local', routePath: '/storage/temp/*' })
 ```
 
-After that, `Storage.disk('local').temporaryUrl('uploads/file.pdf', 3600)` returns a URL of the form `/storage/temp/uploads/file.pdf?expires=...&signature=...`. The registered handler validates the signature and streams the file. Useful in dev so the same `temporaryUrl()` call works locally without S3.
+After that, `Storage.disk('local').temporaryUrl('uploads/file.pdf', new Date(Date.now() + 3600_000))` returns a URL of the form `/storage/temp/uploads/file.pdf?expires=...&signature=...`. The registered handler validates the signature and streams the file. Useful in dev so the same `temporaryUrl()` call works locally without S3.
 
 `serveTemporaryUrls()` is `async` because it dynamic-imports `@rudderjs/router` to read `Url.isValidSignature`. Don't forget to `await` it. `temporaryUploadUrl()` on the local disk throws `StorageNotSupportedError` — there is no signed-POST equivalent in v1.
 
@@ -150,10 +150,11 @@ const v = await Storage.disk('s3').getVisibility('avatars/u-1.jpg')   // 'public
 
 S3 maps `public` → `public-read` ACL and `private` → `private` ACL via `PutObjectAcl`/`GetObjectAcl`. The local adapter writes mode bits (`0o644` / `0o600`) **and** a sidecar at `<root>/.visibility/<path>` so Windows and FUSE volumes still report correctly. `delete()` removes the sidecar.
 
-You can also set the initial visibility at write time via the `put()` options:
+`put()` takes no options argument, so set visibility in a follow-up call:
 
 ```ts
-await Storage.put('reports/q1.pdf', buffer, { visibility: 'public' })
+await Storage.put('reports/q1.pdf', buffer)
+await Storage.setVisibility('reports/q1.pdf', 'public')
 ```
 
 ## Streams
@@ -177,7 +178,7 @@ Multipart uploads parse into `req.body` as a structure with named files. Persist
 Route.post('/api/avatars', async (req, res) => {
   const file: File = (req.body as any).avatar
   const path = `avatars/${req.user.id}/${file.name}`
-  await Storage.disk('s3').put(path, file)
+  await Storage.disk('s3').put(path, Buffer.from(await file.arrayBuffer()))
   return res.status(201).json({ url: Storage.disk('s3').url(path) })
 })
 ```

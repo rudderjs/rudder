@@ -71,7 +71,7 @@ API routes stay stateless by default — `req.user` is undefined, no session is 
 // routes/api.ts
 import { RequireBearer, scope } from '@rudderjs/passport'
 
-Route.get('/api/posts', [RequireBearer(), scope('read')], handler)
+Route.get('/api/posts', handler, [RequireBearer(), scope('read')])
 ```
 
 Packages that need to install group middleware from their own provider call `appendToGroup` instead of `router.use()`:

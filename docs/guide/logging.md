@@ -7,7 +7,7 @@
 Add a logging config:
 
 ```ts
-// config/logging.ts
+// config/log.ts — registered under the `log` key in config/index.ts
 import { resolve } from 'node:path'
 
 export default {
@@ -179,6 +179,6 @@ fake.clear()
 
 ## Pitfalls
 
-- **Stack channels referencing missing channels.** Stacks resolve at boot; a bad name throws `Unknown channel "X"`.
+- **Stack channels referencing missing channels.** Stacks resolve at boot; a bad name throws `Stack references unknown channel "X"`.
 - **File-driver async surprises.** `console` writes synchronously; `single` and `daily` are async. If you need a guaranteed flush before exit, await the last call in your shutdown hook.
 - **Context across requests.** `Log.withContext(...)` writes to the default channel's mutable context. In a long-running process this leaks across requests — for per-request context, use shared context plus `Log.flushSharedContext()` in a request-finish middleware, or pass context per call.

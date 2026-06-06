@@ -128,7 +128,7 @@ The framework ships several built-in commands that show up automatically. The se
 
 | Command | Provided by | Purpose |
 |---|---|---|
-| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `make:job`, `make:notification` | core | Scaffold boilerplate files |
+| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `make:job` | core | Scaffold boilerplate files |
 | `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
 | `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
@@ -169,13 +169,13 @@ pnpm rudder make:provider App                # → app/Providers/AppServiceProvi
 pnpm rudder make:job SendWelcomeEmail        # → app/Jobs/SendWelcomeEmail.ts
 pnpm rudder make:event UserRegistered        # → app/Events/UserRegistered.ts
 pnpm rudder make:listener SendWelcome        # → app/Listeners/SendWelcome.ts
-pnpm rudder make:mail Welcome                # → app/Mail/WelcomeMail.ts
-pnpm rudder make:command Backup              # → app/Commands/BackupCommand.ts
+pnpm rudder make:mail Welcome                # → app/Mail/Welcome.ts
+pnpm rudder make:command Backup              # → app/Commands/Backup.ts
 pnpm rudder make:factory User                # → app/Factories/UserFactory.ts
 pnpm rudder make:seeder Users                # → database/seeders/UsersSeeder.ts
 ```
 
-Pass `--force` to overwrite an existing file. Every generated stub uses your project's framework selection (React for `.tsx`, Vue for `.vue`, etc.) and tsconfig.
+Pass `--force` to overwrite an existing file. These generators all emit `.ts` files; only `make:terminal` emits a `.tsx` Ink component.
 
 ## `add` / `remove` — manage framework packages
 
@@ -228,13 +228,14 @@ For larger apps, group a feature's models, services, providers, and Prisma shard
 
 ```bash
 pnpm rudder make:module Blog
-# → app/Modules/Blog/{Blog.prisma, BlogService.ts, BlogServiceProvider.ts}
+# → app/Modules/Blog/{Blog.prisma, BlogService.ts, BlogServiceProvider.ts, Blog.test.ts}
 
 pnpm rudder module:publish
-# Merges every app/Modules/*/*.prisma into prisma/schema/
+# Merges every app/Modules/*/*.prisma into prisma/schema/modules.prisma
+# (or prisma/schema.prisma on single-file layouts)
 ```
 
-`module:publish` keeps Prisma's multi-file schema in sync with module shards — run it after adding a module or editing its `.prisma` file.
+`module:publish` keeps Prisma's multi-file schema in sync with module shards — run it after adding a module or editing its `.prisma` file. It merges every module shard into `prisma/schema/modules.prisma` when the app uses the multi-file `prisma/schema/` directory (the scaffolder default), or into `prisma/schema.prisma` on single-file layouts.
 
 ## Pitfalls
 

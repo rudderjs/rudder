@@ -210,7 +210,7 @@ The fake captures every send into memory — no real delivery, no queue side eff
 
 ## Pitfalls
 
-- **Forgetting `from`.** The provider throws at boot if `from.address` is empty. Set `MAIL_FROM_ADDRESS` in `.env`.
+- **Forgetting `from`.** There's no boot-time guard — if `from.address` is empty, mail silently goes out with the registry default (`noreply@example.com`). Set `MAIL_FROM_ADDRESS` in `.env`.
 - **`log` driver in production.** Mail goes to your stdout, not the recipient's inbox. Switch to `smtp` (or a custom driver) before deploying.
 - **SPF / DKIM not set up.** Even with valid SMTP, mail without proper DNS lands in spam. Configure SPF, DKIM, and DMARC for your sending domain.
 - **Sending from a request handler with a slow SMTP server.** Wrap in a queue job — synchronous SMTP can take seconds and tie up your handler. See the queue example above.
