@@ -115,6 +115,39 @@ export interface MorphedByManyAccessor {
 
 // ─── Input helpers ─────────────────────────────────────────
 
+/**
+ * Ids that cross an HTTP boundary (form bodies, query params) arrive as
+ * strings while autoincrement pivot rows store numbers. All id matching in
+ * this module compares on the String() form and writes with the type
+ * observed on the existing pivot rows — so `sync(["1","3"])` from a form
+ * never re-attaches an already-present numeric id (UNIQUE violation on a
+ * constrained pivot; a duplicate row the detach side then deletes on an
+ * unconstrained one), and typed adapters (Prisma/Drizzle) never see a
+ * string bound against an Int column.
+ */
+const idKey = (id: unknown): string => String(id)
+
+/**
+ * Object keys are always strings; turn an all-digit key back into a number
+ * only when the round-trip is lossless (`"0123"` and overflow-range digits
+ * stay strings — they can't equal an autoincrement id anyway).
+ */
+const normalizeMapKey = (k: string): string | number =>
+  /^\d+$/.test(k) && String(Number(k)) === k ? Number(k) : k
+
+/**
+ * Coerce `id` to the representation of `sample` (a value read from the
+ * pivot table) when both express the same id in different types. Anything
+ * else passes through untouched.
+ */
+function coerceIdToSample(id: unknown, sample: unknown): unknown {
+  if (typeof sample === 'number' && typeof id === 'string' && /^\d+$/.test(id) && String(Number(id)) === id) {
+    return Number(id)
+  }
+  if (typeof sample === 'string' && typeof id === 'number') return String(id)
+  return id
+}
+
 function normalizeAttachInput(
   input:           AttachInput,
   foreignPivotKey: string,
@@ -135,7 +168,7 @@ function normalizeAttachInput(
     for (const [id, perIdPivot] of Object.entries(input as Record<string | number, Record<string, unknown>>)) {
       // Normalize numeric-string keys back to numbers when possible — JS
       // object keys are always strings; the pivot column may be int.
-      const idVal: unknown = /^\d+$/.test(id) ? Number(id) : id
+      const idVal: unknown = normalizeMapKey(id)
       rows.push({
         ...perIdPivot,
         [foreignPivotKey]: parentVal,
@@ -148,7 +181,7 @@ function normalizeAttachInput(
 
 function idsFromAttachInput(input: AttachInput): unknown[] {
   if (Array.isArray(input)) return [...input]
-  return Object.keys(input).map(k => /^\d+$/.test(k) ? Number(k) : k)
+  return Object.keys(input).map(normalizeMapKey)
 }
 
 // ─── Unified pivot accessor factory ────────────────────────
@@ -192,7 +225,32 @@ function makePivotAccessor(
   const writeMorphCol = (row: Record<string, unknown>): Record<string, unknown> =>
     morphConstraint ? { ...row, [morphConstraint.typeColumn]: morphConstraint.typeValue } : row
 
-  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
+  /** This parent's current pivot rows (morph-filtered). */
+  const currentPivotRows = async (): Promise<Array<Record<string, unknown>>> => {
+    let q = ModelRegistry.getAdapter()
+      .query<Record<string, unknown>>(meta.pivotTable)
+      .where(meta.foreignPivotKey, parentVal)
+    q = applyMorphFilter(q)
+    return q.get()
+  }
+
+  /**
+   * Resolve incoming ids against the current pivot rows: a String()-equal
+   * row wins (its raw stored value keeps detach `IN` lists and reconcile
+   * WHEREs type-correct); anything else is coerced to the observed id type.
+   */
+  const resolveIds = (
+    rows: ReadonlyArray<Record<string, unknown>>,
+    ids:  ReadonlyArray<unknown>,
+  ): unknown[] => {
+    const rawByKey = new Map(rows.map(r => [idKey(r[meta.relatedPivotKey]), r[meta.relatedPivotKey]]))
+    const sample = rows[0]?.[meta.relatedPivotKey]
+    return ids.map(id => rawByKey.has(idKey(id)) ? rawByKey.get(idKey(id)) : coerceIdToSample(id, sample))
+  }
+
+  /** `updatePivot` body without id resolution — `sync` calls this with raw
+   *  values it already resolved against its own current-rows read. */
+  const updatePivotRaw = async (relatedId: unknown, data: Record<string, unknown>): Promise<number> => {
     let q = ModelRegistry.getAdapter()
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
@@ -201,11 +259,18 @@ function makePivotAccessor(
     return q.updateAll(data)
   }
 
+  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
+    const resolved = resolveIds(await currentPivotRows(), [relatedId])[0]
+    return updatePivotRaw(resolved, data)
+  }
+
   return {
     async attach(input, flatPivot) {
       const ids = idsFromAttachInput(input)
       if (ids.length === 0) return
+      const resolved = resolveIds(await currentPivotRows(), ids)
       const rows = normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
+        .map((row, i) => ({ ...row, [meta.relatedPivotKey]: resolved[i] }))
         .map(writeMorphCol)
       await ModelRegistry.getAdapter()
         .query<Record<string, unknown>>(meta.pivotTable)
@@ -214,13 +279,17 @@ function makePivotAccessor(
 
     async detach(ids) {
       const adapter = ModelRegistry.getAdapter()
+      let resolved: unknown[] | undefined
+      if (ids !== undefined) {
+        if (ids.length === 0) return 0
+        resolved = resolveIds(await currentPivotRows(), ids)
+      }
       let q = adapter
         .query<Record<string, unknown>>(meta.pivotTable)
         .where(meta.foreignPivotKey, parentVal)
       q = applyMorphFilter(q)
-      if (ids !== undefined) {
-        if (ids.length === 0) return 0
-        q = q.where(meta.relatedPivotKey, 'IN', [...ids])
+      if (resolved !== undefined) {
+        q = q.where(meta.relatedPivotKey, 'IN', resolved)
       }
       return q.deleteAll()
     },
@@ -235,26 +304,30 @@ function makePivotAccessor(
       const isMap     = !Array.isArray(arg1)
       const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
       const desiredIds: unknown[] = isMap
-        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
+        ? Object.keys(perIdMap!).map(normalizeMapKey)
         : [...(arg1 as ReadonlyArray<number | string>)]
 
-      let lookup = adapter
-        .query<Record<string, unknown>>(meta.pivotTable)
-        .where(meta.foreignPivotKey, parentVal)
-      lookup = applyMorphFilter(lookup)
-      const currentRows = await lookup.get()
+      const currentRows = await currentPivotRows()
 
-      const current = new Set(currentRows.map(r => r[meta.relatedPivotKey]))
-      const desired = new Set<unknown>(desiredIds)
+      // Loose diff: compare on the String() form so a form-body "3" matches
+      // the stored 3. Detach keeps the RAW stored value (type-correct on
+      // typed adapters); attach coerces to the observed id type.
+      const currentByKey = new Map(currentRows.map(r => [idKey(r[meta.relatedPivotKey]), r[meta.relatedPivotKey]]))
+      const sample = currentRows[0]?.[meta.relatedPivotKey]
+      const desiredByKey = new Map<string, unknown>()
+      for (const id of desiredIds) {
+        if (!desiredByKey.has(idKey(id))) desiredByKey.set(idKey(id), id)
+      }
+
       const attached: unknown[] = []
       const detached: unknown[] = []
       const updated:  unknown[] = []
-      for (const id of desired) if (!current.has(id)) attached.push(id)
-      for (const id of current) if (!desired.has(id)) detached.push(id)
+      for (const [key, id] of desiredByKey) if (!currentByKey.has(key)) attached.push(coerceIdToSample(id, sample))
+      for (const [key, raw] of currentByKey) if (!desiredByKey.has(key)) detached.push(raw)
 
       if (attached.length > 0) {
         const rows = attached.map(id => {
-          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
+          const perIdPivot = perIdMap ? perIdMap[idKey(id)] : undefined
           return writeMorphCol({
             ...(flatPivot ?? {}),
             ...(perIdPivot ?? {}),
@@ -276,12 +349,12 @@ function makePivotAccessor(
         // Reconcile extras on still-present ids by overwriting with the
         // requested pivot data — matches Filament's posture (the form
         // value wins). Skip when the supplied pivot is empty.
-        for (const id of desired) {
-          if (!current.has(id)) continue
-          const perIdPivot = perIdMap[id as string | number]
+        for (const [key, raw] of currentByKey) {
+          if (!desiredByKey.has(key)) continue
+          const perIdPivot = perIdMap[key]
           if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
-          await updatePivot(id as number | string, perIdPivot)
-          updated.push(id)
+          await updatePivotRaw(raw, perIdPivot)
+          updated.push(raw)
         }
       }
 
