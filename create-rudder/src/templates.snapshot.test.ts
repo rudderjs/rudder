@@ -59,9 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-05 — `start`/`preview` scripts gained
-  // `NODE_ENV=production` so the built server doesn't mix React build flavors
-  // (external react resolves its dev build from unset NODE_ENV → render 500s).
+  // Baseline last captured 2026-06-06 — scaffolded apps gained a
+  // `.gitattributes` marking the committed generated files (pages/__view,
+  // routes/__registry.d.ts, models __schema registry) linguist-generated.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -70,13 +70,14 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 61
-const EXPECTED_TOTAL_BYTES = 49674
-const EXPECTED_CONTENT_HASH = '9188d1667aa1952379a3c63691b6ce9eb8a7f27aa171b0426b467c910af00f3e'
+const EXPECTED_FILE_COUNT = 62
+const EXPECTED_TOTAL_BYTES = 49819
+const EXPECTED_CONTENT_HASH = 'a13986f9f1f4030b6a329d5ee5af51974f2de6d098e7ceffbae66fbd970b0f6a'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
   '.env.example',
+  '.gitattributes',
   '.gitignore',
   'app/Http/Controllers/AuthController.ts',
   'app/Mcp/EchoServer.ts',

@@ -28,7 +28,7 @@ import { configPulse } from './templates/configs/pulse.js'
 import { configHorizon } from './templates/configs/horizon.js'
 import { configCrypt } from './templates/configs/crypt.js'
 import { configPennant } from './templates/configs/pennant.js'
-import { dotenv, dotenvExample, envDts, gitignore, pnpmWorkspace } from './templates/env.js'
+import { dotenv, dotenvExample, envDts, gitattributes, gitignore, pnpmWorkspace } from './templates/env.js'
 import { serverTs } from './templates/server.js'
 import { bootstrapApp } from './templates/bootstrap/app.js'
 import { bootstrapProviders } from './templates/bootstrap/providers.js'
@@ -109,6 +109,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['.env']                 = dotenv(ctx)
   files['.env.example']         = dotenvExample(ctx)
   files['.gitignore']           = gitignore()
+  files['.gitattributes']       = gitattributes()
 
   // Database schema
   if (ctx.orm === 'prisma') {
