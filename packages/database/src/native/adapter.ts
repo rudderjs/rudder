@@ -24,6 +24,7 @@ import { BetterSqlite3Driver } from './drivers/better-sqlite3.js'
 import { PostgresDriver } from './drivers/postgres.js'
 import { MysqlDriver } from './drivers/mysql.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
+import { readColumns } from './schema/introspect.js'
 import type { ModelCastInfo } from './schema/schema-types.js'
 
 /** Supported native drivers. SQLite (better-sqlite3), Postgres (porsager
@@ -296,6 +297,40 @@ export class NativeAdapter implements OrmAdapter {
    *  The native QB's own `with()` stays a warn-only no-op: the adapter contract
    *  passes relation NAMES only, with no join shape to compile from. */
   readonly eagerLoadStrategy = 'model-layer' as const
+
+  /** Per-table column-name cache for {@link tableColumns}. Lives on the adapter
+   *  instance (rebuilt each boot / dev re-boot), so it can't outlive a schema
+   *  change applied in a previous process. In-process DDL on an ALREADY-cached
+   *  table is the one staleness window — acceptable for its consumer (timestamp
+   *  stamping reads a stable pair of columns), and clearable via
+   *  {@link clearTableColumnsCache} where a test alters mid-run. */
+  private readonly _tableColumnsCache = new Map<string, readonly string[] | null>()
+
+  /**
+   * Column names of `table`, or `null` when the table doesn't exist. Backs the
+   * ORM's Model-layer `createdAt`/`updatedAt` stamping (the optional
+   * `OrmAdapter.tableColumns` capability) — the Model checks the real columns
+   * before stamping so timestamp-less tables never get unknown-column inserts.
+   */
+  async tableColumns(table: string): Promise<readonly string[] | null> {
+    const cached = this._tableColumnsCache.get(table)
+    if (cached !== undefined) return cached
+    let names: readonly string[] | null
+    try {
+      const cols = await readColumns(this.executor, this.dialect, table)
+      names = cols.length > 0 ? cols.map((c) => c.name) : null
+    } catch {
+      names = null
+    }
+    this._tableColumnsCache.set(table, names)
+    return names
+  }
+
+  /** Drop the {@link tableColumns} cache (all tables, or one). */
+  clearTableColumnsCache(table?: string): void {
+    if (table === undefined) this._tableColumnsCache.clear()
+    else this._tableColumnsCache.delete(table)
+  }
 
   /** Build a `NativeAdapter`, opening the configured driver (lazy import). */
   static async make(config: NativeConfig = {}): Promise<NativeAdapter> {
