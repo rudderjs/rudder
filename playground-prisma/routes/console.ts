@@ -1,0 +1,61 @@
+import { Rudder } from '@rudderjs/console'
+import { Schedule } from '@rudderjs/schedule'
+import { Cache } from '@rudderjs/cache'
+import { terminal } from '@rudderjs/terminal'
+import { User } from 'App/Models/User.js'
+import { Greet } from 'App/Commands/Greet.js'
+
+Rudder.register(Greet)
+
+Rudder.command('inspire', () => {
+  const quotes = [
+    'The best way to predict the future is to create it.',
+    'Build something people want.',
+    'Stay hungry, stay foolish.',
+    'Code is poetry.',
+    'Simplicity is the soul of efficiency.',
+  ]
+  const quote = quotes[Math.floor(Math.random() * quotes.length)]!
+  console.log(`\n  "${quote}"\n`)
+}).description('Display an inspiring quote')
+
+Rudder.command('dashboard', async () => {
+  return terminal('dashboard', {
+    appName: 'RudderJS',
+    version: '1.0.0',
+  })
+}).description('Show the app dashboard in the terminal')
+
+Rudder.command('db:seed', async () => {
+  console.log('Seeding database...')
+
+  await User.create({ name: 'Alice',   email: 'alice2@example.com',   role: 'admin' })
+  await User.create({ name: 'Bob',     email: 'bob2@example.com',     role: 'user'  })
+  await User.create({ name: 'Charlie', email: 'charlie2@example.com', role: 'user'  })
+
+  console.log('Done. 3 users seeded.')
+}).description('Seed the database with sample data')
+
+Rudder.command('queue:demo', async () => {
+  const { WelcomeUserJob } = await import('App/Jobs/WelcomeUserJob.js')
+  const { FailingJob }     = await import('App/Jobs/FailingJob.js')
+
+  await WelcomeUserJob.dispatch('Alice', 'alice@example.com').send()
+  await WelcomeUserJob.dispatch('Bob',   'bob@example.com').send()
+  await FailingJob.dispatch('Crash on purpose').send()
+
+  console.log('\nDispatched 3 jobs onto the configured queue.')
+  console.log('Process them: pnpm rudder queue:work --stop-when-empty\n')
+}).description('Dispatch a few demo jobs onto the queue (pairs with queue:work)')
+
+// ─── Scheduled Tasks ───────────────────────────────────────
+
+// Flush the users query cache every 5 minutes so stale data doesn't linger
+Schedule.call(async () => {
+  await Cache.forget('users:all')
+}).everyFiveMinutes().description('Flush users:all cache')
+
+// Log a heartbeat every minute (useful for confirming the scheduler is alive)
+Schedule.call(() => {
+  console.log('[Heartbeat] Scheduler is running —', new Date().toISOString())
+}).everySecond().description('Heartbeat log')

@@ -14,7 +14,7 @@ export type TodoInput  = z.infer<typeof TodoInputSchema>
 export type TodoUpdate = z.infer<typeof TodoUpdateSchema>
 
 export interface Todo {
-  id:        string
+  id:        number
   title:     string
   completed: boolean
   createdAt: Date

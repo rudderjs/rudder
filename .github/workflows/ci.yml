@@ -732,7 +732,7 @@ jobs:
         # executed at prerender time (an app with no prerendered pages still
         # emits the broken chunk).
         run: |
-          if grep -rl '__VITE_ASSETS_MANIFEST__' playground/dist/server playground-web/dist/server 2>/dev/null; then
+          if grep -rl '__VITE_ASSETS_MANIFEST__' playground/dist/server playground-prisma/dist/server playground-web/dist/server 2>/dev/null; then
             echo "::error::Vike left __VITE_ASSETS_MANIFEST__ unreplaced in a server chunk (Vite 8 / rolldown — see patches/vike@0.4.257.patch)"
             exit 1
           fi

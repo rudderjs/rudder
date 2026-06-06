@@ -2,25 +2,22 @@ import { Model } from '@rudderjs/orm'
 import { Post } from './Post.js'
 import { Video } from './Video.js'
 
-export class Tag extends Model {
-  static table = 'tag'
+export class Tag extends Model.for<'tags'>() {
+  static table = 'tags'
   static fillable = ['name']
 
   static override relations = {
     posts: {
       type:       'morphedByMany' as const,
       model:      () => Post,
-      pivotTable: 'taggable',
+      pivotTable: 'taggables',
       morphName:  'taggable',
     },
     videos: {
       type:       'morphedByMany' as const,
       model:      () => Video,
-      pivotTable: 'taggable',
+      pivotTable: 'taggables',
       morphName:  'taggable',
     },
   }
-
-  id!:   number
-  name!: string
 }

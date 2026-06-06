@@ -37,7 +37,7 @@ export default function TodosDemo({ todos: initial }: TodosDemoProps) {
     setTodos(prev => prev.map(t => t.id === data.id ? data : t))
   }
 
-  async function deleteTodo(id: string) {
+  async function deleteTodo(id: number) {
     await fetch(`/api/todos/${id}`, { method: 'DELETE' })
     setTodos(prev => prev.filter(t => t.id !== id))
   }

@@ -21,8 +21,11 @@ import { generateClaudeMd } from './generators/claude-md.js'
 // matrix Phase 1. Re-evaluate when the scaffolder E2E job lands.
 const skipOnWindows = { skip: process.platform === 'win32' ? 'boost playground integration tests need cross-platform fixture work' : false }
 
-// Use the playground as the test project
-const PLAYGROUND = join(import.meta.dirname, '..', '..', '..', 'playground')
+// Use the playgrounds as test projects. `playground/` runs the NATIVE engine
+// (database/migrations/, no .prisma); its twin `playground-prisma/` keeps the
+// Prisma schema — the fixture for the prisma-coupled tools (db_schema).
+const PLAYGROUND        = join(import.meta.dirname, '..', '..', '..', 'playground')
+const PLAYGROUND_PRISMA = join(import.meta.dirname, '..', '..', '..', 'playground-prisma')
 
 // ─── app_info ─────────────────────────────────────────────
 
@@ -49,8 +52,8 @@ describe('getAppInfo', skipOnWindows, () => {
 // ─── db_schema ────────────────────────────────────────────
 
 describe('getDbSchema', skipOnWindows, () => {
-  it('parses prisma schema from playground', () => {
-    const schema = getDbSchema(PLAYGROUND)
+  it('parses prisma schema from playground-prisma', () => {
+    const schema = getDbSchema(PLAYGROUND_PRISMA)
     assert.ok(schema.models.length > 0)
     const user = schema.models.find(m => m.name === 'User')
     assert.ok(user, 'User model should exist')
@@ -58,9 +61,14 @@ describe('getDbSchema', skipOnWindows, () => {
   })
 
   it('returns raw schema content', () => {
-    const schema = getDbSchema(PLAYGROUND)
+    const schema = getDbSchema(PLAYGROUND_PRISMA)
     assert.ok(schema.raw)
     assert.ok(schema.raw.includes('model User'))
+  })
+
+  it('returns empty for the native playground (no .prisma — known gap: db_schema is prisma-only)', () => {
+    const schema = getDbSchema(PLAYGROUND)
+    assert.strictEqual(schema.models.length, 0)
   })
 
   it('returns empty for missing schema', () => {
@@ -112,13 +120,23 @@ describe('getRouteList', skipOnWindows, () => {
 // ─── model_list ───────────────────────────────────────────
 
 describe('getModelList', skipOnWindows, () => {
-  it('finds models in playground', () => {
-    const models = getModelList(PLAYGROUND)
+  it('finds models in playground-prisma (delegate table names + declared fields)', () => {
+    const models = getModelList(PLAYGROUND_PRISMA)
     assert.ok(models.length > 0)
     const user = models.find(m => m.name === 'User')
     assert.ok(user, 'User model should exist')
     assert.strictEqual(user.table, 'user')
     assert.ok(user.fields.length > 0)
+  })
+
+  it('finds models in the native playground (SQL table names)', () => {
+    const models = getModelList(PLAYGROUND)
+    assert.ok(models.length > 0)
+    const user = models.find(m => m.name === 'User')
+    assert.ok(user, 'User model should exist')
+    assert.strictEqual(user.table, 'users')
+    // Models bound via Model.for<>() declare no fields — boost's parser reads
+    // hand-declared fields only (native typed-registry support is a known gap).
   })
 })
 

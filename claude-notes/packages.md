@@ -95,7 +95,7 @@ rudderjs/
 ├── create-rudder/       # Interactive scaffolder CLI — see claude-notes/create-app.md
 ├── create-rudder-app/   # Legacy alias stub for create-rudder
 ├── docs/               # VitePress documentation site
-└── playground/         # Demo app — primary integration reference
+└── playground/         # Demo app — primary integration reference (NATIVE engine; playground-prisma/ = same app on Prisma)
 ```
 
 ---
