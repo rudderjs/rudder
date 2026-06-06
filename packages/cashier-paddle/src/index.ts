@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, config } from '@rudderjs/core'
 
 // ─── Re-exports ───────────────────────────────────────────
@@ -90,8 +91,8 @@ import { WebhookLog }       from './models/WebhookLog.js'
  */
 export class CashierPaddleProvider extends ServiceProvider {
   register(): void {
-    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
-    const viewsDir  = new URL(/* @vite-ignore */ '../views', import.meta.url).pathname
+    const schemaDir = fileURLToPath(new URL(/* @vite-ignore */ '../schema', import.meta.url))
+    const viewsDir  = fileURLToPath(new URL(/* @vite-ignore */ '../views', import.meta.url))
 
     this.publishes([
       // Schema fragment

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { ServiceProvider, config } from '@rudderjs/core'
 import { MemoryStorage, SqliteStorage, RedisStorage } from './storage.js'
 import { JobCollector } from './collectors/job.js'
@@ -80,7 +81,7 @@ export class Horizon {
 export class HorizonProvider extends ServiceProvider {
   register(): void {
     this.publishes({
-      from: new URL('../../boost/guidelines.md', import.meta.url).pathname,
+      from: fileURLToPath(new URL('../../boost/guidelines.md', import.meta.url)),
       to:   'boost',
       tag:  'horizon-boost',
     })
