@@ -2,7 +2,41 @@ export { Collection } from './collection.js'
 
 // ─── Env ───────────────────────────────────────────────────
 
-export const Env = {
+/**
+ * Generated env-key registry — augmented by `.rudder/types/env.d.ts`, which
+ * `@rudderjs/vite`'s env scanner emits from the app's `.env.example` (the
+ * committed truth — never `.env`, which is secret and absent in CI). Empty
+ * by default; once augmented, `Env.get('…')` autocompletes the declared keys.
+ *
+ * Deliberately empty — this is the augmentation TARGET, exactly like core's
+ * `AppConfig` and orm's `SchemaRegistry`. All values are typed `string` in
+ * v1 (runtime truth; no value parsing).
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface EnvRegistry {}
+
+/** Keys declared in the generated registry (never when not augmented). */
+type EnvKey = keyof EnvRegistry & string
+
+/**
+ * `Env` API shape. Each reader carries a typed-first overload constrained
+ * over the generated {@link EnvRegistry} (autocomplete + known keys) above
+ * the loose `string` overload — which STAYS, because framework packages read
+ * keys the app's `.env.example` doesn't declare (`Env.get('REDIS_URL')`).
+ * Same name-loose softness as `route()` and `config()`.
+ */
+interface EnvApi {
+  get<K extends EnvKey>(key: K, fallback?: string): string
+  get(key: string, fallback?: string): string
+  getNumber<K extends EnvKey>(key: K, fallback?: number): number
+  getNumber(key: string, fallback?: number): number
+  getBool<K extends EnvKey>(key: K, fallback?: boolean): boolean
+  getBool(key: string, fallback?: boolean): boolean
+  has<K extends EnvKey>(key: K): boolean
+  has(key: string): boolean
+}
+
+export const Env: EnvApi = {
   get(key: string, fallback?: string): string {
     const val = process.env[key]
     if (val === undefined) {
@@ -37,6 +71,8 @@ export const Env = {
   },
 }
 
+export function env<K extends EnvKey>(key: K, fallback?: string): string
+export function env(key: string, fallback?: string): string
 export function env(key: string, fallback?: string): string {
   return Env.get(key, fallback)
 }

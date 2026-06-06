@@ -51,6 +51,11 @@
       "import": "./dist/commands/routes-sync.js",
       "default": "./dist/commands/routes-sync.js",
       "types": "./dist/commands/routes-sync.d.ts"
+    },
+    "./commands/env-sync": {
+      "import": "./dist/commands/env-sync.js",
+      "default": "./dist/commands/env-sync.js",
+      "types": "./dist/commands/env-sync.d.ts"
     }
   },
   "scripts": {

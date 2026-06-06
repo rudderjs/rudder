@@ -283,6 +283,12 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerRoutesSyncCommand'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/vite → env:sync
+    async () => {
+      const mod = await tryImport('@rudderjs/vite', 'commands/env-sync')
+      const register = mod['registerEnvSyncCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
   ]
 
   await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
@@ -399,7 +405,7 @@ async function main(): Promise<void> {
   //   may still be in node_modules but is being torn out; booting would
   //   be wasted work at best and surface confusing errors at worst.
   const NO_BOOT_EXACT  = new Set([
-    'providers:discover', 'module:publish', 'view:sync', 'routes:sync',
+    'providers:discover', 'module:publish', 'view:sync', 'routes:sync', 'env:sync',
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status', 'migrate:rollback', 'migrate:refresh',
     'add', 'remove', 'upgrade', 'key:generate', 'about', 'test',

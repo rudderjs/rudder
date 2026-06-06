@@ -1,6 +1,6 @@
 # Typed Env + the `.rudder/types/` generated-types home
 
-**Status**: Phases 0–1 shipped; Phases 2–3 proposed
+**Status**: Phases 0–2 shipped; Phase 3 (docs + release) remains
 **Date**: 2026-06-06
 **Context**: Generated-files discussion (items 1+2 shipped in #953). Item 3 — consolidating
 generated type registries into one directory — was parked with a trigger condition: *the next
@@ -75,7 +75,24 @@ New committed directory, owned by the framework:
   see directory-structure.md "Generated files"). `bootstrap/cache/` stays the gitignored home.
 - Docs: rewrite the "Generated files" policy table for the new layout.
 
-## Phase 2 — typed Env
+## Phase 2 — typed Env — ✅ SHIPPED
+
+Implementation deltas from the design below:
+
+- `getNumber`/`getBool`/`has` and the `env()` helper got the typed-first overload too, not
+  just `Env.get` (the `Env` object is typed through an `EnvApi` interface — object literals
+  can't carry overload signatures directly).
+- Commented-out example keys (`# OPENAI_API_KEY=`) are deliberately NOT declared — they're
+  optional suggestions, not contract.
+- Missing `.env.example` removes a stale `env.d.ts` (symmetric shrink, like the views
+  registry); apps without the file get zero `.rudder/` noise.
+- `env:sync --fix` with no `.env` at all copies `.env.example` wholesale (comments included)
+  instead of appending keys to an empty file.
+- The playgrounds had NO `.env.example` (only secret `.env`) — authored placeholder ones for
+  playground/playground-prisma/playground-rsc as part of dogfooding; playground-web has no
+  env file at all and exercises the no-op path.
+- The strict-wrapper type exports for `config()` (`ConfigKey`/`ConfigValue` from core) did
+  NOT ride along — still a candidate for Phase 3 alongside the docs that would use them.
 
 1. **`EnvRegistry`** empty interface in `@rudderjs/support` + `Env.get` overloads:
    ```ts
