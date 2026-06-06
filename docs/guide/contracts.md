@@ -53,9 +53,9 @@ import type { ServerAdapter, AppRequest, AppResponse, RouteDefinition } from '@r
 
 export class MyAdapter implements ServerAdapter {
   registerRoute(route: RouteDefinition): void { /* ... */ }
-  applyMiddleware(handlers: MiddlewareHandler[]): void { /* ... */ }
-  fetch: FetchHandler                                                 = /* ... */
-  listen(port: number): Promise<void>                                 { /* ... */ }
+  applyMiddleware(middleware: MiddlewareHandler): void { /* ... */ }
+  listen(port: number, callback?: () => void): void { /* ... */ }
+  getNativeServer(): unknown { /* ... */ }
 }
 ```
 

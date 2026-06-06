@@ -11,7 +11,7 @@ Every public API has unit tests, and every user-facing flow has at least one end
 Two things deliberately are *not* claimed:
 
 - **A headline coverage percentage.** Coverage numbers are easy to game and say little about edge-case quality. What matters is that the API surface and the scaffolded-app flows are exercised, which the CI jobs below enforce.
-- **Tested on every runtime.** Rudder exposes a [WinterCG Fetch handler](https://wintercg.org/) and *runs* on Node, Bun, Deno, and Cloudflare Workers — but CI gates on Node (20 and 22) across Linux and Windows. Treat non-Node runtimes as supported-and-spot-checked, not continuously gated.
+- **Tested on every runtime.** Rudder exposes a [WinterCG Fetch handler](https://wintercg.org/) and *runs* on Node, Bun, Deno, and Cloudflare Workers — but CI gates on Node (22 and 24) across Linux and Windows. Treat non-Node runtimes as supported-and-spot-checked, not continuously gated.
 
 ## Continuous integration
 
@@ -20,7 +20,7 @@ Every pull request to `main` runs the following before it can merge ([`.github/w
 | Job | What it does |
 |---|---|
 | **Lint** | ESLint across every package's `src`. |
-| **Build & Test** | `turbo run build` + `turbo run test` for all packages and the scaffolder, on a matrix of **Ubuntu + Windows × Node 20 + 22**. |
+| **Build & Test** | `turbo run build` + `turbo run test` for all packages and the scaffolder, on a matrix of **Ubuntu + Windows × Node 22 + 24**. |
 | **Docs Build** | Builds this VitePress site — catches broken Markdown and dead internal links at PR time. Runs on docs-only PRs too. |
 | **Scaffolder E2E** | Scaffolds fresh projects, installs, builds, boots them, and drives a headless browser to render-check the result. See below. |
 | **RSC E2E** | Builds the React Server Components playground for production and drives a browser through an SSR render plus a `"use server"` action round-trip. |

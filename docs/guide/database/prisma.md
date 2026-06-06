@@ -34,7 +34,7 @@ pnpm add -D @types/better-sqlite3
 | `mysql` | `mysql2` | MySQL / MariaDB |
 | `libsql` | `@libsql/client` | Turso / libSQL — SQLite-compatible schema |
 
-The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → sqlite, `postgresql:` → postgresql, `mysql:` → mysql, `libsql:` → libsql) unless you set `driver` explicitly.
+The `driver` defaults to `'sqlite'`. Set it explicitly to `'postgresql'`, `'mysql'`, or `'libsql'` for those databases — there is no `DATABASE_URL`-scheme auto-detection.
 
 MySQL uses `@prisma/adapter-mariadb` under the hood (wire-compatible with both MySQL 5.7+ and MariaDB 10.x), so a single `'mysql'` driver value covers both engines. Install the adapter once: `pnpm add mariadb @prisma/adapter-mariadb`. Available in `@rudderjs/orm-prisma` 1.8.0+.
 
@@ -136,16 +136,23 @@ export class User extends Model {
 
 ## Cross-repo client (advanced)
 
-For cross-repo workspaces where `@prisma/client` is generated in a different package, pass a pre-built client via the `PrismaClient` option:
+For cross-repo workspaces where `@prisma/client` is generated in a different package, pass the pre-built client through `config/database.ts` via the `PrismaClient` field — the adapter picks it up from there:
 
 ```ts
+// config/database.ts
+import { Env } from '@rudderjs/support'
 import { PrismaClient } from '@my-org/database'
-import { database } from '@rudderjs/orm-prisma'
 
-database({
-  ...configs.database,
+export default {
+  default: 'sqlite',
   PrismaClient,       // forwarded to the adapter
-})
+  connections: {
+    sqlite: {
+      driver: 'sqlite' as const,
+      url:    Env.get('DATABASE_URL', 'file:./dev.db'),
+    },
+  },
+}
 ```
 
 This is the path the Pilotiq playgrounds use to consume their own generated client across pnpm-linked workspaces.
@@ -229,5 +236,5 @@ There is no compatibility flag — the long-deprecation strategy is the major-ve
 
 - **`Prisma has no delegate for table "x"`.** You set `static table` to the SQL table name (e.g. `'oauth_clients'`) instead of the accessor (`'oAuthClient'`). Use the accessor.
 - **Stale client after schema edit.** Run `pnpm rudder db:generate`. TypeScript types in your app go stale until the client is regenerated.
-- **`db:push` in production.** Push can drop columns silently. Use `pnpm rudder migrate` (which delegates to `prisma migrate deploy`) for tracked migrations.
+- **`db:push` in production.** Push can drop columns silently. Use `pnpm rudder migrate` for tracked migrations — it delegates to `prisma migrate deploy` under `NODE_ENV=production`, and `prisma migrate dev` otherwise.
 - **Multi-file schema not detected.** Confirm `previewFeatures = ["prismaSchemaFolder"]` is in your generator block, and that `prisma.config.ts` points to the directory.

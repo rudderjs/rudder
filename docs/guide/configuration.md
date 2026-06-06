@@ -56,7 +56,7 @@ export default {
 | Method | Description |
 |---|---|
 | `Env.get(key, fallback?)` | String value or fallback. Throws if the key is missing AND no fallback was supplied. |
-| `Env.getNumber(key, fallback?)` | Parsed integer; throws on `NaN`. |
+| `Env.getNumber(key, fallback?)` | Parsed number (via `Number(...)`, so floats are accepted); throws on `NaN`. |
 | `Env.getBool(key, fallback?)` | Parses `'true'` / `'false'` / `'1'` / `'0'`. |
 | `Env.has(key)` | Existence check; doesn't read the value. |
 
@@ -102,12 +102,13 @@ Application.configure({
 })
 ```
 
-Passing `config: configs` binds each object in the DI container, so any service can retrieve a config slice on demand:
+Passing `config: configs` binds the config repository in the DI container, so any service can retrieve a config slice on demand:
 
 ```ts
-import { app } from '@rudderjs/core'
+import { config } from '@rudderjs/core'
 
-const serverConfig = app().make<typeof configs.server>('config.server')
+const serverConfig = config('server')
+// or, via the repository: app().make<ConfigRepository>('config').get('server')
 ```
 
 ## Framework wiring

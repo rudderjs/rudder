@@ -59,7 +59,7 @@ In a client runtime use byte-based factories instead of paths:
 import { Image } from '@rudderjs/ai'
 
 const img = Image.fromBase64(cameraBase64, 'image/jpeg')
-const url = Image.fromUrl('https://example.com/photo.jpg')
+const url = await Image.fromUrl('https://example.com/photo.jpg')
 ```
 
 Calling LLM providers directly from a browser or RN client leaks your API key — use a server-side proxy in production. The main client-side use case is BYOK desktop apps.
@@ -227,7 +227,7 @@ await agent({
 }).prompt('Research the transformer architecture.')
 ```
 
-Other stop conditions: `until(predicate)`, `tokenLimit(n)`, `noTokensUsed(n)`.
+The built-in stop-condition combinators are `stepCountIs(n)` and `hasToolCall(name)`. For anything else, pass a plain `StopCondition` predicate — `({ steps }) => boolean` — to `stopWhen`.
 
 ## Sub-agents
 

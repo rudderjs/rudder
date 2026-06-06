@@ -82,7 +82,7 @@ import { WeatherServer } from '../app/Mcp/WeatherServer.js'
 Mcp.local('mcp:weather', WeatherServer)
 ```
 
-Then run `pnpm rudder mcp:weather` — Claude Desktop or any stdio MCP client can spawn this process and talk to your server.
+The first argument is a lookup key, not a CLI command name. Run the server with the stdio runner: `pnpm rudder mcp:start mcp:weather` — Claude Desktop or any stdio MCP client can spawn this process and talk to your server.
 
 ## Tools with rich input
 
@@ -212,7 +212,7 @@ import { McpTestClient } from '@rudderjs/mcp'
 import { WeatherServer } from '../app/Mcp/WeatherServer.js'
 
 const client = new McpTestClient(WeatherServer)
-const result = await client.callTool('current_weather', { location: 'London' })
+const result = await client.callTool('current-weather', { location: 'London' })
 
 expect(result.content[0].text).toContain('London')
 ```

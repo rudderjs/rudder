@@ -24,7 +24,7 @@ await VectorStores.delete(store.id)
 
 - `{ fileId: 'file-...' }` — an existing provider Files API id (OpenAI `file_...` or Gemini `files/...`)
 - `{ filePath: './foo.pdf' }` — local path; uploaded via the Files API first (`Node` only)
-- `{ fileBuffer: Buffer, filename }` — in-memory bytes
+- `{ fileBuffer: { data: Uint8Array, filename } }` — in-memory bytes
 
 By default `add()` polls the provider until ingestion is `'completed'`. Failed status surfaces as `{ status: 'failed', lastError }` without throwing. Pass `wait: false` for fire-and-forget. `attributes` map to per-document searchable metadata — `fileSearch({ where })` filters on these.
 
