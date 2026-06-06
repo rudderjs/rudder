@@ -25,18 +25,17 @@
  *   the interface; the scanner's emit MERGES with manual augmentations via
  *   declaration merging.
  *
- * Output: `routes/__registry.d.ts` — domain-adjacent to the `routes/*.ts` files
- * it types (the `__` prefix marks it generated, same convention as
- * `pages/__view/` and `app/Models/__schema/`). It used to live at
- * `pages/__view/routes.d.ts`, but route names aren't view-related — an
- * API-only app with typed routes shouldn't grow a `pages/` directory for them.
- * The scanner deletes the legacy file when it writes the new one, so existing
- * apps migrate on their next dev / build / `routes:sync`.
+ * Output: `.rudder/types/routes.d.ts` — the committed generated-files home
+ * (see `rudder-dir.ts`). Earlier locations — `routes/__registry.d.ts`
+ * (2026-06, #953) and `pages/__view/routes.d.ts` before that — are deleted
+ * whenever the scanner writes, so existing apps migrate on their next
+ * dev / build / `routes:sync`.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Plugin } from 'vite'
+import { ROUTES_DTS, ensureRudderReadme } from './rudder-dir.js'
 
 // ─── Regex ─────────────────────────────────────────────────
 
@@ -236,18 +235,23 @@ function writeIfChanged(file: string, contents: string): boolean {
 // ─── Plugin ────────────────────────────────────────────────
 
 const DEFAULT_ROUTES_DIR = 'routes'
-const DEFAULT_OUT_FILE   = path.join('routes', '__registry.d.ts')
-/** Pre-2026-06 output location — removed on write so migrated apps don't keep
- *  a stale duplicate augmentation. */
-const LEGACY_OUT_FILE    = path.join('pages', '__view', 'routes.d.ts')
+const DEFAULT_OUT_FILE   = ROUTES_DTS
+/** Earlier output locations — removed on write so migrated apps don't keep a
+ *  stale duplicate augmentation. Newest first; both shipped pre-`.rudder/`. */
+const LEGACY_OUT_FILES   = [
+  path.join('routes', '__registry.d.ts'),   // 2026-06 (#953) → .rudder move
+  path.join('pages', '__view', 'routes.d.ts'), // original emit location
+]
 
-/** Remove the legacy emit location (when it isn't the active out file). */
-function removeLegacyOutFile(cwd: string, outFile: string): void {
-  const legacy = path.resolve(cwd, LEGACY_OUT_FILE)
-  if (legacy === outFile) return
-  try {
-    fs.rmSync(legacy, { force: true })
-  } catch { /* best effort — a stale duplicate merges harmlessly until the next write */ }
+/** Remove the legacy emit locations (when one isn't the active out file). */
+function removeLegacyOutFiles(cwd: string, outFile: string): void {
+  for (const rel of LEGACY_OUT_FILES) {
+    const legacy = path.resolve(cwd, rel)
+    if (legacy === outFile) continue
+    try {
+      fs.rmSync(legacy, { force: true })
+    } catch { /* best effort — a stale duplicate merges harmlessly until the next write */ }
+  }
 }
 
 // ─── One-shot sync (CLI surface) ──────────────────────────
@@ -270,7 +274,8 @@ export function syncRoutesFromDisk(cwd: string = process.cwd()): RoutesSyncResul
   }
   const routes = scanRouteFiles(routesDir)
   writeIfChanged(outFile, routesRegistrySource(routes))
-  removeLegacyOutFile(cwd, outFile)
+  removeLegacyOutFiles(cwd, outFile)
+  ensureRudderReadme(cwd)
   return { routesDirExists: true, routeCount: routes.length }
 }
 
@@ -282,7 +287,7 @@ export interface RoutesScannerOptions {
   routesDir?: string
   /**
    * App-relative output path for the augmentation `.d.ts`. Defaults to
-   * `routes/__registry.d.ts` — domain-adjacent to the route files it types.
+   * `.rudder/types/routes.d.ts` — the committed generated-files home.
    */
   outFile?:   string
 }
@@ -295,7 +300,8 @@ export function routesScannerPlugin(opts: RoutesScannerOptions = {}): Plugin {
   function sync(): void {
     const routes = scanRouteFiles(routesDir)
     writeIfChanged(outFile, routesRegistrySource(routes))
-    removeLegacyOutFile(cwd, outFile)
+    removeLegacyOutFiles(cwd, outFile)
+    ensureRudderReadme(cwd)
   }
 
   // Eager sync at plugin construction so tests + first dev start get the

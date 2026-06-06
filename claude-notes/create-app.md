@@ -56,7 +56,7 @@ Package-specific scaffolded behavior:
 When `--install=true` (default), after `pnpm install` + `pnpm rudder providers:discover`, the scaffolder also runs:
 
 1. `pnpm rudder db:generate` — when ORM is Prisma/Drizzle (no-op for Drizzle). **Skipped for Native** (no client to generate; db:generate/db:push throw for native).
-2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed). **For Native, runs `pnpm rudder migrate` instead** (same `dbReady` gating) — applies the scaffolded `database/migrations/*` (creates dev.db on sqlite / runs DDL on the live pg/mysql + the typed `app/Models/__schema/registry.d.ts`). `dbPushOk` carries the migrate result.
+2. `pnpm rudder db:push` — when `dbReady=true` (SQLite default; Postgres/MySQL only if user confirmed). **For Native, runs `pnpm rudder migrate` instead** (same `dbReady` gating) — applies the scaffolded `database/migrations/*` (creates dev.db on sqlite / runs DDL on the live pg/mysql + the typed `.rudder/types/models.d.ts`). `dbPushOk` carries the migrate result.
 3. `pnpm rudder vendor:publish --tag=auth-views-<framework>` — only when auth was selected AND `fs.cp` couldn't vendor the views
 4. `pnpm rudder passport:keys` — only when passport selected
 5. `git init` + `git add . && git commit -m "Initial commit (create-rudder)"` — controlled by `--git=true|false`, default true

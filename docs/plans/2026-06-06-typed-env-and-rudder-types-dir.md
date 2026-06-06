@@ -1,6 +1,6 @@
 # Typed Env + the `.rudder/types/` generated-types home
 
-**Status**: Phase 0 shipped; Phases 1–3 proposed
+**Status**: Phases 0–1 shipped; Phases 2–3 proposed
 **Date**: 2026-06-06
 **Context**: Generated-files discussion (items 1+2 shipped in #953). Item 3 — consolidating
 generated type registries into one directory — was parked with a trigger condition: *the next
@@ -33,7 +33,22 @@ capability instead of being a reshuffle.* Typed env is that feature.
    playgrounds + `pnpm-lock.yaml`) and a new `gitattributes()` scaffolder template
    (create-rudder minor; snapshot baseline recaptured).
 
-## Phase 1 — `.rudder/types/` home + consolidation (the item-3 trigger)
+## Phase 1 — `.rudder/types/` home + consolidation (the item-3 trigger) — ✅ SHIPPED
+
+Implementation deltas from the design below:
+
+- **tsconfig include must be the glob form `".rudder/**/*"`** — the planned bare `".rudder"`
+  does NOT work (verified by probe: tsc only auto-expands non-dotted directory includes).
+  The doctor check specifically flags the bare form.
+- `.rudder/README.md` is emitted by the **vite scanners only** (vite shares no workspace dep
+  with database, so the models emitter can't reuse the helper; the path constant is
+  duplicated in `schema-types.ts` with a keep-in-sync note).
+- The views registry write moved from `generate()` into `syncViewsFromDisk()` and is now
+  **unconditional** — previously a stale registry survived when the last view was deleted
+  (generate()'s 0-views early return).
+- Models legacy cleanup also rmdir's the emptied `app/Models/__schema/` directory.
+- Decision 3 verified: nothing imports the views registry by path (`importPath` entries use
+  the `App/Views/...` tsconfig alias — location-independent).
 
 New committed directory, owned by the framework:
 

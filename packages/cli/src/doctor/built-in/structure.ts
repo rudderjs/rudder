@@ -69,6 +69,47 @@ registerDoctorCheck({
 })
 
 registerDoctorCheck({
+  id:       'structure:rudder-types-tsconfig',
+  category: 'structure',
+  title:    '.rudder/ generated types in tsconfig',
+  run(): DoctorResult {
+    // `.rudder/types/` holds the generated type registries (typed views /
+    // routes / models). They only work when tsc includes the directory —
+    // and dot-directories are invisible to bare `**/*` globs AND to
+    // bare-directory include entries, so the glob form is required.
+    if (!anyExists(['.rudder/types'])) {
+      return { status: 'ok', message: 'no .rudder/ yet (created on first dev/build)' }
+    }
+    const text = readFileSafe('tsconfig.json')
+    if (text === null) {
+      return {
+        status:  'warn',
+        message: '.rudder/ exists but tsconfig.json is missing or unreadable',
+        fix:     'Add a tsconfig.json with ".rudder/**/*" in its include array',
+      }
+    }
+    // A working entry references a path UNDER .rudder/ (e.g. ".rudder/**/*").
+    if (/["']\.?\/?\.rudder\/[^"']*["']/.test(text)) {
+      return { status: 'ok', message: 'included' }
+    }
+    // The bare directory form does NOT work — tsc only auto-expands
+    // non-dotted directory names.
+    if (/["']\.?\/?\.rudder["']/.test(text)) {
+      return {
+        status:  'warn',
+        message: 'tsconfig lists bare ".rudder" — tsc ignores dotted directory includes',
+        fix:     'Change the include entry to ".rudder/**/*"',
+      }
+    }
+    return {
+      status:  'warn',
+      message: '.rudder/ exists but tsconfig include does not cover it — typed view()/route()/Model.for<>() will not resolve',
+      fix:     'Add ".rudder/**/*" to the tsconfig.json include array',
+    }
+  },
+})
+
+registerDoctorCheck({
   id:       'structure:welcome-view',
   category: 'structure',
   title:    'Welcome view / index page',

@@ -11,7 +11,7 @@
 //
 // Here we run the actual `generateSchemaTypes(...)` (the same function the
 // `schema:types` command + the post-migrate hook call) against a live DB, write
-// the real `app/Models/__schema/registry.d.ts`, drop a model that does
+// the real `.rudder/types/models.d.ts`, drop a model that does
 // `extends Model.for<'rudder_types_story'>()` next to it, and spawn `tsc --noEmit` over the
 // pair. Two controls pin it from both sides:
 //   • POSITIVE — correct typed usage + `@ts-expect-error` on a missing column
@@ -154,8 +154,8 @@ function runDialectSuite(label: string, makeConn: () => Promise<{ executor: Exec
       const { tableCount } = await generateSchemaTypes(conn.executor, conn.dialect, root, MODELS)
       assert.ok(tableCount >= 1, 'generator should discover the rudder_types_story table')
       assert.ok(
-        existsSync(join(root, 'app', 'Models', '__schema', 'registry.d.ts')),
-        'registry.d.ts should be written under app/Models/__schema',
+        existsSync(join(root, '.rudder', 'types', 'models.d.ts')),
+        'models.d.ts should be written under .rudder/types',
       )
       writeFileSync(join(root, 'Account.ts'), MODEL_SRC)
     })
@@ -170,7 +170,7 @@ function runDialectSuite(label: string, makeConn: () => Promise<{ executor: Exec
     })
 
     it('a model bound via Model.for<>() type-checks against the generated registry', () => {
-      const registry = join(root, 'app', 'Models', '__schema', 'registry.d.ts')
+      const registry = join(root, '.rudder', 'types', 'models.d.ts')
       writeFileSync(
         join(root, 'consume.ts'),
         `import { Account } from './Account.js'
@@ -194,7 +194,7 @@ void usage
     })
 
     it('rejects type-incorrect usage (columns are precise, not any/never)', () => {
-      const registry = join(root, 'app', 'Models', '__schema', 'registry.d.ts')
+      const registry = join(root, '.rudder', 'types', 'models.d.ts')
       writeFileSync(
         join(root, 'consume-negative.ts'),
         `import { Account } from './Account.js'

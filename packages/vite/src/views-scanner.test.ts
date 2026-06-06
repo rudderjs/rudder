@@ -277,7 +277,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     )
     process.chdir(root)
     viewsScannerPlugin()
-    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    const registryPath = path.join(root, '.rudder', 'types', 'views.d.ts')
     assert.ok(fs.existsSync(registryPath), 'registry.d.ts should be emitted')
     const registry = fs.readFileSync(registryPath, 'utf8')
     assert.match(registry, /declare module '@rudderjs\/view'/)
@@ -293,7 +293,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     )
     process.chdir(root)
     viewsScannerPlugin()
-    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    const registry = fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
     assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
   })
 
@@ -310,7 +310,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     )
     process.chdir(root)
     viewsScannerPlugin()
-    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    const registry = fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
     assert.match(registry, /'dashboard':/)
     assert.doesNotMatch(registry, /'untyped':/, 'view without Props export must be omitted')
     assert.doesNotMatch(registry, /'home':/, 'untyped placeholder must be omitted')
@@ -321,7 +321,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     // The default scaffold leaves Home.tsx as a placeholder with no Props export.
     process.chdir(root)
     viewsScannerPlugin()
-    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    const registryPath = path.join(root, '.rudder', 'types', 'views.d.ts')
     if (fs.existsSync(registryPath)) {
       const contents = fs.readFileSync(registryPath, 'utf8')
       assert.doesNotMatch(contents, /import\(/, 'no typed views = no import() entries')
@@ -337,7 +337,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     )
     process.chdir(root)
     viewsScannerPlugin()
-    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    const registry = fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
     assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.vue['"]\)\.Props/)
   })
 
@@ -345,7 +345,7 @@ describe('views-scanner — ViewPropsRegistry emission', () => {
     root = scaffold('react')
     process.chdir(root)
     viewsScannerPlugin()
-    const registryPath = path.join(root, 'pages', '__view', 'registry.d.ts')
+    const registryPath = path.join(root, '.rudder', 'types', 'views.d.ts')
     const before = fs.existsSync(registryPath) ? fs.readFileSync(registryPath, 'utf8') : ''
     assert.doesNotMatch(before, /'home':\s*import\(/, 'placeholder has no Props export yet')
 
@@ -480,7 +480,7 @@ describe('views-scanner — typed +Page stubs', () => {
     )
     process.chdir(root)
     viewsScannerPlugin()
-    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    const registry = fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
     // No registry entry was emitted for `home` because there's no actual Props export.
     assert.doesNotMatch(registry, /'home':\s*import/)
   })
@@ -734,7 +734,7 @@ describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
     assert.equal(result.viewCount, 2)
     assert.equal(result.typedCount, 1)
 
-    const registry = fs.readFileSync(path.join(root, 'pages', '__view', 'registry.d.ts'), 'utf8')
+    const registry = fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
     assert.match(registry, /'home':\s*import\(['"]App\/Views\/Home\.tsx['"]\)\.Props/)
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx')))
     assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'plain', '+Page.tsx')))

@@ -35,6 +35,11 @@ export function tsconfigJson(ctx: TemplateContext): string {
 
   return JSON.stringify({
     compilerOptions,
-    include: ['src/**/*', 'pages/**/*', 'app/**/*', 'bootstrap/**/*', 'routes/**/*', 'config/**/*', '*.ts', '*.tsx'],
+    // ".rudder/**/*" is listed explicitly: dot-directories are invisible to
+    // bare "**/*" globs AND to bare-directory includes (tsc only auto-expands
+    // non-dotted dir names), and the generated type registries
+    // (.rudder/types/*.d.ts) must be in the program for typed
+    // view()/route()/Model.for<>() to resolve.
+    include: ['src/**/*', 'pages/**/*', 'app/**/*', 'bootstrap/**/*', 'routes/**/*', 'config/**/*', '.rudder/**/*', '*.ts', '*.tsx'],
   }, null, 2) + '\n'
 }

@@ -220,7 +220,7 @@ export class ViewResponse {
  * Module-augmentation registry mapping view ids → component prop types.
  *
  * `@rudderjs/vite`'s views scanner populates this automatically at build time
- * by emitting `pages/__view/registry.d.ts`. App authors never write to this
+ * by emitting `.rudder/types/views.d.ts`. App authors never write to this
  * interface directly — they just `export interface Props` in their view
  * component file and the scanner picks it up.
  *

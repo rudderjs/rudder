@@ -15,5 +15,5 @@
     "types": ["vite/client"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*", "pages/**/*", "app/**/*", "bootstrap/**/*", "routes/**/*", "*.ts", "*.tsx"]
+  "include": ["src/**/*", "pages/**/*", "app/**/*", "bootstrap/**/*", "routes/**/*", ".rudder/**/*", "*.ts", "*.tsx"]
 }

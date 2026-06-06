@@ -137,7 +137,7 @@ Multi-database apps can run a suite against a named connection with `migrate --c
 
 ## Typed models from migrations
 
-The native engine's headline feature: **a model's column types are generated from the migrated schema, so they can't drift.** After a `migrate`, the engine introspects the live database and writes `app/Models/__schema/registry.d.ts`. Bind it with `Model.for<'table'>()` and the model needs zero hand-declared fields:
+The native engine's headline feature: **a model's column types are generated from the migrated schema, so they can't drift.** After a `migrate`, the engine introspects the live database and writes `.rudder/types/models.d.ts`. Bind it with `Model.for<'table'>()` and the model needs zero hand-declared fields:
 
 ```ts
 import { Model } from '@rudderjs/orm'
@@ -223,4 +223,4 @@ The native adapter implements the same `OrmAdapter` interface as Prisma/Drizzle 
 - **`static table` is the SQL table name.** Native queries the table directly — `static table = 'users'`, not the Prisma delegate (`'user'`) or a Drizzle registry key.
 - **`engine: 'native'` is required.** Without it on the default connection the provider stays inert and Models have no adapter — the first query throws. (This is the collision guard that lets `@rudderjs/orm` ship in every app.)
 - **Driver names are `sqlite` / `pg` / `mysql`.** An unknown name (e.g. `postgresql`) fails fast with a pointer to the supported list — it is not silently downgraded.
-- **Commit `app/Models/__schema/registry.d.ts`.** It's generated, never hand-edited, and checked in so `tsc`/CI stays green.
+- **Commit `.rudder/types/models.d.ts`.** It's generated, never hand-edited, and checked in so `tsc`/CI stays green.

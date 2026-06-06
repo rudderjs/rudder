@@ -2,12 +2,12 @@
 //
 // Node-only glue: introspect every user table on a connection, fold in each
 // model's declared `casts` (so a `boolean` cast surfaces as `boolean`, not the
-// raw stored `number`), and write `app/Models/__schema/registry.d.ts`. The pure
+// raw stored `number`), and write `.rudder/types/models.d.ts`. The pure
 // column→TS mapping lives in `types-generator.ts`; the live catalog reads in
 // `introspect.ts`. Run automatically after `migrate` / `migrate:fresh`, and on
 // demand via `rudder schema:types`.
 
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
@@ -48,14 +48,27 @@ export async function collectSchemaTypes(
   return out
 }
 
-/** Default output path for the generated registry, relative to an app root. */
+/**
+ * Default output path for the generated registry, relative to an app root.
+ *
+ * `.rudder/types/` is the committed generated-files home shared with
+ * `@rudderjs/vite`'s view/route registries. The path is duplicated there
+ * (`packages/vite/src/rudder-dir.ts`) because the two packages share no
+ * workspace dependency — keep them in sync.
+ */
 export function registryDtsPath(cwd: string): string {
+  return join(cwd, '.rudder', 'types', 'models.d.ts')
+}
+
+/** Pre-`.rudder/` output location — removed on write so migrated apps don't
+ *  keep a stale duplicate augmentation. */
+function legacyRegistryDtsPath(cwd: string): string {
   return join(cwd, 'app', 'Models', '__schema', 'registry.d.ts')
 }
 
 /**
  * Full `schema:types` run: introspect → emit → write
- * `app/Models/__schema/registry.d.ts`. Returns the written path + table count
+ * `.rudder/types/models.d.ts`. Returns the written path + table count
  * for the CLI to report. Creating the dir is idempotent.
  */
 export async function generateSchemaTypes(
@@ -69,5 +82,13 @@ export async function generateSchemaTypes(
   const path = registryDtsPath(cwd)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, contents, 'utf8')
+  // Migrate apps off the legacy location (best effort — a stale duplicate
+  // merges harmlessly until the next write). The rmdir clears the now-empty
+  // `__schema/` dir; it fails harmlessly when other files live there.
+  const legacy = legacyRegistryDtsPath(cwd)
+  try {
+    await rm(legacy, { force: true })
+    await rmdir(dirname(legacy))
+  } catch { /* dir not empty or never existed */ }
   return { path, tableCount: tables.length }
 }

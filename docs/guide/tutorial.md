@@ -72,7 +72,7 @@ Apply it:
 pnpm rudder migrate
 ```
 
-`migrate` does two things: it creates the table, and it regenerates `app/Models/__schema/registry.d.ts` — a typed map of every table's columns, introspected from the real database.
+`migrate` does two things: it creates the table, and it regenerates `.rudder/types/models.d.ts` — a typed map of every table's columns, introspected from the real database.
 
 That second part is why the model is now tiny. Create `app/Models/Link.ts`:
 

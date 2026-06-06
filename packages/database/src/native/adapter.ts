@@ -448,7 +448,7 @@ export class NativeAdapter implements OrmAdapter {
   }
 
   /**
-   * Generate `app/Models/__schema/registry.d.ts` from THIS connection's live
+   * Generate `.rudder/types/models.d.ts` from THIS connection's live
    * schema (GATE 7-types) — introspect every table, fold in each model's
    * declared `casts`, and (re)write the registry. Node-only; the fs-writing
    * orchestrator is lazily imported so the adapter's static eval graph stays

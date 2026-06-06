@@ -3,8 +3,9 @@ import { syncViewsFromDisk } from '../views-scanner.js'
 /**
  * Register the `view:sync` command with the rudder CLI.
  *
- * Regenerates `pages/__view/` (Vike stubs, `+config.ts`, `registry.d.ts`)
- * from `app/Views/` without booting the app or starting Vite. Useful when:
+ * Regenerates `pages/__view/` (Vike stubs, `+config.ts`) and the typed-view
+ * registry (`.rudder/types/views.d.ts`) from `app/Views/` without booting
+ * the app or starting Vite. Useful when:
  *
  * - Running `tsc` in CI before any Vite step (typecheck-before-build order)
  * - On a fresh clone / scaffolded app, before the first `pnpm dev` or `pnpm build`
@@ -36,7 +37,7 @@ export function registerViewSyncCommand(
 
       const summary = `  Synced ${result.viewCount} view${result.viewCount === 1 ? '' : 's'} (${result.typedCount} typed) — framework: ${result.framework}`
       console.log(summary)
-      console.log('  Wrote pages/__view/{registry.d.ts,+config.ts,<id>/+Page.*}')
+      console.log('  Wrote pages/__view/{+config.ts,<id>/+Page.*} + .rudder/types/views.d.ts')
     } catch (err) {
       if (jsonFlag) {
         console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }, null, 2))
