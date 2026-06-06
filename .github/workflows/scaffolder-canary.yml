@@ -89,7 +89,10 @@ jobs:
         env:
           PORT: '3000'
         run: |
-          node ./dist/server/index.mjs > server.log 2>&1 &
+          # Boot via the scaffolded `start` script — its NODE_ENV=production
+          # prefix is load-bearing (#936); booting node directly would mask a
+          # template regression that drops it.
+          pnpm start > server.log 2>&1 &
           SERVER_PID=$!
           # Poll readiness for up to 10s — boot includes provider boot, ORM
           # init, and route registration; cold-start can take a couple of
