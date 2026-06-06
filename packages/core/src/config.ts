@@ -35,8 +35,14 @@ type Get<T, P extends string> =
 
 // When AppConfig is empty (not augmented), fall back to string/unknown
 // so config() remains callable without augmentation.
-type ConfigKey   = IsEmpty<AppConfig> extends true ? string   : Paths<AppConfig>
-type ConfigValue<K extends string> = IsEmpty<AppConfig> extends true ? unknown : Get<AppConfig, K>
+//
+// Exported so apps can build a STRICT wrapper that rejects unknown keys —
+// the framework's own config() deliberately keeps a loose overload (packages
+// read keys the app doesn't declare):
+//
+//   const configStrict = <K extends ConfigKey>(key: K): ConfigValue<K> => config(key)
+export type ConfigKey   = IsEmpty<AppConfig> extends true ? string   : Paths<AppConfig>
+export type ConfigValue<K extends string> = IsEmpty<AppConfig> extends true ? unknown : Get<AppConfig, K>
 
 // ─── Typed config() ────────────────────────────────────────
 

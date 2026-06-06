@@ -88,7 +88,7 @@ export {
 // that infers return types from the augmented AppConfig interface.
 
 export { config } from './config.js'
-export type { AppConfig } from './config.js'
+export type { AppConfig, ConfigKey, ConfigValue } from './config.js'
 
 // ─── Contracts ─────────────────────────────────────────────
 

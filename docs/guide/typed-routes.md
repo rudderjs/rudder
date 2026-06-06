@@ -226,9 +226,10 @@ This is Rudder's equivalent of:
 
 ## The typed family
 
-Typed routes are one of four conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
+Typed routes are one of five conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
 
 - **Typed routes** (this page) — the literal path types `req.params`; Zod schemas type `req.query` / `req.body`; `.name()` chains type `route(name, params)`.
 - **[Typed views](/guide/typed-views)** — `export interface Props` in the view file types `view('id', props)` at the controller.
 - **[Typed models](/guide/database#typed-models-from-migrations-schema-types)** — column types generated from your migrations type every query result.
 - **[Typed `config()`](/guide/configuration#typed-config)** — `config/index.ts`'s own shape types every dot-path lookup.
+- **[Typed `Env`](/guide/configuration#typed-env)** — keys declared in `.env.example` type every `Env.get()` read.

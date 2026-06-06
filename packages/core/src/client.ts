@@ -83,7 +83,7 @@ export {
 // ─── Typed config ──────────────────────────────────────────
 
 export { config } from './config.js'
-export type { AppConfig } from './config.js'
+export type { AppConfig, ConfigKey, ConfigValue } from './config.js'
 
 // ─── Contracts ─────────────────────────────────────────────
 

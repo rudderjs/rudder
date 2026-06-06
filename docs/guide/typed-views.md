@@ -126,9 +126,10 @@ This is Rudder's equivalent of Inertia's prop typing or Nuxt's typed `useFetch` 
 
 ## The typed family
 
-Typed views are one of four conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
+Typed views are one of five conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
 
 - **Typed views** (this page) — `export interface Props` in the view file types `view('id', props)` at the controller.
 - **[Typed routes](/guide/typed-routes)** — the literal path types `req.params`; Zod schemas type `req.query` / `req.body`; `.name()` chains type `route(name, params)`.
 - **[Typed models](/guide/database#typed-models-from-migrations-schema-types)** — column types generated from your migrations type every query result.
 - **[Typed `config()`](/guide/configuration#typed-config)** — `config/index.ts`'s own shape types every dot-path lookup.
+- **[Typed `Env`](/guide/configuration#typed-env)** — keys declared in `.env.example` type every `Env.get()` read.
