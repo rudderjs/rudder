@@ -1,20 +1,29 @@
 import { Env } from '@rudderjs/core'
 
+// This playground runs on the NATIVE engine (first-party, no external ORM) —
+// its sibling `playground-prisma/` exercises the same app on the Prisma
+// adapter. Migrations live in database/migrations/; `pnpm rudder migrate`
+// applies them AND regenerates the typed model registry at
+// app/Models/__schema/registry.d.ts (see Model.for<'table'>() in app/Models).
 export default {
   default: Env.get('DB_CONNECTION', 'sqlite'),
 
   connections: {
     sqlite: {
+      engine: 'native' as const,
       driver: 'sqlite' as const,
       url:    Env.get('DATABASE_URL', 'file:./dev.db'),
     },
 
-    postgresql: {
-      driver: 'postgresql' as const,
+    // The same app on a server database is a config change, not a rewrite:
+    pg: {
+      engine: 'native' as const,
+      driver: 'pg' as const,
       url:    Env.get('DATABASE_URL', ''),
     },
 
     mysql: {
+      engine: 'native' as const,
       driver: 'mysql' as const,
       url:    Env.get('DATABASE_URL', ''),
     },
@@ -34,10 +43,9 @@ export default {
     //   url:    Env.get('REPORTING_DATABASE_URL', ''),
     // },
     //
-    // Read/write split with sticky reads (native + drizzle; prisma throws at
-    // boot → use @prisma/extension-read-replicas there). Un-locked SELECTs
-    // round-robin the replicas; writes, locked selects, and everything inside
-    // a transaction() stay on the writer; sticky = read-your-writes per request.
+    // Read/write split with sticky reads. Un-locked SELECTs round-robin the
+    // replicas; writes, locked selects, and everything inside a transaction()
+    // stay on the writer; sticky = read-your-writes per request.
     //
     // primary: {
     //   engine: 'native' as const,

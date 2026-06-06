@@ -9,14 +9,18 @@ import type { Todo } from '../Models/Todo.js'
  */
 export class TodoResource extends JsonResource<Todo> {
   toArray() {
+    // The generated registry types timestamps `Date | null` (t.timestamps()
+    // columns are nullable) — rows created through the ORM always have them.
+    const createdAt = this.resource.createdAt
+    const updatedAt = this.resource.updatedAt
     return {
       id:        this.resource.id,
       title:     this.resource.title,
       done:      this.resource.completed,
-      createdAt: this.resource.createdAt.toISOString(),
+      createdAt: createdAt?.toISOString() ?? null,
       updatedAt: this.when(
-        this.resource.updatedAt.getTime() !== this.resource.createdAt.getTime(),
-        this.resource.updatedAt.toISOString(),
+        updatedAt != null && updatedAt.getTime() !== createdAt?.getTime(),
+        updatedAt?.toISOString() ?? null,
       ),
     }
   }

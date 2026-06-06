@@ -1434,6 +1434,238 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
+      '@rudderjs/ai':
+        specifier: workspace:*
+        version: link:../packages/ai
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
+      '@rudderjs/boost':
+        specifier: workspace:*
+        version: link:../packages/boost
+      '@rudderjs/broadcast':
+        specifier: workspace:*
+        version: link:../packages/broadcast
+      '@rudderjs/cache':
+        specifier: workspace:*
+        version: link:../packages/cache
+      '@rudderjs/cashier-paddle':
+        specifier: workspace:*
+        version: link:../packages/cashier-paddle
+      '@rudderjs/concurrency':
+        specifier: workspace:*
+        version: link:../packages/concurrency
+      '@rudderjs/console':
+        specifier: workspace:*
+        version: link:../packages/console
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@rudderjs/hash':
+        specifier: workspace:*
+        version: link:../packages/hash
+      '@rudderjs/horizon':
+        specifier: workspace:*
+        version: link:../packages/horizon
+      '@rudderjs/http':
+        specifier: workspace:*
+        version: link:../packages/http
+      '@rudderjs/image':
+        specifier: workspace:*
+        version: link:../packages/image
+      '@rudderjs/localization':
+        specifier: workspace:*
+        version: link:../packages/localization
+      '@rudderjs/log':
+        specifier: workspace:*
+        version: link:../packages/log
+      '@rudderjs/mail':
+        specifier: workspace:*
+        version: link:../packages/mail
+      '@rudderjs/mcp':
+        specifier: workspace:*
+        version: link:../packages/mcp
+      '@rudderjs/middleware':
+        specifier: workspace:*
+        version: link:../packages/middleware
+      '@rudderjs/notification':
+        specifier: workspace:*
+        version: link:../packages/notification
+      '@rudderjs/orm':
+        specifier: workspace:*
+        version: link:../packages/orm
+      '@rudderjs/passport':
+        specifier: workspace:*
+        version: link:../packages/passport
+      '@rudderjs/pennant':
+        specifier: workspace:*
+        version: link:../packages/pennant
+      '@rudderjs/process':
+        specifier: workspace:*
+        version: link:../packages/process
+      '@rudderjs/pulse':
+        specifier: workspace:*
+        version: link:../packages/pulse
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../packages/queue
+      '@rudderjs/queue-bullmq':
+        specifier: workspace:*
+        version: link:../packages/queue-bullmq
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../packages/router
+      '@rudderjs/schedule':
+        specifier: workspace:*
+        version: link:../packages/schedule
+      '@rudderjs/server-hono':
+        specifier: workspace:*
+        version: link:../packages/server-hono
+      '@rudderjs/session':
+        specifier: workspace:*
+        version: link:../packages/session
+      '@rudderjs/storage':
+        specifier: workspace:*
+        version: link:../packages/storage
+      '@rudderjs/support':
+        specifier: workspace:*
+        version: link:../packages/support
+      '@rudderjs/sync':
+        specifier: workspace:*
+        version: link:../packages/sync
+      '@rudderjs/telescope':
+        specifier: workspace:*
+        version: link:../packages/telescope
+      '@rudderjs/terminal':
+        specifier: workspace:*
+        version: link:../packages/terminal
+      '@rudderjs/view':
+        specifier: workspace:*
+        version: link:../packages/view
+      '@rudderjs/vite':
+        specifier: workspace:*
+        version: link:../packages/vite
+      '@tailwindcss/vite':
+        specifier: ^4.3.0
+        version: 4.3.0(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@vikejs/hono':
+        specifier: ^0.2.0
+        version: 0.2.0(hono@4.12.23)(srvx@0.11.15)(vike@0.4.257(patch_hash=418d132a1f8cd45641dbdf4c220307c6608ae59b47614b2d9308667d696527fe)(hono@4.12.23)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0)))
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.6.2
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      dotenv:
+        specifier: ^16.4.0
+        version: 16.6.1
+      ink:
+        specifier: ^7.0.0
+        version: 7.0.2(@types/react@19.2.14)(react@19.2.4)
+      ioredis:
+        specifier: ^5.3.0
+        version: 5.9.3
+      lucide-react:
+        specifier: ^0.575.0
+        version: 0.575.0(react@19.2.4)
+      radix-ui:
+        specifier: ^1.4.3
+        version: 1.4.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+      tailwind-merge:
+        specifier: ^3.5.0
+        version: 3.5.0
+      tailwindcss:
+        specifier: ^4.2.1
+        version: 4.2.1
+      vike:
+        specifier: 0.4.257
+        version: 0.4.257(patch_hash=418d132a1f8cd45641dbdf4c220307c6608ae59b47614b2d9308667d696527fe)(hono@4.12.23)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
+      vike-react:
+        specifier: ^0.6.23
+        version: 0.6.23(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.257(patch_hash=418d132a1f8cd45641dbdf4c220307c6608ae59b47614b2d9308667d696527fe)(hono@4.12.23)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0)))
+      y-websocket:
+        specifier: ^2.0.0
+        version: 2.1.0(yjs@13.6.29)
+      yjs:
+        specifier: ^13.6.0
+        version: 13.6.29
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.58.2
+      '@rudderjs/cli':
+        specifier: workspace:*
+        version: link:../packages/cli
+      '@types/node':
+        specifier: 20.19.35
+        version: 20.19.35
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      '@vitejs/plugin-react':
+        specifier: ^6.0.0
+        version: 6.0.2(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
+      playwright:
+        specifier: ^1.58.2
+        version: 1.58.2
+      shadcn:
+        specifier: ^4.0.2
+        version: 4.0.2(@types/node@20.19.35)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      tw-animate-css:
+        specifier: ^1.4.0
+        version: 1.4.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0)
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+
+  playground-prisma:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.99.0
+        version: 0.99.0(zod@4.3.6)
+      '@base-ui/react':
+        specifier: ^1.2.0
+        version: 1.2.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@fontsource-variable/geist':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@prisma/adapter-better-sqlite3':
         specifier: ^7.0.0
         version: 7.4.2
@@ -1580,7 +1812,7 @@ importers:
         version: 7.0.2(@types/react@19.2.14)(react@19.2.4)
       ioredis:
         specifier: ^5.3.0
-        version: 5.9.3
+        version: 5.10.1
       lucide-react:
         specifier: ^0.575.0
         version: 0.575.0(react@19.2.4)
@@ -1604,7 +1836,7 @@ importers:
         version: 3.5.0
       tailwindcss:
         specifier: ^4.2.1
-        version: 4.2.1
+        version: 4.3.0
       vike:
         specifier: 0.4.257
         version: 0.4.257(patch_hash=418d132a1f8cd45641dbdf4c220307c6608ae59b47614b2d9308667d696527fe)(hono@4.12.23)(react-streaming@0.4.17(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(srvx@0.11.15)(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
@@ -1644,7 +1876,7 @@ importers:
         version: 6.0.2(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
       playwright:
         specifier: ^1.58.2
-        version: 1.58.2
+        version: 1.60.0
       prisma:
         specifier: ^7.0.0
         version: 7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)

@@ -52,15 +52,19 @@ pnpm rudder      # RudderJS CLI (tsx node_modules/@rudderjs/cli/src/index.ts)
 
 > Always run `pnpm build` from root before `pnpm dev` in playground — packages must be compiled first.
 
-Database (run from `playground/` — ORM-agnostic via the rudder CLI):
+Database — `playground/` runs the **native engine** (migrations in `database/migrations/`, typed registry at `app/Models/__schema/registry.d.ts`, committed); its twin `playground-prisma/` is the same app on the **Prisma adapter**:
 ```bash
+# playground/ (native)
+pnpm rudder migrate             # Apply migrations + regenerate the typed registry
+pnpm rudder schema:types        # Regenerate the registry without a migrate
+pnpm rudder db:seed             # Run DatabaseSeeder
+
+# playground-prisma/ (Prisma)
 pnpm rudder db:generate         # Regenerate client (Prisma) — no-op for Drizzle
 pnpm rudder db:push             # Sync schema → DB (dev, no migrations)
-pnpm rudder migrate             # Create + apply migrations
-pnpm rudder db:seed             # Run DatabaseSeeder
 ```
 
-Raw Prisma still works (`pnpm exec prisma <subcommand>`) when you need a Prisma-specific flag.
+Raw Prisma still works in `playground-prisma/` (`pnpm exec prisma <subcommand>`) when you need a Prisma-specific flag.
 
 ---
 
@@ -238,6 +242,8 @@ For third-party package authors writing their own provider, see `docs/guide/serv
 
 `playground/` is the framework's own demo app — exercises auth, routing, ORM, queue, mail, cache, storage, scheduling, broadcast, sync, telescope/pulse/horizon, Agents (`@rudderjs/ai`). Pure framework, no extra dependencies.
 
+**Two ORM twins**: `playground/` runs the **native engine** (sqlite, `database/migrations/`, `Model.for<>()` typed models, committed registry); `playground-prisma/` is the same app on the **Prisma adapter** (`prisma/schema/`, delegate table names, cuid ids). Package tables on native use literal delegate-style SQL names (`oAuthClient`, `userMemory`, `notification`, `paddle*`) so package models run unchanged on both. Sync persistence is in-memory on native (`syncPrisma()`/`syncRedis()` are the only adapters — known gap).
+
 ```bash
 cd playground && pnpm dev   # :3000
 ```
@@ -263,8 +269,9 @@ playground/
 │   ├── Jobs/ExampleJob.ts        # queue demo
 │   ├── Mail/DemoMail.ts          # mail demo
 │   ├── Mcp/                      # MCP servers + tools (Echo + secured)
-│   ├── Models/User.ts
-│   ├── Modules/Todo/             # self-contained module with its own .prisma + test
+│   ├── Models/                   # User + demo models (Post/Video/Comment/Tag/Todo use Model.for<>())
+│   │   └── __schema/registry.d.ts  # generated typed registry (committed; rewritten on migrate)
+│   ├── Modules/Todo/             # self-contained module with service + test
 │   ├── Notifications/            # WelcomeNotification + others
 │   ├── Providers/AppServiceProvider.ts
 │   ├── Services/                 # singleton-ish app services
@@ -279,9 +286,11 @@ playground/
 │   ├── api.ts          # JSON API routes (router.get/post/all())
 │   └── console.ts      # rudder.command() + db:seed + scheduler
 ├── pages/              # Vike file-based routing; `pages/__view/` is auto-generated
-├── prisma/schema/      # multi-file: auth, base, sync, notification, app (Todo only)
+├── database/migrations/  # native-engine migrations (users, demo tables, package tables)
 └── vite.config.ts
 ```
+
+(`playground-prisma/` keeps the pre-conversion shape: `prisma/schema/` multi-file schema instead of `database/migrations/`, no `__schema` registry.)
 
 **Provider boot order**: `DatabaseServiceProvider` (via `database()`) must come before any provider that uses ORM models.
 
@@ -316,7 +325,7 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **`process is not defined` / `node:*` crash in a browser bundle**: some `@rudderjs/*` packages are legitimately client-bundled (a `Model` reachable from client code; `app`/`Env` from a shared module). Their entry must evaluate in the browser — no top-level `process.env` read (guard with `typeof process !== 'undefined'`), no static `node:` import in the eval graph (lazy `await import('node:x')` inside a function is fine). For `@rudderjs/core`, import client-reachable symbols from **`@rudderjs/core/client`**, not the main entry (the main entry re-exports the `@clack` CLI chain). The `Client Bundle Smoke` CI gate (`scripts/client-bundle-smoke.mjs`, `pnpm test:client-bundle`) enforces this — add new client-reachable entries to its `TARGETS`.
 - **`workspace:*` not resolving**: Run `pnpm install` from root after adding a new local dependency
 - **Stale `dist/`**: Run `pnpm build` from root before running the playground
-- **Prisma client missing**: Run `pnpm rudder db:generate` (or `pnpm exec prisma generate`) from `playground/`
+- **Prisma client missing**: Run `pnpm rudder db:generate` (or `pnpm exec prisma generate`) from `playground-prisma/` (the native `playground/` has no client to generate — run `pnpm rudder migrate` there instead)
 - **Decorator errors**: Ensure `experimentalDecorators` and `emitDecoratorMetadata` in tsconfig.json
 - **Circular dep**: Never add `@rudderjs/core` to router/server-hono's `dependencies` — `peerDependencies` only
 - **Port in use**: `lsof -ti :24678 -ti :3000 | xargs kill -9`

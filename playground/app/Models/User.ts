@@ -4,11 +4,14 @@ import { Billable } from '@rudderjs/cashier-paddle'
 import { dispatch } from '@rudderjs/core'
 import { UserRegistered } from 'App/Events/UserRegistered.js'
 
+// Hand-declared fields (not Model.for<'users'>()) because the class composes
+// the HasApiTokens + Billable mixins, which expect the plain Model base. The
+// simpler demo models (Post, Todo, …) showcase the generated-registry binding.
 export class User extends Billable(HasApiTokens(Model)) {
-  static table = 'user'
+  static table = 'users'
   static hidden = ['password', 'rememberToken']
 
-  id!:            string
+  id!:            number
   name!:          string
   email!:         string
   password!:      string | null

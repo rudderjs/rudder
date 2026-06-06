@@ -166,8 +166,9 @@ rudderjs/
 │                           #   that delegates here for old install commands.
 ├── .github/workflows/      # CI (build, typecheck, lint, test) + Release (Changesets auto-publish)
 ├── docs/                   # VitePress documentation site
-└── playground/             # Framework demo app (port 3000) — auth, routing, ORM, queue, mail,
+├── playground/             # Framework demo app, NATIVE engine (port 3000) — auth, routing, ORM, queue, mail,
                             #   cache, storage, scheduling, broadcast, sync, AI agents, monitoring
+└── playground-prisma/      # Same demo app on the Prisma adapter (ORM twin)
 ```
 
 **Merged/removed packages** (code absorbed, originals deleted):
