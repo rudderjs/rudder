@@ -416,15 +416,30 @@ interface BootedServer {
 }
 
 async function bootServer(target: string, port: number): Promise<BootedServer> {
-  // Boots the scaffolded app via `node ./dist/server/index.mjs` and polls / for
-  // a 200 response (readiness). Catches prod-bundle drift (missing exports,
+  // Boots the scaffolded app via ITS OWN `start` script and polls / for a 200
+  // response (readiness). Catches prod-bundle drift (missing exports,
   // top-level node: imports), Vike build output going wrong, and any provider
   // that throws at HTTP-server start time. The body assertion + cross-route
   // hydration check live downstream in renderCheck().
-  const child = spawn('node', ['./dist/server/index.mjs'], {
+  //
+  // Running the real `start` script — not `node ./dist/server/index.mjs`
+  // directly — is load-bearing: the script's NODE_ENV=production prefix is
+  // the #936 fix (without it the vike SSR bundle bakes production React
+  // internals while external react resolves its dev build, and every render
+  // 500s). The smoke must NOT inject NODE_ENV itself, or a regression that
+  // drops the prefix from the template stays invisible — the harness would be
+  // supplying the exact precondition the artifact is supposed to carry.
+  // NODE_ENV is also stripped from the inherited env for the same reason.
+  const { cmd, args } = scriptArgs(PM_FLAG, 'start')
+  const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(port), CI: '1' }
+  delete env['NODE_ENV']
+  const child = spawn(cmd, args, {
     cwd: target,
     stdio: 'pipe',
-    env: { ...process.env, NODE_ENV: 'production', PORT: String(port), CI: '1' },
+    env,
+    // Own process group: the package manager spawns node as a grandchild, so
+    // shutdown must signal the whole group or the server outlives the smoke.
+    detached: true,
   })
 
   let stdout = ''
@@ -459,14 +474,26 @@ async function bootServer(target: string, port: number): Promise<BootedServer> {
     await new Promise((r) => setTimeout(r, 250))
   }
 
+  // Signal the whole process group (negative pid) — `pnpm start` runs node as
+  // a grandchild, and signalling only the PM would orphan the server on the
+  // port. Falls back to the single pid if the group is already gone.
+  const signalGroup = (sig: NodeJS.Signals) => {
+    try {
+      if (child.pid) process.kill(-child.pid, sig)
+      else child.kill(sig)
+    } catch {
+      try { child.kill(sig) } catch { /* already exited */ }
+    }
+  }
+
   const shutdown = async () => {
     if (child.exitCode !== null) return
-    child.kill('SIGTERM')
+    signalGroup('SIGTERM')
     const result = await Promise.race([
       exited,
       new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 3_000)),
     ])
-    if (result === 'timeout') child.kill('SIGKILL')
+    if (result === 'timeout') signalGroup('SIGKILL')
   }
 
   if (!ready) {
