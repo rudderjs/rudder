@@ -55,7 +55,7 @@ const user = req.user                      // populated on every web request
 
 `auth()` and `Auth` read from AsyncLocalStorage. They work in any handler, service, or middleware that runs inside the `AuthMiddleware` scope. Outside that scope they throw — see [Request Lifecycle](/guide/lifecycle).
 
-`Auth.user()` soft-fails to `null` if there's no auth context, matching the facade convention. Use `Auth.check()` for a boolean.
+`Auth.user()` returns `null` when an auth context is present but nobody is signed in. With no auth context at all (a script, a `boot()` hook, a route outside `AuthMiddleware`) it throws like the rest of the facade. Use `Auth.check()` for a boolean.
 
 ## Login and logout
 
@@ -79,7 +79,7 @@ Route.get ('/login',     showLogin, [RequireGuest('/')])
 Route.get ('/dashboard', handler, [RequireAuth(), EnsureEmailIsVerified()])
 ```
 
-`RequireAuth` returns 401 (or redirects to `/login` for HTML requests). `RequireGuest` redirects already-authenticated users away from sign-in pages. `EnsureEmailIsVerified` returns 403 until the user verifies.
+`RequireAuth` returns a 401 JSON response when nobody is signed in. `RequireGuest` redirects already-authenticated users away from sign-in pages. `EnsureEmailIsVerified` returns 403 until the user verifies.
 
 For non-default guards on a specific route, mount `AuthMiddleware('api')` explicitly before `RequireAuth('api')`.
 
@@ -115,20 +115,25 @@ POST handlers (`/auth/sign-in/email`, `/auth/sign-up/email`, `/auth/sign-out`, `
 The `PasswordBroker` orchestrates token generation, email sending, and consumption:
 
 ```ts
-import { PasswordBroker } from '@rudderjs/auth'
+import { PasswordBroker, MemoryTokenRepository } from '@rudderjs/auth'
+import { Hash } from '@rudderjs/hash'
 import { Mail } from '@rudderjs/mail'
 
-await PasswordBroker.sendResetLink({ email }, (user, token) => {
+const broker = new PasswordBroker(new MemoryTokenRepository(), userProvider, {
+  secret: process.env.AUTH_SECRET,   // required in production — throws without it
+})
+
+await broker.sendResetLink({ email }, (user, token) => {
   const url = `https://app.example.com/reset-password?token=${token}&email=${user.email}`
   return Mail.to(user.email).send(new PasswordResetMail(url))
 })
 
-await PasswordBroker.reset({ email, token, password }, async (user, password) => {
-  await User.update(user.id, { password: await hash(password) })
+await broker.reset({ email, token, password }, async (user, password) => {
+  await User.update(user.id, { password: await Hash.make(password) })
 })
 ```
 
-The default token store is in-memory — fine for development. For production, implement `TokenRepository` over Redis or a database table.
+`userProvider` is the same `UserProvider` your guard uses (resolve it from the auth manager or construct an `EloquentUserProvider` over your User model). `MemoryTokenRepository` is in-memory — fine for development. For production, implement `TokenRepository` over Redis or a database table.
 
 ## Email verification
 
@@ -169,7 +174,7 @@ Route.get('/email/verify/:id/:hash', async (req, res) => {
 ```ts
 import { RequireBearer, scope } from '@rudderjs/passport'
 
-Route.get('/api/posts', [RequireBearer(), scope('read')], handler)
+Route.get('/api/posts', handler, [RequireBearer(), scope('read')])
 ```
 
 For lighter token auth without OAuth, `@rudderjs/sanctum` (simple API token issuance and verification) is the alternative.
