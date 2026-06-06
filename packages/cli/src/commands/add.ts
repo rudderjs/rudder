@@ -69,7 +69,7 @@ const REGISTRY: ReadonlyArray<PackageSpec> = [
 
   // Communication
   { alias: 'mail',          npmName: '@rudderjs/mail',          config: { key: 'mail',          template: () => CFG_MAIL         }, hint: 'Default mailer is `log` (writes to stdout). Set MAIL_MAILER=smtp + SMTP_* in .env for real delivery.' },
-  { alias: 'notifications', npmName: '@rudderjs/notification',                                                                       hint: 'Multi-channel notifications: `rudder make:notification Welcome`.' },
+  { alias: 'notifications', npmName: '@rudderjs/notification',                                                                       hint: 'Multi-channel notifications: extend `Notification`, dispatch via `notify(user, new WelcomeNotification())`.' },
   { alias: 'broadcast',     npmName: '@rudderjs/broadcast',                                                                          hint: 'Real-time channels: define them in routes/channels.ts.' },
   { alias: 'sync',          npmName: '@rudderjs/sync',          config: { key: 'sync',          template: ({ orm }) => buildSyncConfig(orm) }, hint: 'Collaborative Yjs docs: WebSocket endpoint at /ws-sync.' },
 
