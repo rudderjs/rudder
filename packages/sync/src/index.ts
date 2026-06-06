@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { ServiceProvider, rudder, config } from '@rudderjs/core'
+import { ServiceProvider, rudder, config, app } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
 import { syncObservers }                               from './observers.js'
@@ -358,6 +358,193 @@ export function syncRedis(config: RedisSyncPersistenceConfig = {}): SyncPersiste
   }
 }
 
+// ─── Database Persistence (ORM-adapter-backed — native engine, Prisma, Drizzle) ──
+
+export interface DatabasePersistenceConfig {
+  /**
+   * Table holding the append-only update log. Default: `'syncDocument'` —
+   * the same name as `syncPrisma()`'s delegate default, so an app's Prisma
+   * and native twins share one table. Required columns: an auto-assigned
+   * primary key, `docName` (string, indexed), `update` (binary), and
+   * `createdAt` with a database-side default (`useCurrent()` /
+   * `@default(now())`) — the driver never stamps timestamps app-side, so a
+   * NOT NULL `createdAt` without a default will reject every insert.
+   *
+   * Publish the ready-made native migration with
+   * `pnpm rudder vendor:publish --tag=sync-schema`.
+   */
+  table?: string
+  /**
+   * Pass an adapter directly instead of resolving `app().make('db')`.
+   * Anything with `query(table)` returning a RudderJS-shaped QueryBuilder
+   * works — useful for tests or multi-connection setups.
+   */
+  adapter?: unknown
+}
+
+/** Minimal structural slice of `OrmAdapter`/`QueryBuilder` the driver needs.
+ *  Duck-typed (like `PrismaDelegate` above) so `@rudderjs/sync` doesn't take
+ *  a dependency on `@rudderjs/contracts`. */
+type DbQueryBuilder = {
+  where(column: string, value: unknown): DbQueryBuilder
+  orderBy(column: string, direction?: 'ASC' | 'DESC'): DbQueryBuilder
+  get(): Promise<Array<{ update: unknown }>>
+  create(data: Record<string, unknown>): Promise<unknown>
+  deleteAll(): Promise<number>
+}
+type DbAdapter = { query(table: string): DbQueryBuilder }
+
+/**
+ * True when `err` (or any nested `cause`) is the backend's missing-table
+ * error: sqlite `no such table`, Postgres `42P01` (undefined_table), MySQL
+ * errno 1146 (ER_NO_SUCH_TABLE). Read paths tolerate this — `rudder migrate`
+ * boots the FULL app, so the first `getYDoc()` can run before the migration
+ * that creates the table. Returning an empty doc (and NOT caching it) lets
+ * migrate proceed; durable reads start working on the next call.
+ */
+function isMissingTableError(err: unknown): boolean {
+  let e: unknown = err
+  for (let depth = 0; e !== null && typeof e === 'object' && depth < 5; depth++) {
+    const rec = e as Record<string, unknown>
+    const msg = typeof rec['message'] === 'string' ? rec['message'] : ''
+    if (/no such table/i.test(msg)) return true
+    if (rec['code'] === '42P01') return true
+    if (rec['errno'] === 1146) return true
+    e = rec['cause']
+  }
+  return false
+}
+
+/** better-sqlite3 binds Buffers but not plain Uint8Arrays — wrap without copying. */
+function toBuffer(update: Uint8Array): Buffer {
+  return Buffer.isBuffer(update)
+    ? update
+    : Buffer.from(update.buffer, update.byteOffset, update.byteLength)
+}
+
+/**
+ * Database persistence over the active ORM adapter (`app().make('db')`) —
+ * the first-party option for apps on the native engine, where `syncPrisma()`
+ * has no client to resolve. Works against any adapter exposing the RudderJS
+ * `query(table)` surface (native, Prisma, Drizzle), sharing the adapter's
+ * existing connection — no second pool.
+ *
+ * Append-only update log, same shape as `syncPrisma()`: one binary row per
+ * update, full replay on load, no snapshotting or compaction.
+ */
+export function syncDatabase(config: DatabasePersistenceConfig = {}): SyncPersistence {
+  // Bound in-memory retention — hot-path replay optimization, mirrors syncPrisma.
+  const DOC_CACHE_MAX_ENTRIES = 256
+  const table = config.table ?? 'syncDocument'
+  let cachedAdapter: DbAdapter | null = null
+  const docCache = new Map<string, Y.Doc>()
+
+  function cacheDoc(docName: string, doc: Y.Doc): void {
+    if (docCache.has(docName)) docCache.delete(docName)
+    docCache.set(docName, doc)
+    while (docCache.size > DOC_CACHE_MAX_ENTRIES) {
+      const oldest = docCache.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      docCache.delete(oldest)
+    }
+  }
+
+  function getAdapter(): DbAdapter {
+    if (cachedAdapter) return cachedAdapter
+    let resolved: unknown
+    if (config.adapter !== undefined) {
+      resolved = config.adapter
+    } else {
+      try {
+        resolved = app().make('db')
+      } catch (err) {
+        throw new Error(
+          '[Sync] syncDatabase() could not resolve the "db" adapter — ' +
+            'register a database provider (native engine, Prisma, or Drizzle) before the first document op.',
+          { cause: err },
+        )
+      }
+    }
+    const adapter = resolved as DbAdapter | null
+    if (!adapter || typeof adapter.query !== 'function') {
+      throw new Error(
+        '[Sync] syncDatabase() resolved a "db" binding without a query(table) method — ' +
+          'the active database provider does not expose a RudderJS ORM adapter.',
+      )
+    }
+    cachedAdapter = adapter
+    return adapter
+  }
+
+  return {
+    async getYDoc(docName: string): Promise<Y.Doc> {
+      const cachedDoc = docCache.get(docName)
+      if (cachedDoc) {
+        cacheDoc(docName, cachedDoc)
+        return cachedDoc
+      }
+
+      const db  = getAdapter()
+      const doc = new Y.Doc()
+      let rows: Array<{ update: unknown }>
+      try {
+        rows = await db.query(table).where('docName', docName).orderBy('id', 'ASC').get()
+      } catch (err) {
+        // Table not migrated yet — see isMissingTableError. Don't cache: the
+        // table appears after `rudder migrate`, and a cached empty doc would
+        // mask every row written afterwards.
+        if (isMissingTableError(err)) return doc
+        throw err
+      }
+      for (const row of rows) Y.applyUpdate(doc, row.update as Uint8Array)
+      cacheDoc(docName, doc)
+      return doc
+    },
+
+    async storeUpdate(docName: string, update: Uint8Array): Promise<void> {
+      const db = getAdapter()
+      await db.query(table).create({ docName, update: toBuffer(update) })
+      const cachedDoc = docCache.get(docName)
+      if (cachedDoc) {
+        try {
+          Y.applyUpdate(cachedDoc, update)
+        } catch (err) {
+          docCache.delete(docName)
+          syncObservers.emit({
+            kind:    'sync.error',
+            op:      'storeUpdate',
+            docName,
+            error:   err instanceof Error ? err.message : String(err),
+          })
+        }
+      }
+    },
+
+    async getStateVector(docName: string): Promise<Uint8Array> {
+      const doc = await this.getYDoc(docName)
+      return Y.encodeStateVector(doc)
+    },
+
+    async getDiff(docName: string, stateVector: Uint8Array): Promise<Uint8Array> {
+      const doc = await this.getYDoc(docName)
+      return Y.encodeStateAsUpdate(doc, stateVector)
+    },
+
+    async clearDocument(docName: string): Promise<void> {
+      const db = getAdapter()
+      await db.query(table).where('docName', docName).deleteAll()
+      docCache.delete(docName)
+    },
+
+    async destroy(): Promise<void> {
+      // The adapter is app-owned (shared with the Models) — never disconnect
+      // it here. Drop only this driver's in-memory state.
+      docCache.clear()
+      cachedAdapter = null
+    },
+  }
+}
+
 // ─── Sync room manager ───────────────────────────────────────
 
 interface Room {
@@ -414,11 +601,13 @@ function getRoomsMap(): Map<string, Room> | undefined {
  *  `Array<any>`, so call sites that need to walk the delta cast to this. */
 interface DeltaItem { insert: unknown; attributes?: Record<string, unknown> }
 
-/** Commander-style command args are typed as `unknown`; reach into the
- *  positional `<doc>` slot in one place so the structural cast doesn't
- *  repeat across every sync:* command. */
+/** Inline `rudder.command()` handlers receive commander's positional args as
+ *  a STRING ARRAY — the `<doc>` slot is `args[0]`, not `args.doc` (that shape
+ *  belongs to class-based commands). Reading `.doc` off the array made every
+ *  sync:* command operate on `docName === undefined`: sync:clear deleted
+ *  nothing while printing success, sync:inspect dumped a phantom room. */
 function readDocArg(args: unknown): string {
-  return (args as unknown as Record<string, unknown>)['doc'] as string
+  return (args as string[])[0] as string
 }
 
 /** Get-or-create variant — guarantees a Map is present on globalThis. */
@@ -888,8 +1077,9 @@ export type { Doc as YDoc } from 'yjs'
  * Shares the same port as `@rudderjs/broadcast` and the HTTP server — no
  * separate process required. Auto-discovered via `defaultProviders()`.
  *
- * Built-in persistence drivers: memory (default), prisma, redis. Configure
- * via `config/sync.ts`.
+ * Built-in persistence drivers: memory (default), database (any ORM adapter
+ * — native engine, Prisma, Drizzle), prisma, redis. Configure via
+ * `config/sync.ts`.
  *
  * @example
  * // config/sync.ts
@@ -920,16 +1110,21 @@ export class SyncProvider extends ServiceProvider {
     this.app.bind('sync.persistence', () => persistence)
 
     // Publishable persistence schema — `pnpm rudder vendor:publish
-    // --tag=sync-schema` drops the SyncDocument model into prisma/schema/.
-    // The model name is load-bearing: the Prisma delegate must be
-    // `syncDocument`, syncPrisma()'s default. Prisma-only — syncRedis and
-    // in-memory need no schema, and there is no drizzle persistence adapter.
+    // --tag=sync-schema` drops the SyncDocument model into prisma/schema/
+    // (Prisma apps) or the syncDocument migration into database/migrations/
+    // (native-engine apps); vendor:publish picks the group matching the
+    // detected ORM. The names are load-bearing: the Prisma delegate must be
+    // `syncDocument` (syncPrisma()'s default) and the native table uses the
+    // same literal name (syncDatabase()'s default) so the twins share one
+    // table. syncRedis and in-memory need no schema, and there is no drizzle
+    // persistence adapter.
     // fileURLToPath, NOT URL.pathname — pathname yields `/D:/...` on Windows
     // (leading slash + percent-encoding), which breaks the copy. Caught by the
     // asset-on-disk test on Windows CI.
     const schemaDir = fileURLToPath(new URL(/* @vite-ignore */ '../schema', import.meta.url))
     this.publishes([
-      { from: `${schemaDir}/sync.prisma`, to: 'prisma/schema', tag: 'sync-schema', orm: 'prisma' as const },
+      { from: `${schemaDir}/sync.prisma`, to: 'prisma/schema',       tag: 'sync-schema', orm: 'prisma' as const },
+      { from: `${schemaDir}/native`,      to: 'database/migrations', tag: 'sync-schema', orm: 'native' as const },
     ])
   }
 

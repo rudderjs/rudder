@@ -15,8 +15,9 @@ export interface PublishGroup {
    * Auth pages should NOT set this — users may customize them.
    */
   force?: boolean
-  /** If set, only publish when this ORM is detected in the project. */
-  orm?: 'prisma' | 'drizzle'
+  /** If set, only publish when this ORM is detected in the project.
+   *  `'native'` = the built-in engine (neither orm-prisma nor orm-drizzle installed). */
+  orm?: 'prisma' | 'drizzle' | 'native'
   /** If set, only publish when this database driver is detected. Used with orm='drizzle'. */
   driver?: 'sqlite' | 'postgresql' | 'mysql'
 }

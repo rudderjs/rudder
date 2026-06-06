@@ -4,15 +4,18 @@ import { resolve, join } from 'node:path'
 import type { Command } from 'commander'
 import { intro, outro, log, spinner } from '@clack/prompts'
 
-type ORM = 'prisma' | 'drizzle'
+type ORM = 'prisma' | 'drizzle' | 'native'
 
-/** Detect which ORM is installed by checking package.json dependencies. */
+/** Detect which ORM is installed by checking package.json dependencies.
+ *  An adapter package wins; a data-layer package without one means the
+ *  built-in native engine. */
 function detectORM(cwd: string = process.cwd()): ORM | null {
   try {
     const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'))
     const deps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies }
     if ('@rudderjs/orm-prisma' in deps) return 'prisma'
     if ('@rudderjs/orm-drizzle' in deps) return 'drizzle'
+    if ('@rudderjs/orm' in deps || '@rudderjs/database' in deps) return 'native'
     return null
   } catch {
     return null
@@ -26,7 +29,7 @@ interface PublishGroup {
   /** Always overwrite — set by framework-managed pages like panels */
   force?:  boolean
   /** If set, only publish when this ORM is detected in the project. */
-  orm?:    'prisma' | 'drizzle'
+  orm?:    'prisma' | 'drizzle' | 'native'
   /** If set, only publish when this database driver is detected. */
   driver?: 'sqlite' | 'postgresql' | 'mysql'
 }

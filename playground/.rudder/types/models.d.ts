@@ -147,6 +147,12 @@ declare module '@rudderjs/orm' {
       title: string
       createdAt: string
     }
+    syncDocument: {
+      id: number
+      docName: string
+      update: Uint8Array
+      createdAt: string
+    }
     taggables: {
       tagId: number
       taggableId: number

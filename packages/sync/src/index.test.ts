@@ -1033,10 +1033,9 @@ describe('SyncProvider.register — sync-schema publishable', () => {
 
       const groups = ((globalThis as Record<string, unknown>)['__rudderjs_publish_registry__'] as
         Map<string, Array<{ from: string; to: string; tag: string; orm?: string }>>).get('SyncProvider') ?? []
-      const entry = groups.find((g) => g.tag === 'sync-schema')
-      assert.ok(entry, 'sync-schema publish group must be registered')
+      const entry = groups.find((g) => g.tag === 'sync-schema' && g.orm === 'prisma')
+      assert.ok(entry, 'sync-schema (prisma) publish group must be registered')
       assert.equal(entry.to, 'prisma/schema')
-      assert.equal(entry.orm, 'prisma')
       // The asset must actually ship — a registered tag pointing at a missing
       // file would make vendor:publish fail for every user (the docs sold
       // this tag while nothing registered it; see the 2026-06-06 sweep).
@@ -1045,6 +1044,18 @@ describe('SyncProvider.register — sync-schema publishable', () => {
       assert.match(model, /model SyncDocument/, 'model name is load-bearing (delegate syncDocument)')
       assert.match(model, /docName/)
       assert.match(model, /update\s+Bytes/)
+
+      // Native twin — syncDatabase()'s migration published into database/migrations/
+      const native = groups.find((g) => g.tag === 'sync-schema' && g.orm === 'native')
+      assert.ok(native, 'sync-schema (native) publish group must be registered')
+      assert.equal(native.to, 'database/migrations')
+      assert.ok(fs.existsSync(native.from), `published asset missing on disk: ${native.from}`)
+      const migrationFiles = fs.readdirSync(native.from)
+      assert.equal(migrationFiles.length, 1, 'exactly one native migration ships')
+      const migration = fs.readFileSync(`${native.from}/${migrationFiles[0]}`, 'utf8')
+      assert.match(migration, /Schema\.create\('syncDocument'/, 'table name is load-bearing (shared with the syncPrisma delegate)')
+      assert.match(migration, /t\.string\('docName'\)\.index\(\)/)
+      assert.match(migration, /t\.binary\('update'\)/)
     } finally {
       registry?.delete('SyncProvider')
       delete G[SYNC_KEYS.persistence]

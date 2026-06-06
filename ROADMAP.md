@@ -132,11 +132,11 @@
 
 ---
 
-## Plan 7: Monitoring & Observability — mostly done
+## Plan 7: Monitoring & Observability — ✅ DONE
 
-*Production visibility — equivalent to Pulse, Telescope, Horizon, Nightwatch.*
+*Production visibility — equivalent to Pulse, Telescope, Horizon.*
 
-**Status**: Telescope (19 collectors), Pulse, and Horizon all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02 (Pulse + Horizon went through PRs #144 / #146 / #149 / #151 / #153 / #156 / #158 / #160 — cross-process queue collector saga, SQLite WAL storage fix, docs sweep). Telescope dashboard gained **real-time SSE updates** in #431 (2026-05-13). Nightwatch still ⬜ — open question whether to ship a self-hosted dashboard, a SaaS product, or both.
+**Status**: Telescope (19 collectors), Pulse, and Horizon all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02 (Pulse + Horizon went through PRs #144 / #146 / #149 / #151 / #153 / #156 / #158 / #160 — cross-process queue collector saga, SQLite WAL storage fix, docs sweep). Telescope dashboard gained **real-time SSE updates** in #431 (2026-05-13). A Nightwatch equivalent (external monitoring / SaaS) was considered and **dropped** (2026-06-06) — it's a standalone product, not framework work; the self-hosted monitoring story is covered by Telescope + Pulse + Horizon.
 
 ### 7.1 — `@rudderjs/pulse` ✅
 
@@ -267,45 +267,9 @@
 
 ---
 
-### 7.4 — Nightwatch (External Monitoring)
+### 7.4 — Nightwatch (External Monitoring) — DROPPED
 
-**Laravel equivalent**: [Laravel Nightwatch](https://nightwatch.laravel.com/) — hosted monitoring SaaS.
-
-**Effort**: Large — this is a standalone product, not just a plugin.
-
-**Two options:**
-1. **Self-hosted dashboard** — a separate package (e.g. `@rudderjs/nightwatch`) that surfaces monitoring inside an admin app
-2. **Hosted SaaS product** — long-term, run by us
-
-**Monitored Event Types (9):**
-- Requests — trace with detailed interaction + performance metrics
-- Outgoing Requests — external API call monitoring
-- Jobs — queue execution, attempts, duration
-- Queries — SQL performance, problematic query detection
-- Mail — sending, recipients, rendering performance
-- Commands — CLI execution, resource impact
-- Cache — hit rates, storage patterns, invalidation
-- Scheduled Tasks — execution timing, completion status
-- Notifications — delivery across all channels
-
-**Connected Events / Tracing:**
-- Microsecond-precision event correlation
-- Request waterfall view (REQUEST → QUERY → QUERY → CACHE HIT → QUERY)
-- Timeline visualization of event sequences
-
-**Smart Alerts:**
-- Intelligent grouping of related exceptions
-- Noise-reduced notifications
-- Issue assignment to team members
-
-**Uptime Monitoring:**
-- HTTP/TCP/DNS endpoint checks
-- SSL certificate expiry tracking
-- Response time tracking
-- Status pages
-- Incident management
-
-**Depends on**: http, notification, log
+A Laravel Nightwatch equivalent (hosted monitoring SaaS / self-hosted external-monitoring package) was scoped here and **dropped on 2026-06-06**: it's a standalone product with its own roadmap, not framework work. Telescope + Pulse + Horizon cover the self-hosted observability story.
 
 ---
 
@@ -313,7 +277,7 @@
 - [x] `@rudderjs/telescope` — debug inspector. Shipped 19 collectors (request, query, exception, job, mail, notification, cache, log, event, command, schedule, http, model, gate, ai, mcp, broadcast, sync, dump) — partial overlap with Laravel's 18, swapping Redis/View/Batch for ai/mcp/broadcast/sync. Tagging, filtering, related-entry correlation, SQLite + WAL for cross-process viewing. Verified end-to-end 2026-04-20. Real-time SSE dashboard added in #431 (2026-05-13).
 - [x] `@rudderjs/pulse` — performance dashboard. 7 aggregators (request, queue, cache, exception, user, query, server), period-windowed aggregates, individual-entry storage for slow events. Browser-verified 2026-05-02 (PRs #156 + #158 + #160).
 - [x] `@rudderjs/horizon` — queue monitor. Full job lifecycle, per-queue metrics, worker status, retry/delete from UI. Browser-verified 2026-05-02 across the cross-process queue collector saga (PRs #144 / #146 / #149 / #151 / #153).
-- [ ] `@rudderjs/nightwatch` — external monitoring (self-hosted package first, SaaS later)
+- ~~`@rudderjs/nightwatch`~~ — dropped (standalone product, not framework work)
 
 ---
 
@@ -438,8 +402,8 @@ Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ✅ D
 Phase 5 ──── Plan 8 (AI, Boost & MCP — Laravel Parity + beyond)   ✅ DONE
               ├── A1–A7 + B1–B10 + B8.5 shipped; @rudderjs/mcp + boost + passport all 1.0+
               │
-Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mostly done
-              ├── @rudderjs/telescope ✅ (SSE), pulse ✅, horizon ✅, nightwatch ⬜
+Phase 6 ──── Plan 7 (Monitoring & Observability)                  ✅ DONE
+              ├── @rudderjs/telescope ✅ (SSE), pulse ✅, horizon ✅ (nightwatch dropped)
               │
 Phase 7 ──── Plan 9 (Sync — differentiator beyond Laravel parity) ✅ DONE
               ├── Yjs CRDT, Lexical adapter, SSR hydration, onFirstConnect lifecycle
@@ -466,7 +430,6 @@ Phase 8 ──── Plan 10 (Data Layer & Native Engine)                 ✅ DO
 | `@rudderjs/telescope` | 7 | Core framework | ✅ |
 | `@rudderjs/pulse` | 7 | Core framework | ✅ |
 | `@rudderjs/horizon` | 7 | Core framework | ✅ |
-| `@rudderjs/nightwatch` | 7 | Core framework / SaaS | ⬜ |
 | `@rudderjs/mcp` | 8 | Core framework | ✅ |
 | `@rudderjs/passport` | 8 | Core framework | ✅ |
 | `@rudderjs/sync` | 9 | Core framework | ✅ |

@@ -33,8 +33,8 @@ export default class extends Migration {
       t.unique(['userId', 'period', 'periodKey'])
     })
 
-    // (No syncDocument table: @rudderjs/sync's persistence adapters are
-    // Prisma/Redis only — this playground runs sync in-memory. See config/sync.ts.)
+    // (syncDocument lives in its own migration — 0001_01_01_000600 — added
+    // when @rudderjs/sync gained the syncDatabase() native-engine driver.)
 
     // @rudderjs/notification — database channel. Column names are snake_case
     // because DatabaseChannel writes them literally (notifiable_id, read_at, …).
