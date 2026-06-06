@@ -1,6 +1,6 @@
 import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve, join, relative } from 'node:path'
 import { spawn } from 'node:child_process'
 import type { Command } from 'commander'
 import { intro, outro, spinner, log } from '@clack/prompts'
@@ -54,10 +54,25 @@ function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {
 
 // ─── Command ───────────────────────────────────────────────
 
+/**
+ * Where the merged module block lands. Scaffolded apps (and the playground)
+ * use Prisma's multi-file layout — `prisma.config.ts` points `schema` at the
+ * `prisma/schema/` DIRECTORY — so merging into a sibling `prisma/schema.prisma`
+ * would write a file Prisma never reads and the publish would be a silent
+ * no-op. Multi-file layout → `prisma/schema/modules.prisma` (picked up like
+ * any other shard); legacy single-file layout → `prisma/schema.prisma`.
+ */
+export function resolveSchemaTarget(cwd: string): string {
+  const schemaDir = resolve(cwd, 'prisma/schema')
+  return existsSync(schemaDir)
+    ? join(schemaDir, 'modules.prisma')
+    : resolve(cwd, 'prisma/schema.prisma')
+}
+
 export function publishModule(program: Command): void {
   program
     .command('module:publish [module]')
-    .description('Merge module Prisma shards into prisma/schema.prisma')
+    .description('Merge module Prisma shards into the app Prisma schema (prisma/schema/modules.prisma, or prisma/schema.prisma on single-file layouts)')
     .option('--generate', 'Run prisma generate after merging')
     .option('--migrate', 'Run prisma migrate dev after merging')
     .option('--name <name>', 'Migration name (used with --migrate)', 'auto')
@@ -69,7 +84,7 @@ export function publishModule(program: Command): void {
 
       const cwd        = process.cwd()
       const modulesDir = resolve(cwd, 'app/Modules')
-      const schemaPath = resolve(cwd, 'prisma/schema.prisma')
+      const schemaPath = resolveSchemaTarget(cwd)
 
       const s = spinner()
       s.start('Scanning for .prisma files')
@@ -102,10 +117,11 @@ export function publishModule(program: Command): void {
         schema = mergedBlock + '\n'
       }
 
+      const schemaRel = relative(cwd, schemaPath)
       const s2 = spinner()
-      s2.start('Writing prisma/schema.prisma')
+      s2.start(`Writing ${schemaRel}`)
       await writeFile(schemaPath, schema)
-      s2.stop('prisma/schema.prisma updated')
+      s2.stop(`${schemaRel} updated`)
 
       if (opts.generate) {
         const sg = spinner()
