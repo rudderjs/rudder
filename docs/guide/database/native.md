@@ -129,6 +129,8 @@ await Schema.table('users', (t) => {
 Native columns are **camelCase** (`createdAt`, `userId`, `commentableType`) — a deliberate divergence from Laravel's snake_case, matching the ORM's polymorphic-column and soft-delete defaults.
 :::
 
+`t.timestamps()` columns are populated by the **Model layer**, Laravel-style: `create()` stamps `createdAt` + `updatedAt`, `update()`/`save()` bumps `updatedAt` — see [Models — Timestamps](/guide/database/models#timestamps). No `DEFAULT CURRENT_TIMESTAMP` needed (a `.useCurrent()` DB-level backstop is harmless); rows written outside the Model layer (raw `DB.insert`, bulk ops) only get values the database itself defaults.
+
 > There's no `db:push` or `db:generate` for the native engine — those are Prisma/Drizzle commands. Native uses tracked migration files for every change.
 
 Multi-database apps can run a suite against a named connection with `migrate --connection=<name>` (state table included; pair with `--path=<dir>` for per-database migration sets), or scope one DDL operation with `Schema.connection('reporting').create(…)` — see [Connections — Multi-database migrations](/guide/database/connections#multi-database-migrations).

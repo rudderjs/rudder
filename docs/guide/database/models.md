@@ -288,6 +288,27 @@ user.getChanges()               // { name: 'Sue', email: 'sue@example.com' }
 
 Both surfaces compare with `Object.is`, so coercion-equal values (`1 === '1'`) are treated as different. Date columns are compared by reference identity from the original snapshot — if the adapter returns a fresh `Date` per read, an unset field can still appear dirty. Pass an explicit key (`isDirty('name')`) when you want a precise check.
 
+## Timestamps
+
+Models stamp `createdAt` / `updatedAt` automatically (Laravel's `$timestamps`, on by default):
+
+- **`create()`** (and the `save()` insert path) stamps both columns when you didn't pass them.
+- **`Model.update()`** stamps `updatedAt` when absent — an explicitly-passed value is respected (backfills).
+- **`instance.save()`** always bumps `updatedAt`.
+
+Stamps are ISO-8601 UTC strings; add a `'date'` cast to read them back as `Date` objects (the [typed registry](/guide/database#typed-models-from-migrations-schema-types) then emits `Date` for the column too).
+
+The stamping is **schema-gated, so the default is safe everywhere**: the Model layer checks the table's real columns first (via the adapter's introspection capability), and a table without `createdAt`/`updatedAt` — pivots, lookup tables — is silently skipped, never an unknown-column error. On **Prisma/Drizzle** the schema owns timestamp defaults (`@default(now())` / `@updatedAt` / `.defaultNow()`), so Model-layer stamping stays out of the way there; on the **native engine** this is what populates timestamps (there's no schema default unless your migration adds one).
+
+```ts
+class AuditEvent extends Model {
+  static table = 'audit_events'
+  static timestamps = false   // opt out — rows must never look "updated"
+}
+```
+
+**Bulk paths don't stamp** — `updateAll()`, `upsert()`, `insertMany()`, `increment`/`decrement` are pure data-plane, same as they bypass observers.
+
 ## Counters: increment / decrement
 
 For counter columns, `Model.increment()` / `Model.decrement()` issue a single SQL `UPDATE col = col ± amount` so the change is atomic — safe under concurrent writes, no read-modify-write race. Prisma maps to `{ increment: n }` / `{ decrement: n }`; Drizzle to a `sql\`${col} + ${n}\`` expression.

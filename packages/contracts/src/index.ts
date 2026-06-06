@@ -655,6 +655,21 @@ export interface OrmAdapter {
   onQuery?(listener: QueryListener): void
 
   /**
+   * List a table's column names, or `null` when the table doesn't exist (or
+   * can't be introspected). Backs the ORM's automatic `createdAt`/`updatedAt`
+   * stamping: the Model layer stamps timestamps ONLY on adapters exposing this
+   * capability AND only when the table actually carries the columns — so a
+   * model over a timestamp-less table (pivots, lookup tables) never gets an
+   * unknown-column insert error.
+   *
+   * **Optional capability.** The native engine implements it via schema
+   * introspection (cached per table). Prisma/Drizzle omit it — their schemas
+   * own timestamp defaults (`@default(now())` / `@updatedAt` / `.defaultNow()`),
+   * so Model-layer stamping would be redundant there.
+   */
+  tableColumns?(table: string): Promise<readonly string[] | null>
+
+  /**
    * How the adapter resolves *direct* relations (`hasOne` / `hasMany` /
    * `belongsTo` / `belongsToMany`) passed to `QueryBuilder.with(...)`.
    *

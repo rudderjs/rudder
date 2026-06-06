@@ -1646,6 +1646,29 @@ export abstract class Model {
   static guarded: string[] = []
 
   /**
+   * Automatic `createdAt` / `updatedAt` stamping (Laravel's `$timestamps`).
+   * Default `true`: `create()` (and the `save()` insert path) stamps both
+   * columns when absent from the payload; `update()` / `save()` stamps
+   * `updatedAt` (`save()` always bumps it; `Model.update()` respects an
+   * explicitly-passed value). Stamps are ISO-8601 UTC strings — the same
+   * format soft-deletes write for `deletedAt`.
+   *
+   * Stamping is **capability- and schema-gated**, so the default is safe
+   * everywhere: it only happens on adapters exposing `tableColumns()` (the
+   * native engine) AND only for columns the table actually has — a model over
+   * a timestamp-less table (pivots, lookup tables) is silently skipped. On
+   * Prisma/Drizzle the schema owns timestamp defaults (`@default(now())` /
+   * `@updatedAt` / `.defaultNow()`), so the Model layer stays out of the way.
+   *
+   * Set `false` to opt a model out entirely (e.g. append-only event tables
+   * where rows must never look "updated").
+   *
+   * Bulk paths (`updateAll`, `upsert`, `insertMany`, `increment`/`decrement`)
+   * bypass stamping — pure data-plane, same as they bypass observers.
+   */
+  static timestamps = true
+
+  /**
    * Enable soft deletes for this model. When true:
    * - `delete()` sets `deletedAt` instead of removing the record
    * - Queries automatically exclude records where `deletedAt` is not null
@@ -3102,11 +3125,63 @@ export abstract class Model {
   }
 
   /** @internal — create path that skips the fillable filter. Used by `save()`. */
+  /**
+   * @internal — resolve the adapter this model's writes will run on, for
+   * capability checks (`tableColumns`). Mirrors `_adapterQb`'s routing
+   * (tx-scoped → open named connection → default registry); a named connection
+   * that isn't open yet is opened here — the write that follows was about to
+   * open it anyway. Returns `null` when no adapter is registered.
+   */
+  private static async _capabilityAdapter(this: typeof Model): Promise<OrmAdapter | null> {
+    const connection = this.connection
+    try {
+      if (connection !== undefined && connection !== ConnectionManager.defaultName()) {
+        return ModelRegistry.getScopedAdapter(connection) ?? await ConnectionManager.ensure(connection)
+      }
+      return ModelRegistry.getScopedAdapter() ?? ModelRegistry.getAdapter()
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * @internal — stamp `createdAt` / `updatedAt` (see {@link Model.timestamps}).
+   * Create: both columns when absent. Update: `updatedAt` when absent — or
+   * unconditionally when `force` (the `save()` path, whose payload carries the
+   * hydrated old value). Gated on the adapter's `tableColumns` capability and
+   * the table's real columns, so it's a no-op on Prisma/Drizzle and on tables
+   * without the columns.
+   */
+  private static async _ensureTimestamps(
+    this: typeof Model,
+    payload: Record<string, unknown>,
+    op: 'create' | 'update',
+    force = false,
+  ): Promise<Record<string, unknown>> {
+    if (this.timestamps === false) return payload
+    const adapter = await this._capabilityAdapter()
+    if (!adapter?.tableColumns) return payload
+    const columns = await adapter.tableColumns(this.getTable())
+    if (!columns) return payload
+    // Same wire format soft-deletes stamp for `deletedAt`; a `date` cast on
+    // the column reads it back as a `Date`.
+    const now = new Date().toISOString()
+    const out = { ...payload }
+    if (op === 'create' && columns.includes('createdAt') && out['createdAt'] === undefined) {
+      out['createdAt'] = now
+    }
+    if (columns.includes('updatedAt') && (out['updatedAt'] === undefined || (op === 'update' && force))) {
+      out['updatedAt'] = now
+    }
+    return out
+  }
+
   private static async _doCreate<T extends typeof Model>(this: T, data: Record<string, unknown>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data)
     payload = self._ensureGeneratedKey(payload)
     payload = self._ensureInitialVersion(payload)
+    payload = await self._ensureTimestamps(payload, 'create')
 
     const creatingResult = await self._fireEvent('creating', payload)
     if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
@@ -3141,10 +3216,13 @@ export abstract class Model {
     return Model._doUpdate.call(this, id, filtered) as Promise<InstanceType<T>>
   }
 
-  /** @internal — update path that skips the fillable filter. Used by `save()`. */
-  private static async _doUpdate<T extends typeof Model>(this: T, id: number | string, data: Record<string, unknown>): Promise<InstanceType<T>> {
+  /** @internal — update path that skips the fillable filter. Used by `save()`
+   *  (which passes `forceTimestamp` — its payload carries the hydrated old
+   *  `updatedAt`, and a save must bump it, Laravel-style). */
+  private static async _doUpdate<T extends typeof Model>(this: T, id: number | string, data: Record<string, unknown>, forceTimestamp = false): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data)
+    payload = await self._ensureTimestamps(payload, 'update', forceTimestamp)
 
     const updatingResult = await self._fireEvent('updating', id, payload)
     if (updatingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
@@ -3369,7 +3447,9 @@ export abstract class Model {
     // Bypass fillable: data was set via property assignment, not mass-assignment.
     const persisted = id === undefined
       ? await Model._doCreate.call(ctor, data)
-      : await Model._doUpdate.call(ctor, id, data)
+      // forceTimestamp: the payload carries the hydrated old `updatedAt` —
+      // a save must bump it (Laravel semantics).
+      : await Model._doUpdate.call(ctor, id, data, true)
     Object.assign(this, persisted)
     const next: Record<string, unknown> = this._currentAttrs()
     const prev = this._original()
