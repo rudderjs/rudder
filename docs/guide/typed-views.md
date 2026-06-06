@@ -123,3 +123,12 @@ This is Rudder's equivalent of Inertia's prop typing or Nuxt's typed `useFetch` 
 - **Empty `Props` interfaces compile.** `export interface Props {}` registers an empty object type. Documented as a developer choice; not enforced.
 - **Vue inline prop types are not picked up.** `defineProps<{ x: string }>()` inside `<script setup>` is invisible to the regex-based scanner. Use the named `Props` convention to opt in.
 - **`exactOptionalPropertyTypes`** is enabled in the base tsconfig. A view typed as `{ count?: number }` rejects `{ count: undefined }` at the call site — pass `{}` instead, or set the property to a real value.
+
+## The typed family
+
+Typed views are one of four conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
+
+- **Typed views** (this page) — `export interface Props` in the view file types `view('id', props)` at the controller.
+- **[Typed routes](/guide/typed-routes)** — the literal path types `req.params`; Zod schemas type `req.query` / `req.body`; `.name()` chains type `route(name, params)`.
+- **[Typed models](/guide/database#typed-models-from-migrations-schema-types)** — column types generated from your migrations type every query result.
+- **[Typed `config()`](/guide/configuration#typed-config)** — `config/index.ts`'s own shape types every dot-path lookup.

@@ -223,3 +223,12 @@ This is Rudder's equivalent of:
 - **`route()` name strictness is soft, params strictness is hard.** Typos in registered names (`route('users.shwo', ...)`) fall through to the loose params type and surface at runtime — `getNamedRoute(name)` returns `undefined` and `route()` throws on the miss. Wrap `route()` in a helper that constrains `N extends keyof RouteRegistry` if you want compile-time name checking. See "Typed `route()` URL generator" above for the rationale (framework internals + runtime-registered routes).
 - **Template-literal recursion is bounded.** TypeScript permits ~50 recursive template-literal expansions. A path with more than ~50 `:params` would hit the limit, but that's not a realistic case.
 - **`exactOptionalPropertyTypes`** is enabled in the base tsconfig. An optional param `:name?` types as `{ name?: string }` — passing `{ name: undefined }` explicitly to anything reading the shape is rejected. Omit the key instead.
+
+## The typed family
+
+Typed routes are one of four conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
+
+- **Typed routes** (this page) — the literal path types `req.params`; Zod schemas type `req.query` / `req.body`; `.name()` chains type `route(name, params)`.
+- **[Typed views](/guide/typed-views)** — `export interface Props` in the view file types `view('id', props)` at the controller.
+- **[Typed models](/guide/database#typed-models-from-migrations-schema-types)** — column types generated from your migrations type every query result.
+- **[Typed `config()`](/guide/configuration#typed-config)** — `config/index.ts`'s own shape types every dot-path lookup.

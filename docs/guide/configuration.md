@@ -111,6 +111,47 @@ const serverConfig = config('server')
 // or, via the repository: app().make<ConfigRepository>('config').get('server')
 ```
 
+## Typed `config()`
+
+`config()` is fully typed against your own `config/` directory — dot-path keys autocomplete, and the return type is the actual shape of the value at that path:
+
+```ts
+import { config } from '@rudderjs/core'
+
+const name = config('app.name')        // string — autocompleted, typed
+const cors = config('server.cors')     // { origin: string; methods: string; headers: string }
+const port = config('server.port')     // number
+```
+
+No codegen and no sync step — the types flow straight from `config/index.ts` through one ambient declaration. Scaffolded apps ship it as `env.d.ts` at the project root:
+
+```ts
+// env.d.ts
+import type { Configs } from './config/index.js'
+
+declare module '@rudderjs/core' {
+  interface AppConfig extends Configs {}
+}
+```
+
+with `config/index.ts` exporting its own shape alongside the default export:
+
+```ts
+// config/index.ts
+const configs = { app, server, database, auth }
+export type Configs = typeof configs
+export default configs
+```
+
+Apps created before this template existed can paste the two snippets above — that's the entire migration. Editing a config file updates the types immediately; there is nothing to regenerate.
+
+Two things to know about the edges:
+
+- **Unknown keys don't error.** `config()` keeps a loose `config<T>(key: string)` overload, because framework packages read keys your app may not declare. A typo'd key falls through to it and returns `unknown` — which any concrete use of the value will surface as a type error. Same softness as [`route()` name lookups](/guide/typed-routes#limitations).
+- **Mismatched fallbacks degrade, they don't error.** `config('server.port', 3000)` matches the typed overload and returns `number`. `config('server.port', 'oops')` doesn't fail at the call site — it falls through to the loose overload and the return type follows the fallback, so the mismatch surfaces wherever the value is actually used as a number.
+
+Typed `config()` joins [typed views](/guide/typed-views), [typed routes](/guide/typed-routes), and [typed models](/guide/database#typed-models-from-migrations-schema-types) — the same convention everywhere: declare the shape once where it lives, and every call site is checked with no generate step in between.
+
 ## Framework wiring
 
 `bootstrap/app.ts` is where the framework comes together. It contains structural decisions only — server adapter, registered providers, route loaders — never environment values or business logic.
