@@ -83,29 +83,72 @@ const stash = (c: Context): HonoCtxStash => c as HonoCtxStash
 // ─── Request Normalizer ────────────────────────────────────
 
 function normalizeIp(ip: string): string {
-  return ip === '::1' || ip === '::ffff:127.0.0.1' ? '127.0.0.1' : ip
+  // IPv4-mapped IPv6 (`::ffff:203.0.113.5`) → bare IPv4, so socket-derived
+  // and header-derived addresses key identically (rate limits, logs).
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7)
+  return ip === '::1' ? '127.0.0.1' : ip
 }
 
 /**
- * Extract the client IP from proxy headers. Reads `x-forwarded-for` (taking
- * the first hop) then `x-real-ip`. Returns `undefined` when `trustProxy` is
- * false or no proxy header is present — never falls back to the socket
- * address, which would be the proxy's IP and is almost always wrong.
+ * The direct socket address, in every runtime that exposes one:
  *
- * In dev, `@rudderjs/vite`'s `rudderjs:ip` plugin injects `x-real-ip` from
- * `req.socket.remoteAddress` before universal-middleware converts the Node
- * request to a Web Request, so dev sees the real client IP via the same path
- * as prod-behind-proxy.
+ * - srvx (the vike production server, `node dist/server/index.mjs`): its
+ *   `NodeRequest` carries an `ip` getter (`req.socket.remoteAddress`) and a
+ *   `runtime.node` handle.
+ * - `@hono/node-server` (`adapter.listen()`): the bindings land on hono's
+ *   env as `{ incoming }`.
  *
- * `::1` and `::ffff:127.0.0.1` are normalized to `127.0.0.1`.
+ * Edge/worker runtimes expose neither — callers fall back to headers or
+ * `undefined`.
+ */
+function socketAddress(c: Context): string | undefined {
+  const raw = c.req.raw as Request & {
+    ip?: string
+    runtime?: { node?: { req?: { socket?: { remoteAddress?: string } } } }
+  }
+  if (typeof raw.ip === 'string' && raw.ip) return raw.ip
+  const viaRuntime = raw.runtime?.node?.req?.socket?.remoteAddress
+  if (viaRuntime) return viaRuntime
+  const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined
+  return env?.incoming?.socket?.remoteAddress
+}
+
+/**
+ * Resolve the client IP — Laravel `Request::ip()` semantics.
+ *
+ * With `trustProxy` enabled, proxy headers win: `x-forwarded-for` (first
+ * hop) then `x-real-ip`. In every case the direct socket address is the
+ * fallback (`REMOTE_ADDR` parity) — a trusted-proxy config hit directly
+ * (no header) still resolves the caller, and with `trustProxy` off the
+ * socket IS the client. Client-sent proxy headers are never read when
+ * `trustProxy` is false.
+ *
+ * One dev-only exception: the vite dev pipeline converts the Node request
+ * to a plain web `Request` before it reaches this adapter, so no socket is
+ * reachable. There the `x-real-ip` header injected by `@rudderjs/vite`'s
+ * `rudderjs:ip` plugin (from `req.socket.remoteAddress`) stands in for the
+ * socket channel. The branch is gated off `NODE_ENV=production`, which the
+ * production server pins (universal-deploy defaults it; the scaffolded
+ * `start` script sets it explicitly).
+ *
+ * Returns `undefined` only when no channel exists (edge runtimes with
+ * `trustProxy` off). Addresses normalize via {@link normalizeIp}.
  */
 function extractIp(c: Context, trustProxy: boolean): string | undefined {
-  if (!trustProxy) return undefined
-  // x-forwarded-for / x-real-ip (reverse proxy, or injected by rudderjs:ip vite plugin)
-  const xff = c.req.header('x-forwarded-for')
-  if (xff) return normalizeIp(xff.split(',')[0]!.trim())
-  const xri = c.req.header('x-real-ip')
-  if (xri) return normalizeIp(xri)
+  if (trustProxy) {
+    const xff = c.req.header('x-forwarded-for')
+    if (xff) return normalizeIp(xff.split(',')[0]!.trim())
+    const xri = c.req.header('x-real-ip')
+    if (xri) return normalizeIp(xri)
+    // Trusted proxy configured but no header on this hit (direct request) —
+    // fall through: the socket address is the client.
+  }
+  const sock = socketAddress(c)
+  if (sock) return normalizeIp(sock)
+  if (!trustProxy && process.env['NODE_ENV'] !== 'production') {
+    const xri = c.req.header('x-real-ip')
+    if (xri) return normalizeIp(xri)
+  }
   return undefined
 }
 
