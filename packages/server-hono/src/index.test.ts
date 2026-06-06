@@ -1223,3 +1223,115 @@ describe('HonoAdapter — test-mode side channel', () => {
     assert.deepStrictEqual(payload.props, { count: 5 })
   }))
 })
+
+// ─── Client IP resolution (extractIp) ───────────────────────
+//
+// req.ip resolution — Laravel Request::ip() semantics. The socket address is
+// the universal fallback; proxy headers are read ONLY under trustProxy. The
+// srvx production server (node dist/server/index.mjs) hands the adapter a
+// Request carrying an `ip` getter + `runtime.node`; @hono/node-server passes
+// `{ incoming }` as hono's env. Regression for the shared-'unknown'-bucket
+// bug: with trustProxy=false every req.ip was undefined, so all clients
+// keyed into ONE rate-limit bucket in every default deployment.
+describe('HonoAdapter — client IP resolution', () => {
+  function setupEcho(trustProxy: boolean) {
+    const adapter = hono({ trustProxy }).create()
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/ip',
+      handler: async (req, res) => res.json({ ip: req.ip ?? null }),
+      middleware: [],
+    })
+    return adapter.getNativeServer() as {
+      fetch: (req: Request, env?: unknown) => Promise<Response>
+    }
+  }
+
+  function srvxStyle(url: string, opts: { ip?: string; runtimeIp?: string; headers?: Record<string, string> }): Request {
+    const r = new Request(url, { headers: opts.headers ?? {} }) as Request & {
+      ip?: string
+      runtime?: unknown
+    }
+    if (opts.ip) r.ip = opts.ip
+    if (opts.runtimeIp) r.runtime = { node: { req: { socket: { remoteAddress: opts.runtimeIp } } } }
+    return r
+  }
+
+  it('trustProxy=false: srvx request.ip getter resolves (socket fallback)', async () => {
+    const app = setupEcho(false)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', { ip: '203.0.113.9' }))
+    assert.deepStrictEqual(await res.json(), { ip: '203.0.113.9' })
+  })
+
+  it('trustProxy=false: client-sent x-forwarded-for is IGNORED — socket wins', async () => {
+    const app = setupEcho(false)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', {
+      ip: '203.0.113.9',
+      headers: { 'x-forwarded-for': '6.6.6.6' },
+    }))
+    assert.deepStrictEqual(await res.json(), { ip: '203.0.113.9' })
+  })
+
+  it('trustProxy=true: x-forwarded-for first hop wins over the socket', async () => {
+    const app = setupEcho(true)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', {
+      ip: '10.0.0.1',
+      headers: { 'x-forwarded-for': '198.51.100.7, 10.0.0.1' },
+    }))
+    assert.deepStrictEqual(await res.json(), { ip: '198.51.100.7' })
+  })
+
+  it('trustProxy=true with NO proxy header: falls back to the socket (direct hit)', async () => {
+    const app = setupEcho(true)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', { ip: '203.0.113.9' }))
+    assert.deepStrictEqual(await res.json(), { ip: '203.0.113.9' })
+  })
+
+  it('srvx runtime.node.req.socket channel resolves when the ip getter is absent', async () => {
+    const app = setupEcho(false)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', { runtimeIp: '192.0.2.4' }))
+    assert.deepStrictEqual(await res.json(), { ip: '192.0.2.4' })
+  })
+
+  it('@hono/node-server env.incoming.socket channel resolves', async () => {
+    const app = setupEcho(false)
+    const res = await app.fetch(
+      new Request('http://localhost/ip'),
+      { incoming: { socket: { remoteAddress: '192.0.2.8' } } },
+    )
+    assert.deepStrictEqual(await res.json(), { ip: '192.0.2.8' })
+  })
+
+  it('dev-only: x-real-ip (rudderjs:ip vite injection) stands in when no socket is reachable', async () => {
+    // NODE_ENV is not 'production' under the test runner, so the dev branch
+    // is active — mirrors the vite pipeline where the node request became a
+    // plain web Request before reaching the adapter.
+    assert.notEqual(process.env['NODE_ENV'], 'production')
+    const app = setupEcho(false)
+    const res = await app.fetch(new Request('http://localhost/ip', {
+      headers: { 'x-real-ip': '172.16.0.3' },
+    }))
+    assert.deepStrictEqual(await res.json(), { ip: '172.16.0.3' })
+  })
+
+  it('normalizes IPv4-mapped IPv6 socket addresses', async () => {
+    const app = setupEcho(false)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', { ip: '::ffff:203.0.113.5' }))
+    assert.deepStrictEqual(await res.json(), { ip: '203.0.113.5' })
+  })
+
+  it('returns null/undefined when no channel exists in production mode', async () => {
+    const prev = process.env['NODE_ENV']
+    process.env['NODE_ENV'] = 'production'
+    try {
+      const app = setupEcho(false)
+      const res = await app.fetch(new Request('http://localhost/ip', {
+        headers: { 'x-real-ip': '6.6.6.6' },   // client-sent — must NOT be trusted in prod
+      }))
+      assert.deepStrictEqual(await res.json(), { ip: null })
+    } finally {
+      if (prev === undefined) delete process.env['NODE_ENV']
+      else process.env['NODE_ENV'] = prev
+    }
+  })
+})

@@ -27,6 +27,11 @@ function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
     headers: {},
     body:    null,
     raw:     null,
+    // Production sets req.ip via server-hono's extractIp() — RateLimit's
+    // default keying reads it (NOT raw headers), so the fixture must carry
+    // it or every test request collapses into the shared 'unknown' bucket
+    // and per-IP behavior is never exercised.
+    ip:      '127.0.0.1',
     ...overrides,
   }
   attachInputAccessors(req)
@@ -259,7 +264,7 @@ describe('LoggerMiddleware', () => {
 describe('ThrottleMiddleware', () => {
   it('allows requests under the limit', async () => {
     const throttle = new ThrottleMiddleware(3, 10_000)
-    const req = makeReq({ headers: { 'x-real-ip': '1.2.3.4' } })
+    const req = makeReq({ ip: '1.2.3.4' })
     let count = 0
     for (let i = 0; i < 3; i++) {
       await throttle.handle(req, makeRes().res, async () => { count++ })
@@ -269,7 +274,7 @@ describe('ThrottleMiddleware', () => {
 
   it('blocks at the limit with 429', async () => {
     const throttle = new ThrottleMiddleware(2, 10_000)
-    const req = makeReq({ headers: { 'x-real-ip': '1.2.3.5' } })
+    const req = makeReq({ ip: '1.2.3.5' })
     let nextCount = 0
     await throttle.handle(req, makeRes().res, async () => { nextCount++ })
     await throttle.handle(req, makeRes().res, async () => { nextCount++ })
@@ -465,7 +470,7 @@ describe('RateLimit', () => {
   it('sets X-RateLimit-* headers', async () => {
     const handler = RateLimit.perMinute(10)
     const bag = makeRes()
-    await handler(makeReq({ headers: { 'x-real-ip': '1.1.1.1' } }), bag.res, async () => {})
+    await handler(makeReq({ ip: '1.1.1.1' }), bag.res, async () => {})
     assert.ok(bag.headers.has('x-ratelimit-limit'))
     assert.ok(bag.headers.has('x-ratelimit-remaining'))
     assert.ok(bag.headers.has('x-ratelimit-reset'))
@@ -475,13 +480,13 @@ describe('RateLimit', () => {
   it('calls next when under the limit', async () => {
     const handler = RateLimit.perMinute(5)
     let reached = false
-    await handler(makeReq({ headers: { 'x-real-ip': '2.2.2.2' } }), makeRes().res, async () => { reached = true })
+    await handler(makeReq({ ip: '2.2.2.2' }), makeRes().res, async () => { reached = true })
     assert.ok(reached)
   })
 
   it('returns 429 when limit is exceeded', async () => {
     const handler = RateLimit.perMinute(1)
-    const req = makeReq({ headers: { 'x-real-ip': '3.3.3.3' } })
+    const req = makeReq({ ip: '3.3.3.3' })
     await handler(req, makeRes().res, async () => {})
     const bag = makeRes()
     await handler(req, bag.res, async () => {})
@@ -505,7 +510,7 @@ describe('RateLimit', () => {
   it('.message() overrides the 429 body', async () => {
     const handler = RateLimit.perMinute(0).message('Slow down!')
     const bag = makeRes()
-    await handler(makeReq({ headers: { 'x-real-ip': '4.4.4.4' } }), bag.res, async () => {})
+    await handler(makeReq({ ip: '4.4.4.4' }), bag.res, async () => {})
     assert.deepStrictEqual(bag.getJson(), { message: 'Slow down!' })
   })
 
@@ -540,7 +545,7 @@ describe('RateLimit', () => {
 
   it('.byIp() returns a new handler keyed by IP', async () => {
     const handler = RateLimit.perMinute(1).byIp()
-    const req = makeReq({ headers: { 'x-real-ip': '5.5.5.5' } })
+    const req = makeReq({ ip: '5.5.5.5' })
     let count = 0
     await handler(req, makeRes().res, async () => { count++ })
     const bag = makeRes()
@@ -555,13 +560,13 @@ describe('RateLimit', () => {
   // N+1, doubling (or worse) the effective limit. RFC 6819 §5.2.2.3.
   it('rejects all but the configured limit under concurrent load', async () => {
     const handler = RateLimit.perMinute(5)
-    const headers = { 'x-real-ip': '9.9.9.9' }
+    const ip = '9.9.9.9'
 
     const results = await Promise.all(
       Array.from({ length: 50 }, async () => {
         const bag = makeRes()
         let reached = false
-        await handler(makeReq({ headers }), bag.res, async () => { reached = true })
+        await handler(makeReq({ ip }), bag.res, async () => { reached = true })
         return { status: bag.getStatus(), reached }
       }),
     )
@@ -582,19 +587,19 @@ describe('RateLimit', () => {
   it('separate RateLimit instances do not share a bucket when keyed by the same identifier', async () => {
     const tight = RateLimit.perMinute(2)
     const loose = RateLimit.perMinute(50)
-    const headers = { 'x-real-ip': '7.7.7.7' }
+    const ip = '7.7.7.7'
 
     // Fill `loose` to 10 requests — would push the shared bucket past `tight`'s
     // limit of 2 if buckets were shared.
     for (let i = 0; i < 10; i++) {
-      await loose(makeReq({ headers }), makeRes().res, async () => {})
+      await loose(makeReq({ ip }), makeRes().res, async () => {})
     }
 
     // `tight`'s own bucket should be empty — first 2 hits pass, 3rd 429s.
     const statuses: number[] = []
     for (let i = 0; i < 3; i++) {
       const bag = makeRes()
-      await tight(makeReq({ headers }), bag.res, async () => {})
+      await tight(makeReq({ ip }), bag.res, async () => {})
       statuses.push(bag.getStatus())
     }
 
@@ -608,16 +613,39 @@ describe('RateLimit', () => {
     // multiple times — same instance id → same bucket. This is the
     // documented use case `m.web(RateLimit.perMinute(60))` relies on.
     const shared = RateLimit.perMinute(3)
-    const headers = { 'x-real-ip': '8.8.8.8' }
+    const ip = '8.8.8.8'
 
     // Two routes, same handler reference — 4th call should 429 regardless
     // of which "route" it came from.
-    await shared(makeReq({ headers, url: '/a' }), makeRes().res, async () => {})
-    await shared(makeReq({ headers, url: '/b' }), makeRes().res, async () => {})
-    await shared(makeReq({ headers, url: '/a' }), makeRes().res, async () => {})
+    await shared(makeReq({ ip, url: '/a' }), makeRes().res, async () => {})
+    await shared(makeReq({ ip, url: '/b' }), makeRes().res, async () => {})
+    await shared(makeReq({ ip, url: '/a' }), makeRes().res, async () => {})
 
     const bag = makeRes()
-    await shared(makeReq({ headers, url: '/b' }), bag.res, async () => {})
+    await shared(makeReq({ ip, url: '/b' }), bag.res, async () => {})
     assert.strictEqual(bag.getStatus(), 429)
+  })
+
+  // Regression — the headline per-IP contract: two clients with different
+  // `req.ip` values get SEPARATE buckets on the same handler. Before the
+  // fixtures carried `req.ip`, every request keyed to the shared 'unknown'
+  // bucket and this behavior was unverifiable (the old `x-real-ip` header
+  // fixtures were inert — production keying reads `req.ip` only).
+  it('different req.ip values get separate buckets on one handler', async () => {
+    const handler = RateLimit.perMinute(2)
+
+    // Client A exhausts its bucket.
+    await handler(makeReq({ ip: '10.0.0.1' }), makeRes().res, async () => {})
+    await handler(makeReq({ ip: '10.0.0.1' }), makeRes().res, async () => {})
+    const aBlocked = makeRes()
+    await handler(makeReq({ ip: '10.0.0.1' }), aBlocked.res, async () => {})
+    assert.strictEqual(aBlocked.getStatus(), 429, 'client A should be limited')
+
+    // Client B is untouched by A's consumption.
+    const bBag = makeRes()
+    let bReached = false
+    await handler(makeReq({ ip: '10.0.0.2' }), bBag.res, async () => { bReached = true })
+    assert.ok(bReached, 'client B must not share client A\'s bucket')
+    assert.notStrictEqual(bBag.getStatus(), 429)
   })
 })

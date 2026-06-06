@@ -288,7 +288,25 @@ interface RateLimitOptions {
 }
 
 function clientIp(req: AppRequest): string {
-  return (req as unknown as Record<string, unknown>)['ip'] as string ?? 'unknown'
+  const ip = (req as unknown as Record<string, unknown>)['ip'] as string | undefined
+  if (ip) return ip
+  _warnNoIpOnce()
+  return 'unknown'
+}
+
+// First-time warning when an ip-keyed limiter sees no `req.ip`. Every client
+// then shares ONE 'unknown' bucket — the whole site collectively consumes a
+// single quota (and a scaffolded 10/min auth limit becomes a site-wide login
+// lockout). Same one-line-per-process shape as `_warnNoCacheOnce`.
+let _warnedNoIp = false
+function _warnNoIpOnce(): void {
+  if (_warnedNoIp) return
+  _warnedNoIp = true
+  console.warn(
+    '[RudderJS Middleware] RateLimit is keyed by IP but req.ip is undefined — ' +
+    'ALL clients share one rate-limit bucket. Behind a reverse proxy, set ' +
+    'TRUST_PROXY=true so the client IP is read from x-forwarded-for.',
+  )
 }
 
 function buildKey(keyBy: KeyExtractor, req: AppRequest): string {
