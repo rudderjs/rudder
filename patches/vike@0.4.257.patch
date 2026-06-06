@@ -1,8 +1,8 @@
 diff --git a/dist/node/vite/plugins/build/pluginProdBuildEntry.js b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
-index c84ab47949ca4307d42e64dc4f4464f1add09947..5948f6c8c46f99c6d4fd794893fd3e4bae1b5c89 100644
+index c84ab47949ca4307d42e64dc4f4464f1add09947..4d9500ee425e64dcbef6fc058112536d83c9eebb 100644
 --- a/dist/node/vite/plugins/build/pluginProdBuildEntry.js
 +++ b/dist/node/vite/plugins/build/pluginProdBuildEntry.js
-@@ -65,37 +65,51 @@ function getServerProductionEntryCode(config) {
+@@ -65,37 +65,74 @@ function getServerProductionEntryCode(config) {
      ].join('\n');
      return importerCode;
  }
@@ -17,20 +17,23 @@ index c84ab47949ca4307d42e64dc4f4464f1add09947..5948f6c8c46f99c6d4fd794893fd3e4b
 +// `ReferenceError: __VITE_ASSETS_MANIFEST__ is not defined`. We therefore ignore `bundle` and
 +// walk the written server outDir on disk, replacing every occurrence in every JS file — a server
 +// chunk cannot escape outDir, so this can't miss. Backward-compatible with single-chunk Rollup.
++//
++// SECOND layer (2026-06-06): rolldown can also fire writeBundle BEFORE every chunk
++// file is flushed to disk — a late-written chunk carrying the placeholder lands
++// AFTER a single walk, survives, and prerendering (which runs next in the same
++// writeBundle handler) crashes with the same ReferenceError. Reproduced ~2/3 of
++// full concurrent CI builds once a third playground changed the chunk graph. So
++// the walk now LOOPS until a full pass over the re-enumerated outDir finds zero
++// occurrences (bounded; small settle delay between passes). A build that never
++// contains the macro (dist/rsc/) exits after a few empty passes.
  async function set_macro_ASSETS_MANIFEST(assetsJsonFilePath, bundle, outDir) {
      assert(outDir);
 -    const chunkPath = find_ASSETS_MANIFEST(bundle);
 -    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
 -    if (!chunkPath) {
 -        const noop = true; // no operation
-+    let entries;
-+    try {
-+        entries = await fs.readdir(outDir, { recursive: true });
-+    }
-+    catch {
-+        const noop = true; // outDir absent (e.g. a server build that emitted nothing)
-         return noop;
-     }
+-        return noop;
+-    }
 -    assert(assetsJsonFilePath);
 -    const chunkFilePath = path.join(outDir, chunkPath);
 -    const [assetsJsonString, chunkFileContent] = await Promise.all([
@@ -50,27 +53,49 @@ index c84ab47949ca4307d42e64dc4f4464f1add09947..5948f6c8c46f99c6d4fd794893fd3e4b
 -        if ('code' in chunk && chunk.code.includes(ASSETS_MANIFEST)) {
 -            assert(!chunkPath);
 -            chunkPath = filePath;
-+    const filePaths = entries
-+        .filter((entry) => entry.endsWith('.js') || entry.endsWith('.mjs') || entry.endsWith('.cjs'))
-+        .map((entry) => path.join(outDir, entry));
 +    let assetsJsonString;
 +    let replacedAny = false;
-+    for (const filePath of filePaths) {
-+        let fileContent;
++    const MAX_PASSES = 20;
++    const SETTLE_MS = 30;
++    for (let pass = 0; pass < MAX_PASSES; pass++) {
++        let entries;
 +        try {
-+            fileContent = await fs.readFile(filePath, 'utf8');
-         }
++            entries = await fs.readdir(outDir, { recursive: true });
++        }
 +        catch {
-+            continue; // directory entry or unreadable; skip
++            const noop = true; // outDir absent (e.g. a server build that emitted nothing)
++            return noop;
+         }
++        const filePaths = entries
++            .filter((entry) => entry.endsWith('.js') || entry.endsWith('.mjs') || entry.endsWith('.cjs'))
++            .map((entry) => path.join(outDir, entry));
++        let foundThisPass = false;
++        for (const filePath of filePaths) {
++            let fileContent;
++            try {
++                fileContent = await fs.readFile(filePath, 'utf8');
++            }
++            catch {
++                continue; // directory entry or unreadable; skip
++            }
++            if (!fileContent.includes(ASSETS_MANIFEST))
++                continue;
++            foundThisPass = true;
++            if (assetsJsonString === undefined) {
++                assert(assetsJsonFilePath);
++                assetsJsonString = await fs.readFile(assetsJsonFilePath, 'utf8');
++            }
++            await fs.writeFile(filePath, fileContent.replaceAll(ASSETS_MANIFEST, assetsJsonString));
++            replacedAny = true;
 +        }
-+        if (!fileContent.includes(ASSETS_MANIFEST))
-+            continue;
-+        if (assetsJsonString === undefined) {
-+            assert(assetsJsonFilePath);
-+            assetsJsonString = await fs.readFile(assetsJsonFilePath, 'utf8');
++        if (!foundThisPass) {
++            // Clean pass. Done if we already replaced something (verified clean),
++            // or after a few settle passes when nothing ever matched (a build
++            // without the macro — don't stall dist/rsc/ for the full bound).
++            if (replacedAny || pass >= 2)
++                break;
 +        }
-+        await fs.writeFile(filePath, fileContent.replaceAll(ASSETS_MANIFEST, assetsJsonString));
-+        replacedAny = true;
++        await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
      }
 -    return chunkPath;
 +    // Some server builds don't contain ASSETS_MANIFEST such as dist/rsc/ from vike-react-rsc
