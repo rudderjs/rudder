@@ -59,9 +59,11 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-06 — generated registries consolidated
-  // under .rudder/types/: tsconfig include gained ".rudder/**/*" and
-  // .gitattributes now marks .rudder/** + pages/__view/** linguist-generated.
+  // Baseline last captured 2026-06-06 — bootstrap/app.ts no longer wires the
+  // server adapter manually: `server:` is optional in Application.configure()
+  // (@rudderjs/server-hono auto-resolves with config('server')), so the
+  // template dropped the hono import + server line. The config barrel import
+  // is named `config` so the configure() call uses object shorthand.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +73,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 62
-const EXPECTED_TOTAL_BYTES = 49769
-const EXPECTED_CONTENT_HASH = '8dea4d69c894f3b3ca400a1a35d9e0272b32fd1d9464ed538e6f0a4a57a098a8'
+const EXPECTED_TOTAL_BYTES = 49671
+const EXPECTED_CONTENT_HASH = '79c16119647f3afa8ab5f27c714b923fb7769c03b8cf14dd7f3ca4c4fc097be6'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

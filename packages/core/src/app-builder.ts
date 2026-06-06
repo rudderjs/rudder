@@ -1,4 +1,5 @@
 import { rudder } from '@rudderjs/console'
+import { config, resolveOptionalPeer } from '@rudderjs/support'
 import type {
   AppRequest,
   FetchHandler,
@@ -72,7 +73,14 @@ function drainInFlightRequests(timeoutMs = REBOOT_DRAIN_TIMEOUT_MS): Promise<voi
 // ─── Configure Options ─────────────────────────────────────
 
 export interface ConfigureOptions {
-  server:     ServerAdapterProvider
+  /**
+   * HTTP server adapter. Omit to auto-resolve `@rudderjs/server-hono`,
+   * constructed with `config('server')` — equivalent to passing
+   * `hono(config.server)` explicitly. Pass an explicit adapter to use a
+   * different server, or when bundling to a single file (the auto-resolve
+   * is a runtime lookup that bundlers can't see).
+   */
+  server?:    ServerAdapterProvider
   config?:    Record<string, unknown>
   providers?: ProviderClass[]
 }
@@ -304,15 +312,50 @@ export class RudderJS {
   /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
   private _boot: Promise<void> | null = null
   private _handler: FetchHandler | null = null
+  /** Memoized auto-resolved server adapter (when no explicit `server:` was configured). */
+  private _autoServer: Promise<ServerAdapterProvider> | null = null
 
   constructor(
     private readonly _app:     Application,
-    private readonly _server:  ServerAdapterProvider,
+    private readonly _server:  ServerAdapterProvider | undefined,
     private readonly _loaders: Array<() => Promise<unknown>>,
     private readonly _mwFn?:   (m: MiddlewareConfigurator) => void,
     private readonly _excFn?:  (e: ExceptionConfigurator) => void,
   ) {
     this._providerBoot = this._singleFlightBootstrap()
+    // Kick off the auto-resolution eagerly (fire-and-forget) so server-hono's
+    // module-load side effects — notably the vike/server prewarm — fire at the
+    // same t≈0 point in the cold-boot timeline that the static
+    // `import { hono }` in bootstrap/app.ts used to provide. Errors are
+    // swallowed here; the awaited path in `_createHandler()` surfaces them.
+    if (!this._server) void this._resolveServer().catch(() => { /* surfaced at _createHandler */ })
+  }
+
+  /**
+   * Resolve the server adapter: the explicit `server:` from
+   * `Application.configure()` when given, otherwise auto-resolve
+   * `@rudderjs/server-hono` (the default adapter) and construct it with
+   * `config('server')`. Memoized — resolution runs once per instance.
+   */
+  private _resolveServer(): Promise<ServerAdapterProvider> {
+    if (this._server) return Promise.resolve(this._server)
+    if (!this._autoServer) {
+      this._autoServer = (async () => {
+        let mod: { hono?: (cfg?: unknown) => ServerAdapterProvider } | undefined
+        try {
+          mod = await resolveOptionalPeer<{ hono?: (cfg?: unknown) => ServerAdapterProvider }>('@rudderjs/server-hono')
+        } catch { /* not installed — handled below */ }
+        if (typeof mod?.hono !== 'function') {
+          throw new Error(
+            '[RudderJS] No server adapter configured and @rudderjs/server-hono is not installed. ' +
+            'Install @rudderjs/server-hono, or pass an explicit adapter: ' +
+            'Application.configure({ server: hono(config.server), ... }).',
+          )
+        }
+        return mod.hono(config('server', {}))
+      })()
+    }
+    return this._autoServer
   }
 
   /**
@@ -532,7 +575,8 @@ export class RudderJS {
     this._excFn?.(exc)
     const errorHandler = exc.buildHandler()
     const { router } = await import('@rudderjs/router') as { router: { mount(adapter: ServerAdapter): void } }
-    this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
+    const server = await this._resolveServer()
+    this._handler = await server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       if (adapter.applyGroupMiddleware) {
         for (const h of mw.getGroupHandlers('web')) adapter.applyGroupMiddleware('web', h)

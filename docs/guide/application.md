@@ -7,16 +7,11 @@
 import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
-import { hono } from '@rudderjs/server-hono'
 import { RateLimit } from '@rudderjs/middleware'
-import configs from '../config/index.ts'
+import config from '../config/index.ts'
 import providers from './providers.ts'
 
-export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
-  providers,
-})
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
@@ -43,6 +38,22 @@ export default { fetch: app.fetch } satisfies Server
 ```
 
 `import 'reflect-metadata'` belongs at the very top of `bootstrap/app.ts` — it must run before any decorator-using class is loaded.
+
+## Server adapter
+
+No `server:` option is needed — Rudder auto-resolves `@rudderjs/server-hono` (the default HTTP adapter) and constructs it with your `config/server.ts` settings. Pass an explicit adapter only when you need to:
+
+```ts
+import { hono } from '@rudderjs/server-hono'
+
+export default Application.configure({
+  server: hono(config.server),   // explicit — same as the auto-resolved default
+  config,
+  providers,
+})
+```
+
+Use the explicit form when swapping in a different adapter, or when bundling the app to a single file — auto-resolution is a runtime lookup that bundlers can't statically trace, so a bundled build must import the adapter itself.
 
 ## AppBuilder API
 

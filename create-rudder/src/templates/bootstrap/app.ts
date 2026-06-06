@@ -5,9 +5,8 @@ export function bootstrapApp(ctx: TemplateContext): string {
     "import 'reflect-metadata'",
     "import 'dotenv/config'",
     "import { Application } from '@rudderjs/core'",
-    "import { hono } from '@rudderjs/server-hono'",
     "import { RateLimit } from '@rudderjs/middleware'",
-    "import configs from '../config/index.ts'",
+    "import config from '../config/index.ts'",
     "import providers from './providers.ts'",
   ]
   void ctx
@@ -20,11 +19,7 @@ export function bootstrapApp(ctx: TemplateContext): string {
 
   return `${imports.join('\n')}
 
-export default Application.configure({
-  server:    hono(configs.server),
-  config:    configs,
-  providers,
-})
+export default Application.configure({ config, providers })
   .withRouting({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
