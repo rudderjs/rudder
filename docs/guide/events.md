@@ -77,7 +77,7 @@ import { UserRegistered } from '../app/Events/UserRegistered.js'
 await dispatch(new UserRegistered(user))
 ```
 
-`dispatch()` resolves listeners and runs them in order. Each listener's `handle()` is awaited; an unhandled error in one listener does not stop the others, but it does propagate after all listeners have run.
+`dispatch()` resolves listeners and runs them in order. Each listener's `handle()` is awaited in a plain loop, so an unhandled error in one listener stops the remaining listeners and propagates immediately.
 
 ## Wildcard listeners
 
@@ -122,13 +122,13 @@ The event fires synchronously; the job runs in the background. A future release 
 ```ts
 import { EventFake, dispatch } from '@rudderjs/core'
 
-const fake = new EventFake()
+const fake = EventFake.fake()
 
 await someCodeThatDispatches()
 
-fake.assertDispatched(UserRegistered)
-fake.assertDispatched(UserRegistered, (e) => e.user.id === '42')
-fake.assertDispatchedTimes(UserRegistered, 1)
+fake.assertDispatched('UserRegistered')
+fake.assertDispatched('UserRegistered', (e) => e.user.id === '42')
+fake.assertDispatchedTimes('UserRegistered', 1)
 fake.assertNothingDispatched()
 ```
 
@@ -137,5 +137,5 @@ fake.assertNothingDispatched()
 ## Pitfalls
 
 - **String-keyed listener map drift.** Renaming an event class breaks the map's string key silently. Use `[ClassName.name]` so the key tracks the class.
-- **Listener throwing inside a request.** An unhandled error propagates out of `dispatch()` after all listeners run. Catch inside the listener (and `report(err)`) when you want fault isolation.
+- **Listener throwing inside a request.** An unhandled error stops the remaining listeners and propagates out of `dispatch()` immediately. Catch inside the listener (and `report(err)`) when you want fault isolation or want later listeners to still run.
 - **Long-running synchronous listeners.** Anything slow blocks the dispatching code (often a route handler). Queue the work via a job and dispatch the job from `handle()`.

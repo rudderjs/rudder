@@ -71,8 +71,6 @@ export class WelcomeNotification extends Notification {
 }
 ```
 
-Generate stubs with `pnpm rudder make:notification Welcome`.
-
 ## Sending
 
 ```ts
@@ -84,7 +82,7 @@ await notify(user, new WelcomeNotification(token))
 await notify([alice, bob, carol], new WelcomeNotification(token))
 ```
 
-`notify()` resolves the channels for each recipient and dispatches sequentially. Errors from one recipient or channel are isolated — others still fire.
+`notify()` resolves the channels for each recipient and dispatches concurrently (a `Promise.all` over every recipient × channel pair). A single rejection rejects the whole `notify()` call — wrap individual sends if you need per-recipient isolation.
 
 ## Channels
 
@@ -101,7 +99,7 @@ pnpm rudder vendor:publish --tag=notification-schema
 pnpm rudder migrate
 ```
 
-`toDatabase()` returns a JSON-serializable payload. The framework writes a row with the recipient, type, and payload. Read them back with `Notification.where('notifiableId', user.id).get()` (or your own model on the `notifications` table).
+`toDatabase()` returns a JSON-serializable payload. The framework writes a row with the recipient, type, and payload. Read them back by querying your own model on the `notifications` table, filtering on the `notifiable_id` column.
 
 ### Custom
 
@@ -141,7 +139,7 @@ class SendNotificationJob extends Job {
 await SendNotificationJob.dispatch(user.id, 'welcome').send()
 ```
 
-For an automatic queue route, mark the notification as queueable in a future release; for now, wrap the dispatch in a job.
+For an automatic queue route, make the notification queueable by implementing the `ShouldQueue` interface — the notifier then routes the dispatch to the queue for you, no wrapping job required.
 
 ## Testing
 
