@@ -1,5 +1,19 @@
 # @rudderjs/core
 
+## 1.8.0
+
+### Minor Changes
+
+- 87783f7: Export the `ConfigKey` / `ConfigValue` types (main entry + `/client`) so apps can build a strict `config()` wrapper that rejects undeclared dot-paths — the framework's own `config()` deliberately keeps its loose overload. Recipe: `const configStrict = <K extends ConfigKey>(key: K): ConfigValue<K> => config(key)`.
+- 940406d: `vendor:publish` now detects the native database engine: an app with `@rudderjs/orm` / `@rudderjs/database` but no orm-prisma/orm-drizzle adapter resolves as `orm: 'native'`, and `PublishGroup.orm` accepts `'native'` so packages can ship native-engine assets (e.g. `@rudderjs/sync`'s `syncDocument` migration under `--tag=sync-schema`).
+
+### Patch Changes
+
+- Updated dependencies [da07742]
+- Updated dependencies [00e3b83]
+  - @rudderjs/contracts@1.13.0
+  - @rudderjs/support@1.6.0
+
 ## 1.7.0
 
 ### Minor Changes

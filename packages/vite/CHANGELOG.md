@@ -1,5 +1,24 @@
 # @rudderjs/vite
 
+## 2.10.0
+
+### Minor Changes
+
+- 24e25d7: The typed-`route()` registry moved from `pages/__view/routes.d.ts` to `routes/__registry.d.ts` — domain-adjacent to the route files it types (an API-only app no longer grows a `pages/` directory for it). Migration is automatic: the scanner deletes the legacy file when it writes the new one on your next dev / build / `rudder routes:sync` — commit the move. The scanner also no longer re-scans its own emit, and the dev re-boot watcher ignores the registry write (no chained second re-boot after a route edit).
+- bef393f: Generated type registries consolidate under the committed `.rudder/types/` directory: `views.d.ts` (was `pages/__view/registry.d.ts`), `routes.d.ts` (was `routes/__registry.d.ts`), `models.d.ts` (was `app/Models/__schema/registry.d.ts`). The Vike page stubs stay in `pages/__view/` (pinned by Vike's filesystem routing).
+
+  Migration is automatic — the first dev/build/`routes:sync`/`view:sync`/`migrate` after upgrading writes the new path and deletes the legacy file. One manual step for existing apps: add `".rudder/**/*"` to the `tsconfig.json` `include` array (dot-directories are invisible to `**/*` globs and to bare-directory include entries; new scaffolds ship it). A `.rudder/README.md` is generated alongside, describing each file and its regen command.
+
+- 00e3b83: Typed `Env`: `Env.get('APP_NAME')` (and `getNumber`/`getBool`/`has`/`env()`) now autocompletes the keys your app declares. `@rudderjs/vite`'s new env scanner parses `.env.example` — the committed contract, never the secret `.env` — and emits `.rudder/types/env.d.ts` augmenting the new `EnvRegistry` interface in `@rudderjs/support`. Runs on dev/build, re-emits when `.env.example` changes, and the loose `string` overload stays for keys packages read that apps don't declare.
+
+  New `rudder env:sync` command (skip-boot): regenerates the registry AND diffs `.env` against `.env.example` — missing keys are flagged, `--fix` appends them with their example values (or creates `.env` wholesale when absent). Keys only your `.env` carries are reported but never deleted.
+
+### Patch Changes
+
+- Updated dependencies [87783f7]
+- Updated dependencies [940406d]
+  - @rudderjs/core@1.8.0
+
 ## 2.9.1
 
 ### Patch Changes

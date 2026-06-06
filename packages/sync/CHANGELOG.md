@@ -1,5 +1,21 @@
 # @rudderjs/sync
 
+## 1.5.0
+
+### Minor Changes
+
+- 940406d: New `syncDatabase()` persistence driver — stores the Yjs update log through the app's active ORM adapter (`app().make('db')`), making durable sync a first-party option on the native engine (and working unchanged on the Prisma/Drizzle adapters). Shares the adapter's existing connection, defaults to the same `syncDocument` table layout as `syncPrisma()`, wraps updates as Buffers for driver compatibility, keeps a bounded LRU doc cache, and tolerates a missing table on reads so `rudder migrate` can boot the app before the table exists. A ready-made native migration ships under the existing `sync-schema` vendor:publish tag.
+
+  Also fixes `sync:clear <doc>` / `sync:inspect <doc>` reading their `<doc>` argument from the wrong shape — both commands operated on `undefined` (sync:clear deleted nothing while printing success).
+
+- 3c8e059: `SyncProvider` now registers a `sync-schema` publish group: `pnpm rudder vendor:publish --tag=sync-schema` drops the `SyncDocument` Prisma model into `prisma/schema/` (then `pnpm rudder migrate`). The model name is load-bearing — the delegate must be `syncDocument`, `syncPrisma()`'s default. Prisma-only: redis/in-memory persistence need no schema. Previously the docs referenced this tag but nothing registered it, so the documented one-command setup errored with "No publishable assets found".
+
+### Patch Changes
+
+- Updated dependencies [87783f7]
+- Updated dependencies [940406d]
+  - @rudderjs/core@1.8.0
+
 ## 1.4.0
 
 ### Minor Changes
