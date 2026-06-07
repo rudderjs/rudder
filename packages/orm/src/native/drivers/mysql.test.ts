@@ -194,5 +194,57 @@ if (!MYSQL_URL) {
         await schema.dropIfExists('rudder_mysql_types')
       })
     })
+
+    describe('timestamp / soft-delete stamping (strict-mode datetime regression)', () => {
+      // The Model layer stamps `Date` objects and lets each driver serialize.
+      // It used to stamp ISO strings — MySQL strict mode rejects the trailing
+      // `Z` (`Incorrect datetime value: '…T…Z' for column 'createdAt'`), so
+      // EVERY create()/save() on a timestamps-enabled table failed on the
+      // native MySQL engine. Filed from the pilotiq-io migration
+      // (docs/plans/2026-06-07-cashier-paddle-native-engine.md).
+      class StampedNote extends Model {
+        static override table = 'rudder_mysql_notes'
+        static override softDeletes = true
+        id!:        number
+        body!:      string
+        createdAt!: Date | string | null
+        updatedAt!: Date | string | null
+        deletedAt!: Date | string | null
+      }
+
+      beforeEach(async () => {
+        await schema.dropIfExists('rudder_mysql_notes')
+        await schema.create('rudder_mysql_notes', (t: Blueprint) => {
+          t.id()
+          t.string('body')
+          t.timestamps()
+          t.softDeletes()
+        })
+      })
+
+      after(async () => { await schema.dropIfExists('rudder_mysql_notes') })
+
+      it('create() stamps createdAt + updatedAt (previously: Incorrect datetime value)', async () => {
+        const note = await StampedNote.create({ body: 'hello' })
+        assert.ok(note.createdAt, 'createdAt should be stamped')
+        assert.ok(note.updatedAt, 'updatedAt should be stamped')
+      })
+
+      it('Model.update() bumps updatedAt', async () => {
+        const note = await StampedNote.create({ body: 'v1' })
+        const updated = await StampedNote.update(note.id, { body: 'v2' })
+        assert.strictEqual(updated.body, 'v2')
+        assert.ok(updated.updatedAt, 'updatedAt should be stamped')
+      })
+
+      it('soft delete() stamps deletedAt', async () => {
+        const note = await StampedNote.create({ body: 'soft' })
+        await StampedNote.delete(note.id)
+        assert.strictEqual(await StampedNote.find(note.id), null)
+        const trashed = await StampedNote.query().withTrashed().get()
+        assert.strictEqual(trashed.length, 1)
+        assert.notStrictEqual(trashed[0]!.deletedAt, null)
+      })
+    })
   })
 }

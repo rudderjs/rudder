@@ -3165,9 +3165,13 @@ export abstract class Model {
     if (!adapter?.tableColumns) return payload
     const columns = await adapter.tableColumns(this.getTable())
     if (!columns) return payload
-    // Same wire format soft-deletes stamp for `deletedAt`; a `date` cast on
-    // the column reads it back as a `Date`.
-    const now = new Date().toISOString()
+    // Stamp a `Date` and let each driver serialize it in its dialect's wire
+    // format (sqlite normalizes to ISO text at bind time, pg casts via its
+    // `date` type, mysql2 formats natively — a raw ISO string with the
+    // trailing `Z` is rejected by MySQL strict mode). Same wire format
+    // soft-deletes stamp for `deletedAt`; a `date` cast on the column reads
+    // it back as a `Date`.
+    const now = new Date()
     const out = { ...payload }
     if (op === 'create' && columns.includes('createdAt') && out['createdAt'] === undefined) {
       out['createdAt'] = now
