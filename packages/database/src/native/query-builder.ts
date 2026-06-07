@@ -963,11 +963,13 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   async delete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     if (this._softDeletes) {
-      // Soft delete: stamp deletedAt instead of removing the row. ISO string —
-      // the read path filters on `deletedAt IS [NOT] NULL` regardless of format,
-      // and better-sqlite3 can't bind a Date directly.
+      // Soft delete: stamp deletedAt instead of removing the row. A `Date` —
+      // each driver serializes it in its own wire format (sqlite normalizes to
+      // ISO text at bind time; a raw ISO string's trailing `Z` is rejected by
+      // MySQL strict mode). The read path filters on
+      // `deletedAt IS [NOT] NULL` regardless of format.
       const { sql, bindings } = compileUpdate(
-        this._idState(), this.dialect, { deletedAt: new Date().toISOString() },
+        this._idState(), this.dialect, { deletedAt: new Date() },
         { extraConditions: this._pkCondition(id) },
       )
       await this.executor.execute(sql, bindings)

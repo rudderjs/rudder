@@ -12,6 +12,11 @@
 // cast layer; the round-trip test below confirms both paths land on the same
 // stored integer.
 //
+// The same driver-level normalization also maps `Date` → ISO-8601 UTC text
+// (better-sqlite3 can't bind a Date): the ORM's timestamp/soft-delete stamping
+// binds `Date` objects and relies on each driver to serialize them in its own
+// wire format (a raw ISO string would be rejected by MySQL strict mode).
+//
 // A fresh in-memory DB per test keeps inserts from leaking between cases.
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
@@ -87,6 +92,22 @@ describe('native boolean binding — Model API (untyped column)', () => {
     const created = await Flag.query().create({ label: 'created', flag: true as unknown as number })
     const back = await Flag.find(created.id)
     assert.strictEqual(back?.flag, 1)
+  })
+})
+
+describe('native Date binding — Driver.execute', () => {
+  it('binds a Date on an INSERT (stored as ISO-8601 UTC text)', async () => {
+    const stamp = new Date('2026-06-07T12:34:56.789Z')
+    await driver.execute(`INSERT INTO flags (label, flag) VALUES (?, ?)`, [stamp, 1])
+    const rows = await driver.execute(`SELECT label FROM flags WHERE flag = ? AND id > ?`, [1, 2])
+    assert.strictEqual(rows[0]?.['label'], '2026-06-07T12:34:56.789Z')
+  })
+
+  it('binds a Date in a WHERE predicate (matches the stored ISO text)', async () => {
+    const stamp = new Date('2020-01-02T03:04:05.000Z')
+    await driver.execute(`INSERT INTO flags (label, flag) VALUES (?, ?)`, ['2020-01-02T03:04:05.000Z', 0])
+    const rows = await driver.execute(`SELECT id FROM flags WHERE label = ?`, [stamp])
+    assert.strictEqual(rows.length, 1)
   })
 })
 

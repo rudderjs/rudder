@@ -174,26 +174,33 @@ export class BetterSqlite3Driver implements Driver {
  * with the ORM's `boolean` cast (which reads `0`/`1` back). The mapping covers
  * raw boolean values that bypass a column cast — an untyped `where('flag', true)`
  * predicate, or a `query().create({ flag: true })` on a column without a
- * boolean cast. Other unbindable values (`Date`) are passed through so
- * better-sqlite3 still rejects them with its own clear error. Plain objects
- * and arrays never arrive from the query builder — the compiler's binding
- * funnel JSON-stringifies them (json-column payloads) — so only a raw
- * `Driver.execute(...)` call can still bind one, and better-sqlite3 rejects
- * it (an object param reads as a named-parameters bag).
+ * boolean cast. `Date` values map to ISO-8601 UTC text — SQLite's canonical
+ * datetime format, and the same wire format the ORM's `date` cast reads back.
+ * The ORM's timestamp/soft-delete stamping binds `Date` objects and relies on
+ * each driver to serialize them (pg's `date` type override and mysql2 handle
+ * `Date` natively; an ISO *string* would be rejected by MySQL strict mode).
+ * Plain objects and arrays never arrive from the query builder — the
+ * compiler's binding funnel JSON-stringifies them (json-column payloads) — so
+ * only a raw `Driver.execute(...)` call can still bind one, and better-sqlite3
+ * rejects it (an object param reads as a named-parameters bag).
  *
  * Returns the original array reference when nothing needed coercion, so the
- * common boolean-free path allocates nothing.
+ * common path allocates nothing.
  *
  * Any future SQLite driver (libsql, op-sqlite for React Native) needs the same
  * mapping — share this helper rather than re-deriving it per driver.
  */
 function normalizeBindings(bindings: readonly unknown[]): unknown[] {
-  let hasBoolean = false
+  let needsCoercion = false
   for (const v of bindings) {
-    if (typeof v === 'boolean') { hasBoolean = true; break }
+    if (typeof v === 'boolean' || v instanceof Date) { needsCoercion = true; break }
   }
-  if (!hasBoolean) return bindings as unknown[]
-  return bindings.map(v => (typeof v === 'boolean' ? (v ? 1 : 0) : v))
+  if (!needsCoercion) return bindings as unknown[]
+  return bindings.map(v =>
+    typeof v === 'boolean' ? (v ? 1 : 0)
+    : v instanceof Date    ? v.toISOString()
+    : v,
+  )
 }
 
 /** Strip a `file:` scheme and default to an in-memory database. */

@@ -185,7 +185,9 @@ describe('native write — soft deletes', () => {
     // …but still present with trashed
     const trashed = await Doc.query().withTrashed().get()
     assert.strictEqual(trashed.length, 1)
-    assert.notStrictEqual(trashed[0]!.deletedAt, null)
+    // The stamp binds as a `Date`; the sqlite driver serializes it to ISO-8601
+    // UTC text (same wire format the `date` cast reads back).
+    assert.match(String(trashed[0]!.deletedAt), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   })
 
   it('restore(id) clears deletedAt', async () => {
