@@ -215,8 +215,9 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerSchemaTypesCommand'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void
       register(rudder, { bootApp })
     },
-    // @rudderjs/orm → db:show, db:table. Resolves the native engine (via
-    // bootApp on demand, like schema:types) to inspect its live connection.
+    // @rudderjs/orm → db:show, db:table, db:query. The inspect pair resolves
+    // the native engine (via bootApp on demand, like schema:types); db:query
+    // rides the DB facade on whatever adapter the app runs.
     async () => {
       const mod = await tryImport('@rudderjs/orm', 'commands/db-inspect')
       const register = mod['registerDbInspectCommands'] as (r: typeof rudder, opts?: { bootApp?: () => Promise<void> }) => void

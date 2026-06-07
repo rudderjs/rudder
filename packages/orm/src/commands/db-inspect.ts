@@ -1,9 +1,14 @@
-// ─── db:show / db:table commands ──────────────────────────
+// ─── db:show / db:table / db:query commands ───────────────
 //
 // Laravel's `db:show` / `db:table` analogs over the native engine's inspection
 // layer (`@rudderjs/database` `inspectDatabase`/`inspectTable`). Native-engine
 // only: prisma/drizzle ship their own inspection tooling (`prisma studio`,
 // `drizzle-kit studio`), so those get a friendly pointer instead.
+//
+// `db:query` is adapter-agnostic — it rides the DB facade (`DB.select`), so it
+// works on native, drizzle, AND prisma. Primary consumer is machine tooling
+// (`@rudderjs/boost`'s `db_query` MCP tool on non-prisma apps), hence the
+// JSON-rows output.
 //
 // Like `schema:types`, the commands resolve the configured native adapter via
 // `resolveNativeAdapter` (booting the app on demand through the injected
@@ -187,4 +192,24 @@ export function registerDbInspectCommands(
     }
     printTable(info)
   }).description("Display a table's columns, indexes, and foreign keys (native engine)")
+
+  rudder.command('db:query', async (args: string[]) => {
+    const sql = args.find((a) => !a.startsWith('-'))
+    if (!sql) throw new CliError('Usage: rudder db:query "<SELECT …>"', 1)
+    // Read-only by design: this command exists for inspection tooling (boost's
+    // db_query MCP tool). Writes go through migrations/seeders/the app.
+    if (!/^\s*select\b/i.test(sql)) {
+      throw new CliError('db:query only runs SELECT statements.', 1)
+    }
+
+    // The CLI boots the app before non-skip-boot commands run, so the DB
+    // facade already has the configured adapter (native/drizzle/prisma).
+    const { DB } = await import('@rudderjs/database')
+    const rows = await DB.select(sql)
+    // Wrapped in an object (not a bare array) so consumers can extract it
+    // from stdout with a tolerant first-{...} scan — the dev-mode boot log
+    // prints to stdout before the command body runs. BigInt-tolerant
+    // serialization: pg/mysql drivers can surface bigint aggregates.
+    console.log(JSON.stringify({ rows }, (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v), 2))
+  }).description('Run a read-only SELECT against the application database and print JSON rows')
 }

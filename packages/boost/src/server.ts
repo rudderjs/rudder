@@ -37,9 +37,9 @@ export function createBoostServer(cwd: string): McpServer {
 
   server.registerTool('db_schema', {
     title: 'Database Schema',
-    description: 'Read the Prisma database schema. Returns parsed models with fields and types, plus the raw .prisma content.',
+    description: 'Read the database schema — the native typed registry (.rudder/types/models.d.ts) or the Prisma schema, whichever the app uses. Returns parsed models with fields and types, plus the raw source.',
     inputSchema: {
-      format: z.enum(['parsed', 'raw']).default('parsed').describe('Output format: "parsed" for structured JSON, "raw" for full .prisma source'),
+      format: z.enum(['parsed', 'raw']).default('parsed').describe('Output format: "parsed" for structured JSON, "raw" for the full schema source'),
     },
   }, async ({ format }) => {
     const schema = getDbSchema(cwd)
@@ -107,7 +107,7 @@ export function createBoostServer(cwd: string): McpServer {
 
   server.registerTool('db_query', {
     title: 'Database Query',
-    description: 'Execute a read-only SQL SELECT query against the application database via Prisma.',
+    description: 'Execute a read-only SQL SELECT query against the application database (via Prisma on Prisma apps, `rudder db:query` otherwise).',
     inputSchema: {
       query: z.string().describe('SQL SELECT query to execute'),
     },

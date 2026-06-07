@@ -1,6 +1,8 @@
-import { describe, it } from 'node:test'
+import { describe, it, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import * as fsForModelWalk from 'node:fs'
 import { getAppInfo } from './tools/app-info.js'
 import { getDbSchema } from './tools/db-schema.js'
 import { getConfigValue } from './tools/config-get.js'
@@ -9,6 +11,7 @@ import { getModelList } from './tools/model-list.js'
 import { getLastError } from './tools/last-error.js'
 import { listCommands } from './tools/commands-list.js'
 import { runCommand } from './tools/command-run.js'
+import { executeDbQuery } from './tools/db-query.js'
 import { parseFirstJsonObject } from './tools/_pm.js'
 import { createBoostServer, BoostProvider } from './index.js'
 import { parseFrontmatter } from './frontmatter.js'
@@ -66,9 +69,21 @@ describe('getDbSchema', skipOnWindows, () => {
     assert.ok(schema.raw.includes('model User'))
   })
 
-  it('returns empty for the native playground (no .prisma — known gap: db_schema is prisma-only)', () => {
+  it('parses the native typed registry from the native playground', () => {
     const schema = getDbSchema(PLAYGROUND)
-    assert.strictEqual(schema.models.length, 0)
+    assert.ok(schema.models.length > 0)
+    const users = schema.models.find(m => m.name === 'users')
+    assert.ok(users, 'users table should exist in the registry')
+    assert.ok(users.fields.some(f => f.name === 'email' && f.type.includes('string')))
+    // Nullable columns keep their full union type
+    const nullable = schema.models.flatMap(m => m.fields).find(f => f.type.includes('| null'))
+    assert.ok(nullable, 'registry should surface nullable column types')
+  })
+
+  it('returns raw registry content for the native playground', () => {
+    const schema = getDbSchema(PLAYGROUND)
+    assert.ok(schema.raw)
+    assert.ok(schema.raw.includes('SchemaRegistry'))
   })
 
   it('returns empty for missing schema', () => {
@@ -135,8 +150,37 @@ describe('getModelList', skipOnWindows, () => {
     const user = models.find(m => m.name === 'User')
     assert.ok(user, 'User model should exist')
     assert.strictEqual(user.table, 'users')
-    // Models bound via Model.for<>() declare no fields — boost's parser reads
-    // hand-declared fields only (native typed-registry support is a known gap).
+  })
+
+  it('resolves Model.for<>() fields from the native typed registry', () => {
+    const models = getModelList(PLAYGROUND)
+    // Post uses `Model.for<'posts'>()` and declares no fields in-file — its
+    // columns must come from .rudder/types/models.d.ts.
+    const post = models.find(m => m.name === 'Post')
+    assert.ok(post, 'Post model should exist')
+    assert.strictEqual(post.table, 'posts')
+    assert.ok(post.fields.length > 0, 'Model.for<>() fields should resolve from the registry')
+    assert.ok(post.fields.some(f => f.startsWith('title:')))
+  })
+
+  it('walks app/Models recursively', () => {
+    // Both playgrounds keep models flat today; prove the walk by checking a
+    // synthetic nested fixture under a temp dir.
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = fsForModelWalk
+    const dir = mkdtempSync(join(tmpdir(), 'boost-models-'))
+    try {
+      mkdirSync(join(dir, 'app', 'Models', 'Billing'), { recursive: true })
+      writeFileSync(join(dir, 'app', 'Models', 'User.ts'), `export class User extends Model {\n  static table = 'users'\n  id!: number\n}\n`)
+      writeFileSync(join(dir, 'app', 'Models', 'Billing', 'Invoice.ts'), `export class Invoice extends Model {\n  static table = 'invoices'\n  id!: number\n  total!: number\n}\n`)
+      const models = getModelList(dir)
+      const invoice = models.find(m => m.name === 'Invoice')
+      assert.ok(invoice, 'nested model should be discovered')
+      assert.strictEqual(invoice.table, 'invoices')
+      assert.strictEqual(invoice.file, 'app/Models/Billing/Invoice.ts')
+      assert.ok(invoice.fields.some(f => f.startsWith('total:')))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
@@ -213,6 +257,31 @@ describe('runCommand', skipOnWindows, () => {
   it('returns non-zero exit code for unknown command', { timeout: 30_000 }, async () => {
     const result = await runCommand(PLAYGROUND, 'this:does:not:exist', [], 15_000)
     assert.notStrictEqual(result.exitCode, 0)
+  })
+})
+
+// ─── executeDbQuery ──────────────────────────────────────
+
+describe('executeDbQuery', skipOnWindows, () => {
+  // The SELECT leg boots the playground app (db:query is not a skip-boot
+  // command). In CI the gitignored provider manifest doesn't exist, so the
+  // boot fails on the first provider an app file uses (the existing
+  // runCommand tests dodge this via command:list's boot-tolerant path) —
+  // regenerate it first (skip-boot, fast), same as the scaffolder does.
+  before(async () => {
+    await runCommand(PLAYGROUND, 'providers:discover', [], 60_000)
+  })
+
+  it('rejects non-SELECT queries without touching the database', async () => {
+    const result = await executeDbQuery(PLAYGROUND, 'DELETE FROM users')
+    assert.ok(result.startsWith('Error: Only SELECT'))
+  })
+
+  it('runs a SELECT through rudder db:query on the native playground', { timeout: 60_000 }, async () => {
+    const result = await executeDbQuery(PLAYGROUND, 'SELECT 1 AS one')
+    assert.ok(!result.startsWith('Error'), result)
+    const rows = JSON.parse(result) as Record<string, unknown>[]
+    assert.deepStrictEqual(rows, [{ one: 1 }])
   })
 })
 
