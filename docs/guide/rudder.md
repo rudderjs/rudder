@@ -139,6 +139,9 @@ The framework ships several built-in commands that show up automatically. The se
 | `db:show`, `db:table` | orm (native engine) | Inspect the live database — `db:show` lists tables with sizes (`--counts` adds row counts, `--views` adds views); `db:table <name>` shows columns, indexes, and foreign keys. `--json` machine-readable. Prisma/Drizzle apps are pointed at `prisma studio` / `drizzle-kit studio`. See [Native Engine — Inspecting](./database/native.md#inspecting-the-database). |
 | `db:query "<SELECT …>"` | orm (every adapter) | Run a one-off read-only SELECT through the `DB` facade and print JSON rows. Works on native, Prisma, and Drizzle; rejects non-SELECT statements. Backs `@rudderjs/boost`'s `db_query` MCP tool. |
 | `queue:work` | queue | Worker process |
+| `cache:clear` | cache | Flush the application cache store |
+| `optimize:clear` | cli | Remove framework filesystem caches — `bootstrap/cache/` (provider manifest) + `node_modules/.vite/` (dep-optimizer). Skip-boot, so it works when a corrupt cache is why the app won't boot |
+| `fresh` | cli | One-command dev reset: `migrate:fresh` (add `--seed` to also run the seeder) → `cache:clear` (best-effort) → framework filesystem caches. Aborts before touching caches if the migrate fails |
 | `storage:link` | storage | Symlink `public/storage → storage/app/public` |
 | `schedule:work`, `schedule:run`, `schedule:list` | schedule | Task scheduler |
 | `route:list` | router | List all registered routes with name + middleware. `--verbose` (or `-v`) expands the resolved `[global → group → route]` middleware stack in the same order that runs at request time. `--json` for machine-readable; combine with `--verbose` to include the resolved layers inline. |

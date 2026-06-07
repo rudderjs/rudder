@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
+import { ConfigRepository, setConfigRepository, getConfigRepository, rudder } from '@rudderjs/core'
 import { CacheProvider, Cache, CacheRegistry, MemoryAdapter, type CacheConfig } from './index.js'
 
 function withCacheConfig(cfg: CacheConfig): () => void {
@@ -360,5 +360,34 @@ describe('CacheProvider', () => {
   it('register() is a no-op', () => {
     restore = withCacheConfig({ default: 'memory', stores: { memory: { driver: 'memory' } } })
     assert.doesNotThrow(() => new CacheProvider(fakeApp).register())
+  })
+
+  it('boot() registers the cache:clear command, which flushes the live adapter', async () => {
+    restore = withCacheConfig({ default: 'memory', stores: { memory: { driver: 'memory' } } })
+    await new CacheProvider(fakeApp).boot()
+
+    await Cache.set('key', 'value')
+    assert.strictEqual(await Cache.get('key'), 'value')
+
+    const cmd = rudder.getCommands().find(c => c.name === 'cache:clear')
+    assert.ok(cmd, 'cache:clear registered during boot')
+    await cmd.handler([], {})
+
+    assert.strictEqual(await Cache.get('key'), null)
+  })
+
+  it('cache:clear resolves the adapter lazily (acts on a registry swap, not the boot-time closure)', async () => {
+    restore = withCacheConfig({ default: 'memory', stores: { memory: { driver: 'memory' } } })
+    await new CacheProvider(fakeApp).boot()
+
+    // Swap the adapter after boot — the HMR re-boot / test-fake scenario.
+    const swapped = new MemoryAdapter()
+    await swapped.set('swapped-key', 1)
+    CacheRegistry.set(swapped)
+
+    const cmd = rudder.getCommands().find(c => c.name === 'cache:clear')
+    await cmd!.handler([], {})
+
+    assert.strictEqual(await swapped.get('swapped-key'), null, 'the CURRENT adapter was flushed')
   })
 })
