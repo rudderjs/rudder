@@ -128,7 +128,7 @@ The framework ships several built-in commands that show up automatically. The se
 
 | Command | Provided by | Purpose |
 |---|---|---|
-| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `make:job` | core | Scaffold boilerplate files |
+| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `make:job` | core | Scaffold boilerplate files |
 | `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
 | `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
@@ -169,6 +169,7 @@ pnpm rudder make:model Post                  # → app/Models/Post.ts
 pnpm rudder make:provider App                # → app/Providers/AppServiceProvider.ts
 pnpm rudder make:job SendWelcomeEmail        # → app/Jobs/SendWelcomeEmail.ts
 pnpm rudder make:event UserRegistered        # → app/Events/UserRegistered.ts
+pnpm rudder make:exception PaymentError      # → app/Exceptions/PaymentError.ts
 pnpm rudder make:listener SendWelcome        # → app/Listeners/SendWelcome.ts
 pnpm rudder make:mail Welcome                # → app/Mail/Welcome.ts
 pnpm rudder make:command Backup              # → app/Commands/Backup.ts
@@ -177,6 +178,8 @@ pnpm rudder make:seeder Users                # → database/seeders/UsersSeeder.
 ```
 
 Pass `--force` to overwrite an existing file. These generators all emit `.ts` files; only `make:terminal` emits a `.tsx` Ink component.
+
+`make:exception` also takes `--status <code>` (4xx/5xx, default `500`) — the generated class declares `readonly httpStatus = <code>`, which the exception pipeline picks up automatically (see [Error Handling](/guide/error-handling)).
 
 ## `add` / `remove` — manage framework packages
 
