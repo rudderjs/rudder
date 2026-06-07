@@ -396,7 +396,7 @@ describe('Model.whereHas — nested whereHas inside callback', () => {
         q.where('approved', true)
         ;q.orWhere('featured', true)
       }),
-      /orWhere inside a whereHas constrain callback is not supported in v1/,
+      /orWhere\(\) inside a whereHas constrain callback is not supported/,
     )
   })
 })
@@ -693,5 +693,120 @@ describe('Model.whereHas — through relations', () => {
     // adapter sees neither with() nor withConstrained(). The loaded children
     // are asserted in the has-through E2E suite.
     assert.deepEqual(rec.withs, [])
+  })
+})
+
+// ─── Constrain-callback recorder — sugar support + loud rejections ───────────
+//
+// Historically the recorder silently no-oped every method except where/
+// orWhere/whereHas — a whereIn(...) inside a callback silently matched MORE
+// rows than intended. It now records the AND-expressible sugar and throws on
+// everything that can't round-trip through the flat constraint list.
+
+describe('whereHas constrain callback — recorded sugar', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('whereIn / whereNotIn lower to IN / NOT IN clauses', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereHas('posts', q => q.whereIn('id', [1, 2]).whereNotIn('authorId', [9])).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'id',       operator: 'IN',     value: [1, 2] },
+      { column: 'authorId', operator: 'NOT IN', value: [9] },
+    ])
+  })
+
+  it('whereNull / whereNotNull lower to null equality', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereHas('posts', q => q.whereNull('deletedAt').whereNotNull('publishedAt')).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'deletedAt',   operator: '=',  value: null },
+      { column: 'publishedAt', operator: '!=', value: null },
+    ])
+  })
+
+  it('whereBetween lowers to its two AND bounds', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereHas('posts', q => q.whereBetween('views', [10, 20])).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'views', operator: '>=', value: 10 },
+      { column: 'views', operator: '<=', value: 20 },
+    ])
+  })
+
+  it('when / unless run their callbacks against the recorder', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereHas('posts', q =>
+      q.when(true,  (qq) => qq.where('published', true))
+       .when(false, (qq) => qq.where('never', 1), (qq) => qq.where('otherwise', 2))
+       .unless(true, (qq) => qq.where('nor-this', 3)),
+    ).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'published', operator: '=', value: true },
+      { column: 'otherwise', operator: '=', value: 2 },
+    ])
+  })
+
+  it('harmless ordering/limiting methods still chain silently', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await User.whereHas('posts', q => q.orderBy('id').limit(5).where('published', true)).get()
+
+    assert.deepEqual(latest().predicates[0]!.constraintWheres, [
+      { column: 'published', operator: '=', value: true },
+    ])
+  })
+})
+
+describe('whereHas constrain callback — loud rejections (previously silent drops)', () => {
+  beforeEach(() => {
+    ModelRegistry.reset()
+    ModelRegistry.set(recordingAdapter().adapter)
+  })
+
+  const cases: Array<[string, (q: QueryBuilder<Model>) => void]> = [
+    ['whereNotBetween',    q => (q as unknown as { whereNotBetween(c: string, r: [number, number]): void }).whereNotBetween('views', [1, 2])],
+    ['whereDate',          q => (q as unknown as { whereDate(c: string, v: string): void }).whereDate('createdAt', '2026-01-01')],
+    ['whereJsonContains',  q => (q as unknown as { whereJsonContains(c: string, v: unknown): void }).whereJsonContains('meta->tags', 'a')],
+    ['whereRaw',           q => q.whereRaw('1 = 1')],
+    ['whereGroup',         q => q.whereGroup(() => {})],
+    ['whereColumn',        q => (q as unknown as { whereColumn(a: string, b: string): void }).whereColumn('a', 'b')],
+    ['onlyTrashed',        q => q.onlyTrashed()],
+    ['whereExists',        q => (q as unknown as { whereExists(b: unknown): void }).whereExists('SELECT 1')],
+  ]
+
+  for (const [name, call] of cases) {
+    it(`${name} throws instead of silently widening the filter`, () => {
+      assert.throws(
+        () => User.whereHas('posts', q => call(q)),
+        new RegExp(`${name}\\(\\) inside a whereHas constrain callback is not supported`),
+      )
+    })
+  }
+
+  it('unknown / terminal methods throw with the supported list', () => {
+    assert.throws(
+      () => User.whereHas('posts', q => { void (q as unknown as { get(): unknown }).get() }),
+      /get\(\) is not available inside a whereHas constrain callback[\s\S]*Supported: where, whereIn/,
+    )
+  })
+
+  it('orWhere keeps its dedicated error', () => {
+    assert.throws(
+      () => User.whereHas('posts', q => q.orWhere('a', 1)),
+      /orWhere\(\) inside a whereHas constrain callback is not supported/,
+    )
   })
 })

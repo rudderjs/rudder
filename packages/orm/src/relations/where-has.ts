@@ -28,21 +28,93 @@ export type HasOrBelongsToDef = Exclude<
 // ─── Constraint capture ────────────────────────────────────
 
 /**
+ * What a `whereHas` constrain callback may call: the adapter `QueryBuilder`
+ * surface plus the AND-expressible sugar the capture recorder lowers to flat
+ * `WhereClause`s (`whereIn`/`whereNotIn`/`whereNull`/`whereNotNull`/
+ * `whereBetween`/`when`/`unless`). Extends `QueryBuilder<Model>` so existing
+ * callbacks (and helpers explicitly typed against the contract) keep
+ * compiling; `where`'s polymorphic `this` return keeps chains typed.
+ */
+export interface ConstraintQueryBuilder extends QueryBuilder<Model> {
+  whereIn(column: string, values: readonly unknown[]): this
+  whereNotIn(column: string, values: readonly unknown[]): this
+  whereNull(column: string): this
+  whereNotNull(column: string): this
+  /** Lowered to its two AND bounds (`>= low` + `<= high`). */
+  whereBetween(column: string, range: readonly [unknown, unknown]): this
+  when<V>(value: V, cb?: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
+  unless<V>(value: V, cb?: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
+}
+
+/**
+ * Methods that are HARMLESS inside an existence subquery — they can't change
+ * which related rows exist, so the recorder accepts and ignores them (Laravel
+ * likewise ignores ordering/limits inside `whereHas`).
+ */
+const RECORDER_NOOP_METHODS = new Set([
+  'orderBy', 'orderByRaw', 'latest', 'oldest', 'limit', 'offset',
+  'select', 'with', 'withPivot',
+])
+
+/** Throwing entries for methods whose semantics CANNOT round-trip through the
+ *  flat AND-only `WhereClause[]` the predicate carries. Each maps to the
+ *  reason/pointer baked into the error. Silently dropping any of these would
+ *  silently widen the filter — worse than the throw. */
+const RECORDER_REJECTIONS: Record<string, string> = {
+  orWhere:            `the WhereClause contract has no boolean flag, so the OR semantic can't round-trip to the adapter. Compose the predicate with where() (AND), or run two queries and merge in app code.`,
+  whereNotBetween:    `its OR shape (< low OR > high) can't round-trip through the flat AND-only constraint list. Use two whereHas calls or filter in app code.`,
+  whereGroup:         `grouped sub-conditions can't round-trip through the flat constraint list.`,
+  orWhereGroup:       `grouped sub-conditions can't round-trip through the flat constraint list.`,
+  whereRaw:           `raw SQL fragments can't round-trip through the structured constraint list. Use DB.select(...) for raw-SQL relation filters.`,
+  orWhereRaw:         `raw SQL fragments can't round-trip through the structured constraint list. Use DB.select(...) for raw-SQL relation filters.`,
+  whereColumn:        `column-vs-column comparisons can't round-trip through the value-shaped constraint list.`,
+  orWhereColumn:      `column-vs-column comparisons can't round-trip through the value-shaped constraint list.`,
+  whereDate:          `date-part extraction needs adapter SQL the constraint list can't carry.`,
+  whereTime:          `date-part extraction needs adapter SQL the constraint list can't carry.`,
+  whereDay:           `date-part extraction needs adapter SQL the constraint list can't carry.`,
+  whereMonth:         `date-part extraction needs adapter SQL the constraint list can't carry.`,
+  whereYear:          `date-part extraction needs adapter SQL the constraint list can't carry.`,
+  whereJsonContains:      `JSON containment needs adapter SQL the constraint list can't carry. Plain arrow-path where('meta->key', v) DOES work.`,
+  whereJsonDoesntContain: `JSON containment needs adapter SQL the constraint list can't carry. Plain arrow-path where('meta->key', v) DOES work.`,
+  whereJsonLength:        `JSON length needs adapter SQL the constraint list can't carry.`,
+  whereExists:        `subquery predicates can't round-trip through the constraint list.`,
+  whereNotExists:     `subquery predicates can't round-trip through the constraint list.`,
+  whereBelongsTo:     `relation shorthands aren't resolvable inside the callback. Use where('<fk>', parent.id) directly.`,
+  whereRelation:      `relation predicates inside the callback aren't supported in v1.`,
+  orWhereRelation:    `relation predicates inside the callback aren't supported in v1.`,
+  has:                `count comparisons inside the callback aren't supported in v1.`,
+  orHas:              `count comparisons inside the callback aren't supported in v1.`,
+  orWhereHas:         `OR-rooted relation predicates inside the callback aren't supported in v1.`,
+  orWhereDoesntHave:  `OR-rooted relation predicates inside the callback aren't supported in v1.`,
+  withTrashed:        `soft-delete scoping is the callback's responsibility — relation subqueries include trashed rows by default; filter explicitly with where('deletedAt', null).`,
+  onlyTrashed:        `soft-delete scoping is the callback's responsibility — filter explicitly with where('deletedAt', '!=', null).`,
+  whereVectorSimilarTo: `vector predicates can't round-trip through the constraint list.`,
+}
+
+/**
  * Run the constrain callback against a recording-only QueryBuilder that
- * captures `.where()` calls into a flat `WhereClause[]` and treats every
- * other chainable method as a no-op. Nested `whereHas` inside the callback
- * throws — the dot-path form (`whereHas('parent.child', cb)`) covers that
- * semantic instead.
+ * captures the AND-expressible `where` surface into a flat `WhereClause[]`:
+ * `where` (2- and 3-arg), `whereIn` / `whereNotIn`, `whereNull` /
+ * `whereNotNull`, `whereBetween` (lowered to `>= low` + `<= high`), and the
+ * `when` / `unless` conditionals (their callbacks run against the recorder).
+ *
+ * Everything that CANNOT round-trip through the flat AND-only list throws a
+ * clear error instead of silently widening the filter — historically the
+ * recorder no-oped every unknown method, so a `whereIn(...)` inside a
+ * callback silently matched MORE rows than intended. Methods that are
+ * harmless to an existence test (`orderBy`, `limit`, …) stay accepted-and-
+ * ignored. Nested `whereHas` inside the callback still throws — the dot-path
+ * form (`whereHas('parent.child', cb)`) covers that semantic (native engine).
  */
 export function captureConstraintWheres(
-  constrain: (q: QueryBuilder<Model>) => void,
+  constrain: (q: ConstraintQueryBuilder) => void,
 ): WhereClause[] {
   const wheres: WhereClause[] = []
-  const recorder: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
+  const recorder: ConstraintQueryBuilder = new Proxy({} as ConstraintQueryBuilder, {
     get(_t, prop): unknown {
       const name = String(prop)
       if (name === 'where') {
-        return (col: string, opOrVal: unknown, maybeVal?: unknown): QueryBuilder<Model> => {
+        return (col: string, opOrVal: unknown, maybeVal?: unknown): ConstraintQueryBuilder => {
           if (maybeVal === undefined) {
             wheres.push({ column: col, operator: '=', value: opOrVal })
           } else {
@@ -51,30 +123,61 @@ export function captureConstraintWheres(
           return recorder
         }
       }
+      if (name === 'whereIn' || name === 'whereNotIn') {
+        return (col: string, values: unknown[]): ConstraintQueryBuilder => {
+          wheres.push({ column: col, operator: name === 'whereIn' ? 'IN' : 'NOT IN', value: values })
+          return recorder
+        }
+      }
+      if (name === 'whereNull' || name === 'whereNotNull') {
+        return (col: string): ConstraintQueryBuilder => {
+          wheres.push({ column: col, operator: name === 'whereNull' ? '=' : '!=', value: null })
+          return recorder
+        }
+      }
+      if (name === 'whereBetween') {
+        return (col: string, range: [unknown, unknown]): ConstraintQueryBuilder => {
+          wheres.push({ column: col, operator: '>=', value: range[0] })
+          wheres.push({ column: col, operator: '<=', value: range[1] })
+          return recorder
+        }
+      }
+      if (name === 'when' || name === 'unless') {
+        return (value: unknown, cb?: (q: ConstraintQueryBuilder, v: unknown) => void, otherwise?: (q: ConstraintQueryBuilder, v: unknown) => void): ConstraintQueryBuilder => {
+          const truthy = Boolean(value)
+          const active = name === 'when' ? truthy : !truthy
+          if (active) cb?.(recorder, value)
+          else        otherwise?.(recorder, value)
+          return recorder
+        }
+      }
       if (name === 'whereHas' || name === 'whereDoesntHave' || name === 'withWhereHas') {
-        return (): QueryBuilder<Model> => {
+        return (): ConstraintQueryBuilder => {
           throw new Error(
             `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is not supported — ` +
             `use the dot-path form instead: whereHas('parent.child', cb) (native engine).`,
           )
         }
       }
-      if (name === 'orWhere') {
-        return (): QueryBuilder<Model> => {
-          throw new Error(
-            `[RudderJS ORM] orWhere inside a whereHas constrain callback is not supported in v1 — ` +
-            `the WhereClause contract has no boolean flag, so the OR semantic can't round-trip to the adapter. ` +
-            `Compose the predicate with where() (AND), or run two queries and merge in app code.`,
-          )
+      const rejection = RECORDER_REJECTIONS[name]
+      if (rejection !== undefined) {
+        return (): ConstraintQueryBuilder => {
+          throw new Error(`[RudderJS ORM] ${name}() inside a whereHas constrain callback is not supported — ${rejection}`)
         }
       }
-      // All other chainable methods record nothing and return the recorder so
-      // `q.orderBy('x').limit(1)` chains through silently. Terminal methods
-      // (find/get/etc.) don't make sense in a constrain callback — they'd
-      // execute mid-build — but we don't intercept them here; they'd just
-      // return the recorder which then fails downstream. Keep the contract
-      // simple.
-      return (): QueryBuilder<Model> => recorder
+      if (RECORDER_NOOP_METHODS.has(name)) {
+        return (): ConstraintQueryBuilder => recorder
+      }
+      // Unknown methods (incl. terminals like get()/first(), which would
+      // execute mid-build) throw rather than silently chaining — the silent
+      // catch-all is exactly how dropped constraints went unnoticed.
+      return (): ConstraintQueryBuilder => {
+        throw new Error(
+          `[RudderJS ORM] ${name}() is not available inside a whereHas constrain callback. ` +
+          `Supported: where, whereIn/whereNotIn, whereNull/whereNotNull, whereBetween, when/unless ` +
+          `(plus ignored ordering/limiting methods).`,
+        )
+      }
     },
   })
   constrain(recorder)
@@ -91,7 +194,7 @@ export function relationConstrain(
   column:          string,
   operatorOrValue: unknown,
   value:           unknown,
-): (q: QueryBuilder<Model>) => void {
+): (q: ConstraintQueryBuilder) => void {
   return (q): void => {
     if (value === undefined) q.where(column, operatorOrValue)
     else q.where(column, operatorOrValue as WhereOperator, value)
@@ -380,7 +483,7 @@ export function attachWhereHas<TQ>(
   q:         QueryBuilder<TQ>,
   relation:  string,
   exists:    boolean,
-  constrain?: (q: QueryBuilder<Model>) => void,
+  constrain?: (q: ConstraintQueryBuilder) => void,
   opts?:     { boolean?: 'AND' | 'OR'; count?: { operator: WhereOperator; value: number } },
 ): QueryBuilder<TQ> {
   // Dot-path = nested relation chain (`whereHas('posts.comments', cb)`).
@@ -431,7 +534,7 @@ export function attachWithWhereHas<TQ>(
   Parent:    typeof Model,
   q:         QueryBuilder<TQ>,
   relation:  string,
-  constrain?: (q: QueryBuilder<Model>) => void,
+  constrain?: (q: ConstraintQueryBuilder) => void,
 ): QueryBuilder<TQ> {
   const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
   // Reuse attachWhereHas for the parent-side filter — it re-runs the
