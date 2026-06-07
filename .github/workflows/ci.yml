@@ -244,11 +244,18 @@ jobs:
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
               $code = $p.ExitCode
             } else {
-              Write-Host "::warning::Build attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live build processes:"
-              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+              Write-Host "::warning::Build attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B)."
+              # Diagnostic dump in a BOUNDED job — Get-Process against a
+              # kernel-stuck zombie can itself hang, wedging this wrapper
+              # exactly like the process it's reporting on. 10s or skip it.
+              $dump = Start-Job { Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
                 Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
-                Format-Table -AutoSize | Out-String | Write-Host
-              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+                Format-Table -AutoSize | Out-String }
+              if (Wait-Job $dump -Timeout 10) { Receive-Job $dump | Write-Host } else { Write-Host "::warning::process dump itself timed out — zombie wedge" }
+              Remove-Job $dump -Force -ErrorAction SilentlyContinue
+              # taskkill /T /F is more reliable than .NET Kill($true) against a
+              # wedged tree (kills by snapshot walk, not handle enumeration).
+              try { & taskkill /PID $p.Id /T /F 2>$null | Out-Null } catch { Write-Host "::warning::taskkill failed: $_" }
               $p.WaitForExit(15000) | Out-Null
               $code = 124   # conventional timeout exit code
             }
@@ -304,11 +311,14 @@ jobs:
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
               $code = $p.ExitCode
             } else {
-              Write-Host "::warning::Test attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live test processes:"
-              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+              Write-Host "::warning::Test attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B)."
+              # Bounded dump + taskkill — see the Build step for rationale.
+              $dump = Start-Job { Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
                 Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
-                Format-Table -AutoSize | Out-String | Write-Host
-              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+                Format-Table -AutoSize | Out-String }
+              if (Wait-Job $dump -Timeout 10) { Receive-Job $dump | Write-Host } else { Write-Host "::warning::process dump itself timed out — zombie wedge" }
+              Remove-Job $dump -Force -ErrorAction SilentlyContinue
+              try { & taskkill /PID $p.Id /T /F 2>$null | Out-Null } catch { Write-Host "::warning::taskkill failed: $_" }
               $p.WaitForExit(15000) | Out-Null
               $code = 124
             }
