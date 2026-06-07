@@ -17,6 +17,8 @@ import { aboutCommand } from './commands/about.js'
 import { testCommand } from './commands/test.js'
 import { doctorCommand } from './commands/doctor.js'
 import { tinkerCommand } from './commands/tinker.js'
+import { optimizeClearCommand } from './commands/optimize-clear.js'
+import { freshCommand } from './commands/fresh.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -379,6 +381,8 @@ async function main(): Promise<void> {
   testCommand(program)
   doctorCommand(program, { bootApp })
   tinkerCommand(program)
+  optimizeClearCommand(program)
+  freshCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -405,11 +409,16 @@ async function main(): Promise<void> {
   // - `remove` uninstalls a package — the about-to-be-deleted provider
   //   may still be in node_modules but is being torn out; booting would
   //   be wasted work at best and surface confusing errors at worst.
+  // - `optimize:clear` must work when a corrupt cache is the reason the
+  //   app can't boot. `fresh` is an orchestrator — each step that needs
+  //   the app boots its own child process, so `fresh` itself never holds
+  //   connections to the database it is about to drop.
   const NO_BOOT_EXACT  = new Set([
     'providers:discover', 'module:publish', 'view:sync', 'routes:sync', 'env:sync',
     'db:generate', 'db:push',
     'migrate', 'migrate:fresh', 'migrate:status', 'migrate:rollback', 'migrate:refresh',
     'add', 'remove', 'upgrade', 'key:generate', 'about', 'test',
+    'optimize:clear', 'fresh',
     // `doctor` fast-path runs filesystem/env checks only. `--deep` is handled
     // inside the command's handler, which boots the app on demand (Phase 4).
     'doctor',

@@ -1,4 +1,4 @@
-import { ServiceProvider, config } from '@rudderjs/core'
+import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { resolveIoredisClass, reusableConnection } from '@rudderjs/support'
 
 import { FakeCacheAdapter } from './fake.js'
@@ -14,6 +14,12 @@ export interface CacheAdapter {
   forget(key: string): Promise<void>
   has(key: string): Promise<boolean>
   flush(): Promise<void>
+  /**
+   * Close the underlying connection so one-shot processes (CLI commands) can
+   * exit — an open ioredis client keeps the event loop alive. Optional:
+   * in-memory stores have nothing to close.
+   */
+  disconnect?(): Promise<void>
   /**
    * Atomically add `by` (default `1`) to the integer counter at `key` and
    * return the new value. When the key does not exist, it is initialized to
@@ -440,6 +446,19 @@ class RedisAdapter implements CacheAdapter {
       this.prefix,
     )
   }
+
+  async disconnect(): Promise<void> {
+    // Quit the shared client AND clear the reusableConnection slot so a later
+    // boot (dev re-boot, next command) rebuilds instead of reusing a closed
+    // connection.
+    const g = globalThis as Record<string, unknown>
+    const entry = g['__rudderjs_cache_redis__'] as { promise: Promise<{ quit(): Promise<unknown> }> } | undefined
+    if (entry) {
+      delete g['__rudderjs_cache_redis__']
+      try { await (await entry.promise).quit() } catch { /* best effort — connection may already be gone */ }
+    }
+    this.client = undefined
+  }
 }
 
 // ─── Config ────────────────────────────────────────────────
@@ -492,5 +511,18 @@ export class CacheProvider extends ServiceProvider {
     CacheRegistry.set(adapter)
     CacheRegistry.setDefaultName(storeName)
     this.app.instance('cache', adapter)
+
+    // Lazy registry lookup (not the `adapter` closure) — dev HMR re-boots
+    // re-run boot() and rudder.command() dedupes by name; a stale closure
+    // would flush the previous adapter. Same pattern as @rudderjs/queue.
+    rudder.command('cache:clear', async () => {
+      const a = CacheRegistry.get()
+      if (!a) throw new Error('[RudderJS Cache] No cache adapter registered. Add cache() to providers.')
+      await a.flush()
+      console.log(`Cache store "${CacheRegistry.getDefaultName() ?? 'default'}" cleared.`)
+      // Close the connection so this one-shot command exits — an open ioredis
+      // client keeps the event loop alive and hangs the CLI.
+      await a.disconnect?.()
+    }).description('Flush the application cache store — pnpm rudder cache:clear')
   }
 }

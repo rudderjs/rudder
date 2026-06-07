@@ -30,12 +30,13 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 
 | Owner | Commands |
 |---|---|
-| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker` |
+| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker`, `optimize:clear` (framework fs caches; skip-boot), `fresh` (dev reset orchestrator — spawns `migrate:fresh [--seed]` + `cache:clear` as children, clears fs caches inline; skip-boot so it never holds connections to the DB being dropped) |
 | `@rudderjs/ai` | `make:agent`, `ai:eval` |
 | `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
 | `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `schema:types`, `make:factory`, `make:seeder`, `db:push`, `db:generate`, `db:show`, `db:table`, `db:query`, `model:prune` |
 | `@rudderjs/router` | `route:list` |
 | `@rudderjs/queue` | `queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry` |
+| `@rudderjs/cache` | `cache:clear` (registered in `CacheProvider.boot()`; flushes via lazy `CacheRegistry` lookup + `disconnect?.()` so redis doesn't hang the CLI) |
 | `@rudderjs/schedule` | `schedule:run`, `schedule:work`, `schedule:list` |
 | `@rudderjs/storage` | `storage:link` |
 | `@rudderjs/sync` | `sync:docs`, `sync:clear`, `sync:inspect` |
