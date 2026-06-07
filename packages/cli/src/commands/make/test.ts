@@ -3,50 +3,9 @@ import path from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 import { registerMake } from './_shared.js'
+import { featureStub, unitStub } from './test-stubs.js'
 
-// ── Stubs ─────────────────────────────────────────────────────
-
-/**
- * Feature test — boots the app via `AppTestCase` and exercises HTTP / DB /
- * services. The convention assumed here matches `docs/guide/testing.md`:
- * apps export `class AppTestCase extends TestCase` from `tests/TestCase.ts`.
- * The generated file uses Node's built-in `node:test` runner (the documented
- * runner — runs via `tsx --test tests/**\/*.test.ts`).
- */
-export function featureStub(testName: string): string {
-  return `import { describe, it, before, after } from 'node:test'
-import { AppTestCase } from './TestCase.js'
-
-describe('${testName}', () => {
-  let t: AppTestCase
-
-  before(async () => { t = await AppTestCase.create() })
-  after (async () => { await t.teardown() })
-
-  it('does something', async () => {
-    const res = await t.get('/')
-    res.assertOk()
-  })
-})
-`
-}
-
-/**
- * Unit test — plain `node:test` + `assert`. No app boot, no TestCase,
- * no `@rudderjs/testing`. The right shape for pure functions, validators,
- * domain logic, or anything that shouldn't pay the boot cost.
- */
-export function unitStub(testName: string): string {
-  return `import { describe, it } from 'node:test'
-import assert from 'node:assert/strict'
-
-describe('${testName}', () => {
-  it('does something', () => {
-    assert.equal(1 + 1, 2)
-  })
-})
-`
-}
+export { featureStub, unitStub }
 
 // ── Helpers ───────────────────────────────────────────────────
 

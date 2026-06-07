@@ -49,6 +49,7 @@ export function makeRequest(program: Command): void {
     label:       'Request created',
     suffix:      'Request',
     directory:   'app/Http/Requests',
+    testKind:    'unit',
     stub,
   })
 }

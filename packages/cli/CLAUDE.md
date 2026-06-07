@@ -8,7 +8,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 - `src/errors.ts` — `CliError` class
 - `src/commands/make.ts` — Router for CLI-owned + package-contributed `make:*` scaffolders
 - `src/commands/make/` — 12 CLI-owned generators: controller, model, job, middleware, request, provider, command, event, exception, listener, mail, test
-- `src/commands/make/_shared.ts` — Legacy `registerMake()` helper (MakeSpec now lives in `@rudderjs/console`)
+- `src/commands/make/_shared.ts` — Legacy `registerMake()` helper (MakeSpec now lives in `@rudderjs/console`). Owns the `-t, --with-test` flag: specs declare `testKind: 'feature' | 'unit'` (controller=feature, rest=unit; omit = no flag, e.g. make:test) and the harness writes `tests/<Name>.test.ts` from `test-stubs.ts` after the main file. Package-contributed MakeSpecs (factory/seeder/agent/…) don't have it.
 - `src/commands/command-list.ts` — `command:list` tabular output. Supports `--all` (include built-in + package commands) and `--json` (machine-readable, used by `@rudderjs/boost`'s `commands_list` MCP tool)
 - `src/commands/providers-discover.ts` — Thin wrapper; scanning logic lives in `@rudderjs/core`
 - `src/commands/vendor-publish.ts` — Publishes provider assets

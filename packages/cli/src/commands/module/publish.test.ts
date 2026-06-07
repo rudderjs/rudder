@@ -22,6 +22,11 @@ function scaffoldModules(cwd: string): void {
 
 async function runPublish(cwd: string): Promise<void> {
   const prevCwd = process.cwd()
+  // Swallow clack's raw ANSI output (intro/outro/spinner cursor codes) — it
+  // intermittently corrupts the node:test default-reporter stream ("Unable to
+  // deserialize cloned data due to invalid or unsupported version", ~1/3 runs).
+  const prevWrite = process.stdout.write
+  process.stdout.write = (() => true) as typeof process.stdout.write
   process.chdir(cwd)
   try {
     const program = new Command()
@@ -30,6 +35,7 @@ async function runPublish(cwd: string): Promise<void> {
     await program.parseAsync(['module:publish'], { from: 'user' })
   } finally {
     process.chdir(prevCwd)
+    process.stdout.write = prevWrite
   }
 }
 

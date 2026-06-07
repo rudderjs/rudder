@@ -24,6 +24,7 @@ export function makeProvider(program: Command): void {
     label:       'Provider created',
     suffix:      'ServiceProvider',
     directory:   'app/Providers',
+    testKind:    'unit',
     stub,
   })
 }

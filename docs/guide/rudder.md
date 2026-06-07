@@ -179,6 +179,8 @@ pnpm rudder make:seeder Users                # → database/seeders/UsersSeeder.
 
 Pass `--force` to overwrite an existing file. These generators all emit `.ts` files; only `make:terminal` emits a `.tsx` Ink component.
 
+The class generators above (everything except the package-contributed `make:factory` / `make:seeder`) also take `-t, --with-test` — writes `tests/<Name>.test.ts` alongside the scaffolded file, shaped right for what was generated: a feature test (AppTestCase + HTTP) for `make:controller`, a unit test (plain node:test, no app boot) for everything else. See [Testing](/guide/testing).
+
 `make:exception` also takes `--status <code>` (4xx/5xx, default `500`) — the generated class declares `readonly httpStatus = <code>`, which the exception pipeline picks up automatically (see [Error Handling](/guide/error-handling)).
 
 ## `add` / `remove` — manage framework packages

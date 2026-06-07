@@ -46,6 +46,7 @@ export function makeException(program: Command): void {
     description: 'Create a new exception class',
     label:       'Exception created',
     directory:   'app/Exceptions',
+    testKind:    'unit',
     stub:        (className, opts) => stub(className, resolveStatus(opts)),
     extraOptions: [
       { flags: '-s, --status <code>', description: 'HTTP status the exception renders with (4xx/5xx, default 500)' },
