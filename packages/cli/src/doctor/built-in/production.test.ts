@@ -7,11 +7,17 @@ import { resetDoctorRegistry, getRegisteredChecks, type DoctorCheck } from '@rud
 
 // ── Helpers ──────────────────────────────────────────────────
 
+let importSeq = 0
+
 async function loadProduction(): Promise<DoctorCheck[]> {
   resetDoctorRegistry()
   // Side-effect import — cache-busted with a query param so each test gets
   // a fresh registration (Node test reuses the same module otherwise).
-  await import(`./production.js?t=${Date.now()}`)
+  // Monotonic counter, NOT Date.now(): two loads within one clock tick
+  // (routine on Windows — coarse system-clock granularity) produced the
+  // SAME url → module-cache hit → registration skipped right after the
+  // reset → flaky "check not registered" failures on windows-latest.
+  await import(`./production.js?t=${++importSeq}`)
   return getRegisteredChecks()
 }
 
