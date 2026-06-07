@@ -1149,6 +1149,31 @@ export function compileExists(
 ): string {
   const related = predicate.relatedTable
 
+  // Fan-out through relations (hasOneThrough/hasManyThrough) with a count
+  // comparison short-circuit BEFORE the generic body compilation (so the
+  // shared Bindings sees each value exactly once): the intermediate is 1:N to
+  // the far table, so `COUNT(*)` over the pivot-shaped body would count
+  // INTERMEDIATES (users with ≥1 post), not far rows (posts). Count the join
+  // product instead. Pivot relations keep the pivot-count shape
+  // byte-identical (1:1 — the counts coincide). Plain existence falls
+  // through: the nested-EXISTS shape below is already fan-out-correct.
+  if (predicate.count && predicate.through?.fanOut) {
+    const op = OPERATOR_SQL[predicate.count.operator]
+    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
+    const pivot  = predicate.through.pivotTable
+    const joined = [
+      `${qcol(pivot, predicate.through.foreignPivotKey, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
+      ...extraEqualsOn(pivot, predicate.extraEquals, dialect, b),
+      ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
+      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
+    ]
+    return (
+      `(SELECT COUNT(*) FROM ${dialect.quoteId(pivot)} ` +
+      `INNER JOIN ${dialect.quoteId(related)} ON ${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(pivot, predicate.through.relatedPivotKey, dialect)} ` +
+      `WHERE ${andAll(joined)}) ${op} ${asInt(predicate.count.value)}`
+    )
+  }
+
   // The subquery's FROM table + WHERE body — shared by the EXISTS and the
   // `COUNT(*) op N` wrappers below.
   let fromTable: string
@@ -1263,10 +1288,15 @@ export function compileAggregateSubselect(
       ...extraEqualsOn(pivot, js.extraEquals, dialect, b),
     ]
     // A join to the related table is needed only when the aggregate reads a
-    // related column, filters on it, or must honor its soft-delete flag.
+    // related column, filters on it, or must honor its soft-delete flag —
+    // or ALWAYS for fan-out through relations: the pivot fast path counts
+    // intermediate rows (and implies existence from a bare intermediate),
+    // which under-counts / false-positives when intermediate→related is 1:N.
+    // The join branch aggregates the join product (one row per far row).
     const needJoin = req.fn === 'sum' || req.fn === 'min' || req.fn === 'max' || req.fn === 'avg'
       || req.constraintWheres.length > 0
       || js.softDeletes === true
+      || js.through.fanOut === true
 
     if (!needJoin) {
       subquery = `(SELECT ${fnSql} FROM ${dialect.quoteId(pivot)} WHERE ${andAll(pivotExprs)})`

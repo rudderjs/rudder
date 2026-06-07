@@ -965,6 +965,17 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     }
     const pivotRows = await pivotDelegate.findMany({ where: pivotWhere }) as Array<Record<string, unknown>>
 
+    // Fan-out through relations (hasOneThrough/hasManyThrough): the
+    // intermediate is 1:N to the far table, so the pivot-row aggregation
+    // below (one count/value PER PIVOT ROW, related looked up by a unique
+    // key) would count intermediates instead of far rows and collapse a
+    // user's many posts onto one. Aggregate over the FAR rows instead,
+    // rolled up to each parent via the intermediate→parent map.
+    if (through.fanOut) {
+      await this._runFanOutAggregate(req, parentRows, pivotRows)
+      return
+    }
+
     if (req.fn === 'count' || req.fn === 'exists') {
       // Apply the constraint by filtering related rows first (when present),
       // then count surviving pivot rows per parent.
@@ -1027,6 +1038,67 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
         case 'min': row[req.alias] = Math.min(...list); break
         case 'max': row[req.alias] = Math.max(...list); break
         case 'avg': row[req.alias] = list.reduce((a, b) => a + b, 0) / list.length; break
+      }
+    }
+  }
+
+  /** @internal — fan-out (through-relation) aggregate: fetch the FAR rows
+   *  matching the intermediates (+ constraint/soft-delete filters), bucket
+   *  each far row to its parent via the intermediate→parent map, and
+   *  aggregate per parent. One related query total; counts count far rows
+   *  (not intermediates) and numerics see every far row (the 1:1 pivot path's
+   *  unique-key lookup would collapse a user's many posts onto one). */
+  private async _runFanOutAggregate(
+    req:        AggregateRequest,
+    parentRows: Array<Record<string, unknown>>,
+    pivotRows:  Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const js      = req.joinShape
+    const through = js.through!
+
+    // intermediate key (users.id) → parent key value (users.countryId).
+    // The intermediate key is its primary key, so the map is total.
+    const rkToFk = new Map<unknown, unknown>()
+    for (const p of pivotRows) rkToFk.set(p[through.relatedPivotKey], p[through.foreignPivotKey])
+
+    let values: Map<unknown, number[]>
+    if (rkToFk.size === 0) {
+      values = new Map()
+    } else {
+      const relatedDelegate = this.delegateFor(js.relatedTable)
+      const relatedWhere: Record<string, unknown> = {
+        [js.relatedColumn]: { in: [...rkToFk.keys()] },
+        ...this._wheresToPrismaFilter(req.constraintWheres),
+        ...(js.softDeletes ? { deletedAt: null } : {}),
+      }
+      const relatedRows = await relatedDelegate.findMany({ where: relatedWhere }) as Array<Record<string, unknown>>
+
+      // Bucket far-row values per PARENT (via the intermediate hop). For
+      // count/exists the value list's length is the far-row count.
+      values = new Map<unknown, number[]>()
+      for (const r of relatedRows) {
+        const fk = rkToFk.get(r[js.relatedColumn])
+        if (fk === undefined) continue
+        const v = (req.fn === 'count' || req.fn === 'exists') ? 1 : Number(r[req.column!])
+        if (Number.isNaN(v)) continue
+        const list = values.get(fk)
+        if (list) list.push(v); else values.set(fk, [v])
+      }
+    }
+
+    for (const row of parentRows) {
+      const list = values.get(row[js.parentColumn])
+      if (!list || list.length === 0) {
+        row[req.alias] = _aggregateDefault(req.fn)
+        continue
+      }
+      switch (req.fn) {
+        case 'count':  row[req.alias] = list.length; break
+        case 'exists': row[req.alias] = true; break
+        case 'sum':    row[req.alias] = list.reduce((a, b) => a + b, 0); break
+        case 'min':    row[req.alias] = Math.min(...list); break
+        case 'max':    row[req.alias] = Math.max(...list); break
+        case 'avg':    row[req.alias] = list.reduce((a, b) => a + b, 0) / list.length; break
       }
     }
   }

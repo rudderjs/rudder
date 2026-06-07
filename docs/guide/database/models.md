@@ -408,7 +408,7 @@ const recent = await user!.related('posts')
 const team = await user!.related('team').first()
 ```
 
-**Supported types:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `morphTo`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`. Polymorphic columns use camelCase (`commentableId` / `commentableType`) — a deliberate divergence from Laravel's snake_case.
+**Supported types:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `hasOneThrough`, `hasManyThrough`, `morphTo`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`. Polymorphic columns use camelCase (`commentableId` / `commentableType`) — a deliberate divergence from Laravel's snake_case.
 
 **Defaults:** `foreignKey` defaults to `<parentClassName>Id` (camelCase) for `hasOne` / `hasMany`, and `<relatedClassName>Id` for `belongsTo`. `localKey` defaults to the parent's primary key (or the FK on `belongsTo`). Override either when your schema diverges.
 
@@ -479,6 +479,27 @@ class User extends Model {
 - Pivot columns are not surfaced on read results — `related('roles').get()` returns clean `Role` instances without `_pivot` fields. Pivot data round-trips through `attach`/`sync` on the write side.
 - No `withTimestamps` — apps that want `createdAt` on the pivot can write it via `attach(ids, { createdAt: new Date() })` or schema-level defaults.
 - Mutations (`create`, `update`, `delete`, `insertMany`, `deleteAll`) on the deferred query throw — write the pivot via the accessor and write the related rows via the related model directly.
+
+### Through relations (`hasOneThrough` / `hasManyThrough`)
+
+Reach a distant relation via an intermediate model — `Country → User → Post`:
+
+```ts
+class Country extends Model {
+  static override relations = {
+    posts:    { type: 'hasManyThrough', model: () => Post, through: () => User },
+    flagship: { type: 'hasOneThrough',  model: () => Post, through: () => User },
+  } as const
+}
+
+const us = await Country.find(1)
+const posts = await us!.related('posts').where('published', true).get()
+const countries = await Country.with('posts').get()   // batched two-hop eager load
+```
+
+**Keys** default by Laravel convention and can each be overridden: `firstKey` (FK on the intermediate pointing at the parent, `<parentClassName>Id`), `secondKey` (FK on the related table pointing at the intermediate, `<throughClassName>Id`), `localKey` (parent PK), `secondLocalKey` (intermediate PK).
+
+Through relations resolve in the Model layer as two batched `WHERE … IN` hops, so `related()` / `with()` work on every adapter with no schema declaration. They also work with [`whereHas` / `whereDoesntHave` / `has`](#querying-parents-by-related-rows) and [aggregate eager loading](#aggregate-eager-loading) (`withCount` / `withSum` / …) — the constrain callback applies to the **far** table (Laravel semantics), and counts count **far rows** (a country reaching 3 posts via 2 users has `postsCount === 3`; an intermediate with zero far rows never satisfies `whereHas`). On Drizzle, the intermediate table must be registered in `tables: { ... }` alongside the related one; on Prisma both the intermediate and related models need delegates (any model in your schema has one).
 
 ### Polymorphic one-to-many (`morphTo` / `morphMany` / `morphOne`)
 
@@ -696,9 +717,9 @@ const myPosts = await Post.whereBelongsTo(currentUser).get()
 // shorthand for Post.where('userId', currentUser.id)
 ```
 
-`whereHas` works on every relation type; **on Prisma**, direct `hasMany` / `hasOne` / `belongsTo` relations need an `@relation` declared in `schema.prisma` so the adapter can use native `some` / `none`. Polymorphic and pivot relations route through a 2-step lookup so they work without a Prisma-declared relation. **On Drizzle**, every related table referenced from `whereHas` must be registered via `tables: { ... }` on `drizzle()` config or `DrizzleTableRegistry.register(name, table)` — missing tables surface a clear error.
+`whereHas` works on every relation type — including through relations (`hasOneThrough` / `hasManyThrough`), whose constrain callback applies to the **far** table and whose `has(relation, op, n)` counts **far** rows, not intermediates. **On Prisma**, direct `hasMany` / `hasOne` / `belongsTo` relations need an `@relation` declared in `schema.prisma` so the adapter can use native `some` / `none`. Polymorphic, pivot, and through relations route through a 2-step lookup so they work without a Prisma-declared relation. **On Drizzle**, every table referenced from `whereHas` — the related table, plus the pivot or through-intermediate when there is one — must be registered via `tables: { ... }` on `drizzle()` config or `DrizzleTableRegistry.register(name, table)`; missing tables surface a clear error.
 
-`whereHas` has two limitations in v1: nested `whereHas` inside a constrain callback throws (deferred), and `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today).
+`whereHas` has two limitations in v1: nested `whereHas` inside a constrain callback throws (deferred), and `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today), and on through relations everywhere (the two-hop eager load is Model-layer; the constraint still filters the parents).
 
 ### Aggregate eager loading
 

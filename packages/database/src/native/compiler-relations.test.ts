@@ -257,3 +257,91 @@ describe('native compiler — compileScalarAggregate', () => {
     assert.deepStrictEqual(bindings, [5])
   })
 })
+
+// ── Through relations (fanOut) ───────────────────────────────
+
+describe('native compiler — compileExists (through relation, fanOut)', () => {
+  const throughBlock = {
+    pivotTable: 'citizens', foreignPivotKey: 'nationId', relatedPivotKey: 'id', fanOut: true,
+  }
+
+  it('plain existence keeps the pivot nested-EXISTS shape (fan-out-safe as-is)', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'essays', exists: true,
+      relatedTable: 'essays', parentColumn: 'id', relatedColumn: 'citizenId',
+      constraintWheres: [],
+      through: throughBlock,
+    }
+    const b = makeBindings(dialect)
+    const sql = compileExists('nations', pred, dialect, b)
+    assert.strictEqual(sql,
+      'EXISTS (SELECT 1 FROM "citizens" WHERE "citizens"."nationId" = "nations"."id" AND ' +
+      'EXISTS (SELECT 1 FROM "essays" WHERE "essays"."citizenId" = "citizens"."id"))')
+  })
+
+  it('count comparison joins the far table — counts FAR rows, not intermediates', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'essays', exists: true,
+      relatedTable: 'essays', parentColumn: 'id', relatedColumn: 'citizenId',
+      constraintWheres: [{ column: 'published', operator: '=', value: 1 }],
+      count: { operator: '>=', value: 3 },
+      through: throughBlock,
+    }
+    const b = makeBindings(dialect)
+    const sql = compileExists('nations', pred, dialect, b)
+    assert.strictEqual(sql,
+      '(SELECT COUNT(*) FROM "citizens" ' +
+      'INNER JOIN "essays" ON "essays"."citizenId" = "citizens"."id" ' +
+      'WHERE "citizens"."nationId" = "nations"."id" AND "essays"."published" = ?) >= 3')
+    assert.deepStrictEqual(b.values, [1])
+  })
+
+  it('pivot count WITHOUT fanOut keeps the pivot-count shape byte-identical', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'roles', exists: true,
+      relatedTable: 'roles', parentColumn: 'id', relatedColumn: 'id',
+      constraintWheres: [],
+      count: { operator: '>=', value: 2 },
+      through: { pivotTable: 'role_user', foreignPivotKey: 'userId', relatedPivotKey: 'roleId' },
+    }
+    const b = makeBindings(dialect)
+    const sql = compileExists('users', pred, dialect, b)
+    assert.strictEqual(sql,
+      '(SELECT COUNT(*) FROM "role_user" WHERE "role_user"."userId" = "users"."id" AND ' +
+      'EXISTS (SELECT 1 FROM "roles" WHERE "roles"."id" = "role_user"."roleId")) >= 2')
+  })
+})
+
+describe('native compiler — compileAggregateSubselect (through relation, fanOut)', () => {
+  it('count is forced onto the join branch (the pivot fast path would count intermediates)', () => {
+    const b = makeBindings(dialect)
+    const req = countReq({
+      relation: 'essays', alias: 'essaysCount',
+      joinShape: {
+        relatedTable: 'essays', parentColumn: 'id', relatedColumn: 'citizenId',
+        through: { pivotTable: 'citizens', foreignPivotKey: 'nationId', relatedPivotKey: 'id', fanOut: true },
+      },
+    })
+    const sql = compileAggregateSubselect('nations', req, dialect, b)
+    assert.strictEqual(sql,
+      '(SELECT COUNT(*) FROM "citizens" ' +
+      'INNER JOIN "essays" ON "essays"."citizenId" = "citizens"."id" ' +
+      'WHERE "citizens"."nationId" = "nations"."id") AS "essaysCount"')
+  })
+
+  it('exists wraps the joined count — a bare intermediate row no longer implies existence', () => {
+    const b = makeBindings(dialect)
+    const req = countReq({
+      relation: 'essays', fn: 'exists', alias: 'essaysExists',
+      joinShape: {
+        relatedTable: 'essays', parentColumn: 'id', relatedColumn: 'citizenId',
+        through: { pivotTable: 'citizens', foreignPivotKey: 'nationId', relatedPivotKey: 'id', fanOut: true },
+      },
+    })
+    const sql = compileAggregateSubselect('nations', req, dialect, b)
+    assert.strictEqual(sql,
+      '((SELECT COUNT(*) FROM "citizens" ' +
+      'INNER JOIN "essays" ON "essays"."citizenId" = "citizens"."id" ' +
+      'WHERE "citizens"."nationId" = "nations"."id") > 0) AS "essaysExists"')
+  })
+})
