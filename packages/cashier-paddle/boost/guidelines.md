@@ -91,7 +91,7 @@ const preview = await previewPrices(['pri_01...'], { customerId, currencyCode: '
 - **CSRF blocks the webhook**: if you register the webhook on a route group with CSRF middleware (`web` by default), add `/paddle/webhook` to the exclude list. Or register on `api` instead.
 - **Raw body required for signature**: middleware that JSON-parses the body BEFORE `captureRawBody` runs will break HMAC verification — bytes don't round-trip through `JSON.stringify`.
 - **Missing `prisma generate` after `cashier:install`**: the install command publishes the Prisma schema additions but does NOT regenerate the client. Run `pnpm exec prisma db push && pnpm exec prisma generate` after.
-- **Static table is the Prisma camelCase delegate**, not the `@@map` SQL name: use `paddleSubscription`, not `paddle_subscriptions`.
+- **Static table is the `@@map` SQL name** (`paddle_subscriptions`), so the models run on the native engine and on Prisma (orm-prisma maps the SQL name → delegate). On Prisma this needs `@rudderjs/orm-prisma` ≥ the SQL-name-fallback release; an older one 500s with `Prisma has no delegate for table "paddle_subscriptions"`.
 - **Amounts are strings, not numbers**: Paddle returns minor-unit amounts as decimal strings (e.g. `"1999"` = $19.99). Use string math or `BigInt`; never `Number()` arithmetic — floating-point destroys cents at scale.
 - **`@paddle/paddle-node-sdk` is an optional peer**: install it only if you call API methods beyond webhook intake. Checkout-only apps skip it.
 

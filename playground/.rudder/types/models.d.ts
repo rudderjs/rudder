@@ -85,8 +85,8 @@ declare module '@rudderjs/orm' {
       revoked: boolean
       expiresAt: string
     }
-    paddleCustomer: {
-      id: number
+    paddle_customers: {
+      id: string
       paddleId: string | null
       billableId: string
       billableType: string
@@ -96,8 +96,18 @@ declare module '@rudderjs/orm' {
       createdAt: string
       updatedAt: string
     }
-    paddleSubscription: {
-      id: number
+    paddle_subscription_items: {
+      id: string
+      subscriptionId: string
+      productId: string
+      priceId: string
+      status: string
+      quantity: number
+      createdAt: string
+      updatedAt: string
+    }
+    paddle_subscriptions: {
+      id: string
       billableId: string
       billableType: string
       type: string
@@ -110,18 +120,8 @@ declare module '@rudderjs/orm' {
       createdAt: string
       updatedAt: string
     }
-    paddleSubscriptionItem: {
-      id: number
-      subscriptionId: string
-      productId: string
-      priceId: string
-      status: string
-      quantity: number
-      createdAt: string
-      updatedAt: string
-    }
-    paddleTransaction: {
-      id: number
+    paddle_transactions: {
+      id: string
       paddleId: string
       paddleCustomerId: string | null
       paddleSubscriptionId: string | null
@@ -136,8 +136,8 @@ declare module '@rudderjs/orm' {
       createdAt: string
       updatedAt: string
     }
-    paddleWebhookLog: {
-      id: number
+    paddle_webhook_logs: {
+      id: string
       eventId: string
       eventType: string
       processedAt: string
