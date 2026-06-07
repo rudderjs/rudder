@@ -417,6 +417,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
    *  update keys (`'meta->prefs->lang'`) throw a clear Model-layer error on
    *  adapter QBs without it (Prisma, until/unless it grows an equivalent). */
   readonly supportsJsonPathUpdates = true
+  /** Nested relation predicates (dot-path `whereHas('a.b')` AND callback
+   *  nesting `whereHas('a', q => q.whereHas('b'))`) are real on Drizzle —
+   *  `_relationExistsExpr` recurses. The Model layer guards adapters without
+   *  this marker (Prisma, until PR C of the nested-callback plan). */
+  readonly supportsNestedRelationPredicates = true
 
   private _wheres:      WhereClause[] = []
   private _orWheres:    WhereClause[] = []
@@ -1265,6 +1270,21 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         `[RudderJS ORM Drizzle] orWhereHas("${p.relation}") (OR-rooted relation existence) is not implemented on the Drizzle adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
       )
     }
+    this._extraExprs.push(this._relationExistsExpr(this.table, p))
+    return this
+  }
+
+  /**
+   * @internal — recursive correlated `EXISTS` / `NOT EXISTS` expression for a
+   * relation predicate, correlated against `Outer`: the QB's base table at the
+   * top level, or the ENCLOSING predicate's related table for nested children
+   * (dot-paths emit `nested` as a singular predicate, callback nesting as an
+   * array — siblings AND together; each child carries its own `exists` flag
+   * and constraints). Children live INSIDE the related row's EXISTS (for
+   * pivots: inside the inner related select, not the pivot select) — matching
+   * the native compiler's correlation.
+   */
+  private _relationExistsExpr(Outer: unknown, p: RelationExistencePredicate): SQL {
     const Related = this.resolveTable(p.relatedTable)
     if (!Related) {
       throw new Error(
@@ -1273,18 +1293,20 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       )
     }
 
-    const parentCol = this.col(p.parentColumn) as Column
+    const parentCol = this.colOf(Outer, p.parentColumn)
+    const children  = p.nested === undefined ? [] : Array.isArray(p.nested) ? p.nested : [p.nested]
 
     if (p.through) {
       // Pivot path — two-step EXISTS:
       //   EXISTS (
       //     SELECT 1 FROM pivot
-      //     WHERE pivot.foreignPivotKey = parent.parentColumn
+      //     WHERE pivot.foreignPivotKey = outer.parentColumn
       //       AND <extraEquals>
       //       AND EXISTS (
       //         SELECT 1 FROM related
       //         WHERE related.relatedColumn = pivot.relatedPivotKey
       //           AND <constraintWheres>
+      //           AND <child EXISTS…>
       //       )
       //   )
       const Pivot = this.resolveTable(p.through.pivotTable)
@@ -1299,6 +1321,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
       const innerExprs: SQL[] = [eq(relatedRelCol, pivotRelatedCol) as SQL]
       for (const w of p.constraintWheres) innerExprs.push(this.clauseToExprOn(Related, w))
+      for (const c of children) innerExprs.push(this._relationExistsExpr(Related, c))
       const innerSelect = this.db.select().from(Related).where(_andSql(innerExprs))
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1312,8 +1335,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       // real drizzle select implements SQLWrapper, but our stripped interface
       // doesn't expose `getSQL`. exists()/notExists() runtime accepts it.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this._extraExprs.push((p.exists ? exists(pivotSelect as any) : notExists(pivotSelect as any)) as SQL)
-      return this
+      return (p.exists ? exists(pivotSelect as any) : notExists(pivotSelect as any)) as SQL
     }
 
     // Direct path — single correlated EXISTS.
@@ -1323,10 +1345,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     for (const [k, v] of Object.entries(p.extraEquals ?? {})) {
       exprs.push(eq(this.colOf(Related, k), v) as SQL)
     }
+    for (const c of children) exprs.push(this._relationExistsExpr(Related, c))
     const inner = this.db.select().from(Related).where(_andSql(exprs))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this._extraExprs.push((p.exists ? exists(inner as any) : notExists(inner as any)) as SQL)
-    return this
+    return (p.exists ? exists(inner as any) : notExists(inner as any)) as SQL
   }
 
   // withConstrained intentionally not implemented yet — Drizzle's relational
