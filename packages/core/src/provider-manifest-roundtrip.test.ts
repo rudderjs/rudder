@@ -96,9 +96,11 @@ describe('provider manifest round-trip (scan → write → load)', () => {
     assert.strictEqual(manifestPath, path.join(SCRATCH, 'bootstrap/cache', 'providers.json'))
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
       version: number
+      fingerprint?: { depsHash?: string }
       providers: Array<{ package: string; providerSubpath?: string }>
     }
-    assert.strictEqual(manifest.version, 2, 'reader expects manifest version 2')
+    assert.strictEqual(manifest.version, 3, 'reader expects manifest version 3')
+    assert.ok(manifest.fingerprint, 'v3 manifests carry a fingerprint for boot-time staleness checks')
     assert.strictEqual(
       manifest.providers.find(p => p.package === '@rudderjs/fake-sub')?.providerSubpath,
       './server',

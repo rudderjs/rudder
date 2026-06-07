@@ -2,7 +2,7 @@
 // module stays safe to include in browser bundles. Vite externalizes node:* in
 // client builds, and a top-level import would crash the browser the moment any
 // client code transitively touches @rudderjs/core's barrel export.
-import { resolveOptionalPeer, config } from '@rudderjs/support'
+import { resolveOptionalPeer, config, Env } from '@rudderjs/support'
 import type { Application } from './application.js'
 import type { ServiceProvider } from './service-provider.js'
 import type { ProviderEntry, ProviderManifest } from './provider-registry.js'
@@ -31,9 +31,15 @@ export function getLastLoadedProviderEntries(): ProviderEntry[] {
 /**
  * Returns the framework's default provider classes, sorted by stage + depends.
  *
- * Resolution order:
- *   1. `bootstrap/cache/providers.json` manifest if it exists (run `pnpm rudder providers:discover`).
- *   2. Built-in minimal registry as fallback (so cold dev clones boot).
+ * Resolution order (self-healing — no manual `providers:discover` needed):
+ *   1. `bootstrap/cache/providers.json` manifest, when its fingerprint matches the
+ *      current dependency state.
+ *   2. Manifest missing or stale → scan node_modules at boot. In development the
+ *      manifest is rewritten; in production a stale manifest is still honored
+ *      (deterministic boots) with a warning, and a missing one is scanned in
+ *      memory with a warning — bake the manifest via `rudder providers:discover`
+ *      in your build step for bundled/serverless deploys.
+ *   3. Built-in minimal registry as a last resort (no node_modules to scan).
  *
  * Each entry's `package` is dynamically imported via `resolveOptionalPeer`.
  * Missing non-optional packages log a warning and are skipped; missing optional
@@ -70,24 +76,82 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
   const { readFileSync } = await import('node:fs')
   const path             = await import('node:path')
 
-  // 1. Try the build-time manifest first
-  let entries: ProviderEntry[]
+  const cwd = process.cwd()
+  // Same env derivation as Application (APP_ENV, defaulting to production —
+  // the safe side: production never auto-rewrites the manifest).
+  const isProduction = Env.get('APP_ENV', 'production') === 'production'
+
+  // 1. Read the manifest (cached fast path)
+  let manifest: ProviderManifest | undefined
   try {
-    const manifestPath = path.join(process.cwd(), 'bootstrap/cache/providers.json')
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as ProviderManifest
-    entries = manifest.providers
+    manifest = JSON.parse(readFileSync(path.join(cwd, 'bootstrap/cache/providers.json'), 'utf-8')) as ProviderManifest
   } catch {
-    // 2. Fall back to the built-in minimal registry, sort it ourselves
-    entries = sortByStageAndDepends(BUILTIN_REGISTRY)
+    // missing or unreadable — handled below
   }
 
-  // 3. Drop entries explicitly opted out of auto-discovery
+  // 2. Self-heal: scan node_modules when the manifest is missing or stale.
+  // commands/providers-discover.js has top-level node:* imports, so it is
+  // lazy-loaded here to keep this module browser-safe at eval time.
+  let entries: ProviderEntry[] | undefined = manifest?.providers
+
+  if (manifest) {
+    try {
+      const { computeFingerprint, isFingerprintStale, scanProviders, writeProviderManifest } =
+        await import('./commands/providers-discover.js')
+      if (isFingerprintStale(manifest.fingerprint, computeFingerprint(cwd))) {
+        if (isProduction) {
+          // Honor the manifest — deterministic boots win in production. Legacy
+          // v2 manifests (no fingerprint) are used silently; a genuinely stale
+          // v3 fingerprint warns.
+          if (manifest.version >= 3) {
+            console.warn(
+              '[RudderJS] provider manifest is stale (dependencies changed since it was generated). ' +
+              'Using it anyway — run `rudder providers:discover` in your build step to refresh.',
+            )
+          }
+        } else {
+          const scanned = scanProviders(cwd)
+          if (scanned.length > 0) {
+            entries = scanned
+            try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
+            console.log('[RudderJS] provider manifest regenerated (dependencies changed)')
+          }
+        }
+      }
+    } catch {
+      // Fingerprint check failed — use the manifest as-is.
+    }
+  } else {
+    try {
+      const { scanProviders, writeProviderManifest } = await import('./commands/providers-discover.js')
+      const scanned = scanProviders(cwd)
+      if (scanned.length > 0) {
+        entries = scanned
+        try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
+        if (isProduction) {
+          console.warn(
+            '[RudderJS] no provider manifest found — scanned node_modules at boot. ' +
+            'Run `rudder providers:discover` in your build step to bake bootstrap/cache/providers.json.',
+          )
+        } else {
+          console.log('[RudderJS] provider manifest generated (bootstrap/cache/providers.json)')
+        }
+      }
+    } catch {
+      // Scan failed — fall through to the built-in registry.
+    }
+  }
+
+  // 3. Last resort: built-in minimal registry (no manifest, nothing to scan)
+  entries ??= sortByStageAndDepends(BUILTIN_REGISTRY)
+
+  // 4. Drop entries explicitly opted out of auto-discovery
   entries = entries.filter(e => e.autoDiscover !== false)
 
-  // 4. Resolve multi-driver collisions (e.g. orm-prisma vs orm-drizzle)
+  // 5. Resolve multi-driver collisions (e.g. orm-prisma vs orm-drizzle)
   entries = resolveMultiDriver(entries, '@rudderjs/orm-', 'database.driver')
 
-  // 5. Filter installed + skipped, then resolve each class
+  // 6. Filter installed + skipped, then resolve each class
   const providers: ProviderClass[] = []
   const loaded:    ProviderEntry[] = []
 

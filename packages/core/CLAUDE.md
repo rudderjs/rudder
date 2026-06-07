@@ -10,7 +10,7 @@ The framework kernel — Application lifecycle, DI container, service providers,
 - `src/events.ts` — `EventDispatcher`, `eventsProvider()`, wildcard listeners
 - `src/validation.ts` — `FormRequest` (with lifecycle hooks: `prepareForValidation`, `messages`, `after`, `passedValidation`, `failedValidation`), `ValidationError`, `ValidationResponse`, zod integration
 - `src/exceptions.ts` — `HttpException`, `abort()`, `report()`
-- `src/default-providers.ts` — `defaultProviders()` auto-discovery from manifest
+- `src/default-providers.ts` — `defaultProviders()` auto-discovery; self-heals the manifest at boot (fingerprint check via `commands/providers-discover.ts`'s `computeFingerprint`/`isFingerprintStale`; dev rewrites, prod honors stale + warns). Keep the providers-discover import LAZY — that module has top-level `node:fs`/`node:crypto` imports and default-providers must stay browser-eval-safe.
 - `src/provider-sort.ts` — Stage + topo sort: foundation → infrastructure → feature → monitoring
 
 ## Architecture Rules

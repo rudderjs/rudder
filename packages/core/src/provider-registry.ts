@@ -31,10 +31,24 @@ export interface ProviderEntry {
   providerSubpath?: string
 }
 
+/**
+ * Fingerprint of the dependency state a manifest was scanned from. Lets
+ * `defaultProviders()` detect a stale manifest (raw `pnpm add/remove/update`
+ * without a `providers:discover` run) and self-heal at boot.
+ */
+export interface ManifestFingerprint {
+  /** sha256 of JSON({ dependencies, devDependencies }) from the app package.json. */
+  depsHash?: string
+  /** Stat of the first lockfile found — size/mtime only, the file is never read. */
+  lockfile?: { name: string; size: number; mtimeMs: number }
+}
+
 export interface ProviderManifest {
-  version:   2
-  generated: string
-  providers: ProviderEntry[]
+  /** v2 = legacy (no fingerprint); v3 adds `fingerprint`. */
+  version:      2 | 3
+  generated:    string
+  fingerprint?: ManifestFingerprint
+  providers:    ProviderEntry[]
 }
 
 /**

@@ -37,7 +37,7 @@ export class AppServiceProvider extends ServiceProvider {
 
 ## Auto-discovery
 
-Framework providers ship a `rudderjs` field in their `package.json` that tells Rudder how and when to boot them. The `pnpm rudder providers:discover` command scans `node_modules` for these fields and writes a sorted manifest to `bootstrap/cache/providers.json`. The `defaultProviders()` helper from `@rudderjs/core` reads that manifest at boot.
+Framework providers ship a `rudderjs` field in their `package.json` that tells Rudder how and when to boot them. The `defaultProviders()` helper from `@rudderjs/core` resolves them at boot from a cached manifest at `bootstrap/cache/providers.json` — and keeps that manifest fresh itself: the manifest carries a fingerprint of your dependency state, and when it's missing or stale (you ran a raw `pnpm add`/`remove`), boot rescans `node_modules` and rewrites it. No command to remember.
 
 ```ts
 // bootstrap/providers.ts
@@ -50,7 +50,9 @@ export default [
 ]
 ```
 
-That is the entire file. Adding a new framework package and re-running `providers:discover` is enough — no imports to add, no array to maintain. The scaffolder runs `providers:discover` automatically when you scaffold with `--install`.
+That is the entire file. Installing a new framework package is enough — the next boot picks it up. No imports to add, no array to maintain, no discovery command to run.
+
+In **production** the cached manifest always wins: a stale manifest is honored (deterministic boots) with a warning, and a missing one triggers an in-memory scan plus a warning. For bundled or serverless deploys — where `node_modules` doesn't exist at runtime to scan — bake the manifest at build time with `pnpm rudder providers:discover`.
 
 ### The `rudderjs` field
 
@@ -110,7 +112,7 @@ When the app boots in development and `defaultProviders()` was used, Rudder prin
   └─ monitoring      telescope
 ```
 
-If you forget to run `providers:discover` after installing a package, the missing entry is visible at every boot — instead of failing silently when first used. Production stays silent.
+A newly installed package shows up here on the next boot — the manifest self-heals, so a missing entry means the package genuinely isn't installed. Production stays silent.
 
 ## Opt-out paths
 
@@ -203,7 +205,7 @@ Same shape as Laravel's `$this->app->register(Provider::class)`.
 
 ## Common errors
 
-**`@rudderjs/X listed in the provider manifest but not installed`** — the manifest still references a removed package. Run `pnpm rudder providers:discover` to refresh.
+**`@rudderjs/X listed in the provider manifest but not installed`** — a production boot is using a manifest that references a removed package (development self-heals this at boot). Re-bake it with `pnpm rudder providers:discover` in your build step.
 
 **`Multiple @rudderjs/orm-* drivers installed but config('database.driver') is "..."`** — set `config('database.driver')` to one of the installed packages.
 
