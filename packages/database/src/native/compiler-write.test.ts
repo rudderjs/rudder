@@ -140,6 +140,58 @@ describe('native compiler — UPDATE', () => {
   })
 })
 
+describe('native compiler — json bindings (plain objects/arrays stringify at the funnel)', () => {
+  it('INSERT: a plain-object payload value binds as JSON text', () => {
+    const meta = { tags: ['a', 'b'], depth: { n: 2 } }
+    const { sql, bindings } = compileInsert(baseState(), dialect, [{ name: 'Ada', meta }])
+    assert.strictEqual(sql, 'INSERT INTO "users" ("name", "meta") VALUES (?, ?)')
+    assert.deepStrictEqual(bindings, ['Ada', JSON.stringify(meta)])
+  })
+
+  it('INSERT: an array payload value binds as JSON text', () => {
+    const list = [1, 'two', { three: 3 }]
+    const { bindings } = compileInsert(baseState(), dialect, [{ meta: list }])
+    assert.deepStrictEqual(bindings, [JSON.stringify(list)])
+  })
+
+  it('UPDATE: a plain-object SET value binds as JSON text', () => {
+    const meta = { theme: 'dark' }
+    const { sql, bindings } = compileUpdate(baseState(), dialect, { meta }, { extraConditions: pk(1) })
+    assert.strictEqual(sql, 'UPDATE "users" SET "meta" = ? WHERE "id" = ?')
+    assert.deepStrictEqual(bindings, [JSON.stringify(meta), 1])
+  })
+
+  it('WHERE: a plain-object comparison value binds as JSON text', () => {
+    const meta = { a: 1 }
+    const state = baseState({ conditions: [clause('AND', 'meta', '=', meta)] })
+    const { bindings } = compileUpdate(state, dialect, { name: 'x' })
+    assert.deepStrictEqual(bindings, ['x', JSON.stringify(meta)])
+  })
+
+  it('a null-prototype object also stringifies', () => {
+    const meta = Object.assign(Object.create(null) as Record<string, unknown>, { a: 1 })
+    const { bindings } = compileInsert(baseState(), dialect, [{ meta }])
+    assert.deepStrictEqual(bindings, ['{"a":1}'])
+  })
+
+  it('non-plain objects pass through untouched (Date, Buffer, class instances)', () => {
+    const date = new Date('2026-01-01T00:00:00.000Z')
+    const buf = Buffer.from('blob')
+    class NotARecord { x = 1 }
+    const inst = new NotARecord()
+    const { bindings } = compileInsert(baseState(), dialect, [{ a: date, b: buf, c: inst }])
+    assert.strictEqual(bindings[0], date)
+    assert.strictEqual(bindings[1], buf)
+    assert.strictEqual(bindings[2], inst)
+  })
+
+  it('pre-stringified JSON (the json cast path) is not double-encoded', () => {
+    const text = JSON.stringify({ a: 1 })
+    const { bindings } = compileInsert(baseState(), dialect, [{ meta: text }])
+    assert.deepStrictEqual(bindings, [text])
+  })
+})
+
 describe('native compiler — increment/decrement', () => {
   it('positive delta → col = col + ?', () => {
     const { sql, bindings } = compileIncrement(baseState(), dialect, 'views', 1, {}, { extraConditions: pk(7), returning: true })

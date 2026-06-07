@@ -48,23 +48,22 @@ Option 3 composes with 1/2 (blueprint intent for storage-level types, model cast
 Pilotiq playground dropped the casts and writes raw 0/1 integers with a comment
 pointing here (`playground/app/Models/Article.ts`). Revisit once fixed.
 
-## Related runtime gap — json columns reject object payloads (OPEN, found 2026-06-05)
+## Related runtime gap — json columns reject object payloads (✅ CLOSED, found 2026-06-05)
 
 The type half above was fixed in #934 (schema:types sweeps `app/Models` before
-folding). The *runtime* half of the same gap is still open: the native query
-builder binds plain-object values verbatim, so an UPDATE/INSERT whose payload
-contains rich-state objects (e.g. panel form `Json` columns) dies inside
-better-sqlite3 with the opaque `TypeError: You cannot specify named parameters
-in two different objects`. With Prisma these columns serialized implicitly;
-with the native engine the app must know to declare `static casts = { col:
-'json' }`. Suggestions:
-
-- The DDL layer knows a column is `t.json(...)` — the builder could
-  auto-stringify object values bound to json columns (mirroring
-  `castSet('json')`), or
-- Fail with an actionable error naming the column and pointing at
-  `static casts`, instead of surfacing better-sqlite3's named-parameter
-  message.
+folding). The *runtime* half was closed 2026-06-07: the native compiler's
+binding funnel (`Bindings.add` in `packages/database/src/native/compiler.ts`)
+now JSON-stringifies plain-object and array bindings, so an UPDATE/INSERT
+whose payload contains rich-state objects (e.g. panel form `Json` columns)
+binds as JSON text instead of dying inside better-sqlite3 with the opaque
+`TypeError: You cannot specify named parameters in two different objects`
+(mysql2 silently mangled the same shape into `` `key`='val' `` SQL pairs; pg
+survived only when the server described the param as json/jsonb). Chosen over
+DDL/schema introspection because the funnel is synchronous (column-type lookup
+is async), covers raw QB writes with no table metadata, and a plain-object
+binding has exactly one meaningful SQL representation anyway. `Date`/`Buffer`/
+class instances still pass through to the drivers. Declaring `static casts =
+{ col: 'json' }` remains the way to get *parsed reads* on sqlite.
 
 (Re-filed from the pilotiq-pro migration; this section replaces the
 `*.refiled-local.md` duplicate of this doc.)
