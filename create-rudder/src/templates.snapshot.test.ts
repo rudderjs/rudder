@@ -59,11 +59,10 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-06 — bootstrap/app.ts no longer wires the
-  // server adapter manually: `server:` is optional in Application.configure()
-  // (@rudderjs/server-hono auto-resolves with config('server')), so the
-  // template dropped the hono import + server line. The config barrel import
-  // is named `config` so the configure() call uses object shorthand.
+  // Baseline last captured 2026-06-07 — APP_KEY moved from the crypt-gated
+  // block to the unconditional .env/.env.example head (sessions sign with it
+  // regardless of @rudderjs/crypt; a non-crypt scaffold's first doctor was
+  // red). Same line count, two fewer blank separator lines → −2 bytes.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -73,8 +72,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 62
-const EXPECTED_TOTAL_BYTES = 49671
-const EXPECTED_CONTENT_HASH = '79c16119647f3afa8ab5f27c714b923fb7769c03b8cf14dd7f3ca4c4fc097be6'
+const EXPECTED_TOTAL_BYTES = 49669
+const EXPECTED_CONTENT_HASH = 'c9b448861f3f9363a80640094d4363f01abff9839fa09b09da2b47af1c7cad07'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

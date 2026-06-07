@@ -1051,10 +1051,13 @@ describe('getTemplates() — Phase 2 new packages', () => {
     })
   }
 
-  it('crypt selected → APP_KEY emitted in .env', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, crypt: true }, appKey: 'test-key' }))
+  it('APP_KEY always emitted in .env — even with no packages selected', () => {
+    // Sessions sign with APP_KEY regardless of @rudderjs/crypt; gating it on
+    // crypt left every fresh non-crypt scaffold with a red first `doctor`.
+    const files = getTemplates(ctx({ packages: noPkgs, appKey: 'test-key' }))
     assert.ok(files['.env']!.includes('APP_KEY=base64:test-key'))
     assert.ok(files['.env.example']!.includes('APP_KEY='))
+    assert.ok(!files['.env.example']!.includes('APP_KEY=base64:'), '.env.example must not carry a real key')
   })
 
   it('socialite selected → GitHub + Google env keys emitted', () => {

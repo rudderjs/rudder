@@ -4,6 +4,10 @@ export function dotenv(ctx: TemplateContext): string {
   const lines = [
     `APP_NAME=${ctx.name}`,
     'APP_ENV=development',
+    // Always emitted (Laravel parity, laravel new runs key:generate) —
+    // sessions sign with APP_KEY even when @rudderjs/crypt isn't installed;
+    // without it a fresh app's first `rudder doctor` is red out of the box.
+    `APP_KEY=base64:${ctx.appKey}`,
     'APP_DEBUG=true',
     'APP_URL=http://localhost:3000',
     '',
@@ -20,11 +24,6 @@ export function dotenv(ctx: TemplateContext): string {
   if (ctx.packages.auth) {
     lines.push('')
     lines.push(`AUTH_SECRET=${ctx.authSecret}`)
-  }
-
-  if (ctx.packages.crypt) {
-    lines.push('')
-    lines.push(`APP_KEY=base64:${ctx.appKey}`)
   }
 
   if (ctx.packages.ai) {
@@ -53,6 +52,8 @@ export function dotenvExample(ctx: TemplateContext): string {
   const lines = [
     `APP_NAME=${ctx.name}`,
     'APP_ENV=development',
+    '# Generate with: pnpm rudder key:generate',
+    'APP_KEY=',
     'APP_DEBUG=false',
     'APP_URL=http://localhost:3000',
     '',
@@ -69,12 +70,6 @@ export function dotenvExample(ctx: TemplateContext): string {
   if (ctx.packages.auth) {
     lines.push('')
     lines.push('AUTH_SECRET=please-set-a-real-32-char-secret-here')
-  }
-
-  if (ctx.packages.crypt) {
-    lines.push('')
-    lines.push('# Generate with: pnpm rudder key:generate')
-    lines.push('APP_KEY=')
   }
 
   if (ctx.packages.ai) {
