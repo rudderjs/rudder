@@ -26,6 +26,8 @@ import { MysqlDriver } from './drivers/mysql.js'
 import { SchemaBuilder } from './schema/schema-builder.js'
 import { readColumns } from './schema/introspect.js'
 import type { ModelCastInfo } from './schema/schema-types.js'
+import type { TableIntent } from './schema/intent-replay.js'
+import { isIntentReplayActive, refuseIntentReplayStatement } from './intent-guard.js'
 
 /** Supported native drivers. SQLite (better-sqlite3), Postgres (porsager
  *  `postgres`), and MySQL (`mysql2`). */
@@ -150,6 +152,13 @@ function cacheNativeClient(cacheKey: string, entry: NativeClientCacheEntry): voi
  * reported (Laravel parity — `QueryExecuted` doesn't fire on a query error).
  * `affectingExecute` is forwarded only when the underlying driver implements it,
  * so capability checks (`typeof ex.affectingExecute === 'function'`) still hold.
+ *
+ * This wrapper is also the single funnel EVERY NativeAdapter statement flows
+ * through (write executor, read replicas, transaction scopes), so it hosts the
+ * blueprint-intent replay guard: while `collectBlueprintIntent` re-runs applied
+ * migrations' `up()` bodies to recover declared column types, a runtime
+ * statement (a `DB.statement` backfill, a Model write) must throw rather than
+ * re-execute. See `./intent-guard.ts`.
  */
 function instrumentExecutor(
   exec:       Executor,
@@ -174,6 +183,7 @@ function instrumentExecutor(
 
   const wrapped: Executor & Partial<AffectingExecutor> = {
     async execute(sql: string, bindings: readonly unknown[]): Promise<Row[]> {
+      if (isIntentReplayActive()) refuseIntentReplayStatement()
       const startedAt = performance.now()
       const rows = await exec.execute(sql, bindings)
       emit(sql, bindings, startedAt)
@@ -185,6 +195,7 @@ function instrumentExecutor(
   if (typeof affecting.affectingExecute === 'function') {
     const affectingExecute = affecting.affectingExecute.bind(exec)
     wrapped.affectingExecute = async (sql, bindings) => {
+      if (isIntentReplayActive()) refuseIntentReplayStatement()
       const startedAt = performance.now()
       const result = await affectingExecute(sql, bindings)
       emit(sql, bindings, startedAt)
@@ -450,16 +461,19 @@ export class NativeAdapter implements OrmAdapter {
   /**
    * Generate `.rudder/types/models.d.ts` from THIS connection's live
    * schema (GATE 7-types) — introspect every table, fold in each model's
-   * declared `casts`, and (re)write the registry. Node-only; the fs-writing
-   * orchestrator is lazily imported so the adapter's static eval graph stays
-   * import-light. Returns the written path + table count for the CLI to report.
+   * declared `casts` plus the blueprint-declared `intent` recovered by
+   * migration replay (`cast > intent > storage type`), and (re)write the
+   * registry. Node-only; the fs-writing orchestrator is lazily imported so the
+   * adapter's static eval graph stays import-light. Returns the written path +
+   * table count for the CLI to report.
    */
   async generateSchemaTypes(
     cwd: string,
     models: ModelCastInfo[] = [],
+    intent?: TableIntent,
   ): Promise<{ path: string; tableCount: number }> {
     const { generateSchemaTypes } = await import('./schema/schema-types.js')
-    return generateSchemaTypes(this.executor, this.dialect, cwd, models)
+    return generateSchemaTypes(this.executor, this.dialect, cwd, models, intent)
   }
 
   /**

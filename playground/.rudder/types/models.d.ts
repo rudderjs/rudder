@@ -36,7 +36,7 @@ declare module '@rudderjs/orm' {
       clientId: string
       name: string | null
       scopes: string
-      revoked: number
+      revoked: boolean
       expiresAt: string
       createdAt: string
     }
@@ -46,7 +46,7 @@ declare module '@rudderjs/orm' {
       userId: string
       clientId: string
       scopes: string
-      revoked: number
+      revoked: boolean
       expiresAt: string
       redirectUri: string | null
       codeChallenge: string | null
@@ -59,8 +59,8 @@ declare module '@rudderjs/orm' {
       redirectUris: unknown
       grantTypes: unknown
       scopes: unknown
-      confidential: number
-      revoked: number
+      confidential: boolean
+      revoked: boolean
       createdAt: string
       updatedAt: string
     }
@@ -71,7 +71,7 @@ declare module '@rudderjs/orm' {
       deviceCodeHash: string
       scopes: string
       userId: string | null
-      approved: number | null
+      approved: boolean | null
       interval: number
       expiresAt: string
       lastPolledAt: string | null
@@ -82,7 +82,7 @@ declare module '@rudderjs/orm' {
       tokenHash: string
       accessTokenId: string
       familyId: string | null
-      revoked: number
+      revoked: boolean
       expiresAt: string
     }
     paddleCustomer: {

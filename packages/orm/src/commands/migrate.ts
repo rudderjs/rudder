@@ -326,9 +326,13 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
 
 /** The native engine's schema:types capability (GATE 7-types) — present on the
  *  native adapter only. Lets `migrate*` and `schema:types` regenerate the typed
- *  `registry.d.ts` from the live schema. */
+ *  `registry.d.ts` from the live schema (+ casts + blueprint intent). */
 interface SchemaTypesCapable {
-  generateSchemaTypes(cwd: string, models: ModelCastInfo[]): Promise<{ path: string; tableCount: number }>
+  generateSchemaTypes(
+    cwd: string,
+    models: ModelCastInfo[],
+    intent?: import('@rudderjs/database/native').TableIntent,
+  ): Promise<{ path: string; tableCount: number }>
 }
 
 /** A native adapter is duck-typed by its `schemaBuilder()` accessor — prisma/
@@ -469,13 +473,49 @@ export function collectRegisteredModelCasts(): ModelCastInfo[] {
 }
 
 /**
- * Regenerate `.rudder/types/models.d.ts` from a booted native adapter's
- * live schema. Shared by the `schema:types` command and the post-`migrate`
- * auto-gen hook. Logs the written path + table count.
+ * Recover the blueprint-declared column types for the APPLIED migrations by
+ * replaying their `up()` bodies against the in-memory intent ledger (see
+ * `@rudderjs/database`'s `intent-replay.ts`) — the fallback layer between a
+ * model's casts and the introspected storage type. Best-effort by design:
+ * any failure (no migrations dir, unreadable state table, a migration whose
+ * `up()` contains runtime statements) degrades to "no intent" — columns keep
+ * their cast/storage types, never a wrong answer.
  */
-export async function runNativeSchemaTypes(adapter: NativeAdapterLike, cwd: string): Promise<void> {
+export async function collectMigrationIntent(
+  adapter: NativeAdapterLike,
+  dir: string,
+): Promise<import('@rudderjs/database/native').TableIntent | undefined> {
+  try {
+    const { discoverMigrations, collectBlueprintIntent, Migrator } = await import('../native/index.js')
+    const migrations = await discoverMigrations(dir)
+    if (migrations.length === 0) return undefined
+    const applied = await new Migrator(adapter).ran()
+    if (applied.length === 0) return undefined
+    const { intent, skipped } = await collectBlueprintIntent(migrations, applied)
+    if (skipped.length > 0) {
+      console.log(
+        `  (blueprint intent partially skipped for ${skipped.length} migration${skipped.length === 1 ? '' : 's'} ` +
+        `with runtime statements in up() — affected columns keep their introspected types)`,
+      )
+    }
+    return intent
+  } catch {
+    return undefined // intent is a refinement only — generation proceeds without it
+  }
+}
+
+/**
+ * Regenerate `.rudder/types/models.d.ts` from a booted native adapter's
+ * live schema, folding in model casts and blueprint intent (`cast > intent >
+ * storage type`). Shared by the `schema:types` command and the post-`migrate`
+ * auto-gen hook. `dir` is the migrations directory the intent replay reads
+ * (defaults to the `database/migrations` convention). Logs the written path +
+ * table count.
+ */
+export async function runNativeSchemaTypes(adapter: NativeAdapterLike, cwd: string, dir?: string): Promise<void> {
   await registerAppModels(cwd)
-  const { path, tableCount } = await adapter.generateSchemaTypes(cwd, collectRegisteredModelCasts())
+  const intent = await collectMigrationIntent(adapter, dir ?? migrationsDir(cwd))
+  const { path, tableCount } = await adapter.generateSchemaTypes(cwd, collectRegisteredModelCasts(), intent)
   console.log(`  Schema types written to ${path.replace(cwd + '/', '')} (${tableCount} table${tableCount === 1 ? '' : 's'}).`)
 }
 
@@ -778,7 +818,7 @@ export function registerMigrateCommands(
       console.log(count === 0 ? '  Nothing to migrate.' : `  Migrations complete (${count} applied).`)
       // Typed-registry regen reflects the DEFAULT connection's schema — a named
       // connection's tables would clobber it with another database's shape.
-      if (!target) await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd, dir)
       return
     }
     const orm = requireORM()
@@ -796,7 +836,7 @@ export function registerMigrateCommands(
       console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
       const count = await runNativeFresh(native, cwd, dir)
       console.log(`  Database reset complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
-      if (!target) await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd, dir)
       if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }
@@ -817,9 +857,10 @@ export function registerMigrateCommands(
       const batch = flagNumber(args, 'batch')
       const step  = rollbackStep(args)
       const opts = batch !== undefined ? { batch } : step !== undefined ? { step } : {}
-      const count = await runNativeRollback(native, cwd, opts, migrationsDir(cwd, flagString(args, 'path')))
+      const dir = migrationsDir(cwd, flagString(args, 'path'))
+      const count = await runNativeRollback(native, cwd, opts, dir)
       console.log(count === 0 ? '  Nothing to roll back.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
-      if (!target) await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd, dir)
       return
     }
     // Prisma/Drizzle migrations are forward-only — neither tool reverses an
@@ -838,9 +879,10 @@ export function registerMigrateCommands(
     const native = target?.adapter ?? await resolveNative()
     if (native) {
       console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
-      const count = await runNativeReset(native, cwd, migrationsDir(cwd, flagString(args, 'path')))
+      const dir = migrationsDir(cwd, flagString(args, 'path'))
+      const count = await runNativeReset(native, cwd, dir)
       console.log(count === 0 ? '  Nothing to reset.' : `  Rolled back ${count} migration${count === 1 ? '' : 's'}.`)
-      if (!target) await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd, dir)
       return
     }
     const orm = requireORM()
@@ -858,9 +900,10 @@ export function registerMigrateCommands(
     const native = target?.adapter ?? await resolveNative()
     if (native) {
       console.log(target ? `  ORM: native (connection: ${target.connection})` : '  ORM: native')
-      const count = await runNativeRefresh(native, cwd, { step: hasFlag(args, 'step') }, migrationsDir(cwd, flagString(args, 'path')))
+      const dir = migrationsDir(cwd, flagString(args, 'path'))
+      const count = await runNativeRefresh(native, cwd, { step: hasFlag(args, 'step') }, dir)
       console.log(`  Refresh complete (${count} migration${count === 1 ? '' : 's'} re-applied).`)
-      if (!target) await runNativeSchemaTypes(native, cwd)
+      if (!target) await runNativeSchemaTypes(native, cwd, dir)
       if (hasFlag(args, 'seed')) await runSeeder(cwd)
       return
     }

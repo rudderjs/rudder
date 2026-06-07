@@ -14,6 +14,7 @@
 // directly unit-testable.
 
 import type { RawColumn } from './introspect.js'
+import type { ColumnType } from './column.js'
 import type { BuiltInCast } from '@rudderjs/contracts'
 
 /** A column's resolved TypeScript type plus whether it's optional on read. */
@@ -149,32 +150,70 @@ export function castToTs(cast: BuiltInCast | string): string | null {
 }
 
 /**
- * Resolve one column's TS type: a declared cast wins over the storage mapping,
- * and a nullable column widens with `| null`. The primary key and NOT NULL
+ * The TS type a blueprint's declared {@link ColumnType} refines a CAST-LESS
+ * column to — the middle layer of the precedence `cast > blueprint intent >
+ * introspected storage type`. Returns null for types where the storage mapping
+ * is already faithful (or where folding the intent would lie about runtime):
+ *
+ *  - `boolean` → `boolean`: writes are safe everywhere (every driver binds
+ *    `true`/`false`, the sqlite driver maps them to 1/0); reads return `0`/`1`
+ *    on sqlite (and mysql `tinyint(1)`) without a `boolean` cast — truthiness
+ *    behaves identically, but strict `=== true` comparisons need the cast.
+ *    This is the deliberate 90%-case trade-off the plan doc's option 3 names.
+ *  - `json`/`jsonb` → `unknown`: SOUND on every dialect — sqlite reads the raw
+ *    TEXT (a string ⊆ unknown; a `json` cast gets parsed reads), and the
+ *    binding funnel JSON-stringifies object/array writes, which `unknown`
+ *    admits and the affinity type `string` wrongly rejected.
+ *  - date family (`date`/`dateTime`/`timestamp`/`time`) → null, deliberately:
+ *    on sqlite a cast-less column reads as TEXT *and* better-sqlite3 REJECTS a
+ *    `Date` binding — emitting `Date` would make tsc bless writes that throw
+ *    at runtime. The `date`/`datetime` cast (which parses reads AND serializes
+ *    writes) is the correct tool; pg/mysql introspection already yields `Date`.
+ */
+export function blueprintIntentToTs(type: ColumnType): string | null {
+  switch (type) {
+    case 'boolean':  return 'boolean'
+    case 'json':
+    case 'jsonb':    return 'unknown'
+    default:         return null
+  }
+}
+
+/**
+ * Resolve one column's TS type — `cast > blueprint intent > storage mapping` —
+ * and widen nullable columns with `| null`. The primary key and NOT NULL
  * columns stay non-null. `typeToTs` is the per-dialect storage mapper
- * ({@link sqliteTypeToTs} by default; {@link pgTypeToTs} for Postgres).
+ * ({@link sqliteTypeToTs} by default; {@link pgTypeToTs} for Postgres);
+ * `intent` is the column's blueprint-declared type when the migration replay
+ * recovered one (see `intent-replay.ts`).
  */
 export function resolveColumnType(
   col: RawColumn,
   casts: Record<string, string>,
   typeToTs: (declared: string) => string = sqliteTypeToTs,
+  intent?: ReadonlyMap<string, ColumnType>,
 ): GeneratedColumnType {
   const declaredCast = casts[col.name]
-  const base = (declaredCast && castToTs(declaredCast)) || typeToTs(col.type)
+  const intentType = intent?.get(col.name)
+  const base =
+    (declaredCast && castToTs(declaredCast)) ||
+    (intentType && blueprintIntentToTs(intentType)) ||
+    typeToTs(col.type)
   // A column is nullable on read when it permits NULL and isn't the PK.
   const nullable = !col.notNull && col.pk === 0
   return { name: col.name, ts: nullable ? `${base} | null` : base }
 }
 
-/** Build one table's {@link TableTypes} from its columns + casts, using the
- *  given per-dialect storage mapper (defaults to the SQLite mapping). */
+/** Build one table's {@link TableTypes} from its columns + casts + blueprint
+ *  intent, using the given per-dialect storage mapper (defaults to SQLite). */
 export function buildTableTypes(
   table: string,
   columns: RawColumn[],
   casts: Record<string, string> = {},
   typeToTs: (declared: string) => string = sqliteTypeToTs,
+  intent?: ReadonlyMap<string, ColumnType>,
 ): TableTypes {
-  return { table, columns: columns.map((c) => resolveColumnType(c, casts, typeToTs)) }
+  return { table, columns: columns.map((c) => resolveColumnType(c, casts, typeToTs, intent)) }
 }
 
 /**
