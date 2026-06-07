@@ -36,6 +36,21 @@ class TypeRow extends Model {
   meta!: Record<string, unknown>
 }
 
+// Same table, NO casts — exercises the compiler's binding funnel directly: a
+// plain-object/array payload on a json column must JSON-stringify at bind time
+// (better-sqlite3 used to die with the opaque "named parameters in two
+// different objects" TypeError; mysql2 silently mangled the object into
+// `key='val'` SQL pairs). Prisma serialized these implicitly, so apps porting
+// to the native engine hit this exact shape.
+class RawTypeRow extends Model {
+  static override table = TABLE
+  id!: number
+  amount!: string | number
+  big!: number
+  seenAt!: Date | string
+  meta!: unknown
+}
+
 // Read-side casts apply at serialization (`toJSON()`), not hydration — the
 // instance fields hold the raw column values. Assert on the cast-applied view.
 function castView(row: TypeRow): Record<string, unknown> {
@@ -93,6 +108,26 @@ function defineScenario(dateMode: 'native' | 'iso'): void {
     // as a STRING here, not a parsed object.
     assert.deepStrictEqual(out, meta)
     assert.strictEqual(typeof out, 'object')
+  })
+
+  it('json — an UNCAST plain-object payload binds (compiler stringifies) and round-trips', async () => {
+    const meta = { theme: 'dark', tags: ['a', 'b'], depth: { n: 2, ok: true } }
+    const created = await RawTypeRow.create({ amount: 0, big: 1, seenAt: seed(dateMode), meta })
+    const fresh = await RawTypeRow.findOrFail(created.id)
+    // No cast → sqlite reads the TEXT back; pg (porsager) and mysql (mysql2)
+    // parse their native json columns to objects. Normalize before comparing.
+    const raw = fresh.meta
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) as unknown : raw
+    assert.deepStrictEqual(parsed, meta)
+  })
+
+  it('json — an UNCAST array payload binds and round-trips', async () => {
+    const meta = [1, 'two', { three: 3 }]
+    const created = await RawTypeRow.create({ amount: 0, big: 1, seenAt: seed(dateMode), meta })
+    const fresh = await RawTypeRow.findOrFail(created.id)
+    const raw = fresh.meta
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) as unknown : raw
+    assert.deepStrictEqual(parsed, meta)
   })
 }
 

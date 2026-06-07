@@ -244,9 +244,40 @@ class Bindings {
   constructor(private readonly dialect: Dialect) {}
   add(value: unknown): string {
     const ph = this.dialect.placeholder(this.values.length)
-    this.values.push(value)
+    this.values.push(normalizeBindingValue(value))
     return ph
   }
+}
+
+/**
+ * Serialize plain-object and array bindings to JSON text at the binding
+ * funnel. A single SQL placeholder has no structural representation for a JS
+ * object — JSON text is the only meaningful encoding, and it is exactly what
+ * every dialect's `t.json()` column stores/parses. Without this, an object
+ * payload on a json column (declaring `static casts = { col: 'json' }` is
+ * easy to omit) failed per driver in three different ways: better-sqlite3
+ * threw the opaque "named parameters in two different objects" TypeError,
+ * mysql2 silently expanded the object into `` `key` = 'val' `` SQL pairs, and
+ * porsager survived only when the server described the param as json/jsonb.
+ * Stringifying once here makes all three dialects store identical JSON text,
+ * which round-trips with the `json` cast's read path and with pg/mysql's
+ * native JSON column parsing. Values a cast already serialized are strings by
+ * the time they reach the funnel and pass through untouched; `IN` lists and
+ * the dialect json seams (`jsonContains`/`jsonSet`) bind element-/pre-
+ * stringified values, so no structural binding is ever meant to stay raw.
+ *
+ * Deliberately PLAIN objects only (`Object.prototype` or null prototype) plus
+ * arrays: `Date`/`Buffer` keep their driver-level handling (porsager binds
+ * Dates natively), and an accidentally-bound class instance (e.g. a Model)
+ * should surface the driver's error rather than be silently stored as JSON.
+ */
+function normalizeBindingValue(value: unknown): unknown {
+  if (Array.isArray(value)) return JSON.stringify(value)
+  if (typeof value === 'object' && value !== null) {
+    const proto = Object.getPrototypeOf(value) as unknown
+    if (proto === Object.prototype || proto === null) return JSON.stringify(value)
+  }
+  return value
 }
 
 /**

@@ -174,8 +174,12 @@ export class BetterSqlite3Driver implements Driver {
  * with the ORM's `boolean` cast (which reads `0`/`1` back). The mapping covers
  * raw boolean values that bypass a column cast — an untyped `where('flag', true)`
  * predicate, or a `query().create({ flag: true })` on a column without a
- * boolean cast. Other unbindable values (`Date`, plain objects) are passed
- * through so better-sqlite3 still rejects them with its own clear error.
+ * boolean cast. Other unbindable values (`Date`) are passed through so
+ * better-sqlite3 still rejects them with its own clear error. Plain objects
+ * and arrays never arrive from the query builder — the compiler's binding
+ * funnel JSON-stringifies them (json-column payloads) — so only a raw
+ * `Driver.execute(...)` call can still bind one, and better-sqlite3 rejects
+ * it (an object param reads as a named-parameters bag).
  *
  * Returns the original array reference when nothing needed coercion, so the
  * common boolean-free path allocates nothing.
