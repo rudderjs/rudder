@@ -1,5 +1,16 @@
 # @rudderjs/orm
 
+## 1.19.0
+
+### Minor Changes
+
+- dca4bf5: schema:types now folds blueprint-declared column types into the generated registry as a fallback layer for cast-less columns — precedence is `cast > blueprint intent > introspected storage type`. On SQLite a `t.boolean()` column types as `boolean` (instead of the INTEGER affinity's `number`) and `t.json()`/`t.jsonb()` as `unknown` (instead of `string`, which wrongly rejected the object writes the engine JSON-stringifies) without declaring any model cast. Intent is recovered by replaying the APPLIED migrations' blueprints against an in-memory ledger at generation time — no DDL or data statements re-execute (a guard at the adapter's executor funnel refuses runtime statements during replay and the migration's remaining intent is skipped). Date/time columns deliberately stay storage-typed without a cast: a cast-less SQLite column reads strings and rejects `Date` bindings, so the `date`/`datetime` cast remains the way to get `Date` semantics. New exports: `collectBlueprintIntent`/`TableIntent` (`@rudderjs/database/native`); `runNativeSchemaTypes` accepts an optional migrations-dir argument and `NativeAdapter.generateSchemaTypes` an optional intent map.
+
+### Patch Changes
+
+- Updated dependencies [dca4bf5]
+  - @rudderjs/database@1.4.0
+
 ## 1.18.0
 
 ### Minor Changes
