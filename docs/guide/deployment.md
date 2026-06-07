@@ -257,7 +257,7 @@ Most platforms (Kubernetes, Cloud Run, Fly.io) hit this endpoint before routing 
 ## Pitfalls
 
 - **`pnpm build` skipped.** Running `tsx` in production works but starts cold every request. Always build first.
-- **Forgetting `pnpm rudder providers:discover`.** The provider manifest must exist at boot. The build doesn't generate it — add it to your deploy script before `pnpm build`.
+- **No provider manifest in bundled deploys.** When `node_modules` exists at runtime, a missing manifest self-heals (boot scans it, with a warning). Bundled/serverless deploys can't scan — add `pnpm rudder providers:discover` to your deploy script before `pnpm build` to bake `bootstrap/cache/providers.json`.
 - **`APP_DEBUG=true` shipping to production.** Stack traces leak path and dependency info. Hard-set `APP_DEBUG=false` in production environments.
 - **Single instance for everything.** Run web, queue worker, and scheduler as separate supervised processes. Bundling them in one process means a queue spike degrades request handling.
 - **No reverse proxy.** Node serves TLS poorly compared to nginx, and you lose static-asset caching. Even on edge platforms, the platform itself is the proxy.

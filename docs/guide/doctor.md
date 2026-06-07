@@ -315,6 +315,6 @@ Like `doctor`, `about` skips the app boot — it's fast (under 50ms) and works e
 ## Pitfalls
 
 - **Doctor doesn't replace error messages.** A red doctor names the layer; you still need the stack trace for app-code bugs. `--deep`'s `runtime:app-boot` shows the boot error verbatim — that's the primary debugging signal, not the doctor.
-- **`bootstrap/cache/providers.json` is gitignored.** On a fresh clone, `deps:providers-manifest` warns "missing." That's expected — `--fix --yes` regenerates it, or the next `pnpm rudder providers:discover` will.
+- **`bootstrap/cache/providers.json` is gitignored.** On a fresh clone, `deps:providers-manifest` may warn "missing" if the app has never booted. Harmless — the first boot self-heals it (and `--fix --yes` or `pnpm rudder providers:discover` regenerate it explicitly).
 - **Stale-mtime checks can lag.** Some checks (notably `orm-prisma:client-generated`) compare mtimes; under pnpm + Prisma 7, the symlink target's mtime doesn't move when the client is regenerated. A future release will switch to a content hash.
 - **`--fix` over a broken `.env`.** Fixers never touch `.env`, so `--fix` won't help with "missing AUTH_SECRET." Add the env var, then re-run.

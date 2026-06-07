@@ -67,7 +67,7 @@ For sqlite, `url` accepts a `file:` path, a bare path, or `:memory:`; pg/mysql t
 
 ### Register the provider
 
-Auto-discovery handles this — after installing, run `pnpm rudder providers:discover` and the native provider boots when the config opts in. To wire it explicitly instead:
+Auto-discovery handles this — once installed, the next boot picks the package up and the native provider boots when the config opts in. To wire it explicitly instead:
 
 ```ts
 // bootstrap/providers.ts

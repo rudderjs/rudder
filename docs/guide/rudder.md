@@ -149,7 +149,7 @@ The framework ships several built-in commands that show up automatically. The se
 | `tinker` | cli | Interactive REPL with the app booted — `User`, `Route`, `app()`, every model in `app/Models/` pre-imported. Top-level await; persistent history. See [Tinker](./tinker.md). |
 | `add`, `remove` | core | Install / uninstall a `@rudderjs/*` package end-to-end (see below) |
 | `vendor:publish` | core | Publish package assets (configs, views, schemas) |
-| `providers:discover` | core | Refresh the provider manifest |
+| `providers:discover` | core | Bake the provider manifest (build-step primitive — boot self-heals it in dev) |
 | `mcp:inspector` | mcp | Dev UI for MCP servers |
 | `ai:eval` | ai | Run agent evals with metrics; `--record` / `--replay` for fixtures, `--html <path>` for a self-contained report |
 | `passport:keys`, `passport:client`, `passport:purge` | passport | OAuth 2 key + client + token management |
@@ -246,6 +246,6 @@ pnpm rudder module:publish
 ## Pitfalls
 
 - **Running rudder from a sub-package.** It resolves `bootstrap/app.ts` from `process.cwd()`. Run from the project root.
-- **Forgetting `pnpm rudder providers:discover` after install.** Newly installed framework packages don't load until you refresh the manifest. The scaffolder runs it automatically; manual installs need it explicit.
+- **Expecting `providers:discover` to be required after install.** It isn't — the provider manifest self-heals at boot (missing or stale → rescan). The command exists for build pipelines: bundled/serverless deploys must bake `bootstrap/cache/providers.json` at build time.
 - **`make:*` overwriting work.** Without `--force`, the generator refuses to overwrite. With `--force`, it overwrites silently — review the diff before committing.
 - **Slow commands at startup.** The CLI boots the full app for every command. `make:*`, `providers:discover`, `db:generate`, `db:push`, `migrate*`, `add`, `remove`, and `view:sync` skip `bootApp()` for speed; if you write a custom command that doesn't need the app, you can do the same — see `@rudderjs/cli`'s source.
