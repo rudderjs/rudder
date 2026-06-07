@@ -734,7 +734,7 @@ await User.whereHas('posts', (q) =>
 await User.whereHas('posts', (q) => q.whereDoesntHave('comments')).get()
 ```
 
-Both nested forms work on the **native engine and Drizzle** (on Drizzle, every table in the chain must be registered in `tables: { ... }`); Prisma rejects them with a clear error (adapter support is planned).
+Both nested forms work on **all three adapters**. On Drizzle, every table in the chain must be registered in `tables: { ... }`. On Prisma, every nested level must be a schema-declared direct relation (they compose as native `some`/`none`); a pivot/polymorphic/through relation is allowed only at the **outermost** position — deeper, Prisma throws a clear mixed-chain error (use native/Drizzle for those).
 
 Remaining `whereHas` limitations: `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today), on through relations everywhere, and whenever the callback nests (the constraint still filters the parents; the eagerly loaded children are unconstrained).
 

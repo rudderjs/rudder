@@ -129,6 +129,15 @@ import { resolveOptionalPeer } from '@rudderjs/support'
 // ─── Prisma Query Builder ──────────────────────────────────
 
 class PrismaQueryBuilder<T> implements QueryBuilder<T> {
+  /** Nested relation predicates are real on Prisma for ALL-DIRECT chains
+   *  (schema-declared relations compose as nested `some`/`none`), and for a
+   *  pivot/morph/through level at the OUTERMOST position (its deferred 2-step
+   *  lookup's related filter carries the direct-chain children). A non-direct
+   *  level at any DEEPER position throws a clear mixed-chain error — see
+   *  `_childRelationLeg` and docs/plans/2026-06-07-nested-callback-where-has.md
+   *  (v1-throw posture; the innermost-first hybrid is a documented follow-up). */
+  readonly supportsNestedRelationPredicates = true
+
   private _wheres:       WhereClause[] = []
   private _orWheres:     WhereClause[] = []
   private _orders:       OrderClause[] = []
@@ -345,17 +354,54 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     this._assertPlainRelationPredicate(p)
     if (p.extraEquals === undefined && p.through === undefined) {
       // Direct relation — assumes the relation is declared in the Prisma
-      // schema with the same name. Prisma resolves the join itself.
+      // schema with the same name. Prisma resolves the join itself. Nested
+      // children (dot-paths / callback nesting) fold in as `some`/`none` legs
+      // — built EAGERLY so a mixed chain throws at build time, not terminal time.
       this._relationFilters.push({
         relation: p.relation,
         polarity: p.exists ? 'some' : 'none',
-        filter:   this._wheresToPrismaFilter(p.constraintWheres),
+        filter:   this._relatedRowsFilter(p),
       })
       return this
     }
-    // Polymorphic or pivot — defer to a 2-step lookup at terminal time.
+    // Polymorphic or pivot — defer to a 2-step lookup at terminal time. A
+    // non-direct level is only legal at the OUTERMOST position; its children
+    // must be all-direct chains (validated eagerly here — `_resolveDeferred`
+    // rebuilds the same filter at terminal time).
+    void this._relatedRowsFilter(p)
     this._deferredPredicates.push(p)
     return this
+  }
+
+  /**
+   * @internal — the Prisma `where` filter for a predicate's RELATED rows:
+   * its constraint clauses plus one `{ [relation]: { some|none: … } }` leg per
+   * nested child, combined collision-safely (`_combineFilters` — same-column
+   * clause pairs survive via `AND`). Children recurse; a child that is itself
+   * non-direct (pivot/morph/through — `extraEquals`/`through` set) cannot be
+   * expressed inside a Prisma filter and throws the mixed-chain error.
+   */
+  private _relatedRowsFilter(p: RelationExistencePredicate): Record<string, unknown> {
+    const children = p.nested === undefined ? [] : Array.isArray(p.nested) ? p.nested : [p.nested]
+    return this._combineFilters([
+      ...p.constraintWheres.map(c => this.clauseToFilter(c)),
+      ...children.map(c => this._childRelationLeg(c)),
+    ])
+  }
+
+  /** @internal — one nested child as a Prisma relation-filter leg. The child's
+   *  relation must be schema-declared (same requirement as top-level direct
+   *  whereHas); a pivot/morph/through child has no Prisma-filter form. */
+  private _childRelationLeg(c: RelationExistencePredicate): Record<string, unknown> {
+    if (c.extraEquals !== undefined || c.through !== undefined) {
+      throw new Error(
+        `[RudderJS ORM Prisma] Nested whereHas: relation "${c.relation}" is a pivot/polymorphic/through ` +
+        `relation below the top level of the chain — Prisma's relation filters can't express it, and the ` +
+        `deferred 2-step lookup only supports a non-direct relation at the OUTERMOST position. ` +
+        `Restructure the chain, filter in app code, or use the native engine / Drizzle (both support mixed chains).`,
+      )
+    }
+    return { [c.relation]: { [c.exists ? 'some' : 'none']: this._relatedRowsFilter(c) } }
   }
 
   whereVectorSimilarTo(
@@ -622,10 +668,11 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private async _resolveDeferredIds(p: RelationExistencePredicate): Promise<unknown[]> {
     const through = p.through
     if (through) {
-      // Pivot mediated — step A: find related rows matching the constraint,
-      // step B: find pivot rows pointing at those related ids (plus the
-      // pivot-side discriminator from extraEquals), project foreignPivotKey.
-      const relatedFilter = this._wheresToPrismaFilter(p.constraintWheres)
+      // Pivot mediated — step A: find related rows matching the constraint
+      // (incl. nested direct-chain children as some/none legs), step B: find
+      // pivot rows pointing at those related ids (plus the pivot-side
+      // discriminator from extraEquals), project foreignPivotKey.
+      const relatedFilter = this._relatedRowsFilter(p)
       const relatedDelegate = this.delegateFor(p.relatedTable)
       const relatedRows = await relatedDelegate.findMany({ where: relatedFilter }) as Array<Record<string, unknown>>
       const relatedIds  = relatedRows.map(r => r[p.relatedColumn])
@@ -640,9 +687,10 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       const pivotRows = await pivotDelegate.findMany({ where: pivotFilter }) as Array<Record<string, unknown>>
       return pivotRows.map(r => r[through.foreignPivotKey])
     }
-    // Direct polymorphic relation — constraint AND extraEquals on related.
+    // Direct polymorphic relation — constraint (incl. nested direct-chain
+    // children as some/none legs) AND extraEquals on related.
     const filter: Record<string, unknown> = {
-      ...this._wheresToPrismaFilter(p.constraintWheres),
+      ...this._relatedRowsFilter(p),
       ...(p.extraEquals ?? {}),
     }
     const delegate = this.delegateFor(p.relatedTable)
