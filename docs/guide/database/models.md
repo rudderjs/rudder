@@ -848,7 +848,7 @@ const matches = await Document
   .get()
 ```
 
-Postgres + the pgvector extension required. Scaffold the migration with `pnpm rudder make:migration add_embedding --vector`. See [Vector stores](/guide/vector-stores) for the full surface, including hosted-vector-store integration with `@rudderjs/ai`.
+Postgres + the pgvector extension required. Scaffold the migration with `pnpm rudder make:migration --vector <table> <column> <dimensions>` (e.g. `--vector documents embedding 1536`; optional `--metric cosine|l2|inner-product`, default cosine) — it generates the `CREATE EXTENSION`, column add, and HNSW index in your ORM's migration format. See [Vector stores](/guide/vector-stores) for hosted-vector-store integration with `@rudderjs/ai`.
 
 ## Accessors and mutators
 

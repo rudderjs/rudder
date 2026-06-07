@@ -25,6 +25,8 @@ On **Prisma/Drizzle**, the commands delegate to the underlying tool:
 
 `db:push` and `db:generate` are Prisma/Drizzle-only — the native engine has no push mode and no client to generate; every change is a tracked migration.
 
+`make:migration` also takes a `--vector <table> <column> <dimensions>` flag (optional `--metric cosine|l2|inner-product`, default cosine) that scaffolds a pgvector migration — `CREATE EXTENSION`, the `vector(N)` column, and an HNSW index — in your ORM's migration format. Postgres only; see the `vector({ dimensions })` cast under [Models — Casts](/guide/database/models#casts) for the read/write side.
+
 Production vs development is selected by `NODE_ENV`. In production, `migrate` runs `prisma migrate deploy` (apply only — never generate, never prompt) instead of `migrate dev`.
 
 You can also run any of these via the `rudder` CLI directly: `pnpm rudder migrate`, `pnpm rudder db:seed`, etc.
