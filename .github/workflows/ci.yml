@@ -91,11 +91,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
-    # 40 (was 20) to leave headroom for the Windows per-attempt-timeout retry to
-    # self-heal a hung build/test attempt (kill at 8m → back off → retry) without
-    # the job-level timeout cancelling mid-recovery. A genuine hang still fails
-    # red deterministically at ~26m (3 × 8m + backoff); healthy runs are ~6m.
-    timeout-minutes: 40
+    # Healthy runs are ~6-8m; the Windows wrapper's worst case (1 × 6m attempt
+    # + kill + log flush) concludes well under 10m. 15m is the backstop for
+    # anything that still slips past the per-attempt timeout — bounded, instead
+    # of the old 40m grind.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -148,24 +148,30 @@ jobs:
       #   2. TURBO_CONCURRENCY=1 — serialise so only one process spawns at a time
       #      (#784). Default on Linux. Cuts the crash rate, but not to zero.
       #   3. TURBO_LOG_ORDER=stream — keep failures attributable, not swallowed.
-      #   4. Bounded retry WITH BACKOFF (#792 + #798) — handles mode A: a retry
-      #      replays turbo's cache and re-spawns only the crashed package in ~ms,
-      #      hitting the still-exhausted desktop heap, so an INSTANT retry fails
-      #      again in ~ms; sleeping 30s before the retry lets the OS reclaim
-      #      handles first. Capped at 2 attempts: the desktop-heap exhaustion is
-      #      sticky to the runner, so a 3rd in-job retry rarely helps — exhaust
-      #      fast and (on a pure-flake signature) exit non-blocking, rather than
-      #      grinding ~27m. Re-run the job on a FRESH runner to actually clear it.
-      #   5. PER-ATTEMPT TIMEOUT — handles mode B, which #4 is structurally blind
-      #      to: the retry only inspects the exit code, so a process that never
-      #      exits just blocks the loop until the job timeout. Each attempt now
-      #      runs in a child pwsh we kill (whole tree) if it exceeds 6m (healthy
-      #      is ~3m), turning a 25m cancel into kill→backoff→retry. On timeout we
-      #      dump the live node/pnpm/turbo/tsc processes so the next hang is
-      #      finally diagnosable instead of opaque.
+      #   4. SINGLE attempt (was bounded retry #792/#798, then 2 attempts #828):
+      #      the flake is sticky to the runner, so in-job retries re-hit the
+      #      exhausted heap and mostly just doubled the grind. One attempt +
+      #      the flake-signature exit-0 (#815) gets to a non-blocking green in
+      #      ~7m worst case; re-run the job on a FRESH runner to genuinely clear.
+      #   5. PER-ATTEMPT TIMEOUT — handles mode B, which exit-code checks are
+      #      structurally blind to: a process that never exits blocks the loop
+      #      until the job timeout. Each attempt runs in a child pwsh we kill
+      #      (whole tree) if it exceeds 6m (healthy is ~3m). On timeout we dump
+      #      the live node/pnpm/turbo/tsc processes for diagnosability.
+      #   6. REDIRECTED ATTEMPT OUTPUT + STRAY SWEEP — why the self-heal never
+      #      visibly worked before (jobs "always stuck" until cancelled): the
+      #      attempt child shared the step's console, and orphaned grandchildren
+      #      surviving the tree-kill (esbuild service, turbo children) inherited
+      #      the step's stdout pipe. The Actions runner does not complete a step
+      #      until that pipe closes, so the wrapper's `exit 0` landed into a
+      #      step that hung anyway. Attempts now write to RUNNER_TEMP files
+      #      (orphans hold file handles, not the runner pipe; output is printed
+      #      after the attempt), and every exit path force-stops stray
+      #      node/esbuild/turbo/tsc processes so a wedged Build can't poison
+      #      the Test step on the same runner.
       #
-      # A REAL failure (crash or hang) is deterministic — fails both attempts
-      # and still goes red — so the retry can't mask a true break.
+      # A REAL failure (a failing test exits 1 — not a flake signature) still
+      # goes red; the flake-only exit-0 cannot mask it.
       - name: Exclude workspace from Windows Defender
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -201,7 +207,7 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          $max = 2
+          $max = 1   # was 2 (#828): the flake is runner-sticky, in-job retries mostly doubled the grind
           $attemptTimeoutSec = 360   # 6m; healthy build is ~3m
           # Known Windows flake exit codes: 124 = our wedge-timeout (mode B);
           # -1073741502 / 3221225794 = 0xC0000142 STATUS_DLL_INIT_FAILED (mode A).
@@ -210,39 +216,68 @@ jobs:
           # (e.g. 1 = a real failing test) flips $allFlake off and still goes red.
           $flakeCodes = @(124, -1073741502, 3221225794)
           $allFlake = $true
+          # Orphans surviving a tree-kill (esbuild service, turbo children) hold
+          # handles that wedge the NEXT step on this runner — sweep them on every
+          # exit path. (The step's own completion is protected by the output
+          # redirection below, not by this sweep.)
+          function Stop-StrayBuildProcs {
+            Get-Process -Name node, esbuild, turbo, tsc, pnpm -ErrorAction SilentlyContinue |
+              Stop-Process -Force -ErrorAction SilentlyContinue
+          }
           foreach ($i in 1..$max) {
             # Run the attempt in a child pwsh so we can enforce a deadline and
             # kill a wedged process tree. The command line matches the Linux step.
-            $p = Start-Process pwsh -NoNewWindow -PassThru -ArgumentList @(
-              '-NoProfile','-Command',
-              "pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
-            )
+            # Output goes to files, NOT the step console: orphaned grandchildren
+            # that survive the tree-kill would otherwise inherit the step's
+            # stdout pipe, and the Actions runner does not complete a step until
+            # that pipe closes — the historical "exit 0 but the job hangs until
+            # cancelled" failure. File handles don't pin the step.
+            $out = Join-Path $env:RUNNER_TEMP "build-attempt-$i.out.log"
+            $errf = Join-Path $env:RUNNER_TEMP "build-attempt-$i.err.log"
+            $p = Start-Process pwsh -NoNewWindow -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $errf `
+              -ArgumentList @(
+                '-NoProfile','-Command',
+                "pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+              )
             $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
               $code = $p.ExitCode
             } else {
-              Write-Host "::warning::Build attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live build processes:"
-              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+              Write-Host "::warning::Build attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B)."
+              # Diagnostic dump in a BOUNDED job — Get-Process against a
+              # kernel-stuck zombie can itself hang, wedging this wrapper
+              # exactly like the process it's reporting on. 10s or skip it.
+              $dump = Start-Job { Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
                 Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
-                Format-Table -AutoSize | Out-String | Write-Host
-              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+                Format-Table -AutoSize | Out-String }
+              if (Wait-Job $dump -Timeout 10) { Receive-Job $dump | Write-Host } else { Write-Host "::warning::process dump itself timed out — zombie wedge" }
+              Remove-Job $dump -Force -ErrorAction SilentlyContinue
+              # taskkill /T /F is more reliable than .NET Kill($true) against a
+              # wedged tree (kills by snapshot walk, not handle enumeration).
+              try { & taskkill /PID $p.Id /T /F 2>$null | Out-Null } catch { Write-Host "::warning::taskkill failed: $_" }
               $p.WaitForExit(15000) | Out-Null
               $code = 124   # conventional timeout exit code
             }
-            if ($code -eq 0) { exit 0 }
+            # Surface the attempt's redirected output in the step log.
+            foreach ($f in @($out, $errf)) {
+              if (Test-Path $f) { try { Get-Content $f | Write-Host } catch { Write-Host "::warning::could not read $f : $_" } }
+            }
+            if ($code -eq 0) { Stop-StrayBuildProcs; exit 0 }
             if ($flakeCodes -notcontains $code) { $allFlake = $false }
             if ($i -lt $max) {
-              $delay = 30 * $i   # 30s before the single retry — let the OS reclaim handles (mode A)
+              $delay = 30 * $i   # backoff before a retry — let the OS reclaim handles (mode A)
               Write-Host "::warning::Build attempt $i/$max failed (exit $code) — waiting ${delay}s, then retrying"
               Start-Sleep -Seconds $delay
             }
           }
+          Stop-StrayBuildProcs
           if ($allFlake) {
-            Write-Host "::warning::Windows build failed all $max attempts, but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
-            "⚠️ **Windows build** failed $max attempts, all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            Write-Host "::warning::Windows build failed all $max attempt(s), but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
+            "⚠️ **Windows build** failed $max attempt(s), all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             exit 0
           }
-          Write-Host "::error::Windows build failed after $max attempts with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
+          Write-Host "::error::Windows build failed after $max attempt(s) with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
           exit 1
 
       - name: Test (windows — retry + per-attempt timeout for the DLL crash/hang flakes)
@@ -252,30 +287,45 @@ jobs:
           TURBO_LOG_ORDER: stream
           TURBO_CONCURRENCY: '1'
         run: |
-          $max = 2
+          $max = 1   # was 2 (#828): the flake is runner-sticky, in-job retries mostly doubled the grind
           $attemptTimeoutSec = 360   # 6m; healthy test is ~3m
-          # See the Build step for the flake-code rationale. Flake-only failures
-          # are non-blocking (Ubuntu gates); a real failing test (exit 1) blocks.
+          # See the Build step for the flake-code + output-redirection rationale.
+          # Flake-only failures are non-blocking (Ubuntu gates); a real failing
+          # test (exit 1) blocks.
           $flakeCodes = @(124, -1073741502, 3221225794)
           $allFlake = $true
+          function Stop-StrayBuildProcs {
+            Get-Process -Name node, esbuild, turbo, tsc, pnpm -ErrorAction SilentlyContinue |
+              Stop-Process -Force -ErrorAction SilentlyContinue
+          }
           foreach ($i in 1..$max) {
-            $p = Start-Process pwsh -NoNewWindow -PassThru -ArgumentList @(
-              '-NoProfile','-Command',
-              "pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
-            )
+            $out = Join-Path $env:RUNNER_TEMP "test-attempt-$i.out.log"
+            $errf = Join-Path $env:RUNNER_TEMP "test-attempt-$i.err.log"
+            $p = Start-Process pwsh -NoNewWindow -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $errf `
+              -ArgumentList @(
+                '-NoProfile','-Command',
+                "pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+              )
             $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
               $code = $p.ExitCode
             } else {
-              Write-Host "::warning::Test attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B). Live test processes:"
-              Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
+              Write-Host "::warning::Test attempt $i/$max exceeded ${attemptTimeoutSec}s — a process wedged (hang flake, mode B)."
+              # Bounded dump + taskkill — see the Build step for rationale.
+              $dump = Start-Job { Get-Process | Where-Object { $_.ProcessName -match 'node|pnpm|turbo|tsc|esbuild' } |
                 Select-Object Id, ProcessName, @{ n = 'RSS_MB'; e = { [int]($_.WorkingSet64 / 1MB) } } |
-                Format-Table -AutoSize | Out-String | Write-Host
-              try { $p.Kill($true) } catch { Write-Host "::warning::could not kill the hung tree: $_" }
+                Format-Table -AutoSize | Out-String }
+              if (Wait-Job $dump -Timeout 10) { Receive-Job $dump | Write-Host } else { Write-Host "::warning::process dump itself timed out — zombie wedge" }
+              Remove-Job $dump -Force -ErrorAction SilentlyContinue
+              try { & taskkill /PID $p.Id /T /F 2>$null | Out-Null } catch { Write-Host "::warning::taskkill failed: $_" }
               $p.WaitForExit(15000) | Out-Null
               $code = 124
             }
-            if ($code -eq 0) { exit 0 }
+            foreach ($f in @($out, $errf)) {
+              if (Test-Path $f) { try { Get-Content $f | Write-Host } catch { Write-Host "::warning::could not read $f : $_" } }
+            }
+            if ($code -eq 0) { Stop-StrayBuildProcs; exit 0 }
             if ($flakeCodes -notcontains $code) { $allFlake = $false }
             if ($i -lt $max) {
               $delay = 30 * $i
@@ -283,12 +333,13 @@ jobs:
               Start-Sleep -Seconds $delay
             }
           }
+          Stop-StrayBuildProcs
           if ($allFlake) {
-            Write-Host "::warning::Windows tests failed all $max attempts, but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
-            "⚠️ **Windows tests** failed $max attempts, all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            Write-Host "::warning::Windows tests failed all $max attempt(s), but every failure matched a known Windows flake signature (DLL-init crash / wedge timeout; last code $code). Treating as NON-BLOCKING — Ubuntu remains the hard gate. Re-run this job to retry on a fresh runner."
+            "⚠️ **Windows tests** failed $max attempt(s), all flake signatures (last code $code) — non-blocking. Ubuntu is the gate." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             exit 0
           }
-          Write-Host "::error::Windows tests failed after $max attempts with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
+          Write-Host "::error::Windows tests failed after $max attempt(s) with a non-flake exit code ($code) — this is a real failure, not the environmental flake."
           exit 1
 
   client-bundle:
