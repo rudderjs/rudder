@@ -174,7 +174,10 @@ pnpm rudder db:show              # overview — dialect, version, every table + 
 pnpm rudder db:show --counts     # add row counts (runs one COUNT(*) per table)
 pnpm rudder db:show --views      # add the view list
 pnpm rudder db:table users      # one table — columns, indexes, foreign keys, row count
+pnpm rudder db:query "SELECT id, title FROM posts LIMIT 5"   # one-off SELECT → JSON rows
 ```
+
+`db:query` is the odd one out: it rides the `DB` facade rather than the native catalog, so it works on **every** adapter (native, Prisma, Drizzle) — and it's deliberately SELECT-only.
 
 ```
   posts  1 row · 4.0 KB
