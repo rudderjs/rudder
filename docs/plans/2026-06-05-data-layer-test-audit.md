@@ -15,6 +15,12 @@ Priority legend: **P0** = run-it-now hole (the #882 class: code path shippable-b
 green CI) · **P1** = live-dialect gap on a write/correctness path · **P2** = untested public
 surface / single-dialect live coverage · **P3** = cheap unit asserts (error paths).
 
+> **STATUS 2026-06-07: ✅ AUDIT FULLY CLOSED.** All findings shipped across Waves 1–3
+> (#906 CI filter; #908/#910/#912/#913/#915/#916/#917/#918 + fixes #911/#914; Wave 3
+> #923–#928, which also fixed three real pg/mysql schema bugs — see P2-11). §2 and §3
+> closed by the Wave-3 surface/guard PRs. Nothing on this list remains open; future test
+> gaps belong in a NEW audit doc, not appended here.
+
 ---
 
 ## 1. Live-suite breadth (sqlite-only coverage where pg/mysql can differ)
@@ -23,7 +29,12 @@ Live tests gate on `PG_TEST_URL` / `MYSQL_TEST_URL`. Current live-gated inventor
 `packages/database`, 12 in `packages/orm/src/native`, 5 in `packages/orm-drizzle`, **0 in
 `packages/orm-prisma`**.
 
-### P0-1 · CI never executes the orm-drizzle live suites
+### P0-1 · CI never executes the orm-drizzle live suites — ✅ CLOSED (#906)
+
+Both live jobs now run `--filter @rudderjs/orm-drizzle --filter @rudderjs/orm-prisma`
+(`ci.yml` orm-pg/orm-mysql jobs).
+
+Original finding:
 
 `.github/workflows/ci.yml:419,472` — both live jobs run
 `turbo run test --filter @rudderjs/orm --filter @rudderjs/database`. The five live-gated
@@ -35,7 +46,12 @@ the green-by-skip failure mode #885 fixed for turbo env stripping.
 *Fix (separate PR, not this audit): add `--filter @rudderjs/orm-drizzle` to both jobs.
 Watch CI minutes — the drizzle live suites spin up their own schemas.*
 
-### P0-2 · orm-prisma has zero live coverage of any kind
+### P0-2 · orm-prisma has zero live coverage of any kind — ✅ CLOSED (#908)
+
+Shipped exactly as suggested: `orm-prisma/src/pg-live.test.ts` + `mysql-live.test.ts`
+(Model round-trip incl. `$transaction` + isolation pass-through).
+
+Original finding:
 
 All 13 test files run sqlite (better-sqlite3 driver adapter or mocks). Never tested against
 real pg/mysql: write paths, `$transaction` isolation-level mapping (PascalCase translation,
@@ -48,7 +64,12 @@ create/update/delete/upsert/increment/transaction/isolation). Needs a generated 
 dialect — likely a fixture schema + `prisma generate` in the suite setup, or a prebuilt
 fixture client checked into test fixtures.*
 
-### P1-3 · Drizzle has no live **Postgres write** round-trip
+### P1-3 · Drizzle has no live **Postgres write** round-trip — ✅ CLOSED (#910)
+
+Shipped as `orm-drizzle/src/pg-writes.test.ts` (proxy-pinned RETURNING sequence + live
+Postgres write round-trip).
+
+Original finding:
 
 Live PG coverage on orm-drizzle is `json-where` / `json-update` / one read-path block in
 `read-write-split.test.ts:349`. The mysql side got `mysql-writes.test.ts` after #882; PG has
@@ -58,7 +79,12 @@ no equivalent. Drizzle's PG write path (RETURNING handling, `restore`, `incremen
 *Suggested: `packages/orm-drizzle/src/pg-writes.test.ts` cloned from `mysql-writes.test.ts`
 (live half).*
 
-### P1-4 · Transactions + isolation levels: Drizzle and Prisma sqlite-only
+### P1-4 · Transactions + isolation levels: Drizzle and Prisma sqlite-only — ✅ CLOSED (#912 drizzle, #908 prisma)
+
+`orm-drizzle/src/transactions-live.test.ts` (savepoints + isolation pass-through on live
+pg+mysql); the prisma legs ride the #908 live suites.
+
+Original finding:
 
 `packages/orm/src/native/transaction-isolation.test.ts` proves all 4 levels live on PG+MySQL
 — **native engine only**. `orm-drizzle/src/transactions.test.ts` and
@@ -67,7 +93,12 @@ so the pass-through seams (drizzle tx-config, prisma `$transaction({ isolationLe
 never run against a database that accepts them. Savepoint nesting on live pg/mysql:
 implicit-at-best on both adapters.
 
-### P1-5 · Lock wait-options on Drizzle never tested under real concurrency
+### P1-5 · Lock wait-options on Drizzle never tested under real concurrency — ✅ CLOSED (#913)
+
+Shipped as `orm-drizzle/src/lock-live.test.ts` (skipLocked/noWait under real two-connection
+contention).
+
+Original finding:
 
 `packages/database/src/native/lock-live.test.ts` (PG+MySQL, two-connection contention) covers
 the **native** engine only. `orm-drizzle/src/lock.test.ts` asserts SQL shape on sqlite. The
@@ -77,7 +108,12 @@ drizzle `.for(strength, { skipLocked|noWait })` path — the queue-reservation p
 *Suggested: extend `lock-live.test.ts`'s scenario into an orm-drizzle live suite (gated on
 both URLs).*
 
-### P1-6 · Constraint-violation error shapes: zero assertions anywhere
+### P1-6 · Constraint-violation error shapes: zero assertions anywhere — ✅ CLOSED (#915)
+
+Shipped as `constraint-errors.test.ts` suites pinning the pass-through error shapes across
+all three engines.
+
+Original finding:
 
 No test in any of the four packages asserts what reaches user code on unique-violation,
 FK-violation, NOT-NULL violation, or missing table — per dialect, per adapter. We don't map
@@ -89,7 +125,12 @@ depend on these shapes.
 *Suggested: one `constraint-errors` live suite per engine asserting the error's
 discriminating fields (code/errno/constraint name presence) on all three dialects.*
 
-### P1-7 · Vector / pgvector: never exercised against pgvector
+### P1-7 · Vector / pgvector: never exercised against pgvector — ✅ CLOSED (#916)
+
+Shipped as `orm-drizzle/src/vector-live.test.ts` (CREATE EXTENSION vector; cast round-trip,
+similarity ranking, distance projection).
+
+Original finding:
 
 `orm/src/vector-cast.test.ts`, `orm-drizzle/src/vector.test.ts`, `orm-prisma/src/vector.test.ts`
 are all sqlite-mocked. `whereVectorSimilarTo` / `selectVectorDistance` / vector cast
@@ -98,7 +139,12 @@ serialization + dimension validation have never run against a real `pgvector` ex
 *Suggested: PG-gated block (skip when `CREATE EXTENSION vector` unavailable) in each
 adapter's vector suite.*
 
-### P1-8 · Read/write split + sticky: no MySQL live coverage at all
+### P1-8 · Read/write split + sticky: no MySQL live coverage at all — ✅ CLOSED (#917)
+
+MySQL live blocks added to both `database/src/native/read-write-split.test.ts` and
+`orm-drizzle/src/read-write-split.test.ts`.
+
+Original finding:
 
 `database/src/native/read-write-split.test.ts` has one live block — PG only.
 `orm-drizzle/src/read-write-split.test.ts:349` — PG only. MySQL pool acquire/release
@@ -158,7 +204,15 @@ ALTER TABLE paths (mysql `MODIFY` vs pg `ALTER COLUMN`, sqlite table-rebuild fal
 ALTER) and the Migrator lifecycle (`latest/rollback/refresh/fresh` against pg/mysql, including
 the migrations table itself) never run live.
 
-### P2-12 · `cursorPaginate` has zero engine coverage; `chunk`/`lazy` zero live
+### P2-12 · `cursorPaginate` has zero engine coverage; `chunk`/`lazy` zero live — ✅ CLOSED (#918)
+
+Shipped as `orm/src/native/cursor-paginate.test.ts` (sqlite always + gated live pg/mysql —
+the dialect-sensitive keyset decomposition is the risk, and it lives in the hydrating proxy,
+so the per-adapter legs compose the same `whereGroup`/`orderBy`/`get` primitives that are
+adapter-tested elsewhere; ditto `chunk`/`lazy`, pure limit/offset paging). No per-adapter
+suites by design.
+
+Original finding:
 
 `cursorPaginate` is tested only against an in-memory fake QB (`orm/src/index.test.ts:2487+`).
 It has never produced SQL through any engine on any dialect (keyset `(a,b) > (?,?)`
