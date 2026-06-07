@@ -31,6 +31,53 @@ type PrismaClientWithEvents = PrismaClient & {
   $on(event: string, listener: (e: unknown) => void): void
 }
 
+// ─── SQL-table-name → delegate resolution ──────────────────
+//
+// `Model.getTable()` historically had to carry the Prisma DELEGATE name
+// (camelCase model name, `paddleCustomer`) because the adapter does
+// `prisma[table]` — but on the native engine the same field is the literal SQL
+// table name, so a package model couldn't run on both adapters. Models now may
+// carry the REAL SQL name (`paddle_customers`): when no delegate property
+// matches directly, we resolve through the client's runtime datamodel
+// (`_runtimeDataModel.models` — present on every generated client since
+// Prisma 5). The model whose `dbName` (the `@@map` name; `null` when unmapped,
+// in which case the model name itself IS the SQL table) equals the requested
+// table wins, and its delegate is the lower-camelCased model name. Exact
+// delegate-name lookups keep the historical fast path, so existing models are
+// untouched.
+//
+// Cache: WeakMap keyed by client instance (a dev re-boot may build a fresh
+// client; the stale entry is GC'd with it), holding table → delegate-key hits.
+const delegateKeyCache = new WeakMap<object, Map<string, string>>()
+
+/** @internal — resolve the delegate property name for `table`, or `undefined`
+ *  when neither a direct delegate nor a datamodel `dbName` match exists. */
+function resolveDelegateKey(prisma: PrismaClient, table: string): string | undefined {
+  // Historical contract: `table` IS the delegate name.
+  if (prisma[table]) return table
+
+  let cache = delegateKeyCache.get(prisma)
+  if (!cache) { cache = new Map(); delegateKeyCache.set(prisma, cache) }
+  const hit = cache.get(table)
+  if (hit !== undefined) return hit
+
+  const models = (prisma as unknown as {
+    _runtimeDataModel?: { models?: Record<string, { dbName?: string | null }> }
+  })._runtimeDataModel?.models
+  if (!models) return undefined
+
+  for (const [modelName, def] of Object.entries(models)) {
+    const sqlName = def?.dbName ?? modelName   // no @@map → model name is the SQL table
+    if (sqlName !== table) continue
+    const key = modelName.charAt(0).toLowerCase() + modelName.slice(1)
+    if (prisma[key]) {
+      cache.set(table, key)
+      return key
+    }
+  }
+  return undefined
+}
+
 // ─── Dev HMR: PrismaClient reuse across re-boots ───────────
 //
 // In dev, the @rudderjs/vite watcher re-bootstraps the app on every `app/`
@@ -209,12 +256,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   private get delegate(): PrismaModelDelegate {
-    const d = this.prisma[this.table]
-    if (!d) throw new Error(
-      `[RudderJS ORM] Prisma has no delegate for table "${this.table}". ` +
-      `Did you run "prisma generate" after adding the model to your schema?`
-    )
-    return d as PrismaModelDelegate
+    return this.delegateFor(this.table)
   }
 
   where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
@@ -698,13 +740,18 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return rows.map(r => r[p.relatedColumn])
   }
 
-  /** @internal — resolve a Prisma delegate by table name (camelCase Prisma
-   *  model name). Same shape as `delegate` but parameterised by table. */
+  /** @internal — resolve a Prisma delegate by table name: the delegate
+   *  property itself (camelCase Prisma model name, the historical contract) or
+   *  a SQL table name resolved through the client's runtime datamodel
+   *  (`@@map` name / unmapped model name — see {@link resolveDelegateKey}). */
   private delegateFor(table: string): PrismaModelDelegate {
-    const d = this.prisma[table]
+    const key = resolveDelegateKey(this.prisma, table)
+    const d = key === undefined ? undefined : this.prisma[key]
     if (!d) throw new Error(
-      `[RudderJS ORM] Prisma has no delegate for table "${table}". ` +
-      `Did you run "prisma generate" after adding the model to your schema?`,
+      `[RudderJS ORM] Prisma has no delegate for table "${table}", and no model ` +
+      `in the client's datamodel maps to it (checked @@map names too). ` +
+      `Set \`static table\` to the SQL table name (or the camelCase delegate name) ` +
+      `and run "prisma generate" after adding the model to your schema.`,
     )
     return d as PrismaModelDelegate
   }
