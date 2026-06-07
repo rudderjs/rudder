@@ -1,6 +1,8 @@
 # Nested `whereHas` inside constrain callbacks — design plan
 
-**Status:** DRAFT — awaiting review (Suleiman) before any implementation.
+**Status:** PR A (contracts + orm capture + native) SHIPPED in #980; PR B (Drizzle) shipped in the
+drizzle-nested PR. Remaining: PR C (Prisma) — gated on the §4 open questions (notably #2, mixed-chain
+posture). Question #3's footgun was fixed separately in #979.
 **Scope:** `whereHas('posts', q => q.whereHas('comments', c => …))` — the callback-nested form, which today throws
 `"Nested whereHas inside a whereHas constrain callback is not supported — use the dot-path form instead"`
 (`packages/orm/src/relations/where-has.ts`, `captureConstraintWheres`).
@@ -73,7 +75,7 @@ captureConstraints(Related: typeof Model, constrain): { wheres: WhereClause[]; c
 | Adapter | Posture | Notes |
 |---|---|---|
 | **native** | REAL | `compileExists` already recurses; change = normalize `nested` to an array and append one `EXISTS` per child (both in the direct body and the pivot/fan-out branches). SQL pins for: constraints at two levels, inner NOT EXISTS, siblings, pivot/through level in the middle of a chain. |
-| **Drizzle** | REAL (new) | Symmetric recursion with `exists()/notExists()` + `eq()` — the through PR already proved the per-level building blocks. All referenced tables (every level's related + pivot/intermediate) must be registered; clear error names the missing table. Add the `supportsNestedRelationPredicates` marker **only when** this lands (the marker currently gates dot-paths too, so Drizzle gains those for free — test both). |
+| **Drizzle** | ✅ SHIPPED (PR B) | Symmetric recursion (`_relationExistsExpr`) with `exists()/notExists()` + `eq()`. All referenced tables (every level's related + pivot/intermediate) must be registered; clear error names the missing table at any depth. The `supportsNestedRelationPredicates` marker landed with it — Drizzle gained dot-paths for free (both forms E2E-tested). |
 | **Prisma** | REAL for all-direct chains; deferred 2-step hybrid otherwise — **needs the most review** | For a chain where EVERY level is a schema-declared direct relation, Prisma is the *easiest* adapter: nested `some`/`none` composes naturally — `{ posts: { some: { published: true, comments: { some: { approved: true } } } } }`. For chains containing a pivot/morph/through level, resolve **innermost-first** via the existing deferred 2-step machinery (each child reduces to an `IN (...)` clause folded into its parent's filter). v1 fallback option if the hybrid is too hairy: all-direct chains real, mixed chains throw with a pointer. |
 
 ### 3.4 Semantics to pin in tests (all adapters)
