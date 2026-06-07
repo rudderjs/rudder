@@ -7,7 +7,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 - `src/index.ts` — CLI bootstrap: finds `bootstrap/app.ts`, loads package commands, boots app, runs commander
 - `src/errors.ts` — `CliError` class
 - `src/commands/make.ts` — Router for CLI-owned + package-contributed `make:*` scaffolders
-- `src/commands/make/` — 10 CLI-owned generators: controller, model, job, middleware, request, provider, command, event, listener, mail
+- `src/commands/make/` — 12 CLI-owned generators: controller, model, job, middleware, request, provider, command, event, exception, listener, mail, test
 - `src/commands/make/_shared.ts` — Legacy `registerMake()` helper (MakeSpec now lives in `@rudderjs/console`)
 - `src/commands/command-list.ts` — `command:list` tabular output. Supports `--all` (include built-in + package commands) and `--json` (machine-readable, used by `@rudderjs/boost`'s `commands_list` MCP tool)
 - `src/commands/providers-discover.ts` — Thin wrapper; scanning logic lives in `@rudderjs/core`
@@ -30,7 +30,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 
 | Owner | Commands |
 |---|---|
-| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker` |
+| CLI (direct) | `make:controller`, `make:model`, `make:job`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `command:list`, `module:make`, `module:publish`, `vendor:publish`, `providers:discover` (thin wrapper), `tinker` |
 | `@rudderjs/ai` | `make:agent`, `ai:eval` |
 | `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
 | `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `schema:types`, `make:factory`, `make:seeder`, `db:push`, `db:generate`, `db:show`, `db:table`, `db:query`, `model:prune` |

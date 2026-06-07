@@ -80,6 +80,17 @@ The pipeline runs in this order:
 5. **Duck-typed `httpStatus`** — any `Error` with a numeric `httpStatus` property in the 4xx/5xx range renders with that status. This is how adapter-owned errors flow through without a hard dependency on `@rudderjs/core`: `MalformedBodyError` (from `@rudderjs/contracts`, raised by `@rudderjs/server-hono` on malformed JSON / form-urlencoded request bodies → 400), `ModelNotFoundError` (`@rudderjs/orm` → 404), `RouteModelNotFoundError` (`@rudderjs/router` → 404). Custom errors can opt in by declaring `readonly httpStatus = <number>` on the class.
 6. **Anything else** is reported and rendered as 500 (HTML stack trace if `APP_DEBUG=true`, generic page otherwise).
 
+## Scaffolding a custom exception
+
+`make:exception` writes a domain exception class to `app/Exceptions/` with the `httpStatus` opt-in baked in:
+
+```bash
+pnpm rudder make:exception PaymentRequiredError --status 402
+# → app/Exceptions/PaymentRequiredError.ts
+```
+
+`--status` takes any 4xx/5xx code (default `500`). Thrown from a route, the exception renders with that status through pipeline step 5 — no `e.render()` registration needed unless you want a custom response shape.
+
 ## Dev error page
 
 In development (`APP_ENV=local|development`, with `APP_DEBUG` on / outside production), uncaught errors render an Ignition-style HTML page with the message, parsed stack trace, source-code context around the throw, and the request envelope. The page is browser-rendered for HTML requests; JSON requests still get a structured error response.

@@ -9,6 +9,7 @@ import { makeRequest } from './make/request.js'
 import { makeProvider } from './make/provider.js'
 import { makeCommandCmd } from './make/command.js'
 import { makeEvent } from './make/event.js'
+import { makeException } from './make/exception.js'
 import { makeListener } from './make/listener.js'
 import { makeMail } from './make/mail.js'
 import { makeTest } from './make/test.js'
@@ -23,6 +24,7 @@ export function makeCommand(program: Command): void {
   makeProvider(program)
   makeCommandCmd(program)
   makeEvent(program)
+  makeException(program)
   makeListener(program)
   makeMail(program)
   makeTest(program)
