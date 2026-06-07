@@ -1,5 +1,24 @@
 # @rudderjs/orm
 
+## 1.20.0
+
+### Minor Changes
+
+- 361b298: Nested `whereHas` / `whereDoesntHave` inside constrain callbacks now works on the native engine: `User.whereHas('posts', q => q.where('published', true).whereHas('comments', c => c.where('approved', true)))`. Strictly more expressive than the dot-path form — constraints at EVERY level (not just the deepest), inner `whereDoesntHave` ("posts with NO flagged comments"), sibling branches that AND together, unbounded recursion, and dot-paths composing inside callbacks. The predicate contract's `nested` field widens to `RelationExistencePredicate | RelationExistencePredicate[]` (dot-paths keep the singular form; existing emitters unaffected) and the native compiler normalizes each level to a child list, compiling one correlated EXISTS per child with its own polarity and constraints. Drizzle and Prisma keep rejecting nested predicates via the `supportsNestedRelationPredicates` marker guard with a clear error (adapter implementations planned separately). `withWhereHas` with a nesting callback falls back to plain `with()` — the flat `withConstrained` shape can't carry children.
+- c1c8b58: `whereHas` / `whereDoesntHave` / `has(relation, op, n)` / `withCount` and the other aggregates now work on through relations (`hasOneThrough` / `hasManyThrough`) on all three adapters — Laravel parity for the previously documented v1 gap. The predicate reuses the pivot two-hop `through` shape with the intermediate table in the pivot slot, plus a new `through.fanOut` marker (`@rudderjs/contracts`) for the 1:N intermediate→related cardinality: plain existence keeps the fan-out-safe nested-EXISTS shape, while count comparisons and aggregates run over the JOINED far rows — counts count far rows (a country reaching 3 posts via 2 users has `postsCount === 3`), and a bare intermediate row never satisfies existence. Constrain callbacks apply to the far table (Laravel semantics); nested dot-paths may include through levels; `withWhereHas` on a through relation falls back to plain `with()` (the two-hop eager load is Model-layer). Drizzle requires the intermediate table registered in `tables: { ... }` (same as pivots); Prisma routes whereHas through the existing deferred 2-step lookup and aggregates through a new fan-out-aware batch path. Also fixes a latent Drizzle bug: the pivot-aggregate JOIN's ON clause rendered unqualified column names — ambiguous whenever pivot and related share a column name (always true for through relations, both having `id`).
+- 45b9cf0: whereHas constrain callbacks no longer silently drop query sugar. Historically the constraint recorder captured only `.where()` and silently no-oped everything else — a `whereIn(...)` inside a callback silently matched MORE rows than intended. The recorder now records the AND-expressible surface (`whereIn`/`whereNotIn`/`whereNull`/`whereNotNull`/`whereBetween` — lowered to its two bounds — plus `when`/`unless` conditionals, all typed via the new exported `ConstraintQueryBuilder`), keeps ignoring methods that can't change an existence test (`orderBy`/`limit`/…), and **throws a clear error** for everything that can't round-trip through the flat AND-only constraint list (date/JSON helpers, raw SQL, groups, `whereNotBetween`, column comparisons, soft-delete scopes, terminals) instead of silently widening the filter. Companion Prisma fix: multi-clause filters on the SAME column (e.g. `whereBetween`'s two bounds, or `where('views','>=',10).where('views','<=',20)` on the main query) were composed with last-wins `Object.assign` and silently dropped all but the last clause — collisions now route through Prisma's `AND: [...]` array form (distinct-column filters keep their historical shape byte-identical).
+
+### Patch Changes
+
+- b1f748d: Fix timestamp and soft-delete stamping on the native MySQL engine. The Model layer stamped `createdAt`/`updatedAt`/`deletedAt` as ISO-8601 strings — MySQL strict mode rejects the trailing `Z` (`Incorrect datetime value`), so every `create()`/`save()`/soft `delete()` on a timestamps-enabled table failed on native MySQL. Stamps are now `Date` objects and each driver serializes them in its own wire format: the sqlite driver normalizes `Date` → ISO-8601 UTC text at bind time (the same stored format as before — no migration needed), pg and mysql2 handle `Date` natively. Side effect: `Date` values in any payload now bind on sqlite instead of throwing better-sqlite3's `can only bind` error, and `creating`/`saving` observers see a `Date` (not a string) in stamped fields.
+- Updated dependencies [361b298]
+- Updated dependencies [d6f0e79]
+- Updated dependencies [c1c8b58]
+- Updated dependencies [b1f748d]
+  - @rudderjs/contracts@1.14.0
+  - @rudderjs/database@1.5.0
+  - @rudderjs/core@1.10.0
+
 ## 1.19.0
 
 ### Minor Changes

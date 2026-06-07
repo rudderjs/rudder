@@ -1,6 +1,0 @@
----
-"@rudderjs/orm": minor
-"@rudderjs/orm-prisma": patch
----
-
-whereHas constrain callbacks no longer silently drop query sugar. Historically the constraint recorder captured only `.where()` and silently no-oped everything else — a `whereIn(...)` inside a callback silently matched MORE rows than intended. The recorder now records the AND-expressible surface (`whereIn`/`whereNotIn`/`whereNull`/`whereNotNull`/`whereBetween` — lowered to its two bounds — plus `when`/`unless` conditionals, all typed via the new exported `ConstraintQueryBuilder`), keeps ignoring methods that can't change an existence test (`orderBy`/`limit`/…), and **throws a clear error** for everything that can't round-trip through the flat AND-only constraint list (date/JSON helpers, raw SQL, groups, `whereNotBetween`, column comparisons, soft-delete scopes, terminals) instead of silently widening the filter. Companion Prisma fix: multi-clause filters on the SAME column (e.g. `whereBetween`'s two bounds, or `where('views','>=',10).where('views','<=',20)` on the main query) were composed with last-wins `Object.assign` and silently dropped all but the last clause — collisions now route through Prisma's `AND: [...]` array form (distinct-column filters keep their historical shape byte-identical).

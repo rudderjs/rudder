@@ -1,5 +1,28 @@
 # @rudderjs/cashier-paddle
 
+## 5.0.0
+
+### Major Changes
+
+- 36514d9: Support the native engine, and ship one model set that runs on both native and Prisma.
+
+  The 5 models' `static table` now carry the real SQL table names (`paddle_customers`, `paddle_subscriptions`, `paddle_subscription_items`, `paddle_transactions`, `paddle_webhook_logs`) instead of the Prisma camelCase delegate names, and set `static keyType = 'ulid'` so the ORM stamps a primary key on insert (the native engine has no `@default(cuid())`). A native migration fragment (`schema/native/`) is published by `vendor:publish --tag=cashier-schema` alongside the existing Prisma fragment.
+
+  **Breaking — Prisma apps must upgrade `@rudderjs/orm-prisma`** to a release with the SQL-table-name → delegate fallback. Without it, queries fail with `Prisma has no delegate for table "paddle_customers"`. With it, the SQL name resolves to the `paddleCustomer` delegate via the client's runtime datamodel — no schema or data change needed.
+
+  **Behavior change — new primary keys are ulid, not cuid.** Existing cuid rows are untouched (both are opaque strings in a `String @id` column); only rows created after upgrading get ulid ids. No migration required.
+
+### Patch Changes
+
+- Updated dependencies [361b298]
+- Updated dependencies [d6f0e79]
+- Updated dependencies [c1c8b58]
+- Updated dependencies [b1f748d]
+- Updated dependencies [45b9cf0]
+  - @rudderjs/contracts@1.14.0
+  - @rudderjs/orm@1.20.0
+  - @rudderjs/core@1.10.0
+
 ## 4.4.1
 
 ### Patch Changes

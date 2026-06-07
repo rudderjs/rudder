@@ -1,5 +1,18 @@
 # @rudderjs/cli
 
+## 4.13.0
+
+### Minor Changes
+
+- e33199c: Add `-t, --with-test` to every CLI-owned `make:*` generator — also writes `tests/<Name>.test.ts` shaped for what was scaffolded: a feature test (AppTestCase + HTTP) for `make:controller`, a unit test (plain node:test, no app boot) for everything else. An existing test file is never overwritten without `--force`, and the generated test carries a `// Covers <path>` pointer back at the scaffolded file.
+- f5595cc: Add `optimize:clear` and `rudder fresh`. `optimize:clear` removes the framework's filesystem caches (`bootstrap/cache/` provider manifest, `node_modules/.vite/` dep-optimizer cache) and is skip-boot, so it works when a corrupt cache is the reason the app won't boot. `fresh` is the one-command dev reset: `migrate:fresh` (pass `--seed` to also seed) → `cache:clear` (best-effort) → framework filesystem caches, aborting before touching caches if the migrate fails. Pair with `@rudderjs/core`'s self-healing provider manifest — clearing `bootstrap/cache/` relies on boot regenerating it.
+- 6de07fc: Add `make:exception` — scaffolds a domain exception class into `app/Exceptions/` with the duck-typed `httpStatus` rendering opt-in baked in. `--status <code>` (4xx/5xx, default 500) sets the status the exception renders with; invalid codes are rejected before anything is written.
+
+### Patch Changes
+
+- Updated dependencies [d6f0e79]
+  - @rudderjs/core@1.10.0
+
 ## 4.12.0
 
 ### Minor Changes

@@ -1,5 +1,23 @@
 # @rudderjs/orm-drizzle
 
+## 1.11.0
+
+### Minor Changes
+
+- c1c8b58: `whereHas` / `whereDoesntHave` / `has(relation, op, n)` / `withCount` and the other aggregates now work on through relations (`hasOneThrough` / `hasManyThrough`) on all three adapters — Laravel parity for the previously documented v1 gap. The predicate reuses the pivot two-hop `through` shape with the intermediate table in the pivot slot, plus a new `through.fanOut` marker (`@rudderjs/contracts`) for the 1:N intermediate→related cardinality: plain existence keeps the fan-out-safe nested-EXISTS shape, while count comparisons and aggregates run over the JOINED far rows — counts count far rows (a country reaching 3 posts via 2 users has `postsCount === 3`), and a bare intermediate row never satisfies existence. Constrain callbacks apply to the far table (Laravel semantics); nested dot-paths may include through levels; `withWhereHas` on a through relation falls back to plain `with()` (the two-hop eager load is Model-layer). Drizzle requires the intermediate table registered in `tables: { ... }` (same as pivots); Prisma routes whereHas through the existing deferred 2-step lookup and aggregates through a new fan-out-aware batch path. Also fixes a latent Drizzle bug: the pivot-aggregate JOIN's ON clause rendered unqualified column names — ambiguous whenever pivot and related share a column name (always true for through relations, both having `id`).
+- 7c81f16: Nested `whereHas` now works on the Drizzle adapter — both the dot-path form (`whereHas('posts.comments')`) and callback nesting (`whereHas('posts', q => q.where('id','>=',4).whereHas('comments', c => c.where('approved', true))))`), with constraints at every level, inner `whereDoesntHave`, sibling branches, unbounded recursion, and pivot hops mid-chain. The relation-existence builder recurses (`_relationExistsExpr`), correlating each child against the enclosing level's related table — children of a pivot level live inside the inner related select, matching the native compiler. The adapter now advertises `supportsNestedRelationPredicates`, lifting the Model-layer guard that previously rejected both nested forms on Drizzle. Every table referenced anywhere in the chain must be registered in `tables: { ... }` (or `DrizzleTableRegistry`) — a missing table at any depth surfaces the standard clear error.
+
+### Patch Changes
+
+- Updated dependencies [361b298]
+- Updated dependencies [d6f0e79]
+- Updated dependencies [c1c8b58]
+- Updated dependencies [b1f748d]
+- Updated dependencies [45b9cf0]
+  - @rudderjs/contracts@1.14.0
+  - @rudderjs/orm@1.20.0
+  - @rudderjs/core@1.10.0
+
 ## 1.10.0
 
 ### Minor Changes

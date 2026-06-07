@@ -1,5 +1,25 @@
 # @rudderjs/orm-prisma
 
+## 2.3.0
+
+### Minor Changes
+
+- 40a1424: Nested `whereHas` now works on the Prisma adapter for all-direct chains — `whereHas('posts', q => q.where('published', true).whereHas('comments', c => c.where('approved', true)))` (and the dot-path form) composes as native nested `some`/`none` filters, with constraints at every level, inner `whereDoesntHave` (`none`), sibling branches (same-relation siblings survive via the collision-safe `AND` array), and unbounded recursion. A pivot/polymorphic/through relation is allowed only at the OUTERMOST position of the chain — its deferred 2-step lookup's related filter carries the direct-chain children — and throws a clear mixed-chain error anywhere deeper (the native engine and Drizzle support those; an innermost-first hybrid is a documented follow-up). Every nested level must be declared as a relation in `schema.prisma`, same as top-level direct `whereHas`.
+- c1c8b58: `whereHas` / `whereDoesntHave` / `has(relation, op, n)` / `withCount` and the other aggregates now work on through relations (`hasOneThrough` / `hasManyThrough`) on all three adapters — Laravel parity for the previously documented v1 gap. The predicate reuses the pivot two-hop `through` shape with the intermediate table in the pivot slot, plus a new `through.fanOut` marker (`@rudderjs/contracts`) for the 1:N intermediate→related cardinality: plain existence keeps the fan-out-safe nested-EXISTS shape, while count comparisons and aggregates run over the JOINED far rows — counts count far rows (a country reaching 3 posts via 2 users has `postsCount === 3`), and a bare intermediate row never satisfies existence. Constrain callbacks apply to the far table (Laravel semantics); nested dot-paths may include through levels; `withWhereHas` on a through relation falls back to plain `with()` (the two-hop eager load is Model-layer). Drizzle requires the intermediate table registered in `tables: { ... }` (same as pivots); Prisma routes whereHas through the existing deferred 2-step lookup and aggregates through a new fan-out-aware batch path. Also fixes a latent Drizzle bug: the pivot-aggregate JOIN's ON clause rendered unqualified column names — ambiguous whenever pivot and related share a column name (always true for through relations, both having `id`).
+- fbb223d: Resolve a model's `static table` against the Prisma client's runtime datamodel when it isn't a direct delegate name. Previously `static table` had to be the camelCase Prisma delegate name (`paddleCustomer`) because the adapter does `prisma[table]` — but on the native engine the same field is the literal SQL table name (`paddle_customers`), so a single package model couldn't run on both adapters. The adapter now falls back to `_runtimeDataModel.models` (present on every generated client since Prisma 5): the model whose `@@map` name (or, when unmapped, its own name) equals the requested table resolves to its delegate. Direct delegate-name lookups keep the historical fast path, so existing models are untouched. This unblocks shipping package models (cashier-paddle, and later passport/notification/etc.) with real SQL table names that work on the native engine AND Prisma.
+
+### Patch Changes
+
+- 45b9cf0: whereHas constrain callbacks no longer silently drop query sugar. Historically the constraint recorder captured only `.where()` and silently no-oped everything else — a `whereIn(...)` inside a callback silently matched MORE rows than intended. The recorder now records the AND-expressible surface (`whereIn`/`whereNotIn`/`whereNull`/`whereNotNull`/`whereBetween` — lowered to its two bounds — plus `when`/`unless` conditionals, all typed via the new exported `ConstraintQueryBuilder`), keeps ignoring methods that can't change an existence test (`orderBy`/`limit`/…), and **throws a clear error** for everything that can't round-trip through the flat AND-only constraint list (date/JSON helpers, raw SQL, groups, `whereNotBetween`, column comparisons, soft-delete scopes, terminals) instead of silently widening the filter. Companion Prisma fix: multi-clause filters on the SAME column (e.g. `whereBetween`'s two bounds, or `where('views','>=',10).where('views','<=',20)` on the main query) were composed with last-wins `Object.assign` and silently dropped all but the last clause — collisions now route through Prisma's `AND: [...]` array form (distinct-column filters keep their historical shape byte-identical).
+- Updated dependencies [361b298]
+- Updated dependencies [d6f0e79]
+- Updated dependencies [c1c8b58]
+- Updated dependencies [b1f748d]
+- Updated dependencies [45b9cf0]
+  - @rudderjs/contracts@1.14.0
+  - @rudderjs/orm@1.20.0
+  - @rudderjs/core@1.10.0
+
 ## 2.2.0
 
 ### Minor Changes
