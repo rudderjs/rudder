@@ -1,5 +1,12 @@
 # @rudderjs/contracts
 
+## 1.14.0
+
+### Minor Changes
+
+- 361b298: Nested `whereHas` / `whereDoesntHave` inside constrain callbacks now works on the native engine: `User.whereHas('posts', q => q.where('published', true).whereHas('comments', c => c.where('approved', true)))`. Strictly more expressive than the dot-path form — constraints at EVERY level (not just the deepest), inner `whereDoesntHave` ("posts with NO flagged comments"), sibling branches that AND together, unbounded recursion, and dot-paths composing inside callbacks. The predicate contract's `nested` field widens to `RelationExistencePredicate | RelationExistencePredicate[]` (dot-paths keep the singular form; existing emitters unaffected) and the native compiler normalizes each level to a child list, compiling one correlated EXISTS per child with its own polarity and constraints. Drizzle and Prisma keep rejecting nested predicates via the `supportsNestedRelationPredicates` marker guard with a clear error (adapter implementations planned separately). `withWhereHas` with a nesting callback falls back to plain `with()` — the flat `withConstrained` shape can't carry children.
+- c1c8b58: `whereHas` / `whereDoesntHave` / `has(relation, op, n)` / `withCount` and the other aggregates now work on through relations (`hasOneThrough` / `hasManyThrough`) on all three adapters — Laravel parity for the previously documented v1 gap. The predicate reuses the pivot two-hop `through` shape with the intermediate table in the pivot slot, plus a new `through.fanOut` marker (`@rudderjs/contracts`) for the 1:N intermediate→related cardinality: plain existence keeps the fan-out-safe nested-EXISTS shape, while count comparisons and aggregates run over the JOINED far rows — counts count far rows (a country reaching 3 posts via 2 users has `postsCount === 3`), and a bare intermediate row never satisfies existence. Constrain callbacks apply to the far table (Laravel semantics); nested dot-paths may include through levels; `withWhereHas` on a through relation falls back to plain `with()` (the two-hop eager load is Model-layer). Drizzle requires the intermediate table registered in `tables: { ... }` (same as pivots); Prisma routes whereHas through the existing deferred 2-step lookup and aggregates through a new fan-out-aware batch path. Also fixes a latent Drizzle bug: the pivot-aggregate JOIN's ON clause rendered unqualified column names — ambiguous whenever pivot and related share a column name (always true for through relations, both having `id`).
+
 ## 1.13.0
 
 ### Minor Changes

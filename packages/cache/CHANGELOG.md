@@ -1,5 +1,16 @@
 # @rudderjs/cache
 
+## 1.5.0
+
+### Minor Changes
+
+- f5595cc: Add `cache:clear` — flushes the application cache store (Laravel parity), registered by `CacheProvider.boot()`. `CacheAdapter` gains an optional `disconnect()` (implemented for redis) so one-shot CLI commands exit instead of hanging on an open connection.
+
+### Patch Changes
+
+- Updated dependencies [d6f0e79]
+  - @rudderjs/core@1.10.0
+
 ## 1.4.0
 
 ### Minor Changes
