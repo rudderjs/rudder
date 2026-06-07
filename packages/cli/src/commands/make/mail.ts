@@ -25,6 +25,7 @@ export function makeMail(program: Command): void {
     description: 'Create a new mailable class',
     label:       'Mailable created',
     directory:   'app/Mail',
+    testKind:    'unit',
     stub,
   })
 }

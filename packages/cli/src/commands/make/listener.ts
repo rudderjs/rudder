@@ -18,6 +18,7 @@ export function makeListener(program: Command): void {
     description: 'Create a new event listener class',
     label:       'Listener created',
     directory:   'app/Listeners',
+    testKind:    'unit',
     stub,
   })
 }

@@ -25,6 +25,7 @@ export function makeMiddleware(program: Command): void {
     label:       'Middleware created',
     suffix:      'Middleware',
     directory:   'app/Http/Middleware',
+    testKind:    'unit',
     stub,
   })
 }

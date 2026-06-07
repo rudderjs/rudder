@@ -16,6 +16,7 @@ export function makeEvent(program: Command): void {
     description: 'Create a new event class',
     label:       'Event created',
     directory:   'app/Events',
+    testKind:    'unit',
     stub,
   })
 }

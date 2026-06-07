@@ -104,6 +104,7 @@ export function makeController(program: Command): void {
     label:       'Controller created',
     suffix:      'Controller',
     directory:   'app/Http/Controllers',
+    testKind:    'feature',
     stub:        (className, opts) => pickStub(className, opts).body,
     extraOptions: [
       { flags: '-r, --resource',  description: 'Generate a full RESTful resource controller (7 verbs)' },

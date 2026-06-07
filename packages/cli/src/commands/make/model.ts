@@ -44,6 +44,7 @@ export function makeModel(program: Command): void {
     description: 'Create a new ORM model class',
     label:       'Model created',
     directory:   'app/Models',
+    testKind:    'unit',
     stub:        (className) => stub(className, deriveTable(className)),
     extraOptions: [
       { flags: '-m, --migration', description: 'Also create a migration file for the model' },

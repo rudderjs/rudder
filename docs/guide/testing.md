@@ -51,6 +51,17 @@ pnpm rudder make:test Math --unit      # tests/Math.test.ts — bare node:test, 
 
 The filename uses the `.test.ts` suffix to match the documented `tsx --test tests/**/*.test.ts` glob. The default feature stub assumes `tests/TestCase.ts` exists (the snippet above); when it doesn't, the command prints a hint pointing back here.
 
+### `--with-test` on the other generators
+
+Every class-scaffolding `make:*` command takes `-t, --with-test`, which also writes `tests/<Name>.test.ts` shaped for what was generated — a feature test (AppTestCase + HTTP) for `make:controller`, a unit test for everything else:
+
+```bash
+pnpm rudder make:controller User --with-test    # + tests/UserController.test.ts (feature)
+pnpm rudder make:model Post --with-test         # + tests/Post.test.ts (unit)
+```
+
+An existing test file is never overwritten unless you pass `--force`.
+
 ## HTTP requests
 
 The case dispatches requests through the framework without starting a real server:

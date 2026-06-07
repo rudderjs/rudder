@@ -25,6 +25,7 @@ export function makeJob(program: Command): void {
     description: 'Create a new queue job class',
     label:       'Job created',
     directory:   'app/Jobs',
+    testKind:    'unit',
     stub,
   })
 }

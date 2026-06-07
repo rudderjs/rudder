@@ -34,6 +34,7 @@ export function makeCommandCmd(program: Command): void {
     description: 'Create a new rudder command class',
     label:       'Command created',
     directory:   'app/Commands',
+    testKind:    'unit',
     stub,
     afterCreate: (className) => {
       console.log(chalk.dim(`    Register it in routes/console.ts:  rudder.register(${className})`))
