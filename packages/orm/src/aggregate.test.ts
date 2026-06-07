@@ -693,3 +693,44 @@ describe('Multiple aggregates accumulate in order', () => {
 // Compile-time witness: WhereClause typing flows through fine.
 const _w: WhereClause = { column: 'x', operator: '=', value: 1 }
 void _w
+
+// ─── Through relations (hasOneThrough / hasManyThrough) ─────────────────────
+
+class ThruEssay extends Model {
+  static override table = 'essays'
+  id!: number
+}
+class ThruCitizen extends Model {
+  static override table = 'citizens'
+  id!: number
+}
+class ThruNation extends Model {
+  static override table = 'nations'
+  id!: number
+  static override relations = {
+    essays: { type: 'hasManyThrough' as const, model: () => ThruEssay, through: () => ThruCitizen },
+  }
+}
+
+describe('withCount on hasManyThrough — intermediate as through block + fanOut', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('carries the two-hop join shape with the fan-out marker', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await ThruNation.query().withCount('essays').get()
+
+    const r = latest().aggregates[0]!
+    assert.equal(r.alias, 'essaysCount')
+    assert.equal(r.joinShape.relatedTable,  'essays')
+    assert.equal(r.joinShape.parentColumn,  'id')          // localKey default
+    assert.equal(r.joinShape.relatedColumn, 'thruCitizenId') // secondKey default = camelHead(Through)+Id
+    assert.deepEqual(r.joinShape.through, {
+      pivotTable:      'citizens',
+      foreignPivotKey: 'thruNationId',                      // firstKey default = camelHead(Parent)+Id
+      relatedPivotKey: 'id',                                // secondLocalKey default = Through PK
+      fanOut:          true,
+    })
+  })
+})

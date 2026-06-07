@@ -103,11 +103,22 @@ export interface AggregateJoinShape {
    *  pivot-side type discriminator for `morphToMany`/`morphedByMany`). */
   extraEquals?:    Record<string, unknown>
   /** Pivot table the relation passes through (`belongsToMany` /
-   *  `morphToMany` / `morphedByMany`). Two-step subquery when set. */
+   *  `morphToMany` / `morphedByMany`), or the INTERMEDIATE table of a through
+   *  relation (`hasOneThrough` / `hasManyThrough` — the same two-hop walk).
+   *  Two-step subquery when set. */
   through?: {
     pivotTable:      string
     foreignPivotKey: string
     relatedPivotKey: string
+    /**
+     * True for through relations: the intermediate table fans out 1:N to the
+     * related table (one user → many posts), unlike a pivot whose rows map
+     * 1:1 onto related rows. Adapters MUST aggregate over the RELATED rows
+     * (join/group the far table) — the pivot fast path (`COUNT(*)` over the
+     * pivot, existence implied by a pivot row) under-counts and
+     * false-positives under fan-out.
+     */
+    fanOut?: boolean
   }
   /** True when the related Model has soft deletes enabled — adapters AND
    *  `deleted_at IS NULL` (or its camelCase `deletedAt`) into the subquery. */
@@ -158,14 +169,24 @@ export interface RelationExistencePredicate {
    *  discriminator (`{morph}Type`), and by morph pivots to add the pivot-side
    *  type discriminator. */
   extraEquals?:    Record<string, unknown>
-  /** Optional pivot table the relation passes through. When set, the subquery
-   *  is two-step (pivot → related) instead of a single direct EXISTS. */
+  /** Optional pivot (or through-relation intermediate) table the relation
+   *  passes through. When set, the subquery is two-step (pivot → related)
+   *  instead of a single direct EXISTS. */
   through?: {
     pivotTable:      string
     /** Pivot column compared against the parent's `parentColumn`. */
     foreignPivotKey: string
     /** Pivot column projected as the inner select for the second step. */
     relatedPivotKey: string
+    /**
+     * True for through relations (`hasOneThrough` / `hasManyThrough`): the
+     * intermediate fans out 1:N to the related table, so a `count` comparison
+     * must count the RELATED rows (join the far table), not the intermediate
+     * rows — for pivots the two counts coincide (1:1), for through they don't.
+     * Plain existence is unaffected (the nested-EXISTS shape is already
+     * fan-out-correct).
+     */
+    fanOut?: boolean
   }
   /**
    * Optional child predicate for nested relation paths

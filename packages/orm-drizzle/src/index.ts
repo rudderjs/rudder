@@ -1397,9 +1397,15 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       const pivotRelatedCol = this.colOf(Pivot,   js.through.relatedPivotKey)
       const relatedKeyCol   = this.colOf(Related, js.relatedColumn)
 
+      // Fan-out through relations (hasOneThrough/hasManyThrough) ALWAYS join:
+      // the pivot fast path counts intermediate rows (and implies existence
+      // from a bare intermediate), which under-counts / false-positives when
+      // intermediate→related is 1:N. The join branch aggregates the join
+      // product (one row per far row). Pivots (1:1) keep the fast path.
       const needJoin = req.fn === 'sum' || req.fn === 'min' || req.fn === 'max' || req.fn === 'avg'
         || req.constraintWheres.length > 0
         || js.softDeletes === true
+        || js.through.fanOut === true
 
       const exprs: SQL[] = [eq(pivotForeignCol, parentCol) as SQL]
       for (const [k, v] of Object.entries(js.extraEquals ?? {})) {
@@ -1421,7 +1427,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
         const da = this.colOf(Related, 'deletedAt') as Column | undefined
         if (da) exprs.push(isNull(da) as SQL)
       }
-      const subq = sql`(SELECT ${fnExpr} FROM ${Pivot as Column} INNER JOIN ${Related as Column} ON ${relatedKeyCol} = ${pivotRelatedCol} WHERE ${_andSql(exprs)})`
+      // The ON clause goes through eq() so BOTH sides render table-qualified —
+      // a bare `${col}` interpolation in a sql template renders the unqualified
+      // column name, which is ambiguous whenever pivot and related share a
+      // column name (always true for through relations: both have `id`).
+      const subq = sql`(SELECT ${fnExpr} FROM ${Pivot as Column} INNER JOIN ${Related as Column} ON ${eq(relatedKeyCol, pivotRelatedCol)} WHERE ${_andSql(exprs)})`
       return req.fn === 'exists' ? (sql`(${subq} > 0)` as SQL) : (subq as SQL)
     }
 

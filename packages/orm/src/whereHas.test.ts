@@ -578,3 +578,120 @@ describe('whereRelation / orWhereRelation', () => {
     assert.deepEqual(rec.predicates[1]!.constraintWheres, [{ column: 'authorId', operator: '>', value: 0 }])
   })
 })
+
+// ─── whereHas — through relations (hasOneThrough / hasManyThrough) ───────────
+
+class Essay extends Model {
+  static override table = 'essays'
+  id!: number
+  citizenId!: number
+}
+class Citizen extends Model {
+  static override table = 'citizens'
+  id!: number
+  nationId!: number
+}
+class Nation extends Model {
+  static override table = 'nations'
+  id!: number
+  static override relations = {
+    essays: { type: 'hasManyThrough' as const, model: () => Essay, through: () => Citizen },
+    motto:  { type: 'hasOneThrough'  as const, model: () => Essay, through: () => Citizen },
+    custom: {
+      type: 'hasManyThrough' as const, model: () => Essay, through: () => Citizen,
+      firstKey: 'homeId', secondKey: 'writerId', localKey: 'code', secondLocalKey: 'uuid',
+    },
+  }
+}
+
+describe('Model.whereHas — through relations', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('builds the two-hop predicate: intermediate as the through block + fanOut', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.whereHas('essays').get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.relation,      'essays')
+    assert.equal(p.exists,        true)
+    assert.equal(p.relatedTable,  'essays')
+    assert.equal(p.parentColumn,  'id')          // localKey default = Nation PK
+    assert.equal(p.relatedColumn, 'citizenId')   // secondKey default = camelHead(Citizen)+Id
+    assert.deepEqual(p.through, {
+      pivotTable:      'citizens',
+      foreignPivotKey: 'nationId',               // firstKey default = camelHead(Nation)+Id
+      relatedPivotKey: 'id',                     // secondLocalKey default = Citizen PK
+      fanOut:          true,
+    })
+    assert.equal(p.extraEquals, undefined)
+  })
+
+  it('whereDoesntHave flips exists; hasOneThrough builds the same walk', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.whereDoesntHave('motto').get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.exists, false)
+    assert.equal(p.relatedTable, 'essays')
+    assert.equal(p.through!.pivotTable, 'citizens')
+    assert.equal(p.through!.fanOut, true)
+  })
+
+  it('honors explicit key overrides on every hop', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.whereHas('custom').get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.parentColumn,  'code')
+    assert.equal(p.relatedColumn, 'writerId')
+    assert.deepEqual(p.through, {
+      pivotTable:      'citizens',
+      foreignPivotKey: 'homeId',
+      relatedPivotKey: 'uuid',
+      fanOut:          true,
+    })
+  })
+
+  it('constrain callback wheres target the FAR table clauses', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.whereHas('essays', q => q.where('published', true)).get()
+
+    const p = latest().predicates[0]!
+    assert.deepEqual(p.constraintWheres, [{ column: 'published', operator: '=', value: true }])
+  })
+
+  it('has(relation, op, n) carries the count comparison on the predicate', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.has('essays', '>=', 3).get()
+
+    const p = latest().predicates[0]!
+    assert.deepEqual(p.count, { operator: '>=', value: 3 })
+    assert.equal(p.through!.fanOut, true)
+  })
+
+  it('withWhereHas on a through relation falls back to plain with() — never withConstrained', async () => {
+    const { adapter, latest } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    await Nation.withWhereHas('essays', q => q.where('published', true)).get()
+
+    const rec = latest()
+    assert.equal(rec.predicates.length, 1, 'parent-side filter still applies')
+    assert.deepEqual(rec.withConstraineds, [], 'withConstrained cannot express the two-hop walk')
+    // The eager load itself never reaches the adapter QB: through relations
+    // always ride the Model-layer two-hop walk (attachHasThrough), so the
+    // adapter sees neither with() nor withConstrained(). The loaded children
+    // are asserted in the has-through E2E suite.
+    assert.deepEqual(rec.withs, [])
+  })
+})

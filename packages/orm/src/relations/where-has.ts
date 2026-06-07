@@ -11,6 +11,7 @@ import {
   resolveMorphToManyMeta,
   resolveMorphedByManyMeta,
 } from './pivot-meta.js'
+import { resolveHasThroughMeta, type HasThroughDef } from './has-through.js'
 
 /**
  * Variant shape of `RelationDefinition` for `hasOne | hasMany | belongsTo`.
@@ -155,12 +156,30 @@ export function buildRelationPredicate(
   constraintWheres: WhereClause[],
 ): RelationExistencePredicate {
   if (def.type === 'hasOneThrough' || def.type === 'hasManyThrough') {
-    // Through relations would need a two-level EXISTS (parent → through →
-    // related); not expressible by the current single-hop predicate. Deferred.
-    throw new Error(
-      `[RudderJS ORM] whereHas / has on a through relation ("${relation}" on ${Parent.name}) is not supported yet. ` +
-      `Filter via the related model directly, or load it with \`${Parent.name}.with('${relation}')\` / \`.related('${relation}')\`.`,
-    )
+    // Through relations are structurally the pivot two-hop walk — the
+    // INTERMEDIATE table plays the pivot's role (`users` between `countries`
+    // and `posts`):
+    //   pivot.foreignPivotKey = parent.parentColumn   (users.countryId = countries.id)
+    //   related.relatedColumn = pivot.relatedPivotKey (posts.userId    = users.id)
+    // `fanOut` marks the 1:N intermediate→related cardinality so a `count`
+    // comparison counts FAR rows (joined), not intermediates — for pivots the
+    // two coincide, for through they don't. Constraint wheres apply to the
+    // FAR table (Laravel semantics).
+    const meta = resolveHasThroughMeta(Parent, def as HasThroughDef)
+    return {
+      relation,
+      exists,
+      relatedTable:  meta.Related.getTable(),
+      parentColumn:  meta.localKey,
+      relatedColumn: meta.secondKey,
+      constraintWheres,
+      through: {
+        pivotTable:      meta.Through.getTable(),
+        foreignPivotKey: meta.firstKey,
+        relatedPivotKey: meta.secondLocalKey,
+        fanOut:          true,
+      },
+    }
   }
 
   const Related = def.model() as typeof Model
@@ -276,7 +295,8 @@ export function buildRelationPredicate(
  * against it).
  *
  * `morphTo` anywhere in the chain throws (dynamic related table); through
- * relations throw inside {@link buildRelationPredicate} as before.
+ * relations compose like any other level (their predicate carries the
+ * intermediate as a `through` block).
  */
 export function buildNestedRelationPredicate(
   Parent:           typeof Model,
@@ -420,8 +440,15 @@ export function attachWithWhereHas<TQ>(
   // distinct recorder instances. That's intentional: each captures the
   // same constraint independently and neither is mutated by the adapter.
   attachWhereHas(Parent, q, relation, true, constrain)
+  // Through relations always eager-load via the Model layer's two-hop walk —
+  // an adapter's `withConstrained` (Prisma nested `include.where`) can't
+  // express the intermediate hop and would target a schema relation that
+  // doesn't exist. Fall back to plain with(): the constraint filters the
+  // PARENTS; the eagerly loaded children are unconstrained (documented).
+  const defType = Parent.relations[relation]?.type
+  const isThrough = defType === 'hasOneThrough' || defType === 'hasManyThrough'
   const withConstrained = (q as unknown as { withConstrained?: (rel: string, ws: WhereClause[]) => QueryBuilder<TQ> }).withConstrained
-  if (constraintWheres.length > 0 && typeof withConstrained === 'function') {
+  if (!isThrough && constraintWheres.length > 0 && typeof withConstrained === 'function') {
     return withConstrained.call(q, relation, constraintWheres)
   }
   return q.with(relation)

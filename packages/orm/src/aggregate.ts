@@ -8,6 +8,7 @@ import type {
 } from '@rudderjs/contracts'
 import type { Model, RelationDefinition } from './index.js'
 import { camelHead, capitalize } from './utils.js'
+import { resolveHasThroughMeta, type HasThroughDef } from './relations/has-through.js'
 
 // ─── Public types ──────────────────────────────────────────
 
@@ -143,12 +144,26 @@ export function buildAggregateJoinShape(
   def:      Exclude<RelationDefinition, { type: 'morphTo' | 'belongsTo' }>,
 ): AggregateJoinShape {
   if (def.type === 'hasOneThrough' || def.type === 'hasManyThrough') {
-    // Aggregating across a two-hop through relation isn't expressible by the
-    // single-join aggregate shape. Deferred — load the relation and count in app.
-    throw new Error(
-      `[RudderJS ORM] withCount / withAggregate on a through relation ("${relation}" on ${Parent.name}) is not supported yet. ` +
-      `Eager-load it with \`${Parent.name}.with('${relation}')\` and aggregate in application code.`,
-    )
+    // Through relations reuse the pivot two-hop shape — the INTERMEDIATE
+    // table plays the pivot's role. `fanOut` tells the adapter the
+    // intermediate→related cardinality is 1:N, so aggregates must run over
+    // the JOINED far rows (the pivot fast path of counting pivot rows would
+    // count intermediates instead of far rows, and existence would
+    // false-positive on an intermediate with zero far rows).
+    const meta = resolveHasThroughMeta(Parent, def as HasThroughDef)
+    const throughSoftDeletes = meta.Related.softDeletes
+    return {
+      relatedTable:  meta.Related.getTable(),
+      parentColumn:  meta.localKey,
+      relatedColumn: meta.secondKey,
+      through: {
+        pivotTable:      meta.Through.getTable(),
+        foreignPivotKey: meta.firstKey,
+        relatedPivotKey: meta.secondLocalKey,
+        fanOut:          true,
+      },
+      ...(throughSoftDeletes && { softDeletes: true }),
+    }
   }
 
   const Related = def.model() as typeof Model
