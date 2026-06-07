@@ -44,6 +44,11 @@ export interface ConstraintQueryBuilder extends QueryBuilder<Model> {
   whereBetween(column: string, range: readonly [unknown, unknown]): this
   when<V>(value: V, cb?: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
   unless<V>(value: V, cb?: (q: this, value: V) => void, otherwise?: (q: this, value: V) => void): this
+  /** Nested relation existence on the RELATED model's relations — recorded as
+   *  a child predicate (native engine only; the Model layer guards). Dot-path
+   *  relation names compose too. */
+  whereHas(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
+  whereDoesntHave(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
 }
 
 /**
@@ -89,6 +94,14 @@ const RECORDER_REJECTIONS: Record<string, string> = {
   withTrashed:        `soft-delete scoping is the callback's responsibility — relation subqueries include trashed rows by default; filter explicitly with where('deletedAt', null).`,
   onlyTrashed:        `soft-delete scoping is the callback's responsibility — filter explicitly with where('deletedAt', '!=', null).`,
   whereVectorSimilarTo: `vector predicates can't round-trip through the constraint list.`,
+  withWhereHas:       `eager-loading inside a filter callback is meaningless — the callback only decides which PARENT rows match. Call withWhereHas on the outer query.`,
+}
+
+/** What a constrain callback contributed: flat AND clauses on the related
+ *  table + child existence predicates from nested whereHas/whereDoesntHave. */
+export interface CapturedConstraints {
+  wheres:   WhereClause[]
+  children: RelationExistencePredicate[]
 }
 
 /**
@@ -98,18 +111,27 @@ const RECORDER_REJECTIONS: Record<string, string> = {
  * `whereNotNull`, `whereBetween` (lowered to `>= low` + `<= high`), and the
  * `when` / `unless` conditionals (their callbacks run against the recorder).
  *
+ * Nested `whereHas` / `whereDoesntHave` calls resolve their relation on
+ * `Owner` (the model whose rows the callback filters — i.e. the RELATED model
+ * of the enclosing whereHas) and record a child {@link
+ * RelationExistencePredicate}, recursively capturing the child's own
+ * callback. Children land in `children`; the caller attaches them to the
+ * enclosing predicate's `nested` array (native engine only — the Model layer
+ * guards via `supportsNestedRelationPredicates`).
+ *
  * Everything that CANNOT round-trip through the flat AND-only list throws a
  * clear error instead of silently widening the filter — historically the
  * recorder no-oped every unknown method, so a `whereIn(...)` inside a
  * callback silently matched MORE rows than intended. Methods that are
  * harmless to an existence test (`orderBy`, `limit`, …) stay accepted-and-
- * ignored. Nested `whereHas` inside the callback still throws — the dot-path
- * form (`whereHas('parent.child', cb)`) covers that semantic (native engine).
+ * ignored.
  */
-export function captureConstraintWheres(
+export function captureConstraints(
+  Owner:     typeof Model,
   constrain: (q: ConstraintQueryBuilder) => void,
-): WhereClause[] {
+): CapturedConstraints {
   const wheres: WhereClause[] = []
+  const children: RelationExistencePredicate[] = []
   const recorder: ConstraintQueryBuilder = new Proxy({} as ConstraintQueryBuilder, {
     get(_t, prop): unknown {
       const name = String(prop)
@@ -151,12 +173,10 @@ export function captureConstraintWheres(
           return recorder
         }
       }
-      if (name === 'whereHas' || name === 'whereDoesntHave' || name === 'withWhereHas') {
-        return (): ConstraintQueryBuilder => {
-          throw new Error(
-            `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is not supported — ` +
-            `use the dot-path form instead: whereHas('parent.child', cb) (native engine).`,
-          )
+      if (name === 'whereHas' || name === 'whereDoesntHave') {
+        return (relation: string, childConstrain?: (q: ConstraintQueryBuilder) => void): ConstraintQueryBuilder => {
+          children.push(buildChildPredicate(Owner, relation, name === 'whereHas', childConstrain))
+          return recorder
         }
       }
       const rejection = RECORDER_REJECTIONS[name]
@@ -174,14 +194,50 @@ export function captureConstraintWheres(
       return (): ConstraintQueryBuilder => {
         throw new Error(
           `[RudderJS ORM] ${name}() is not available inside a whereHas constrain callback. ` +
-          `Supported: where, whereIn/whereNotIn, whereNull/whereNotNull, whereBetween, when/unless ` +
-          `(plus ignored ordering/limiting methods).`,
+          `Supported: where, whereIn/whereNotIn, whereNull/whereNotNull, whereBetween, when/unless, ` +
+          `whereHas/whereDoesntHave (plus ignored ordering/limiting methods).`,
         )
       }
     },
   })
   constrain(recorder)
-  return wheres
+  return { wheres, children }
+}
+
+/**
+ * Build the child predicate a nested `whereHas('name', cb)` inside a
+ * constrain callback records. `Owner` is the model whose rows the enclosing
+ * callback filters; `relation` resolves on its `static relations` (dot-paths
+ * compose through {@link buildNestedRelationPredicate}). The child's own
+ * callback captures recursively — arbitrary depth, every relation type except
+ * `morphTo` (dynamic related table).
+ */
+function buildChildPredicate(
+  Owner:     typeof Model,
+  relation:  string,
+  exists:    boolean,
+  constrain?: (q: ConstraintQueryBuilder) => void,
+): RelationExistencePredicate {
+  if (relation.includes('.')) {
+    return buildNestedRelationPredicate(Owner, relation, exists, constrain)
+  }
+  const def = Owner.relations[relation]
+  if (!def) {
+    throw new Error(
+      `[RudderJS ORM] Relation "${relation}" is not defined on ${Owner.name} (nested whereHas inside a constrain callback).`,
+    )
+  }
+  if (def.type === 'morphTo') {
+    throw new Error(
+      `[RudderJS ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
+      `Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
+    )
+  }
+  const Related  = def.model() as typeof Model
+  const captured = constrain ? captureConstraints(Related, constrain) : { wheres: [], children: [] }
+  const pred     = buildRelationPredicate(Owner, relation, def, exists, captured.wheres)
+  if (captured.children.length > 0) pred.nested = captured.children
+  return pred
 }
 
 /**
@@ -399,14 +455,17 @@ export function buildRelationPredicate(
  *
  * `morphTo` anywhere in the chain throws (dynamic related table); through
  * relations compose like any other level (their predicate carries the
- * intermediate as a `through` block).
+ * intermediate as a `through` block). The constrain callback is captured
+ * against the DEEPEST level's related model, so callback-nested
+ * `whereHas` calls inside it resolve there and attach as the deepest
+ * predicate's children.
  */
 export function buildNestedRelationPredicate(
-  Parent:           typeof Model,
-  path:             string,
-  exists:           boolean,
-  constraintWheres: WhereClause[],
-  count?:           { operator: WhereOperator; value: number },
+  Parent:    typeof Model,
+  path:      string,
+  exists:    boolean,
+  constrain?: (q: ConstraintQueryBuilder) => void,
+  count?:    { operator: WhereOperator; value: number },
 ): RelationExistencePredicate {
   const names = path.split('.')
   if (names.some(n => n.length === 0)) {
@@ -431,6 +490,10 @@ export function buildNestedRelationPredicate(
     Owner = def.model() as typeof Model
   }
 
+  // The callback filters the DEEPEST level's rows — `Owner` has walked the
+  // whole path by now, so it IS the deepest related model.
+  const captured = constrain ? captureConstraints(Owner, constrain) : { wheres: [], children: [] }
+
   // Build deepest-first; each level wraps its child via `nested`.
   let child: RelationExistencePredicate | undefined
   for (let i = levels.length - 1; i >= 0; i--) {
@@ -439,9 +502,14 @@ export function buildNestedRelationPredicate(
     const pred = buildRelationPredicate(
       level.Owner, level.name, level.def,
       i === 0 ? exists : true,
-      deepest ? constraintWheres : [],
+      deepest ? captured.wheres : [],
     )
     if (deepest && count) pred.count = count
+    if (deepest && captured.children.length > 0) {
+      // Callback-nested children of the deepest level. The chain link below
+      // (singular wrap) only applies to NON-deepest levels, so no clobber.
+      pred.nested = captured.children
+    }
     if (child) pred.nested = child
     child = pred
   }
@@ -497,8 +565,7 @@ export function attachWhereHas<TQ>(
       rootExists = false
       count = undefined
     }
-    const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
-    const predicate = buildNestedRelationPredicate(Parent, relation, rootExists, constraintWheres, count)
+    const predicate = buildNestedRelationPredicate(Parent, relation, rootExists, constrain, count)
     if (opts?.boolean) predicate.boolean = opts.boolean
     assertNestedRelationSupport(q, relation)
     return q.whereRelationExists(predicate)
@@ -515,8 +582,17 @@ export function attachWhereHas<TQ>(
     )
   }
 
-  const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
-  const predicate        = buildRelationPredicate(Parent, relation, def, exists, constraintWheres)
+  // The callback filters the RELATED rows, so nested whereHas calls inside it
+  // resolve on the related model (morphTo was rejected above; every other
+  // relation type has a static `model()`).
+  const Related  = def.model() as typeof Model
+  const captured = constrain ? captureConstraints(Related, constrain) : { wheres: [], children: [] }
+  const predicate = buildRelationPredicate(Parent, relation, def, exists, captured.wheres)
+  if (captured.children.length > 0) {
+    predicate.nested = captured.children
+    // Children need the recursive correlated-EXISTS compiler, same as dot-paths.
+    assertNestedRelationSupport(q, relation)
+  }
   // OR-rooting (orWhereHas family) + count comparison (has(rel, op, n)) ride on
   // the predicate so the adapter sees them in one shape.
   if (opts?.boolean) predicate.boolean = opts.boolean
@@ -536,23 +612,30 @@ export function attachWithWhereHas<TQ>(
   relation:  string,
   constrain?: (q: ConstraintQueryBuilder) => void,
 ): QueryBuilder<TQ> {
-  const constraintWheres = constrain ? captureConstraintWheres(constrain) : []
-  // Reuse attachWhereHas for the parent-side filter — it re-runs the
-  // constrain callback against a fresh recorder, so the WhereClause[] we
-  // capture above and the one captured inside attachWhereHas come from
-  // distinct recorder instances. That's intentional: each captures the
-  // same constraint independently and neither is mutated by the adapter.
+  // Run the parent-side filter FIRST — it validates the relation (unknown /
+  // morphTo throw there) and re-runs the callback against its own recorder.
   attachWhereHas(Parent, q, relation, true, constrain)
+  // Re-capture for the eager side: the WhereClause[] captured here and the
+  // one captured inside attachWhereHas come from distinct recorder instances.
+  // That's intentional — each captures the same constraint independently and
+  // neither is mutated by the adapter. (Dot-path relations skip this — the
+  // deepest model isn't resolved here; `q.with('a.b')` throws downstream,
+  // the documented nested-eager posture.)
+  const def = Parent.relations[relation]
+  const captured = constrain && def && def.type !== 'morphTo' && !relation.includes('.')
+    ? captureConstraints(def.model() as typeof Model, constrain)
+    : { wheres: [], children: [] }
   // Through relations always eager-load via the Model layer's two-hop walk —
   // an adapter's `withConstrained` (Prisma nested `include.where`) can't
   // express the intermediate hop and would target a schema relation that
-  // doesn't exist. Fall back to plain with(): the constraint filters the
-  // PARENTS; the eagerly loaded children are unconstrained (documented).
-  const defType = Parent.relations[relation]?.type
-  const isThrough = defType === 'hasOneThrough' || defType === 'hasManyThrough'
+  // doesn't exist. Same for callbacks carrying NESTED children: the flat
+  // WhereClause[] `withConstrained` accepts can't express them. Fall back to
+  // plain with(): the constraint filters the PARENTS; the eagerly loaded
+  // children are unconstrained (documented).
+  const isThrough = def?.type === 'hasOneThrough' || def?.type === 'hasManyThrough'
   const withConstrained = (q as unknown as { withConstrained?: (rel: string, ws: WhereClause[]) => QueryBuilder<TQ> }).withConstrained
-  if (!isThrough && constraintWheres.length > 0 && typeof withConstrained === 'function') {
-    return withConstrained.call(q, relation, constraintWheres)
+  if (!isThrough && captured.children.length === 0 && captured.wheres.length > 0 && typeof withConstrained === 'function') {
+    return withConstrained.call(q, relation, captured.wheres)
   }
   return q.with(relation)
 }

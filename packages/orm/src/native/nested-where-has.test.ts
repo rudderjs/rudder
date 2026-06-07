@@ -240,7 +240,7 @@ describe('buildNestedRelationPredicate', () => {
   it('builds the chain deepest-first with Laravel hasNested semantics', () => {
     const pred = buildNestedRelationPredicate(
       User, 'posts.comments', false,
-      [{ column: 'approved', operator: '=', value: 1 }],
+      (q) => q.where('approved', 1),
       { operator: '>=', value: 2 },
     )
     // outer: posts — flipped exists, NO constraint, NO count
@@ -249,7 +249,7 @@ describe('buildNestedRelationPredicate', () => {
     assert.deepStrictEqual(pred.constraintWheres, [])
     assert.strictEqual(pred.count, undefined)
     // deepest: comments — plain exists, carries constraint + count
-    const child = pred.nested!
+    const child = pred.nested! as RelationExistencePredicate
     assert.strictEqual(child.relation, 'comments')
     assert.strictEqual(child.exists, true)
     assert.deepStrictEqual(child.constraintWheres, [{ column: 'approved', operator: '=', value: 1 }])
@@ -259,21 +259,21 @@ describe('buildNestedRelationPredicate', () => {
 
   it('unknown segment names the owning model and the full path', () => {
     assert.throws(
-      () => buildNestedRelationPredicate(User, 'posts.nope', true, []),
+      () => buildNestedRelationPredicate(User, 'posts.nope', true),
       /Relation "nope" is not defined on Post \(nested path "posts\.nope"\)/,
     )
   })
 
   it('morphTo in the chain throws', () => {
     assert.throws(
-      () => buildNestedRelationPredicate(Post, 'comments.commentable', true, []),
+      () => buildNestedRelationPredicate(Post, 'comments.commentable', true),
       /morphTo "commentable" cannot appear in a nested whereHas path/,
     )
   })
 
   it('empty segment throws', () => {
     assert.throws(
-      () => buildNestedRelationPredicate(User, 'posts..comments', true, []),
+      () => buildNestedRelationPredicate(User, 'posts..comments', true),
       /Malformed nested relation path/,
     )
   })
@@ -373,6 +373,65 @@ describe('nested whereHas (native, sqlite E2E)', () => {
   it('single-level whereHas still works unchanged next to nested calls', async () => {
     const rows = await User.whereHas('posts').whereHas('posts.comments', q => q.where('approved', 1)).get()
     assert.deepStrictEqual(names(rows), ['Ada', 'Edsger'])
+  })
+
+  // ── Callback-nested form (`q => q.whereHas(...)`) ──
+
+  it('callback form is equivalent to the dot-path when only the deepest level is constrained', async () => {
+    const viaCallback = names(await User.whereHas('posts', q => q.whereHas('comments')).get())
+    const viaDotPath  = names(await User.whereHas('posts.comments').get())
+    assert.deepStrictEqual(viaCallback, viaDotPath)
+    assert.deepStrictEqual(viaCallback, ['Ada', 'Alan', 'Edsger'])
+  })
+
+  it('constraints apply at EVERY level — inexpressible as a dot-path', async () => {
+    // posts with id >= 4 that have an approved comment: only Edsger's p4.
+    // (Ada's approved comment sits on p1, filtered out by the MID-level where.)
+    const rows = await User.whereHas('posts', q =>
+      q.where('id', '>=', 4).whereHas('comments', c => c.where('approved', 1)),
+    ).get()
+    assert.deepStrictEqual(names(rows), ['Edsger'])
+  })
+
+  it('inner whereDoesntHave — "a post with NO comments" (inexpressible as a dot-path)', async () => {
+    // Ada's p2 and Hopper's p5 have no comments.
+    const rows = await User.whereHas('posts', q => q.whereDoesntHave('comments')).get()
+    assert.deepStrictEqual(names(rows), ['Ada', 'Hopper'])
+  })
+
+  it('sibling nested calls AND together — same relation, different constraints', async () => {
+    // A single post having BOTH an approved comment AND an eve comment: p1 only.
+    const rows = await User.whereHas('posts', q =>
+      q.whereHas('comments', c => c.where('approved', 1))
+       .whereHas('comments', c => c.where('author', 'eve')),
+    ).get()
+    assert.deepStrictEqual(names(rows), ['Ada'])
+  })
+
+  it('recursion three levels deep via callbacks', async () => {
+    const rows = await User.whereHas('posts', q =>
+      q.whereHas('comments', c => c.whereHas('reactions')),
+    ).get()
+    assert.deepStrictEqual(names(rows), ['Ada'])
+  })
+
+  it('dot-path inside a callback composes', async () => {
+    const rows = await User.whereHas('posts', q => q.whereHas('comments.reactions')).get()
+    assert.deepStrictEqual(names(rows), ['Ada'])
+  })
+
+  it('outer whereDoesntHave with an inner whereHas matches the dot-path equivalent', async () => {
+    const viaCallback = names(await User.whereDoesntHave('posts', q => q.whereHas('comments')).get())
+    assert.deepStrictEqual(viaCallback, names(await User.whereDoesntHave('posts.comments').get()))
+    assert.deepStrictEqual(viaCallback, ['Grace', 'Hopper'])
+  })
+
+  it('recorded sugar composes inside nested callbacks', async () => {
+    // comments by eve OR dan (whereIn), nested one level down.
+    const rows = await User.whereHas('posts', q =>
+      q.whereHas('comments', c => c.whereIn('author', ['eve', 'dan'])),
+    ).get()
+    assert.deepStrictEqual(names(rows), ['Ada', 'Alan', 'Edsger'])
   })
 })
 

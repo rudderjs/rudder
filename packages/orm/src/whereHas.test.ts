@@ -17,13 +17,13 @@ interface RecordedQb {
   withConstraineds: Array<[string, WhereClause[]]>
 }
 
-function recordingAdapter(): { adapter: OrmAdapter; latest: () => RecordedQb } {
+function recordingAdapter(opts: { nestedSupport?: boolean } = {}): { adapter: OrmAdapter; latest: () => RecordedQb } {
   let latest: RecordedQb | null = null
 
   const makeQb = <T,>(): QueryBuilder<T> => {
     const rec: RecordedQb = { predicates: [], wheres: [], withs: [], withConstraineds: [] }
     latest = rec
-    const qb: QueryBuilder<T> = {
+    const qb: QueryBuilder<T> & { supportsNestedRelationPredicates?: boolean } = {
       where: ((col: string, opOrVal: unknown, maybeVal?: unknown): QueryBuilder<T> => {
         if (maybeVal === undefined) rec.wheres.push([col, '=', opOrVal])
         else                        rec.wheres.push([col, opOrVal as WhereOperator, maybeVal])
@@ -64,6 +64,7 @@ function recordingAdapter(): { adapter: OrmAdapter; latest: () => RecordedQb } {
       whereGroup:   () => qb,
       orWhereGroup: () => qb,
     }
+    if (opts.nestedSupport) qb.supportsNestedRelationPredicates = true
     return qb
   }
 
@@ -375,15 +376,26 @@ describe('Model.whereHas — unknown relation', () => {
 describe('Model.whereHas — nested whereHas inside callback', () => {
   beforeEach(() => ModelRegistry.reset())
 
-  it('throws v1-deferred error', () => {
+  it('rejects nested whereHas on adapters without the recursive-EXISTS marker', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    // The child predicate builds fine — the ADAPTER guard is what rejects:
+    // the recording stub has no `supportsNestedRelationPredicates`, mirroring
+    // Drizzle/Prisma's current posture.
+    assert.throws(
+      () => Team.whereHas('members', (q) => q.whereHas('posts')),
+      /Nested whereHas \("members"\) is not supported on this adapter/,
+    )
+  })
+
+  it('unknown child relation names the owning model', () => {
     const { adapter } = recordingAdapter()
     ModelRegistry.set(adapter)
 
     assert.throws(
-      () => User.whereHas('posts', (q) => {
-        (q as unknown as { whereHas: (r: string) => void }).whereHas('author')
-      }),
-      /Nested whereHas inside a whereHas constrain callback is not supported/,
+      () => User.whereHas('posts', (q) => q.whereHas('nope')),
+      /Relation "nope" is not defined on Post \(nested whereHas inside a constrain callback\)/,
     )
   })
 
@@ -808,5 +820,171 @@ describe('whereHas constrain callback — loud rejections (previously silent dro
       () => User.whereHas('posts', q => q.orWhere('a', 1)),
       /orWhere\(\) inside a whereHas constrain callback is not supported/,
     )
+  })
+})
+
+// ─── Callback-nested whereHas — predicate shapes (PR A) ──────────────────────
+//
+// `whereHas('posts', q => q.whereHas('comments', cb))` — the callback-nested
+// form. Children land on the parent predicate's `nested` ARRAY (dot-paths
+// keep emitting the singular form), each with its own exists flag +
+// constraints; recursion is unbounded. Native-only via the same
+// `supportsNestedRelationPredicates` marker as dot-paths.
+
+class NComment extends Model {
+  static override table = 'ncomments'
+  id!: number
+  static override relations = {
+    reactions: { type: 'hasMany' as const, model: () => NReaction, foreignKey: 'commentId' },
+  }
+}
+class NReaction extends Model {
+  static override table = 'nreactions'
+  id!: number
+}
+class NPost extends Model {
+  static override table = 'nposts'
+  id!: number
+  static override relations = {
+    comments: { type: 'hasMany' as const, model: () => NComment, foreignKey: 'postId' },
+    tags:     { type: 'belongsToMany' as const, model: () => NTag, pivotTable: 'npost_tag' },
+  }
+}
+class NTag extends Model {
+  static override table = 'ntags'
+  id!: number
+}
+class NUser extends Model {
+  static override table = 'nusers'
+  id!: number
+  static override relations = {
+    posts: { type: 'hasMany' as const, model: () => NPost, foreignKey: 'authorId' },
+  }
+}
+
+const asArray = (n: RelationExistencePredicate['nested']): RelationExistencePredicate[] =>
+  n === undefined ? [] : Array.isArray(n) ? n : [n]
+
+describe('Model.whereHas — callback-nested children', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('records a child predicate with constraints at BOTH levels', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts', q =>
+      q.where('published', true)
+       .whereHas('comments', c => c.where('approved', true)),
+    ).get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.relation, 'posts')
+    assert.deepEqual(p.constraintWheres, [{ column: 'published', operator: '=', value: true }])
+    const children = asArray(p.nested)
+    assert.equal(children.length, 1)
+    const child = children[0]!
+    assert.equal(child.relation, 'comments')
+    assert.equal(child.relatedTable, 'ncomments')
+    assert.equal(child.parentColumn, 'id')
+    assert.equal(child.relatedColumn, 'postId')
+    assert.equal(child.exists, true)
+    assert.deepEqual(child.constraintWheres, [{ column: 'approved', operator: '=', value: true }])
+  })
+
+  it('inner whereDoesntHave flips the CHILD exists flag only', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts', q => q.whereDoesntHave('comments')).get()
+
+    const p = latest().predicates[0]!
+    assert.equal(p.exists, true)
+    assert.equal(asArray(p.nested)[0]!.exists, false)
+  })
+
+  it('sibling nested calls AND together as an array', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts', q => q.whereHas('comments').whereHas('tags')).get()
+
+    const children = asArray(latest().predicates[0]!.nested)
+    assert.deepEqual(children.map(c => c.relation), ['comments', 'tags'])
+    // The pivot child carries its through block like any top-level pivot predicate.
+    assert.equal(children[1]!.through?.pivotTable, 'npost_tag')
+  })
+
+  it('recursion: a child callback may nest again', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts', q =>
+      q.whereHas('comments', c => c.whereHas('reactions', r => r.where('kind', 'up'))),
+    ).get()
+
+    const level1 = asArray(latest().predicates[0]!.nested)[0]!
+    const level2 = asArray(level1.nested)[0]!
+    assert.equal(level2.relation, 'reactions')
+    assert.deepEqual(level2.constraintWheres, [{ column: 'kind', operator: '=', value: 'up' }])
+  })
+
+  it('dot-path inside a callback composes through the nested builder', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts', q => q.whereHas('comments.reactions')).get()
+
+    const child = asArray(latest().predicates[0]!.nested)[0]!
+    assert.equal(child.relation, 'comments')
+    assert.equal((child.nested as RelationExistencePredicate).relation, 'reactions')
+  })
+
+  it('dot-path whereHas with a callback that nests applies children at the DEEPEST level', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.whereHas('posts.comments', q => q.where('approved', true).whereHas('reactions')).get()
+
+    const outer = latest().predicates[0]!
+    assert.equal(outer.relation, 'posts')
+    assert.deepEqual(outer.constraintWheres, [])
+    const deepest = outer.nested as RelationExistencePredicate
+    assert.equal(deepest.relation, 'comments')
+    assert.deepEqual(deepest.constraintWheres, [{ column: 'approved', operator: '=', value: true }])
+    assert.deepEqual(asArray(deepest.nested).map(c => c.relation), ['reactions'])
+  })
+
+  it('morphTo child throws; withWhereHas inside a callback throws', () => {
+    const { adapter } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    // NThread.comments → Comment, whose 'target' is a morphTo — the dynamic
+    // related table can't appear at ANY nesting level.
+    class NThread extends Model {
+      static override table = 'nthreads'
+      static override relations = {
+        comments: { type: 'hasMany' as const, model: () => Comment, foreignKey: 'threadId' },
+      }
+    }
+    assert.throws(
+      () => NThread.whereHas('comments', q => q.whereHas('target')),
+      /morphTo "target" cannot be used with whereHas/,
+    )
+    assert.throws(
+      () => NUser.whereHas('posts', q => (q as unknown as { withWhereHas(r: string): unknown }).withWhereHas('comments')),
+      /withWhereHas\(\) inside a whereHas constrain callback is not supported/,
+    )
+  })
+
+  it('withWhereHas with a NESTED callback falls back to plain with() — flat withConstrained cannot carry children', async () => {
+    const { adapter, latest } = recordingAdapter({ nestedSupport: true })
+    ModelRegistry.set(adapter)
+
+    await NUser.withWhereHas('posts', q => q.where('published', true).whereHas('comments')).get()
+
+    const rec = latest()
+    assert.equal(rec.predicates.length, 1)
+    assert.deepEqual(rec.withConstraineds, [], 'children cannot round-trip through withConstrained')
+    assert.deepEqual(rec.withs, ['posts'])
   })
 })

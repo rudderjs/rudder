@@ -189,18 +189,26 @@ export interface RelationExistencePredicate {
     fanOut?: boolean
   }
   /**
-   * Optional child predicate for nested relation paths
-   * (`whereHas('posts.comments', cb)`) — the related rows must ALSO satisfy
-   * the child's existence, correlated against THIS predicate's related table
-   * (the child's `parentColumn` is a column on `relatedTable`). Chains
-   * recursively for deeper paths. Laravel `hasNested` semantics: every outer
-   * level is plain existence (`exists: true`, no `count`, empty
-   * `constraintWheres`); the constrain callback and any count comparison sit
-   * on the DEEPEST predicate; `whereDoesntHave` flips only the OUTERMOST
-   * `exists`. Adapters that can't express the recursion must reject predicates
+   * Optional child predicate(s) — the related rows must ALSO satisfy each
+   * child's existence, correlated against THIS predicate's related table
+   * (a child's `parentColumn` is a column on `relatedTable`). Chains
+   * recursively for deeper levels. Two producers:
+   *
+   * - **Dot-paths** (`whereHas('posts.comments', cb)`) emit the SINGULAR
+   *   form with Laravel `hasNested` semantics: every outer level is plain
+   *   existence (`exists: true`, no `count`, empty `constraintWheres`); the
+   *   constrain callback and any count comparison sit on the DEEPEST
+   *   predicate; `whereDoesntHave` flips only the OUTERMOST `exists`.
+   * - **Callback nesting** (`whereHas('posts', q => q.whereHas('comments'))`)
+   *   emits the ARRAY form — one child per nested call (siblings AND
+   *   together), each carrying its own `constraintWheres` and `exists` flag
+   *   (inner `whereDoesntHave` is legal), alongside the parent level's own
+   *   `constraintWheres`. Children never carry `count` or `boolean`.
+   *
+   * Adapters that can't express the recursion must reject predicates
    * carrying `nested` rather than silently ignoring the field.
    */
-  nested?: RelationExistencePredicate
+  nested?: RelationExistencePredicate | RelationExistencePredicate[]
 }
 
 /**

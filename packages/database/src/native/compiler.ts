@@ -1141,6 +1141,15 @@ function andAll(fragments: string[]): string {
  * Soft-delete scoping is intentionally NOT applied here — it's the constrain
  * callback's responsibility (documented), matching the other adapters.
  */
+/** Normalize a predicate's `nested` field to a child list: dot-paths emit the
+ *  singular form, callback nesting the array form (siblings AND together —
+ *  each compiles recursively to its own correlated EXISTS on the related
+ *  table, with its own `exists` flag and constraints). */
+function nestedChildren(p: RelationExistencePredicate): RelationExistencePredicate[] {
+  if (p.nested === undefined) return []
+  return Array.isArray(p.nested) ? p.nested : [p.nested]
+}
+
 export function compileExists(
   outerTable: string,
   predicate: RelationExistencePredicate,
@@ -1165,7 +1174,7 @@ export function compileExists(
       `${qcol(pivot, predicate.through.foreignPivotKey, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
       ...extraEqualsOn(pivot, predicate.extraEquals, dialect, b),
       ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
-      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
+      ...nestedChildren(predicate).map(c => compileExists(related, c, dialect, b)),
     ]
     return (
       `(SELECT COUNT(*) FROM ${dialect.quoteId(pivot)} ` +
@@ -1196,7 +1205,7 @@ export function compileExists(
     const innerExprs = [
       `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(pivot, predicate.through.relatedPivotKey, dialect)}`,
       ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
-      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
+      ...nestedChildren(predicate).map(c => compileExists(related, c, dialect, b)),
     ]
     const innerExists = `EXISTS (SELECT 1 FROM ${dialect.quoteId(related)} WHERE ${andAll(innerExprs)})`
 
@@ -1212,7 +1221,7 @@ export function compileExists(
       `${qcol(related, predicate.relatedColumn, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
       ...extraEqualsOn(related, predicate.extraEquals, dialect, b),
       ...predicate.constraintWheres.map(w => compileClauseOn(related, w, dialect, b)),
-      ...(predicate.nested ? [compileExists(related, predicate.nested, dialect, b)] : []),
+      ...nestedChildren(predicate).map(c => compileExists(related, c, dialect, b)),
     ])
   }
 
