@@ -3,9 +3,13 @@ import { Model } from '@rudderjs/orm'
 /**
  * Paddle transaction (invoice/order). Amounts stored as strings in *minor units*
  * — never `Number()` for arithmetic. Use `formatAmount()` for display.
+ *
+ * `static table` = the SQL table name (runs on native + Prisma; see
+ * `Customer.ts`). `keyType = 'ulid'` stamps the id on insert.
  */
 export class Transaction extends Model {
-  static override table = 'paddleTransaction'
+  static override table = 'paddle_transactions'
+  static override keyType = 'ulid' as const
 
   static override fillable = [
     'paddleId', 'paddleCustomerId', 'paddleSubscriptionId',

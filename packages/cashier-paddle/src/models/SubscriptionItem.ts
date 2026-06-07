@@ -1,8 +1,11 @@
 import { Model } from '@rudderjs/orm'
 
-/** Line item on a Paddle subscription (price × quantity). */
+/** Line item on a Paddle subscription (price × quantity).
+ *  `static table` = the SQL table name (runs on native + Prisma; see
+ *  `Customer.ts`). `keyType = 'ulid'` stamps the id on insert. */
 export class SubscriptionItem extends Model {
-  static override table = 'paddleSubscriptionItem'
+  static override table = 'paddle_subscription_items'
+  static override keyType = 'ulid' as const
 
   static override fillable = [
     'subscriptionId', 'productId', 'priceId', 'status', 'quantity',

@@ -95,8 +95,10 @@ export class CashierPaddleProvider extends ServiceProvider {
     const viewsDir  = fileURLToPath(new URL(/* @vite-ignore */ '../views', import.meta.url))
 
     this.publishes([
-      // Schema fragment
+      // Schema fragment — Prisma engine
       { from: `${schemaDir}/cashier-paddle.prisma`, to: 'prisma/schema', tag: 'cashier-schema', orm: 'prisma' as const },
+      // Schema fragment — native engine (migration mirroring the prisma @@map names)
+      { from: `${schemaDir}/native`, to: 'database/migrations', tag: 'cashier-schema', orm: 'native' as const },
       // React views — Vue/Solid land later as demand appears
       { from: `${viewsDir}/react`, to: 'app/Views/Cashier', tag: 'cashier-views-react' },
     ])

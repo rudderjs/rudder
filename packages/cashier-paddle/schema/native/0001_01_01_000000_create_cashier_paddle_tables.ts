@@ -1,9 +1,13 @@
 import { Migration, Schema } from '@rudderjs/orm/native'
 
 // @rudderjs/cashier-paddle tables (mirror Laravel Cashier Paddle 13.x).
-// SQL table names + string ulid PKs match the package's models (which carry the
-// @@map SQL names + `static keyType = 'ulid'`), so the same models run on the
-// native engine here and on the Prisma twin.
+// Published by `pnpm rudder vendor:publish --tag=cashier-schema` on
+// native-engine apps (the Prisma twin lives in ../cashier-paddle.prisma).
+//
+// SQL table names match the prisma fragment's `@@map` names so one set of
+// models runs on both engines (orm-prisma maps the SQL name → delegate). The
+// `id` is a string ulid: the models set `static keyType = 'ulid'` so the ORM
+// stamps the key on insert (the native engine has no `@default(cuid())`).
 export default class extends Migration {
   async up() {
     await Schema.create('paddle_customers', (t) => {

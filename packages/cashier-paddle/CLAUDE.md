@@ -20,7 +20,8 @@ Paddle billing for RudderJS — Billable mixin, subscription state machine, sign
 - `src/webhooks/{events,transformers,handler,idempotency}.ts` — webhook layer
 - `src/middleware/{raw-body,verify-paddle-webhook}.ts` — webhook middleware
 - `src/commands/{install,webhook,sync}.ts` — CLI commands
-- `schema/cashier-paddle.prisma` — 5 tables (customers, subscriptions, items, transactions, webhook log)
+- `schema/cashier-paddle.prisma` — 5 tables (customers, subscriptions, items, transactions, webhook log), Prisma engine
+- `schema/native/*.ts` — the same 5 tables as a native-engine migration (SQL `@@map` names, string ulid PKs); published to `database/migrations` on native apps
 - `views/react/{CheckoutButton,InlineCheckout,PaddleScript}.tsx` — drop-in components
 
 ## Architecture Rules
@@ -32,7 +33,8 @@ Paddle billing for RudderJS — Billable mixin, subscription state machine, sign
 - **Paddle SDK is optional** — `@paddle/paddle-node-sdk` is a peer dep with `optional: true`. `paddle()` lazy-imports + throws an actionable error if missing. Apps doing only checkout (Paddle.js) without server-side calls don't need to install it.
 - **Webhook handler is the source of truth** — wrapper mutations (e.g. `subscription.cancel()`) issue the SDK call then re-read from DB rather than trusting the SDK response. The webhook will arrive seconds later with the canonical row.
 - **Single configurable Billable model in v1** — `Cashier.useBillableModel(User)` from your routes/provider. Schema has `billable_id` + `billable_type` columns reserved for future polymorphic v2.
-- **`static table` is the Prisma DELEGATE name** — camelCase (`paddleSubscription`), NOT the SQL `@@map` name. The ORM does `prisma[this.table]`.
+- **`static table` is the SQL table name** (`@@map` — `paddle_subscriptions`), so the 5 models run unchanged on the **native engine** (literal SQL name) AND on **Prisma** (orm-prisma's runtime-datamodel fallback maps the SQL name → `paddleSubscription` delegate; needs `@rudderjs/orm-prisma` ≥ the SQL-name-fallback release). The pre-`@rudderjs/cashier-paddle@5` delegate-name-in-`table` contract is gone. **`static keyType = 'ulid'`** on all 5 models stamps an app-generated id on insert (the native engine has no `@default(cuid())`); on Prisma, new rows get a ulid instead of a cuid — both opaque strings, so existing cuid rows coexist with no migration.
+- **Native engine support** — `vendor:publish --tag=cashier-schema` publishes `schema/cashier-paddle.prisma` on Prisma apps and `schema/native/*.ts` (a migration mirroring the `@@map` names, string ulid PKs) to `database/migrations` on native-engine apps. Keep the two in sync when columns change.
 - **Past-due semantics match Cashier** — `subscribed()` is true for active, trialing, paused-on-grace, canceled-on-grace; flip past-due into "active too" with `Cashier.keepPastDueSubscriptionsActive()`.
 
 ## Doctor checks
@@ -105,4 +107,4 @@ await sub?.cancel()
 - **`prisma db push` after install**: `cashier:install` publishes the schema fragment but doesn't run Prisma. Run `pnpm exec prisma generate && pnpm exec prisma db push` after.
 - **Decimal arithmetic on `total`/`tax`**: Paddle sends amounts as STRINGS in minor units. Never `Number()` — string math or BigInt only. `formatAmount()` is display-only.
 - **`Cashier.useBillableModel` not called**: webhook handlers can still update DB tables but won't be able to materialize the User object. Call it from `routes/web.ts` or your `AppServiceProvider.boot()`.
-- **`static table` set to SQL name**: queries 500 with `[RudderJS ORM] Prisma has no delegate for table "paddle_subscriptions"`. Use the camelCase Prisma delegate name (`paddleSubscription`).
+- **Old `@rudderjs/orm-prisma` (no SQL-name fallback)**: a Prisma app on cashier-paddle ≥5 with an orm-prisma older than the SQL-name-fallback release queries 500 with `[RudderJS ORM] Prisma has no delegate for table "paddle_subscriptions"`. Upgrade `@rudderjs/orm-prisma` — it resolves the `@@map` SQL name to the delegate via the client's runtime datamodel.

@@ -7,12 +7,14 @@ import { Model } from '@rudderjs/orm'
  * `paddleStatus` mirrors Paddle's status string (`active`, `trialing`,
  * `past_due`, `paused`, `canceled`).
  *
- * NOTE: `static table` = Prisma delegate (`paddleSubscription`), not SQL name.
+ * NOTE: `static table` = the SQL table name (runs on native + Prisma; see
+ * `Customer.ts`). `keyType = 'ulid'` stamps the id on insert.
  * NOTE: Use `subscriptionHelpers` from `models/helpers.ts` for state predicates;
  * ORM queries return plain records without prototype.
  */
 export class Subscription extends Model {
-  static override table = 'paddleSubscription'
+  static override table = 'paddle_subscriptions'
+  static override keyType = 'ulid' as const
 
   static override fillable = [
     'billableId', 'billableType', 'type', 'paddleId', 'paddleStatus',
