@@ -165,7 +165,7 @@ users[0].posts   // Post[]  — eagerly loaded
 | `connect()` | No-op — Drizzle connects lazily |
 | `disconnect()` | PostgreSQL and MySQL — closes the pool; no-op on SQLite/libSQL |
 
-For nested eager loads (`'a.b'`) or constrained eager loading (`withWhereHas`), drop down to raw Drizzle queries or the `related()` accessor — see the [drizzle-orm docs](https://orm.drizzle.team/docs/rqb).
+For constrained eager loading (`withWhereHas`), use `whereHas(relation, cb)` for the filter (it works on Drizzle) and load the constrained children via the `related()` accessor. For nested eager loads (`'a.b'`), drop down to raw Drizzle queries — see the [drizzle-orm docs](https://orm.drizzle.team/docs/rqb).
 
 ## Pitfalls
 

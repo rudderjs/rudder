@@ -148,7 +148,7 @@ export class Post extends Model.for<'posts'>() {
 }
 ```
 
-Regenerate without a full migrate via `pnpm rudder schema:types`. Commit the generated `registry.d.ts` (like Drizzle's schema, not Prisma's gitignored client) so CI is green without a generate step. See [Database — Typed models from migrations](/guide/database#typed-models-from-migrations-schema-types) for the full rules.
+Regenerate without a full migrate via `pnpm rudder schema:types`. Commit the generated `models.d.ts` (like Drizzle's schema, not Prisma's gitignored client) so CI is green without a generate step. See [Database — Typed models from migrations](/guide/database#typed-models-from-migrations-schema-types) for the full rules.
 
 A scaffolded `app/Models/User.ts` starts with hand-declared fields (so `tsc` is green before the first `migrate`); switch it to `extends Model.for<'users'>()` once you've run `migrate` and want the columns to track the schema automatically.
 
