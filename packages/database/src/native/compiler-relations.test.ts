@@ -345,3 +345,73 @@ describe('native compiler — compileAggregateSubselect (through relation, fanOu
       'WHERE "citizens"."nationId" = "nations"."id") > 0) AS "essaysExists"')
   })
 })
+
+// ── Callback-nested children (`nested` as an ARRAY) ──────────
+
+describe('native compiler — compileExists (nested children array)', () => {
+  it('sibling children compile to consecutive EXISTS clauses, each with its own polarity', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'posts', exists: true,
+      relatedTable: 'posts', parentColumn: 'id', relatedColumn: 'userId',
+      constraintWheres: [{ column: 'published', operator: '=', value: 1 }],
+      nested: [
+        {
+          relation: 'comments', exists: true,
+          relatedTable: 'comments', parentColumn: 'id', relatedColumn: 'postId',
+          constraintWheres: [{ column: 'approved', operator: '=', value: 1 }],
+        },
+        {
+          relation: 'flags', exists: false,
+          relatedTable: 'flags', parentColumn: 'id', relatedColumn: 'postId',
+          constraintWheres: [],
+        },
+      ],
+    }
+    const b = makeBindings(dialect)
+    const sql = compileExists('users', pred, dialect, b)
+    assert.strictEqual(sql,
+      'EXISTS (SELECT 1 FROM "posts" WHERE "posts"."userId" = "users"."id" AND "posts"."published" = ? AND ' +
+      'EXISTS (SELECT 1 FROM "comments" WHERE "comments"."postId" = "posts"."id" AND "comments"."approved" = ?) AND ' +
+      'NOT EXISTS (SELECT 1 FROM "flags" WHERE "flags"."postId" = "posts"."id"))')
+    // Parent constraint binds first (SQL-text order), then each child's in order.
+    assert.deepStrictEqual(b.values, [1, 1])
+  })
+
+  it('singular `nested` stays byte-identical to the pre-array form', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'posts', exists: true,
+      relatedTable: 'posts', parentColumn: 'id', relatedColumn: 'userId',
+      constraintWheres: [],
+      nested: {
+        relation: 'comments', exists: true,
+        relatedTable: 'comments', parentColumn: 'id', relatedColumn: 'postId',
+        constraintWheres: [],
+      },
+    }
+    const b = makeBindings(dialect)
+    assert.strictEqual(compileExists('users', pred, dialect, b),
+      'EXISTS (SELECT 1 FROM "posts" WHERE "posts"."userId" = "users"."id" AND ' +
+      'EXISTS (SELECT 1 FROM "comments" WHERE "comments"."postId" = "posts"."id"))')
+  })
+
+  it('children compose inside a pivot (through-block) level', () => {
+    const pred: RelationExistencePredicate = {
+      relation: 'roles', exists: true,
+      relatedTable: 'roles', parentColumn: 'id', relatedColumn: 'id',
+      constraintWheres: [],
+      through: { pivotTable: 'role_user', foreignPivotKey: 'userId', relatedPivotKey: 'roleId' },
+      nested: [{
+        relation: 'grants', exists: true,
+        relatedTable: 'grants', parentColumn: 'id', relatedColumn: 'roleId',
+        constraintWheres: [{ column: 'action', operator: '=', value: 'edit' }],
+      }],
+    }
+    const b = makeBindings(dialect)
+    const sql = compileExists('users', pred, dialect, b)
+    assert.strictEqual(sql,
+      'EXISTS (SELECT 1 FROM "role_user" WHERE "role_user"."userId" = "users"."id" AND ' +
+      'EXISTS (SELECT 1 FROM "roles" WHERE "roles"."id" = "role_user"."roleId" AND ' +
+      'EXISTS (SELECT 1 FROM "grants" WHERE "grants"."roleId" = "roles"."id" AND "grants"."action" = ?)))')
+    assert.deepStrictEqual(b.values, ['edit'])
+  })
+})

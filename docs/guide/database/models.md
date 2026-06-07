@@ -719,9 +719,24 @@ const myPosts = await Post.whereBelongsTo(currentUser).get()
 
 `whereHas` works on every relation type — including through relations (`hasOneThrough` / `hasManyThrough`), whose constrain callback applies to the **far** table and whose `has(relation, op, n)` counts **far** rows, not intermediates. **On Prisma**, direct `hasMany` / `hasOne` / `belongsTo` relations need an `@relation` declared in `schema.prisma` so the adapter can use native `some` / `none`. Polymorphic, pivot, and through relations route through a 2-step lookup so they work without a Prisma-declared relation. **On Drizzle**, every table referenced from `whereHas` — the related table, plus the pivot or through-intermediate when there is one — must be registered via `tables: { ... }` on `drizzle()` config or `DrizzleTableRegistry.register(name, table)`; missing tables surface a clear error.
 
-**Inside the constrain callback** you can use `where` (including JSON arrow paths), `whereIn` / `whereNotIn`, `whereNull` / `whereNotNull`, `whereBetween`, and the `when` / `unless` conditionals — they lower to flat AND constraints on the related rows. Ordering/limiting calls are accepted and ignored (they can't change an existence test). Anything that can't round-trip through the flat constraint list — `orWhere`, raw SQL, `whereGroup`, the date/JSON helpers, `whereNotBetween` — throws a clear error rather than silently widening the filter.
+**Inside the constrain callback** you can use `where` (including JSON arrow paths), `whereIn` / `whereNotIn`, `whereNull` / `whereNotNull`, `whereBetween`, the `when` / `unless` conditionals — they lower to flat AND constraints on the related rows — plus nested `whereHas` / `whereDoesntHave` (below). Ordering/limiting calls are accepted and ignored (they can't change an existence test). Anything that can't round-trip through the flat constraint list — `orWhere`, raw SQL, `whereGroup`, the date/JSON helpers, `whereNotBetween` — throws a clear error rather than silently widening the filter.
 
-`whereHas` has two limitations in v1: nested `whereHas` inside a constrain callback throws (deferred), and `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today), and on through relations everywhere (the two-hop eager load is Model-layer; the constraint still filters the parents).
+**Nested relation filters** compose two ways. The dot-path form (`whereHas('posts.comments', cb)`) tests a chain with the callback applying to the deepest level. The callback-nested form goes further — constraints at *every* level, inner `whereDoesntHave`, and sibling branches:
+
+```ts
+// users with a PUBLISHED post that has an APPROVED comment
+await User.whereHas('posts', (q) =>
+  q.where('published', true)
+   .whereHas('comments', (c) => c.where('approved', true)),
+).get()
+
+// users with a post that has NO comments at all
+await User.whereHas('posts', (q) => q.whereDoesntHave('comments')).get()
+```
+
+Both nested forms are **native-engine only** today — Drizzle and Prisma reject them with a clear error (adapter support is planned).
+
+Remaining `whereHas` limitations: `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today), on through relations everywhere, and whenever the callback nests (the constraint still filters the parents; the eagerly loaded children are unconstrained).
 
 ### Aggregate eager loading
 

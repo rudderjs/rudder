@@ -193,13 +193,15 @@ describe('native relations — per-instance load aggregates (_aggregate)', () =>
 })
 
 describe('native relations — friction cases (CLAUDE.md)', () => {
-  it('nested whereHas inside a constrain callback throws (use dot-path form)', () => {
-    // The error is raised synchronously at query-build time (inside the
-    // constrain callback), before any terminal — so it throws, not rejects.
-    assert.throws(
-      () => User.whereHas('posts', q => (q as unknown as { whereHas(r: string): unknown }).whereHas('author')),
-      /Nested whereHas inside a whereHas constrain callback is not supported/,
-    )
+  it('nested whereHas inside a constrain callback works on the native engine', async () => {
+    // users with a PUBLISHED post whose author is named Ada — the inner
+    // whereHas resolves on Post (author = belongsTo User) and compiles as a
+    // child correlated EXISTS. Only Ada has a published post, and she is her
+    // own author.
+    const rows = await User.whereHas('posts', q =>
+      q.where('published', 1).whereHas('author', a => a.where('name', 'Ada')),
+    ).get()
+    assert.deepStrictEqual(rows.map(r => (r as User).name), ['Ada'])
   })
 
   it('morphTo + whereHas throws a clear error', () => {
