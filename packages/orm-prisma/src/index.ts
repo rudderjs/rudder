@@ -579,8 +579,26 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   private _wheresToPrismaFilter(clauses: WhereClause[]): Record<string, unknown> {
-    if (clauses.length === 0) return {}
-    return Object.assign({}, ...clauses.map(c => this.clauseToFilter(c))) as Record<string, unknown>
+    return this._combineFilters(clauses.map(c => this.clauseToFilter(c)))
+  }
+
+  /**
+   * @internal — combine per-clause Prisma filters into one object. The
+   * historical shape (plain `Object.assign` spread) is kept whenever every
+   * clause targets a DISTINCT column; when two clauses hit the same column
+   * (`where('views','>=',10).where('views','<=',20)`, or a `whereBetween`
+   * lowered to its two bounds) the spread silently clobbered all but the
+   * last — Prisma's `AND: [...]` array form keeps both. Collision-only, so
+   * existing single-column filter shapes stay byte-identical.
+   */
+  private _combineFilters(filters: Array<Record<string, unknown>>): Record<string, unknown> {
+    if (filters.length === 0) return {}
+    if (filters.length === 1) return { ...filters[0] }
+    const keys = filters.flatMap(f => Object.keys(f))
+    if (new Set(keys).size === keys.length) {
+      return Object.assign({}, ...filters) as Record<string, unknown>
+    }
+    return { AND: filters }
   }
 
   /** @internal — resolve any deferred (polymorphic / pivot) predicates into
@@ -803,13 +821,14 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
     if (!hasOrItems) {
       // Pure AND chain — for AND-only-no-groups with multiple items the
-      // legacy shape was Object.assign-spread. Keep that to avoid churning
-      // tests of unrelated callers; the new AND-array form is only used
-      // when we need to compose with OR alternatives.
+      // legacy shape was Object.assign-spread. Keep that for distinct
+      // columns to avoid churning tests of unrelated callers; same-column
+      // clauses route through the collision-safe AND-array (the spread
+      // silently clobbered all but the last clause on a column).
       if (hasAndGroups) {
         return { AND: [...andFilters, ...this._andGroups] }
       }
-      if (andFilters.length > 0) return Object.assign({}, ...andFilters)
+      if (andFilters.length > 0) return this._combineFilters(andFilters)
       return {}
     }
 

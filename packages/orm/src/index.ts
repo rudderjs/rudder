@@ -44,7 +44,9 @@ import {
   attachWithWhereHas,
   attachWhereBelongsTo,
   relationConstrain,
+  type ConstraintQueryBuilder,
 } from './relations/where-has.js'
+export type { ConstraintQueryBuilder } from './relations/where-has.js'
 import {
   morphParentQuery,
   belongsToManyDeferredQb,
@@ -990,21 +992,21 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
   /** {@link QueryBuilder.updateAll} accepting JSON arrow-path keys — see
    *  {@link UpdatePayload}. */
   updateAll(data: UpdatePayload<T>): Promise<number>
-  whereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
-  whereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  whereHas(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
+  whereDoesntHave(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
   /** OR-rooted {@link whereHas} — `... OR EXISTS(relation)`. */
-  orWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  orWhereHas(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
   /** OR-rooted {@link whereDoesntHave}. */
-  orWhereDoesntHave(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  orWhereDoesntHave(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
   /**
    * Count comparison on a relation — `has('posts', '>=', 3)` keeps rows whose
    * `posts` count satisfies the operator. Defaults to `>= 1` (≡ `whereHas`).
    * Native only; throws on Drizzle/Prisma (no count-filter in their query APIs).
    */
-  has(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: QueryBuilder<Model>) => void): this
+  has(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: ConstraintQueryBuilder) => void): this
   /** OR-rooted {@link has}. */
-  orHas(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: QueryBuilder<Model>) => void): this
-  withWhereHas(relation: string, constrain?: (q: QueryBuilder<Model>) => void): this
+  orHas(relation: string, operator?: WhereOperator, count?: number, constrain?: (q: ConstraintQueryBuilder) => void): this
+  withWhereHas(relation: string, constrain?: (q: ConstraintQueryBuilder) => void): this
   /**
    * Filter by a single column on a related row — shorthand for
    * `whereHas(relation, q => q.where(column, …))` (Laravel's `whereRelation`).
@@ -2045,38 +2047,38 @@ export abstract class Model {
           }
         }
         if (prop === 'whereHas') {
-          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain)
             return proxy
           }
         }
         if (prop === 'whereDoesntHave') {
-          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain)
             return proxy
           }
         }
         if (prop === 'orWhereHas') {
-          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain, { boolean: 'OR' })
             return proxy
           }
         }
         if (prop === 'orWhereDoesntHave') {
-          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain, { boolean: 'OR' })
             return proxy
           }
         }
         if (prop === 'has' || prop === 'orHas') {
           const boolean = prop === 'orHas' ? 'OR' : 'AND'
-          return (relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain, { boolean, count: { operator, value: count } })
             return proxy
           }
         }
         if (prop === 'withWhereHas') {
-          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+          return (relation: string, constrain?: (q: ConstraintQueryBuilder) => void): QueryBuilder<InstanceType<T>> => {
             attachWithWhereHas(ModelClass, target as QueryBuilder<Model>, relation, constrain)
             return proxy
           }
@@ -2728,7 +2730,7 @@ export abstract class Model {
   static whereHas<T extends typeof Model>(
     this:      T,
     relation:  string,
-    constrain?: (q: QueryBuilder<Model>) => void,
+    constrain?: (q: ConstraintQueryBuilder) => void,
   ): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }
@@ -2742,18 +2744,18 @@ export abstract class Model {
   static whereDoesntHave<T extends typeof Model>(
     this:      T,
     relation:  string,
-    constrain?: (q: QueryBuilder<Model>) => void,
+    constrain?: (q: ConstraintQueryBuilder) => void,
   ): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /** OR-rooted {@link Model.whereHas}. */
-  static orWhereHas<T extends typeof Model>(this: T, relation: string, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+  static orWhereHas<T extends typeof Model>(this: T, relation: string, constrain?: (q: ConstraintQueryBuilder) => void): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { boolean: 'OR' }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /** OR-rooted {@link Model.whereDoesntHave}. */
-  static orWhereDoesntHave<T extends typeof Model>(this: T, relation: string, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+  static orWhereDoesntHave<T extends typeof Model>(this: T, relation: string, constrain?: (q: ConstraintQueryBuilder) => void): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain, { boolean: 'OR' }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
@@ -2761,12 +2763,12 @@ export abstract class Model {
    * Count comparison on a relation — `Post.has('comments', '>=', 3)`. Defaults
    * to `>= 1` (≡ {@link Model.whereHas}). Native only; Drizzle/Prisma throw.
    */
-  static has<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+  static has<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: ConstraintQueryBuilder) => void): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { count: { operator, value: count } }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
   /** OR-rooted {@link Model.has}. */
-  static orHas<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: QueryBuilder<Model>) => void): HydratingQueryBuilder<InstanceType<T>> {
+  static orHas<T extends typeof Model>(this: T, relation: string, operator: WhereOperator = '>=', count = 1, constrain?: (q: ConstraintQueryBuilder) => void): HydratingQueryBuilder<InstanceType<T>> {
     return attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain, { boolean: 'OR', count: { operator, value: count } }) as HydratingQueryBuilder<InstanceType<T>>
   }
 
@@ -2780,7 +2782,7 @@ export abstract class Model {
   static withWhereHas<T extends typeof Model>(
     this:      T,
     relation:  string,
-    constrain?: (q: QueryBuilder<Model>) => void,
+    constrain?: (q: ConstraintQueryBuilder) => void,
   ): HydratingQueryBuilder<InstanceType<T>> {
     return attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as HydratingQueryBuilder<InstanceType<T>>
   }

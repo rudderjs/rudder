@@ -225,6 +225,19 @@ describe('hasManyThrough — whereHas / whereDoesntHave', () => {
     const c = new Country()
     assert.throws(() => c.related('posts'), /is null\/undefined/)
   })
+
+  it('recorded sugar round-trips: whereIn + whereBetween constraints execute on the far table', async () => {
+    // whereIn lowers to IN — titles A1 (US) and C1 (UK).
+    assert.deepStrictEqual(
+      await names(Country.whereHas('posts', q => q.whereIn('title', ['A1', 'C1']))),
+      ['UK', 'US'],
+    )
+    // whereBetween lowers to >= / <= — views 20 and 30 are US-only (UK's post has 40).
+    assert.deepStrictEqual(
+      await names(Country.whereHas('posts', q => q.whereBetween('views', [15, 35]))),
+      ['US'],
+    )
+  })
 })
 
 describe('hasManyThrough — withCount / withAggregate', () => {
