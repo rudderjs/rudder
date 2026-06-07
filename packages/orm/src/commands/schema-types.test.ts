@@ -169,6 +169,61 @@ describe('registerSchemaTypesCommand', () => {
   })
 })
 
+describe('blueprint intent folds into the generated registry (option 3)', () => {
+  // No model declares casts for this table — the migration's declared column
+  // types are the only refinement source. Cast > intent > storage; see
+  // docs/plans/2026-06-05-schema-types-cast-folding-needs-import-time-registration.md.
+  it('migrate → boolean/json columns type as boolean/unknown without any cast', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'rudder-st-intent-'))
+    const orig = process.cwd()
+    process.chdir(cwd)
+    try {
+      // The migration imports Migration/Schema through THIS package's compiled
+      // native shim so the Schema facade identity matches the migrator's.
+      const nativeUrl = new URL('../native/index.js', import.meta.url).href
+      mkdirSync(join(cwd, 'database', 'migrations'), { recursive: true })
+      writeFileSync(join(cwd, 'database', 'migrations', '2026_06_07_000000_create_gadgets.js'), [
+        `import { Migration, Schema } from '${nativeUrl}'`,
+        'export default class extends Migration {',
+        '  async up() {',
+        "    await Schema.create('gadgets', (t) => {",
+        '      t.id()',
+        "      t.string('label')",
+        "      t.boolean('active')",
+        "      t.json('meta')",
+        "      t.timestamp('shippedAt').nullable()",
+        '    })',
+        '  }',
+        "  async down() { await Schema.dropIfExists('gadgets') }",
+        '}',
+        '',
+      ].join('\n'))
+
+      const handlers: Record<string, (args: string[]) => void | Promise<void>> = {}
+      const rudder = {
+        command(name: string, handler: (args: string[]) => void | Promise<void>) {
+          handlers[name] = handler
+          return { description() { return this } }
+        },
+      }
+      registerMigrateCommands(rudder, { bootApp: async () => {} })
+      await handlers['migrate']!([])
+
+      const dts = readFileSync(join(cwd, '.rudder', 'types', 'models.d.ts'), 'utf8')
+      assert.match(dts, /gadgets: \{/)
+      assert.match(dts, /active: boolean/, 'blueprint boolean intent must fold in without a cast')
+      assert.match(dts, /meta: unknown/, 'blueprint json intent must fold in without a cast')
+      // Date family deliberately stays storage-typed (TEXT) without a cast.
+      assert.match(dts, /shippedAt: string \| null/)
+      // Widget has a boolean cast — cast still wins on its table.
+      assert.match(dts, /enabled: boolean/)
+    } finally {
+      process.chdir(orig)
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('native migrate auto-regenerates schema types (post-apply hook)', () => {
   it('migrate writes registry.d.ts even with nothing to migrate', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'rudder-st-hook-'))

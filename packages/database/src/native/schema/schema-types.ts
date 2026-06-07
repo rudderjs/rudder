@@ -13,6 +13,7 @@ import type { Executor } from '../driver.js'
 import type { Dialect } from '../dialect.js'
 import { readTables, readColumns } from './introspect.js'
 import { buildTableTypes, emitRegistryDts, sqliteTypeToTs, pgTypeToTs, mysqlTypeToTs, type TableTypes } from './types-generator.js'
+import type { TableIntent } from './intent-replay.js'
 
 /** A model's contribution to type resolution: its table name + declared casts. */
 export interface ModelCastInfo {
@@ -22,14 +23,17 @@ export interface ModelCastInfo {
 
 /**
  * Introspect every user table and build the {@link TableTypes} for each, folding
- * in `casts` for any table a model declares them on (matched by table name).
- * Pure-ish: only reads the DB, returns data — the file write is separate so this
- * is unit-testable against an in-memory connection.
+ * in `casts` for any table a model declares them on (matched by table name) and
+ * the blueprint-declared `intent` recovered by migration replay (fallback for
+ * cast-less columns — `cast > intent > storage type`). Pure-ish: only reads the
+ * DB, returns data — the file write is separate so this is unit-testable
+ * against an in-memory connection.
  */
 export async function collectSchemaTypes(
   executor: Executor,
   dialect: Dialect,
   models: ModelCastInfo[] = [],
+  intent?: TableIntent,
 ): Promise<TableTypes[]> {
   const castsByTable = new Map(models.map((m) => [m.table, m.casts]))
   // Per-dialect storage→TS mapper: Postgres / MySQL data types differ from
@@ -43,7 +47,7 @@ export async function collectSchemaTypes(
   const out: TableTypes[] = []
   for (const table of tables) {
     const columns = await readColumns(executor, dialect, table)
-    out.push(buildTableTypes(table, columns, castsByTable.get(table) ?? {}, typeToTs))
+    out.push(buildTableTypes(table, columns, castsByTable.get(table) ?? {}, typeToTs, intent?.get(table)))
   }
   return out
 }
@@ -76,8 +80,9 @@ export async function generateSchemaTypes(
   dialect: Dialect,
   cwd: string,
   models: ModelCastInfo[] = [],
+  intent?: TableIntent,
 ): Promise<{ path: string; tableCount: number }> {
-  const tables = await collectSchemaTypes(executor, dialect, models)
+  const tables = await collectSchemaTypes(executor, dialect, models, intent)
   const contents = emitRegistryDts(tables)
   const path = registryDtsPath(cwd)
   await mkdir(dirname(path), { recursive: true })
