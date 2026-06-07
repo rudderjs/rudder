@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -263,6 +263,15 @@ describe('runCommand', skipOnWindows, () => {
 // ─── executeDbQuery ──────────────────────────────────────
 
 describe('executeDbQuery', skipOnWindows, () => {
+  // The SELECT leg boots the playground app (db:query is not a skip-boot
+  // command). In CI the gitignored provider manifest doesn't exist, so the
+  // boot fails on the first provider an app file uses (the existing
+  // runCommand tests dodge this via command:list's boot-tolerant path) —
+  // regenerate it first (skip-boot, fast), same as the scaffolder does.
+  before(async () => {
+    await runCommand(PLAYGROUND, 'providers:discover', [], 60_000)
+  })
+
   it('rejects non-SELECT queries without touching the database', async () => {
     const result = await executeDbQuery(PLAYGROUND, 'DELETE FROM users')
     assert.ok(result.startsWith('Error: Only SELECT'))
