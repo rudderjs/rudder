@@ -272,6 +272,8 @@ await DB.transaction(async () => {                // same transaction() Models j
 - `select` / `insert` / `update` / `delete` / `statement` take parameterized SQL + bindings (`?` placeholders on every dialect — the native engine rebinds to `$n` on Postgres). The write methods return the affected-row count.
 - `DB.raw(value)` wraps a verbatim SQL expression for use as a query-builder value (`where('createdAt', '>', DB.raw('NOW()'))`).
 - `DB.listen(cb)` subscribes to query events (SQL, bindings, duration, connection, read/write target) across every adapter.
+
+From the terminal, `pnpm rudder db:query "SELECT …"` runs a one-off read through the same facade and prints the rows as JSON — adapter-agnostic (native, Prisma, Drizzle), SELECT-only by design (writes go through migrations, seeders, or the app). It's also the data path behind `@rudderjs/boost`'s `db_query` MCP tool.
 - `DB.connection('name')` scopes any of the above to a [named connection](/guide/database/connections): `DB.connection('reporting').select(...)`.
 
 Available on all three adapters — on Prisma this is the designated escape hatch the query-builder guard errors point at.
