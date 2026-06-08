@@ -140,14 +140,14 @@ describe('zodToJsonSchema', () => {
     assert.deepStrictEqual(zodToJsonSchema(schema).required, ['name'])
   })
 
-  it('handles date fields → open schema (zod date is unrepresentable in JSON Schema)', () => {
-    // Zod 4's native `z.toJSONSchema` has no representation for `z.date()`; the
-    // shared converter runs with `unrepresentable: 'any'`, so it degrades to an
-    // open `{}` schema instead of throwing. (The old hand-rolled converter
-    // guessed `string` + `date-time`; native is honest about the gap.)
+  it('handles date fields → string with date-time format', () => {
+    // `z.date()` has no native JSON Schema representation, but it serializes to an
+    // ISO string over the wire — so `@rudderjs/json-schema` maps it to
+    // `string` + `date-time` (via Zod 4's `toJSONSchema` override hook).
     const schema = z.object({ created: z.date() })
     const prop = (zodToJsonSchema(schema).properties as Record<string, Record<string, unknown>>)['created']
-    assert.deepStrictEqual(prop, {})
+    assert.equal(prop!['type'], 'string')
+    assert.equal(prop!['format'], 'date-time')
   })
 
   it('handles record fields → object with additionalProperties', () => {
