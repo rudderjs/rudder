@@ -1,17 +1,12 @@
 {
-  "name": "@rudderjs/openapi",
+  "name": "@rudderjs/json-schema",
   "version": "1.0.0",
-  "description": "Auto-generate an OpenAPI 3.1 spec (+ optional Swagger UI) from RudderJS typed routes",
-  "rudderjs": {
-    "provider": "OpenApiProvider",
-    "stage": "feature",
-    "autoDiscover": false
-  },
+  "description": "Validator-agnostic schema → JSON Schema converter registry (Standard Schema; Zod by default)",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/rudderjs/rudder",
-    "directory": "packages/openapi"
+    "directory": "packages/json-schema"
   },
   "type": "module",
   "engines": {
@@ -27,11 +22,6 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./commands/openapi-generate": {
-      "import": "./dist/commands/openapi-generate.js",
-      "default": "./dist/commands/openapi-generate.js",
-      "types": "./dist/commands/openapi-generate.d.ts"
     }
   },
   "scripts": {
@@ -43,24 +33,9 @@
   },
   "dependencies": {
     "@rudderjs/contracts": "workspace:^",
-    "@rudderjs/json-schema": "workspace:^",
     "zod": "^4.0.0"
   },
-  "peerDependencies": {
-    "@rudderjs/core": "workspace:^",
-    "@rudderjs/router": "workspace:^"
-  },
-  "peerDependenciesMeta": {
-    "@rudderjs/core": {
-      "optional": true
-    },
-    "@rudderjs/router": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@rudderjs/core": "workspace:^",
-    "@rudderjs/router": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
