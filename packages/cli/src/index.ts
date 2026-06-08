@@ -292,6 +292,12 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerEnvSyncCommand'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/vite → config:sync
+    async () => {
+      const mod = await tryImport('@rudderjs/vite', 'commands/config-sync')
+      const register = mod['registerConfigSyncCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
   ]
 
   await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
