@@ -1012,13 +1012,67 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS'
  */
 export type RouteGroup = 'web' | 'api'
 
+// ─── Standard Schema (validator-agnostic) ──────────────────
+
+/**
+ * The [Standard Schema](https://standardschema.dev) v1 interface — the shared
+ * `~standard` contract that Zod 4, Valibot, and ArkType all implement. The
+ * framework's typed-route surface depends on THIS interface, not on `ZodType`
+ * specifically, so apps can bring any conforming validator (Zod is the default).
+ * Inlined here (types-only, zero runtime) so contracts keeps its no-dependency
+ * invariant; structurally identical to `@standard-schema/spec` — swap to that
+ * package later without a code change. See the typed-responses plan.
+ */
+export interface StandardSchemaV1<Input = unknown, Output = Input> {
+  readonly '~standard': {
+    readonly version: 1
+    readonly vendor:  string
+    readonly validate: (value: unknown) =>
+      StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>
+    readonly types?: { readonly input: Input; readonly output: Output } | undefined
+  }
+}
+
+export type StandardSchemaResult<Output> =
+  | { readonly value: Output; readonly issues?: undefined }
+  | { readonly issues: ReadonlyArray<{ readonly message: string }> }
+
+/** Infer the output (parsed) type of any Standard Schema validator. */
+export type StandardSchemaOutput<T> =
+  T extends StandardSchemaV1<unknown, infer O> ? O : never
+
 // ─── Route Definition ──────────────────────────────────────
+
+/**
+ * A declared response for one HTTP status, retained by `.responds(status, schema)`.
+ * `schema` is a Standard Schema validator stored as `unknown` so contracts stays
+ * validator-agnostic — the OpenAPI emitter narrows + converts it to JSON Schema.
+ */
+export interface RouteResponseDef {
+  schema:       unknown
+  description?: string
+}
 
 export interface RouteDefinition {
   method:     HttpMethod
   path:       string
   handler:    RouteHandler
   middleware: MiddlewareHandler[]
+  /**
+   * Route name (mirrors the router's name registry) — populated by `.name()`.
+   * Retained here so introspection (e.g. the OpenAPI emitter's `operationId`)
+   * has a single source on the definition.
+   */
+  name?:        string
+  /**
+   * Raw request-body / query schemas retained by `.body(schema)` / `.query(schema)`
+   * for introspection (OpenAPI). Stored as `unknown` (validator-agnostic); the
+   * validation itself still runs via the middleware those methods install.
+   */
+  bodySchema?:  unknown
+  querySchema?: unknown
+  /** Declared responses by HTTP status, retained by `.responds(status, schema)`. */
+  responses?:   Record<number, RouteResponseDef>
   /** Middleware group this route belongs to. Undefined = no group middleware applied. */
   group?:     RouteGroup
   /**
