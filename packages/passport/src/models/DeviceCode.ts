@@ -1,7 +1,10 @@
 import { Model } from '@rudderjs/orm'
 
 export class DeviceCode extends Model {
-  static override table = 'oAuthDeviceCode'
+  // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
+  // 'ulid'` stamps the id on insert (native has no `@default(cuid())`).
+  static override table = 'oauth_device_codes'
+  static override keyType = 'ulid' as const
 
   static override fillable = ['clientId', 'userCodeHash', 'deviceCodeHash', 'scopes', 'userId', 'approved', 'interval', 'expiresAt', 'lastPolledAt']
 

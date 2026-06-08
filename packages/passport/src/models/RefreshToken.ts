@@ -1,7 +1,10 @@
 import { Model } from '@rudderjs/orm'
 
 export class RefreshToken extends Model {
-  static override table = 'oAuthRefreshToken'
+  // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
+  // 'ulid'` stamps the id on insert (native has no `@default(cuid())`).
+  static override table = 'oauth_refresh_tokens'
+  static override keyType = 'ulid' as const
 
   // `revoked` is intentionally NOT fillable — see AccessToken.ts for the
   // rationale. Lifecycle flips happen through `revoke()` or `forceFill`.

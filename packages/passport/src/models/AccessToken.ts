@@ -25,7 +25,11 @@ import { Model, Hidden } from '@rudderjs/orm'
  * no JWT verification step, use `@rudderjs/sanctum` instead.
  */
 export class AccessToken extends Model {
-  static override table = 'oAuthAccessToken'
+  // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
+  // 'ulid'` stamps the id on insert — the row id is the JWT subject (`tokenId`),
+  // so it must never be NULL on the native engine.
+  static override table = 'oauth_access_tokens'
+  static override keyType = 'ulid' as const
 
   // `revoked` is intentionally NOT fillable — flipping it is a privileged
   // lifecycle operation that should only happen through `revoke()` (instance

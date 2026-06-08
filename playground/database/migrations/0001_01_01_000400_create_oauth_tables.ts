@@ -1,12 +1,12 @@
 import { Migration, Schema } from '@rudderjs/orm/native'
 
-// @rudderjs/passport OAuth2 tables. The passport models reference
-// delegate-style table names (static table = 'oAuthClient', …), which on the
-// native engine are literal SQL table names — created as such here.
+// @rudderjs/passport OAuth2 tables. SQL table names + string ulid PKs match the
+// passport models (which carry the @@map SQL names + `static keyType = 'ulid'`),
+// so the same models run on the native engine here and on the Prisma twin.
 export default class extends Migration {
   async up() {
-    await Schema.create('oAuthClient', (t) => {
-      t.id()
+    await Schema.create('oauth_clients', (t) => {
+      t.ulid('id').primary()
       t.string('name')
       t.string('secret').nullable()
       t.text('redirectUris').default('[]')
@@ -18,8 +18,8 @@ export default class extends Migration {
       t.dateTime('updatedAt').useCurrent()
     })
 
-    await Schema.create('oAuthAccessToken', (t) => {
-      t.id()
+    await Schema.create('oauth_access_tokens', (t) => {
+      t.ulid('id').primary()
       t.string('userId').nullable().index()
       t.string('clientId')
       t.string('name').nullable()
@@ -29,8 +29,8 @@ export default class extends Migration {
       t.dateTime('createdAt').useCurrent()
     })
 
-    await Schema.create('oAuthRefreshToken', (t) => {
-      t.id()
+    await Schema.create('oauth_refresh_tokens', (t) => {
+      t.ulid('id').primary()
       t.string('tokenHash').unique()
       t.string('accessTokenId').unique()
       t.string('familyId').nullable().index()
@@ -38,8 +38,8 @@ export default class extends Migration {
       t.dateTime('expiresAt')
     })
 
-    await Schema.create('oAuthAuthCode', (t) => {
-      t.id()
+    await Schema.create('oauth_auth_codes', (t) => {
+      t.ulid('id').primary()
       t.string('tokenHash').unique()
       t.string('userId')
       t.string('clientId')
@@ -51,8 +51,8 @@ export default class extends Migration {
       t.string('codeChallengeMethod').nullable()
     })
 
-    await Schema.create('oAuthDeviceCode', (t) => {
-      t.id()
+    await Schema.create('oauth_device_codes', (t) => {
+      t.ulid('id').primary()
       t.string('clientId')
       t.string('userCodeHash').unique()
       t.string('deviceCodeHash').unique()
@@ -67,10 +67,10 @@ export default class extends Migration {
   }
 
   async down() {
-    await Schema.dropIfExists('oAuthDeviceCode')
-    await Schema.dropIfExists('oAuthAuthCode')
-    await Schema.dropIfExists('oAuthRefreshToken')
-    await Schema.dropIfExists('oAuthAccessToken')
-    await Schema.dropIfExists('oAuthClient')
+    await Schema.dropIfExists('oauth_device_codes')
+    await Schema.dropIfExists('oauth_auth_codes')
+    await Schema.dropIfExists('oauth_refresh_tokens')
+    await Schema.dropIfExists('oauth_access_tokens')
+    await Schema.dropIfExists('oauth_clients')
   }
 }

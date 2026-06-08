@@ -15,7 +15,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
   - `refresh-token.ts` — Token rotation
   - `device-code.ts` — Device authorization flow
   - `issue-tokens.ts` — Shared token issuance (DB + JWT)
-- `src/models/` — ORM models: `OAuthClient`, `AccessToken`, `RefreshToken`, `AuthCode`, `DeviceCode`
+- `src/models/` — ORM models: `OAuthClient`, `AccessToken`, `RefreshToken`, `AuthCode`, `DeviceCode`. Each carries its **SQL `@@map` table name** in `static table` (`oauth_clients`, …) + `static keyType = 'ulid'`, so the models run on the native engine (literal SQL name) AND on Prisma (orm-prisma maps the SQL name → `oAuthClient` delegate via the runtime datamodel — needs `@rudderjs/orm-prisma` ≥ the SQL-name-fallback release). Pre-this-change they carried the camelCase delegate names. New rows get a ulid id (not cuid); existing cuid rows coexist (both opaque strings). The `id` is load-bearing — `AccessToken.id` is the JWT subject, so it must never be NULL on native (the reason `keyType` is required there).
 - `src/middleware/bearer.ts` — `BearerMiddleware()`, `RequireBearer()` (both share an internal `authenticateBearer()` that returns a discriminated outcome; the middlewares only diverge on the failure-handler branches)
 - `src/middleware/scope.ts` — `scope('read', 'write')` enforcement
 - `src/commands/` — `generateKeys()`, `createClient()`, `purgeTokens()`

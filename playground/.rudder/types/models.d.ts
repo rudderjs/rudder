@@ -30,8 +30,8 @@ declare module '@rudderjs/orm' {
       created_at: string
       updated_at: string
     }
-    oAuthAccessToken: {
-      id: number
+    oauth_access_tokens: {
+      id: string
       userId: string | null
       clientId: string
       name: string | null
@@ -40,8 +40,8 @@ declare module '@rudderjs/orm' {
       expiresAt: string
       createdAt: string
     }
-    oAuthAuthCode: {
-      id: number
+    oauth_auth_codes: {
+      id: string
       tokenHash: string
       userId: string
       clientId: string
@@ -52,8 +52,8 @@ declare module '@rudderjs/orm' {
       codeChallenge: string | null
       codeChallengeMethod: string | null
     }
-    oAuthClient: {
-      id: number
+    oauth_clients: {
+      id: string
       name: string
       secret: string | null
       redirectUris: unknown
@@ -64,8 +64,8 @@ declare module '@rudderjs/orm' {
       createdAt: string
       updatedAt: string
     }
-    oAuthDeviceCode: {
-      id: number
+    oauth_device_codes: {
+      id: string
       clientId: string
       userCodeHash: string
       deviceCodeHash: string
@@ -77,8 +77,8 @@ declare module '@rudderjs/orm' {
       lastPolledAt: string | null
       createdAt: string
     }
-    oAuthRefreshToken: {
-      id: number
+    oauth_refresh_tokens: {
+      id: string
       tokenHash: string
       accessTokenId: string
       familyId: string | null
