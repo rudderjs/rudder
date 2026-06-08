@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { rudder } from '@rudderjs/core'
+import { rudder, down, up } from '@rudderjs/core'
 import { FakeCacheAdapter, type CacheOperation } from '@rudderjs/cache'
 import { ScheduledTask, schedule, Schedule, ScheduleProvider, _executeTask } from './index.js'
 
@@ -223,6 +223,28 @@ describe('scheduler() provider', () => {
     console.log = orig
 
     assert.ok(logs.some(l => l.includes('task(s) completed')))
+  })
+
+  it('schedule:run skips tasks not flagged evenInMaintenanceMode while down', async () => {
+    let normalRan = false
+    let evenRan   = false
+    schedule.call(() => { normalRan = true }).everyMinute().description('normal')
+    schedule.call(() => { evenRan = true }).everyMinute().evenInMaintenanceMode().description('even')
+    new ScheduleProvider({} as never).boot?.()
+    const cmd = rudder.getCommands().find(c => c.name === 'schedule:run')!
+
+    down({ time: 0 }) // flag at process.cwd()/storage/framework/down
+    const orig = console.log
+    console.log = () => {}
+    try {
+      await cmd.handler([], {})
+    } finally {
+      console.log = orig
+      up()
+    }
+
+    assert.equal(normalRan, false) // gated by maintenance mode
+    assert.equal(evenRan, true)    // evenInMaintenanceMode() → runs
   })
 })
 

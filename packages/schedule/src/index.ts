@@ -1,4 +1,4 @@
-import { ServiceProvider, rudder } from '@rudderjs/core'
+import { ServiceProvider, rudder, isDownForMaintenance } from '@rudderjs/core'
 import { Cron } from 'croner'
 import type { CacheAdapter, Lock } from '@rudderjs/cache'
 
@@ -293,9 +293,14 @@ export class ScheduleProvider extends ServiceProvider {
           return
         }
 
+        // Maintenance mode: skip every task except those flagged
+        // evenInMaintenanceMode() — Laravel parity.
+        const down = isDownForMaintenance()
+
         let ran = 0
         for (const task of tasks) {
           if (!task.isDue()) continue
+          if (down && !task.isEvenInMaintenanceMode()) continue
           await _executeTask(task)
           ran++
         }
@@ -315,6 +320,8 @@ export class ScheduleProvider extends ServiceProvider {
           const tz    = task.getTimezone()
           const opts  = tz ? { timezone: tz } : {}
           jobs.push(new Cron(task.getCron(), opts, async () => {
+            // Skip while in maintenance mode unless explicitly flagged.
+            if (isDownForMaintenance() && !task.isEvenInMaintenanceMode()) return
             await _executeTask(task)
           }))
         }
