@@ -1,7 +1,13 @@
 import { Model, Hidden, Cast } from '@rudderjs/orm'
 
 export class OAuthClient extends Model {
-  static override table = 'oAuthClient'
+  // SQL `@@map` table name — runs on the native engine (literal SQL name) AND
+  // on Prisma (orm-prisma maps the SQL name → `oAuthClient` delegate via the
+  // runtime datamodel). `keyType = 'ulid'` stamps the id on insert (the native
+  // engine has no `@default(cuid())`); on Prisma, new rows get a ulid instead
+  // of a cuid — both opaque strings, so existing cuid rows coexist.
+  static override table = 'oauth_clients'
+  static override keyType = 'ulid' as const
 
   static override fillable = ['name', 'secret', 'redirectUris', 'grantTypes', 'scopes', 'confidential']
 

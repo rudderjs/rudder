@@ -1,7 +1,10 @@
 import { Model } from '@rudderjs/orm'
 
 export class AuthCode extends Model {
-  static override table = 'oAuthAuthCode'
+  // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
+  // 'ulid'` stamps the id on insert (native has no `@default(cuid())`).
+  static override table = 'oauth_auth_codes'
+  static override keyType = 'ulid' as const
 
   // `revoked` is intentionally NOT fillable — see AccessToken.ts for the
   // rationale. Auth codes are revoked atomically through
