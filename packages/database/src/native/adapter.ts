@@ -83,6 +83,17 @@ export interface NativeConfig {
    * meaningful with `readUrls`.
    */
   sticky?: boolean
+  /**
+   * Driver-specific knobs forwarded verbatim to the underlying driver's
+   * `open()` — e.g. mysql2 pool/`timezone` options, porsager `postgres()`
+   * options (`max`, `ssl`), or better-sqlite3 `Database` options (`readonly`,
+   * `timeout`). Lets apps tune the connection declaratively from
+   * `config/database.ts`. Replica drivers (`readUrls`) open with the same
+   * options as the write connection. Part of the dev-HMR cache signature, so an
+   * options edit disposes and reopens the connection rather than reusing a stale
+   * driver.
+   */
+  options?: Record<string, unknown>
 }
 
 // ── Dev-HMR driver reuse (mirrors orm-drizzle / orm-prisma) ──
@@ -360,11 +371,16 @@ export class NativeAdapter implements OrmAdapter {
       ':memory:'
     const readUrls = config.readUrls ?? []
     const sticky = config.sticky ?? false
-    // Replica list is part of the signature so a replica edit disposes/reopens
-    // just this connection. The no-replica form stays byte-identical to before.
-    const signature = readUrls.length > 0
-      ? `${driverName}::${url}::${readUrls.join(',')}`
-      : `${driverName}::${url}`
+    const options = config.options
+    // Replica list + driver options are part of the signature so a replica or
+    // options edit disposes/reopens just this connection. Both segments are
+    // appended only when present, so the common no-replica / no-options form
+    // stays byte-identical to before (regression-safety — tests assert it).
+    const replicaSig = readUrls.length > 0 ? `::${readUrls.join(',')}` : ''
+    const optionsSig = options && Object.keys(options).length > 0
+      ? `::options=${stableSignature(options)}`
+      : ''
+    const signature = `${driverName}::${url}${replicaSig}${optionsSig}`
     const cacheKey = config.connectionName ?? signature
     const connection = config.connectionName ?? driverName
 
@@ -373,10 +389,10 @@ export class NativeAdapter implements OrmAdapter {
       return NativeAdapter._topLevel(reused.driver, reused.dialect, primaryKey, connection, reused.readDrivers, sticky, config.readPicker)
     }
 
-    const { driver, dialect } = await openDriver(driverName, url)
+    const { driver, dialect } = await openDriver(driverName, url, options)
     const readDrivers: Driver[] = []
     for (const readUrl of readUrls) {
-      readDrivers.push((await openDriver(driverName, readUrl)).driver)
+      readDrivers.push((await openDriver(driverName, readUrl, options)).driver)
     }
     cacheNativeClient(cacheKey, { signature, driver, readDrivers, dialect })
     return NativeAdapter._topLevel(driver, dialect, primaryKey, connection, readDrivers, sticky, config.readPicker)
@@ -559,22 +575,24 @@ export class NativeAdapter implements OrmAdapter {
   }
 }
 
-/** Open the built-in driver for `driverName` and pair it with its dialect. */
+/** Open the built-in driver for `driverName` and pair it with its dialect.
+ *  `options` (when set) is forwarded verbatim to the driver's `open()`. */
 async function openDriver(
   driverName: NativeDriverName,
   url: string,
+  options?: Record<string, unknown>,
 ): Promise<{ driver: Driver; dialect: Dialect }> {
   switch (driverName) {
     case 'sqlite': {
-      const driver = await BetterSqlite3Driver.open({ filename: url })
+      const driver = await BetterSqlite3Driver.open({ filename: url, ...(options && { options }) })
       return { driver, dialect: new SqliteDialect() }
     }
     case 'pg': {
-      const driver = await PostgresDriver.open({ url })
+      const driver = await PostgresDriver.open({ url, ...(options && { options }) })
       return { driver, dialect: new PgDialect() }
     }
     case 'mysql': {
-      const driver = await MysqlDriver.open({ url })
+      const driver = await MysqlDriver.open({ url, ...(options && { options }) })
       return { driver, dialect: new MysqlDialect() }
     }
     default: {
@@ -582,6 +600,20 @@ async function openDriver(
       throw new Error(`[RudderJS ORM native] Unknown driver: ${String(_exhaustive)}`)
     }
   }
+}
+
+/** Stable JSON of an options bag — keys sorted recursively so two configs with
+ *  the same options in a different key order produce the same cache signature.
+ *  Functions / undefined are dropped (JSON semantics); a config differing only
+ *  by a function-valued option is a best-effort cache hit. */
+function stableSignature(value: unknown): string {
+  return JSON.stringify(value, (_key, val) =>
+    val && typeof val === 'object' && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.keys(val as Record<string, unknown>).sort().map((k) => [k, (val as Record<string, unknown>)[k]]),
+        )
+      : val,
+  )
 }
 
 /**
