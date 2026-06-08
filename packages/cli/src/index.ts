@@ -19,6 +19,7 @@ import { doctorCommand } from './commands/doctor.js'
 import { tinkerCommand } from './commands/tinker.js'
 import { optimizeClearCommand } from './commands/optimize-clear.js'
 import { freshCommand } from './commands/fresh.js'
+import { downCommand, upCommand } from './commands/maintenance.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -389,6 +390,8 @@ async function main(): Promise<void> {
   tinkerCommand(program)
   optimizeClearCommand(program)
   freshCommand(program)
+  downCommand(program)
+  upCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -425,6 +428,9 @@ async function main(): Promise<void> {
     'migrate', 'migrate:fresh', 'migrate:status', 'migrate:rollback', 'migrate:refresh',
     'add', 'remove', 'upgrade', 'key:generate', 'about', 'test',
     'optimize:clear', 'fresh',
+    // `down`/`up` just write/remove the storage/framework/down flag file — no
+    // app context needed (and the app may be down because it can't boot).
+    'down', 'up',
     // `doctor` fast-path runs filesystem/env checks only. `--deep` is handled
     // inside the command's handler, which boots the app on demand (Phase 4).
     'doctor',

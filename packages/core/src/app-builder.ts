@@ -575,8 +575,13 @@ export class RudderJS {
     this._excFn?.(exc)
     const errorHandler = exc.buildHandler()
     const { router } = await import('@rudderjs/router') as { router: { mount(adapter: ServerAdapter): void } }
+    // Kernel maintenance middleware — first in the global stack, a pure
+    // existsSync no-op when the app is up. Lazy-imported so its node:fs static
+    // import never lands in a client bundle (this path is server-only).
+    const { maintenanceMiddleware } = await import('./maintenance.js')
     const server = await this._resolveServer()
     this._handler = await server.createFetchHandler((adapter: ServerAdapter) => {
+      adapter.applyMiddleware(maintenanceMiddleware())
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       if (adapter.applyGroupMiddleware) {
         for (const h of mw.getGroupHandlers('web')) adapter.applyGroupMiddleware('web', h)

@@ -90,6 +90,21 @@ export {
 export { config } from './config.js'
 export type { AppConfig, ConfigKey, ConfigValue } from './config.js'
 
+// ─── Maintenance mode ──────────────────────────────────────
+// Node-only (static node:fs/node:path) — deliberately NOT re-exported from
+// @rudderjs/core/client. app-builder reaches maintenanceMiddleware via a lazy
+// import inside the server-only request-handler path.
+
+export {
+  isDownForMaintenance,
+  maintenanceData,
+  down,
+  up,
+  maintenanceMiddleware,
+  MAINTENANCE_BYPASS_COOKIE,
+} from './maintenance.js'
+export type { MaintenanceData, MaintenanceMiddlewareOptions } from './maintenance.js'
+
 // ─── Contracts ─────────────────────────────────────────────
 
 export type {
