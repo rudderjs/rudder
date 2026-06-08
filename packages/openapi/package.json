@@ -1,0 +1,67 @@
+{
+  "name": "@rudderjs/openapi",
+  "version": "1.0.0",
+  "description": "Auto-generate an OpenAPI 3.1 spec (+ optional Swagger UI) from RudderJS typed routes",
+  "rudderjs": {
+    "provider": "OpenApiProvider",
+    "stage": "feature",
+    "autoDiscover": false
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rudderjs/rudder",
+    "directory": "packages/openapi"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./commands/openapi-generate": {
+      "import": "./dist/commands/openapi-generate.js",
+      "default": "./dist/commands/openapi-generate.js",
+      "types": "./dist/commands/openapi-generate.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test"
+  },
+  "dependencies": {
+    "@rudderjs/contracts": "workspace:^",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/router": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/core": {
+      "optional": true
+    },
+    "@rudderjs/router": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/router": "workspace:^",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

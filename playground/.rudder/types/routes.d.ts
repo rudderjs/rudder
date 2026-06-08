@@ -6,6 +6,8 @@
 declare module '@rudderjs/router' {
   interface RouteRegistry {
     'demos.index': '/demos'
+    'health': '/api/health'
+    'widgets.update': '/api/widgets/:id'
   }
 }
 export {}

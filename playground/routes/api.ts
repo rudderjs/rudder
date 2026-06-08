@@ -23,6 +23,23 @@ import { z } from 'zod'
 Route.registerController(TestController)
 
 Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+  .name('health')
+  .responds(z.object({ status: z.string() }), { description: 'Service is healthy' })
+
+// ── OpenAPI demo: a fully-annotated typed route ────────────────────────────
+// `@rudderjs/openapi` reads the chained .query()/.body()/.responds() schemas
+// (retained on the RouteDefinition) to emit params/requestBody/responses.
+// Generate with: `pnpm rudder openapi:generate --out=openapi.json`
+// Serve Swagger UI by mounting registerOpenApiRoutes(Route) (see routes/web.ts).
+Route.post('/api/widgets/:id', (req, res) =>
+  res.json({ id: Number(req.params.id), name: 'demo widget' }),
+)
+  .name('widgets.update')
+  .whereNumber('id')
+  .query(z.object({ notify: z.coerce.boolean().optional() }))
+  .body(z.object({ name: z.string().min(1), price: z.number().positive() }))
+  .responds(200, z.object({ id: z.number(), name: z.string() }), { description: 'The updated widget' })
+  .responds(404, z.object({ error: z.string() }), { description: 'Widget not found' })
 
 // Demo: typed routes
 //   - Path params: `:id` typed from the literal path; reading `req.params.userId`

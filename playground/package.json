@@ -42,6 +42,7 @@
     "@rudderjs/mcp": "workspace:*",
     "@rudderjs/middleware": "workspace:*",
     "@rudderjs/notification": "workspace:*",
+    "@rudderjs/openapi": "workspace:*",
     "@rudderjs/orm": "workspace:*",
     "@rudderjs/passport": "workspace:*",
     "@rudderjs/pennant": "workspace:*",

@@ -253,6 +253,12 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerRouteListCommand'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/openapi → openapi:generate
+    async () => {
+      const mod = await tryImport('@rudderjs/openapi', 'commands/openapi-generate')
+      const register = mod['registerOpenApiGenerateCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
     // @rudderjs/core → event:list
     async () => {
       const mod = await tryImport('@rudderjs/core', 'commands/event-list')

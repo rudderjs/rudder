@@ -6,6 +6,7 @@ import { AppError } from 'App/Exceptions/AppError.ts'
 import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { registerPassportWebRoutes } from '@rudderjs/passport'
+import { registerOpenApiRoutes } from '@rudderjs/openapi'
 import { registerCashierRoutes, Cashier } from '@rudderjs/cashier-paddle'
 import { Feature, FeatureMiddleware } from '@rudderjs/pennant'
 import { AuthController } from 'App/Http/Controllers/AuthController.js'
@@ -37,6 +38,13 @@ Route.registerController(AuthController)
 // The stateless half (POST /oauth/token, /oauth/device/*, /oauth/scopes)
 // is mounted in routes/api.ts via registerPassportApiRoutes().
 registerPassportWebRoutes(Route)
+
+// API docs — Swagger UI at /docs, spec JSON at /openapi.json (from
+// @rudderjs/openapi). Opt-in + dev-only here so it's never exposed in prod;
+// gate behind auth if you want it on a deployed environment.
+if (config<string>('app.env', 'development') !== 'production') {
+  registerOpenApiRoutes(Route, { info: { title: 'RudderJS Playground API' } })
+}
 
 // Paddle webhook receiver — POST /paddle/webhook (standalone, no web/api group).
 registerCashierRoutes(Route)
