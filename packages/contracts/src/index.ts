@@ -1035,11 +1035,55 @@ export interface StandardSchemaV1<Input = unknown, Output = Input> {
 
 export type StandardSchemaResult<Output> =
   | { readonly value: Output; readonly issues?: undefined }
-  | { readonly issues: ReadonlyArray<{ readonly message: string }> }
+  | { readonly issues: ReadonlyArray<StandardSchemaIssue> }
+
+/**
+ * A single validation failure. Mirrors the Standard Schema spec: `path` is a
+ * chain of property keys (or `{ key }` segments) from the root to the failing
+ * value — `undefined`/empty means a top-level (root) issue.
+ */
+export interface StandardSchemaIssue {
+  readonly message: string
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined
+}
 
 /** Infer the output (parsed) type of any Standard Schema validator. */
 export type StandardSchemaOutput<T> =
   T extends StandardSchemaV1<unknown, infer O> ? O : never
+
+/**
+ * Map Standard Schema issues to the framework's `{ [path]: string[] }` error
+ * shape (the same shape `ValidationError` carries and `FormRequest` produces).
+ * Top-level (no-path) issues land under `'root'`; nested paths join with `.`.
+ */
+export function standardIssuesToErrors(
+  issues: ReadonlyArray<StandardSchemaIssue>,
+): Record<string, string[]> {
+  const errors: Record<string, string[]> = {}
+  for (const issue of issues) {
+    const key = (issue.path ?? [])
+      .map(seg => String((typeof seg === 'object' && seg !== null && 'key' in seg) ? seg.key : seg))
+      .join('.') || 'root'
+    errors[key] = [...(errors[key] ?? []), issue.message]
+  }
+  return errors
+}
+
+/**
+ * Validate a value against any **Standard Schema** validator (Zod by default —
+ * a Zod 4 schema implements `~standard`). Awaits the `validate()` result (which
+ * may be async) and normalizes it to a success value or the framework's error
+ * map. The single validation funnel for user-supplied schema boundaries
+ * (router `.body()`/`.query()`, etc.) — see the Standard Schema convergence plan.
+ */
+export async function standardValidate<T>(
+  schema: StandardSchemaV1<unknown, T>,
+  value: unknown,
+): Promise<{ value: T; errors?: undefined } | { value?: undefined; errors: Record<string, string[]> }> {
+  const result = await schema['~standard'].validate(value)
+  if (result.issues) return { errors: standardIssuesToErrors(result.issues) }
+  return { value: result.value }
+}
 
 // ─── Route Definition ──────────────────────────────────────
 

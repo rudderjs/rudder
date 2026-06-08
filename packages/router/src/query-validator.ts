@@ -1,8 +1,8 @@
-import { ZodType, ZodError } from 'zod'
-import { ValidationError, type MiddlewareHandler } from '@rudderjs/contracts'
+import { ValidationError, standardValidate, type StandardSchemaV1, type MiddlewareHandler } from '@rudderjs/contracts'
 
 /**
- * Build a middleware that validates `req.query` against a Zod schema.
+ * Build a middleware that validates `req.query` against a **Standard Schema**
+ * validator (Zod by default — any `~standard` validator works).
  *
  * - On success, `req.query` is **replaced in place** with the parsed result.
  *   This is what makes `z.coerce.number()` work end-to-end: the handler sees
@@ -14,22 +14,13 @@ import { ValidationError, type MiddlewareHandler } from '@rudderjs/contracts'
  * Used by `RouteBuilder.query(schema)` and the `{ query: schema }` opts form
  * on `Router.get/post/etc`.
  */
-export function buildQueryValidator(schema: ZodType): MiddlewareHandler {
+export function buildQueryValidator(schema: StandardSchemaV1): MiddlewareHandler {
   return async (req, _res, next) => {
-    const result = schema.safeParse(req.query)
-    if (!result.success) {
-      throw new ValidationError(zodIssuesToErrors(result.error))
+    const result = await standardValidate(schema, req.query)
+    if (result.errors) {
+      throw new ValidationError(result.errors)
     }
-    ;(req as { query: unknown }).query = result.data
+    ;(req as { query: unknown }).query = result.value
     await next()
   }
-}
-
-function zodIssuesToErrors(err: ZodError): Record<string, string[]> {
-  const errors: Record<string, string[]> = {}
-  for (const issue of err.issues) {
-    const key = issue.path.join('.') || 'root'
-    errors[key] = [...(errors[key] ?? []), issue.message]
-  }
-  return errors
 }
