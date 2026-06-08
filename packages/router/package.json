@@ -34,18 +34,18 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/resource.test.js dist-test/query-validator.test.js dist-test/body-validator.test.js dist-test/typed-responses.test.js dist-test/commands/route-list.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/resource.test.js dist-test/query-validator.test.js dist-test/body-validator.test.js dist-test/typed-responses.test.js dist-test/standard-validate.test.js dist-test/commands/route-list.test.js"
   },
   "dependencies": {
     "@rudderjs/contracts": "workspace:^",
-    "reflect-metadata": "^0.2.2",
-    "zod": "^4.0.0"
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/reflect-metadata": "^0.1.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "zod": "^4.0.0"
   },
   "author": "Suleiman Shahbari"
 }

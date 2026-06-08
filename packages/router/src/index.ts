@@ -8,9 +8,8 @@ import type {
   HttpMethod,
   RouteGroup,
   StandardSchemaV1,
+  StandardSchemaOutput,
 } from '@rudderjs/contracts'
-
-import type { ZodType, z } from 'zod'
 
 import type { TypedHandler, ExtractParams } from './typed-routes.js'
 import { buildQueryValidator } from './query-validator.js'
@@ -72,7 +71,7 @@ export type ParamsForName<N> =
  * `unknown`, and chaining `.query()` / `.body()` after that can't go back
  * and re-type the closure.
  */
-export interface RouteOptions<Q extends ZodType = ZodType, B extends ZodType = ZodType> {
+export interface RouteOptions<Q extends StandardSchemaV1 = StandardSchemaV1, B extends StandardSchemaV1 = StandardSchemaV1> {
   /** Zod schema to validate `req.query` against. Parsed result replaces `req.query`. */
   query?:      Q
   /** Zod schema to validate `req.body` against. Parsed result replaces `req.body`. */
@@ -454,13 +453,14 @@ export class RouteBuilder<
   }
 
   /**
-   * Install a Zod validator on `req.query` for this route. The parsed result
+   * Install a validator on `req.query` for this route — any Standard Schema
+   * validator (Zod by default). The parsed result
    * replaces `req.query` at request time, so `z.coerce.number()` end-to-end
    * works.
    *
    * **Note on typing:** the handler was already passed (and typed) when this
    * route was registered. Chaining `.query(schema)` AFTER cannot re-type a
-   * closure that's already been bound. The returned `RouteBuilder<P, z.infer<S>>`
+   * closure that's already been bound. The returned `RouteBuilder<P, StandardSchemaOutput<S>>`
    * carries the inferred query for downstream chain methods, but the
    * already-registered handler still sees the original typing of its closure.
    *
@@ -473,24 +473,25 @@ export class RouteBuilder<
    * // Runtime-only (validation runs, but `req.query.page` is still typed string)
    * Route.get('/users', (req) => req.query.page).query(z.object({ page: z.coerce.number() }))
    */
-  query<S extends ZodType>(schema: S): RouteBuilder<P, z.infer<S>, B> {
+  query<S extends StandardSchemaV1>(schema: S): RouteBuilder<P, StandardSchemaOutput<S>, B> {
     this._guardMutation('query')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildQueryValidator(schema))
     // Retain the raw schema for introspection (OpenAPI emitter). Validation
     // still runs via the middleware above; this is the documentation source.
     this.definition.querySchema = schema
-    return this as unknown as RouteBuilder<P, z.infer<S>, B>
+    return this as unknown as RouteBuilder<P, StandardSchemaOutput<S>, B>
   }
 
   /**
-   * Install a Zod validator on `req.body` for this route. Mirrors `.query()`:
+   * Install a validator on `req.body` for this route — any Standard Schema
+   * validator (Zod by default). Mirrors `.query()`:
    * the parsed result replaces `req.body` so the handler sees the inferred
    * shape end-to-end (including `z.coerce.*` / `z.transform()` / `.default()`).
    *
    * **Note on typing:** the handler was already passed (and typed) when this
    * route was registered. Chaining `.body(schema)` AFTER cannot re-type a
-   * closure that's already been bound. The returned `RouteBuilder<P, Q, z.infer<S>>`
+   * closure that's already been bound. The returned `RouteBuilder<P, Q, StandardSchemaOutput<S>>`
    * carries the inferred body for downstream chain methods, but the
    * already-registered handler still sees its original body typing.
    *
@@ -503,14 +504,14 @@ export class RouteBuilder<
    * // Runtime-only (validation runs, but `req.body` is still typed unknown)
    * Route.post('/posts', (req) => req.body).body(z.object({ title: z.string() }))
    */
-  body<S extends ZodType>(schema: S): RouteBuilder<P, Q, z.infer<S>> {
+  body<S extends StandardSchemaV1>(schema: S): RouteBuilder<P, Q, StandardSchemaOutput<S>> {
     this._guardMutation('body')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildBodyValidator(schema))
     // Retain the raw schema for introspection (OpenAPI emitter). Validation
     // still runs via the middleware above; this is the documentation source.
     this.definition.bodySchema = schema
-    return this as unknown as RouteBuilder<P, Q, z.infer<S>>
+    return this as unknown as RouteBuilder<P, Q, StandardSchemaOutput<S>>
   }
 
   /**
@@ -847,42 +848,42 @@ export class Router {
   // field at request time so `z.coerce.*`/`z.transform()` work end-to-end.
 
   get   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  get   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  get   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  get   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  get   <P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  get   <P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  get   <P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   // Impl signature — `b` is intentionally `unknown` so all four typed
   // overload-handler shapes (bare / query / body / both) are assignment-
   // compatible. The runtime cast back to `RouteHandler` happens in `_verb`.
   get   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('GET', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   post  <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  post  <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  post  <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  post  <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  post  <P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  post  <P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  post  <P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   post  <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('POST', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   put   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  put   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  put   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  put   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  put   <P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  put   <P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  put   <P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   put   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('PUT', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   patch <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  patch <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  patch <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  patch <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  patch <P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  patch <P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  patch <P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   patch <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('PATCH', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   delete<P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  delete<P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  delete<P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  delete<P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  delete<P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  delete<P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  delete<P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   delete<P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('DELETE', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   all   <P extends string>(path: P, handler: TypedHandler<P>, middleware?: MiddlewareHandler[]): RouteBuilder<P>
-  all   <P extends string, Q extends ZodType, B extends ZodType>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, z.infer<Q>, z.infer<B>>): RouteBuilder<P, z.infer<Q>, z.infer<B>>
-  all   <P extends string, Q extends ZodType>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, z.infer<Q>>):              RouteBuilder<P, z.infer<Q>>
-  all   <P extends string, B extends ZodType>(path: P, opts: RouteOptions<ZodType, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, z.infer<B>>): RouteBuilder<P, Record<string, string>, z.infer<B>>
+  all   <P extends string, Q extends StandardSchemaV1, B extends StandardSchemaV1>(path: P, opts: RouteOptions<Q, B> & { query: Q; body: B }, handler: TypedHandler<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>): RouteBuilder<P, StandardSchemaOutput<Q>, StandardSchemaOutput<B>>
+  all   <P extends string, Q extends StandardSchemaV1>(path: P, opts: RouteOptions<Q>          & { query: Q          }, handler: TypedHandler<P, StandardSchemaOutput<Q>>):              RouteBuilder<P, StandardSchemaOutput<Q>>
+  all   <P extends string, B extends StandardSchemaV1>(path: P, opts: RouteOptions<StandardSchemaV1, B> & { body:  B          }, handler: TypedHandler<P, Record<string, string>, StandardSchemaOutput<B>>): RouteBuilder<P, Record<string, string>, StandardSchemaOutput<B>>
   all   <P extends string>(path: P, a: TypedHandler<P> | RouteOptions, b?: unknown): RouteBuilder<P> { return this._verb('ALL', path, a, b as MiddlewareHandler[] | RouteHandler | undefined) }
 
   /**
