@@ -43,8 +43,13 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
 
-      - name: Build
-        run: pnpm build
+      - name: Build publishable packages
+        # Build only what gets published (packages/* + create-rudder*), NOT the
+        # private demo playgrounds. A flaky vike/rolldown prerender in a demo app
+        # must never block publishing real packages. The full build (incl.
+        # playgrounds) still runs as the dedicated "Playground Build (production)"
+        # CI gate on PRs — that's where prerender regressions are caught.
+        run: pnpm build:publish
 
       - name: Create Release PR or Publish
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0

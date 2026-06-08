@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.29.3",
   "scripts": {
     "build": "turbo run build",
+    "build:publish": "turbo run build --filter=./packages/* --filter=./create-rudder --filter=./create-rudder-app",
     "dev": "turbo run dev",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\"",
     "typecheck": "turbo run typecheck",
@@ -16,7 +17,7 @@
     "docs:preview": "cd docs && pnpm preview",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "release": "pnpm build && pnpm changeset publish",
+    "release": "pnpm build:publish && pnpm changeset publish",
     "test:client-bundle": "node scripts/client-bundle-smoke.mjs"
   },
   "pnpm": {
