@@ -104,51 +104,7 @@ describe('zodToJsonSchema', () => {
     assert.equal(prop!['description'], 'Search query')
   })
 
-  // Zod v4 moved `.describe()` storage off `_def.description` and onto the schema
-  // instance. The converter has to fall back to `schema.description` when v4 is
-  // in use. Simulate by building the v4-shaped schema object directly — this
-  // passes regardless of which Zod version the workspace installs.
-  it('reads description from instance (Zod v4 shape)', () => {
-    const fakeV4Field = {
-      _def: { type: 'string' },
-      description: 'The name to greet',
-    }
-    const fakeSchema = {
-      shape: { name: fakeV4Field },
-    } as unknown as z.ZodObject<z.ZodRawShape>
-    const result = zodToJsonSchema(fakeSchema)
-    const prop = (result.properties as Record<string, Record<string, unknown>>)['name']
-    assert.equal(prop!['type'], 'string')
-    assert.equal(prop!['description'], 'The name to greet')
-  })
-
-  it('handles v4-shape arrays (element field, not type)', () => {
-    const fakeV4Array = {
-      _def: { type: 'array', element: { _def: { type: 'string' } } },
-    }
-    const fakeSchema = {
-      shape: { tags: fakeV4Array },
-    } as unknown as z.ZodObject<z.ZodRawShape>
-    const result = zodToJsonSchema(fakeSchema)
-    const prop = (result.properties as Record<string, Record<string, unknown>>)['tags']
-    assert.equal(prop!['type'], 'array')
-    assert.deepStrictEqual(prop!['items'], { type: 'string' })
-  })
-
-  it('handles v4-shape enums (entries record)', () => {
-    const fakeV4Enum = {
-      _def: { type: 'enum', entries: { admin: 'admin', user: 'user' } },
-    }
-    const fakeSchema = {
-      shape: { role: fakeV4Enum },
-    } as unknown as z.ZodObject<z.ZodRawShape>
-    const result = zodToJsonSchema(fakeSchema)
-    const prop = (result.properties as Record<string, Record<string, unknown>>)['role']
-    assert.equal(prop!['type'], 'string')
-    assert.deepStrictEqual(prop!['enum'], ['admin', 'user'])
-  })
-
-  // ─── Expanded type coverage (v3 real + v4 synthetic) ────
+  // ─── Expanded type coverage ─────────────────────────────
 
   it('handles nested object fields', () => {
     const schema = z.object({
@@ -176,19 +132,22 @@ describe('zodToJsonSchema', () => {
     assert.equal(prop!['const'], 'user')
   })
 
-  it('handles nullable fields → type union with null', () => {
+  it('handles nullable fields → anyOf with a null branch', () => {
     const schema = z.object({ name: z.nullable(z.string()) })
     const prop = (zodToJsonSchema(schema).properties as Record<string, Record<string, unknown>>)['name']
-    assert.deepStrictEqual(prop!['type'], ['string', 'null'])
+    assert.deepStrictEqual(prop!['anyOf'], [{ type: 'string' }, { type: 'null' }])
     // Nullable is still required — JSON Schema separates required from nullability.
     assert.deepStrictEqual(zodToJsonSchema(schema).required, ['name'])
   })
 
-  it('handles date fields → string with date-time format', () => {
+  it('handles date fields → open schema (zod date is unrepresentable in JSON Schema)', () => {
+    // Zod 4's native `z.toJSONSchema` has no representation for `z.date()`; the
+    // shared converter runs with `unrepresentable: 'any'`, so it degrades to an
+    // open `{}` schema instead of throwing. (The old hand-rolled converter
+    // guessed `string` + `date-time`; native is honest about the gap.)
     const schema = z.object({ created: z.date() })
     const prop = (zodToJsonSchema(schema).properties as Record<string, Record<string, unknown>>)['created']
-    assert.equal(prop!['type'], 'string')
-    assert.equal(prop!['format'], 'date-time')
+    assert.deepStrictEqual(prop, {})
   })
 
   it('handles record fields → object with additionalProperties', () => {
@@ -199,7 +158,7 @@ describe('zodToJsonSchema', () => {
     assert.equal(ap['type'], 'number')
   })
 
-  it('handles tuple fields → prefixItems with items: false', () => {
+  it('handles tuple fields → prefixItems', () => {
     const schema = z.object({ pair: z.tuple([z.string(), z.number()]) })
     const prop = (zodToJsonSchema(schema).properties as Record<string, Record<string, unknown>>)['pair']
     assert.equal(prop!['type'], 'array')
@@ -207,41 +166,20 @@ describe('zodToJsonSchema', () => {
     assert.equal(prefix.length, 2)
     assert.equal(prefix[0]!['type'], 'string')
     assert.equal(prefix[1]!['type'], 'number')
-    assert.equal(prop!['items'], false)
   })
 
-  // ─── v4-synthetic shapes for the new types ──────────────
-
-  it('handles v4-shape literal with multiple values → enum', () => {
-    const fakeV4Literal = { _def: { type: 'literal', values: ['a', 'b'] } }
-    const fakeSchema = { shape: { role: fakeV4Literal } } as unknown as z.ZodObject<z.ZodRawShape>
-    const prop = (zodToJsonSchema(fakeSchema).properties as Record<string, Record<string, unknown>>)['role']
-    assert.deepStrictEqual(prop!['enum'], ['a', 'b'])
+  it('handles a union of literals → anyOf of consts', () => {
+    const schema = z.object({ role: z.union([z.literal('a'), z.literal('b')]) })
+    const prop = (zodToJsonSchema(schema).properties as Record<string, Record<string, unknown>>)['role']
+    const consts = (prop!['anyOf'] as Record<string, unknown>[]).map((p) => p['const'])
+    assert.deepStrictEqual(consts, ['a', 'b'])
   })
 
-  it('handles v4-shape union (options array)', () => {
-    const fakeV4Union = {
-      _def: { type: 'union', options: [
-        { _def: { type: 'string' } },
-        { _def: { type: 'number' } },
-      ] },
-    }
-    const fakeSchema = { shape: { id: fakeV4Union } } as unknown as z.ZodObject<z.ZodRawShape>
-    const prop = (zodToJsonSchema(fakeSchema).properties as Record<string, Record<string, unknown>>)['id']
-    const types = (prop!['anyOf'] as Record<string, unknown>[]).map((p) => p['type'])
-    assert.deepStrictEqual(types, ['string', 'number'])
-  })
-
-  it('handles v4-shape nested object (recurses into shape)', () => {
-    const fakeV4Inner = {
-      _def: { type: 'object' },
-      shape: { name: { _def: { type: 'string' } } },
-    }
-    const fakeSchema = { shape: { profile: fakeV4Inner } } as unknown as z.ZodObject<z.ZodRawShape>
-    const prop = (zodToJsonSchema(fakeSchema).properties as Record<string, Record<string, unknown>>)['profile']
-    assert.equal(prop!['type'], 'object')
-    const nested = prop!['properties'] as Record<string, Record<string, unknown>>
-    assert.equal(nested['name']!['type'], 'string')
+  it('falls back to an open object schema for a non-Standard-Schema input', () => {
+    // A bare `{ shape }` with no `~standard` vendor tag can't be dispatched —
+    // the shared converter returns null and the shim degrades to `{ type: 'object' }`.
+    const notZod = { shape: { name: {} } } as unknown as z.ZodObject<z.ZodRawShape>
+    assert.deepStrictEqual(zodToJsonSchema(notZod), { type: 'object' })
   })
 })
 

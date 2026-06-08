@@ -625,16 +625,19 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
-        version: 1.29.0(zod@3.25.76)
+        version: 1.29.0(zod@4.3.6)
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
+      '@rudderjs/json-schema':
+        specifier: workspace:^
+        version: link:../json-schema
       reflect-metadata:
         specifier: ^0.2.0
         version: 0.2.2
       zod:
-        specifier: ^3.23.0
-        version: 3.25.76
+        specifier: ^4.0.0
+        version: 4.3.6
     devDependencies:
       '@rudderjs/console':
         specifier: workspace:^

@@ -66,8 +66,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
+    "@rudderjs/json-schema": "workspace:^",
     "reflect-metadata": "^0.2.0",
-    "zod": "^3.23.0"
+    "zod": "^4.0.0"
   },
   "peerDependencies": {
     "@rudderjs/console": "workspace:^",
