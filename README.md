@@ -52,7 +52,8 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **Pay-as-you-go** — 49 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, done. The provider manifest self-heals at boot: no command to run, no imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones. Introspection on tap — `route:list --verbose`, `event:list`, `config:show` for the "where is this wired up?" questions.
-- **TypeScript-first** — typed everything from one convention each: views (`view('id', props)` checked against the component's `Props`), routes (path params + `route()` lookups), models (column types generated from migrations), `config()` (dot-paths from your own `config/`), and `Env.get()` (keys from `.env.example`). Plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, WinterCG-compatible runtime.
+- **TypeScript-first** — typed everything from one convention each: views (`view('id', props)` checked against the component's `Props`), routes (path params, query / body / response schemas, + `route()` lookups), models (column types generated from migrations), `config()` (dot-paths from your own `config/`), and `Env.get()` (keys from `.env.example`). Validators are [Standard Schema](https://standardschema.dev) (Zod / Valibot / ArkType). Plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, WinterCG-compatible runtime.
+- **Code-first API docs** — declare responses with `.responds(schema)` and `@rudderjs/openapi` emits an [OpenAPI 3.1 spec + Swagger UI](./docs/guide/openapi.md) from your route table. No hand-written YAML, opt-in, FastAPI-style.
 
 ---
 
@@ -113,14 +114,16 @@ Route.post(
     const name:   string  = req.body.name     // validated body
     return res.json({ id, notify, updated: name })
   },
-).name('users.update')
+)
+  .name('users.update')
+  .responds(z.object({ id: z.string(), updated: z.string() }))  // typed response → OpenAPI
 
 // `route()` URL generator — type-check params against the path (opt-in)
 route('users.update', { id: 1, notify: true })
 // → '/api/users/1?notify=true'
 ```
 
-Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default. Path params, query, and body all infer from a single Zod declaration; failure surfaces as `422 { errors: {...} }` automatically. Declare your named routes in `RouteRegistry` (see [Typed Routes](./docs/guide/typed-routes.md)) and `route()` calls type-check too.
+Same router, same middleware engine — the `web` group runs through session + auth + CSRF, the `api` group is stateless by default. Path params, query, body, **and response** all infer from a single declaration; failure surfaces as `422 { errors: {...} }` automatically. Schemas type against [Standard Schema](https://standardschema.dev) (Zod / Valibot / ArkType — Zod by default), and `@rudderjs/openapi` turns the same declarations into an [OpenAPI 3.1 spec + Swagger UI](./docs/guide/openapi.md), no hand-written YAML. Declare your named routes in `RouteRegistry` (see [Typed Routes](./docs/guide/typed-routes.md)) and `route()` calls type-check too.
 
 ### 3. Controllers, middleware & views
 

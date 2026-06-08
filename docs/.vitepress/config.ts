@@ -79,6 +79,7 @@ export default defineConfig({
             { text: 'Requests', link: '/guide/requests' },
             { text: 'Responses', link: '/guide/responses' },
             { text: 'Validation', link: '/guide/validation' },
+            { text: 'OpenAPI', link: '/guide/openapi' },
             { text: 'Error Handling', link: '/guide/error-handling' },
             { text: 'Logging', link: '/guide/logging' },
           ],

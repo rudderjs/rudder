@@ -135,6 +135,36 @@ Route.post('/posts', handler)
 
 The opts form accepts `body` on every verb, including `GET` / `DELETE`. HTTP allows bodies on those methods but they're rarely used — the validator will simply find an empty `req.body` and fail (or pass, depending on whether the schema permits it). Prefer `{ query }` for `GET` / `DELETE` parameters.
 
+## Typed responses
+
+`.responds()` declares what a route *returns* — the output half of the typed surface. It mirrors `.body()`, but for the response:
+
+```ts
+Route.get('/users/:id', show)
+  .name('users.show')
+  .responds(z.object({ id: z.number(), name: z.string() }))   // 200 by default
+  .responds(404, z.object({ error: z.string() }))             // explicit status
+```
+
+- `.responds(schema)` declares a `200` response; `.responds(status, schema)` declares any code. Call it multiple times for multiple status codes.
+- `.responds(status, schema, { description })` adds a description to the OpenAPI response object.
+- A `z.union(...)` documents same-status variant shapes.
+
+Unlike `.body()` / `.query()`, `.responds()` does **not** install a validator — it's a contract declaration, not runtime enforcement (the handler isn't forced to return the declared shape). Its payoff is twofold: the response type threads onto the handler (returning the wrong shape is a `tsc` error, parity with how `.body()` types `req.body`), and `@rudderjs/openapi` reads it to document each route's responses. See [OpenAPI](/guide/openapi) for auto-generating a spec from these declarations.
+
+## Standard Schema — bring your own validator
+
+`.query()`, `.body()`, and `.responds()` type their `schema` argument against [Standard Schema](https://standardschema.dev) — the `~standard` interface that **Zod 4, Valibot, and ArkType** all implement — not `ZodType` specifically. Zod stays the default and recommended validator (the examples here all use it), but the signatures accept any Standard Schema, so you can reach for Valibot or ArkType without the framework standing in the way:
+
+```ts
+import * as v from 'valibot'
+
+Route.post('/posts', handler)
+  .body(v.object({ title: v.string() }))   // Valibot — accepted, validated, inferred
+```
+
+This decouples Rudder from any single validator library. The one place it matters: OpenAPI generation needs JSON Schema, which Standard Schema doesn't standardize — so `@rudderjs/openapi` carries a small converter registry (Zod by default, others pluggable). See [OpenAPI § validator-agnostic](/guide/openapi#validator-agnostic-standard-schema) for how that works.
+
 ## Typed `route()` URL generator
 
 The `route(name, params)` URL helper type-checks its params against the path's `:params` for every name in the `RouteRegistry` interface — and the registry **populates itself**: `@rudderjs/vite`'s routes scanner walks `routes/*.ts` for inline `.name('foo')` chains (literal path + literal name) and emits `.rudder/types/routes.d.ts` with the augmentation. It runs on dev/build, or on demand with `pnpm rudder routes:sync` (no app boot — works before the first `pnpm dev`). Commit the generated file so `tsc`/CI stay green without a scan step.
@@ -228,7 +258,7 @@ This is Rudder's equivalent of:
 
 Typed routes are one of five conventions that share the same shape — declare the shape once where it lives, and every call site is checked:
 
-- **Typed routes** (this page) — the literal path types `req.params`; Zod schemas type `req.query` / `req.body`; `.name()` chains type `route(name, params)`.
+- **Typed routes** (this page) — the literal path types `req.params`; Standard Schema validators type `req.query` / `req.body` and declare responses via `.responds()`; `.name()` chains type `route(name, params)`.
 - **[Typed views](/guide/typed-views)** — `export interface Props` in the view file types `view('id', props)` at the controller.
 - **[Typed models](/guide/database#typed-models-from-migrations-schema-types)** — column types generated from your migrations type every query result.
 - **[Typed `config()`](/guide/configuration#typed-config)** — `config/index.ts`'s own shape types every dot-path lookup.
