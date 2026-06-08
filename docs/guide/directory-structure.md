@@ -147,6 +147,7 @@ The framework generates a small, fixed set of files. The rule: **generated type 
 | `.rudder/types/routes.d.ts` | `RouteRegistry` augmentation — typed `route(name, params)` from `.name()` chains | **yes** | routes scanner (dev/build) or `pnpm rudder routes:sync` |
 | `.rudder/types/models.d.ts` | Typed-models registry — column types introspected from the migrated schema (native engine) | **yes** — CI can't regenerate it (needs a live, migrated database) | `pnpm rudder migrate` / `pnpm rudder schema:types` |
 | `.rudder/types/env.d.ts` | Typed-env registry — `Env.get()` keys declared in `.env.example` (the committed contract; `.env` itself is never read) | **yes** | env scanner (dev/build) or `pnpm rudder env:sync` |
+| `.rudder/types/config.d.ts` | Typed-config registry — `config('section.key')` keys from the `config/index.ts` barrel | **yes** | config scanner (dev/build) or `pnpm rudder config:sync` |
 | `.rudder/README.md` | Self-description of the directory + regen commands | **yes** | either Vite scanner |
 | `pages/__view/**` | Vike page stubs for `app/Views/**` | **yes** — Vike discovers pages via `git ls-files`; gitignoring 404s every view | views scanner, on every dev/build |
 | `bootstrap/cache/providers.json` | Provider auto-discovery manifest | **no** (gitignored) | self-heals at boot; `pnpm rudder providers:discover` to bake in CI/build |

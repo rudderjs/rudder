@@ -128,7 +128,7 @@ The framework ships several built-in commands that show up automatically. The se
 
 | Command | Provided by | Purpose |
 |---|---|---|
-| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `make:job` | core | Scaffold boilerplate files |
+| `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `make:job`, `make:policy`, `make:observer`, `make:cast`, `make:notification` | cli | Scaffold boilerplate files |
 | `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
 | `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
@@ -176,9 +176,24 @@ pnpm rudder make:exception PaymentError      # → app/Exceptions/PaymentError.t
 pnpm rudder make:listener SendWelcome        # → app/Listeners/SendWelcome.ts
 pnpm rudder make:mail Welcome                # → app/Mail/Welcome.ts
 pnpm rudder make:command Backup              # → app/Commands/Backup.ts
+pnpm rudder make:policy Post                 # → app/Policies/PostPolicy.ts
+pnpm rudder make:observer Post               # → app/Observers/PostObserver.ts
+pnpm rudder make:cast Money                  # → app/Casts/Money.ts
+pnpm rudder make:notification Welcome        # → app/Notifications/WelcomeNotification.ts
 pnpm rudder make:factory User                # → app/Factories/UserFactory.ts
 pnpm rudder make:seeder Users                # → database/seeders/UsersSeeder.ts
 ```
+
+Most generators append a suffix matching the kind (`Policy`, `Observer`, `Notification`, `Controller`, …) when you leave it off. `make:cast` is the exception — casts read as nouns in `static casts = { amount: Money }`, so the class name is used verbatim.
+
+The four newest generators scaffold against their owning package's contract:
+
+| Command | Output | Stub |
+|---|---|---|
+| `make:policy` | `app/Policies/<Name>Policy.ts` | `extends Policy` with `viewAny`/`view`/`create`/`update`/`delete` abilities |
+| `make:observer` | `app/Observers/<Name>Observer.ts` | `implements ModelObserver` with `creating`/`created`/`updating`/`updated`/`deleted` hooks |
+| `make:cast` | `app/Casts/<Name>.ts` | `implements CastUsing` with `get` / `set` |
+| `make:notification` | `app/Notifications/<Name>Notification.ts` | `extends Notification` with `via()` returning the channels |
 
 Pass `--force` to overwrite an existing file. These generators all emit `.ts` files; only `make:terminal` emits a `.tsx` Ink component.
 
