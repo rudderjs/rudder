@@ -5,7 +5,12 @@
  * correct block-style emit for the value shapes the emitter produces.
  */
 export function toYaml(value: unknown): string {
-  return emit(value, 0).replace(/\n+$/, '') + '\n'
+  // Trim trailing newlines with a linear loop rather than an anchored `\n+$`
+  // regex (which CodeQL flags as a polynomial-regex ReDoS risk on large input).
+  const out = emit(value, 0)
+  let end = out.length
+  while (end > 0 && out.charCodeAt(end - 1) === 10) end--
+  return out.slice(0, end) + '\n'
 }
 
 function emit(value: unknown, indent: number): string {

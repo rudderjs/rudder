@@ -116,11 +116,14 @@ function buildOperation(
  */
 function operationIdFor(def: RouteDefinition, method: string, multi: boolean): string {
   if (def.name) return multi ? `${def.name}_${method}` : def.name
+  // Split on runs of non-alphanumerics and rejoin with `_`. Using split+filter
+  // (linear) instead of an anchored `^_+|_+$` trim avoids a polynomial-regex
+  // ReDoS on adversarial paths. Wildcard `*` → `all` so `/x/*` ≠ `/x`.
   const slug = def.path
-    .replace(/\*/g, 'all')        // wildcard segment → a word so `/x/*` ≠ `/x`
-    .replace(/[:{}]/g, '')
-    .replace(/[^A-Za-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/\*/g, 'all')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .join('_')
   return `${method}_${slug || 'root'}`
 }
 
