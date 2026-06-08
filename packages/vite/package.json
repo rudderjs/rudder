@@ -56,6 +56,11 @@
       "import": "./dist/commands/env-sync.js",
       "default": "./dist/commands/env-sync.js",
       "types": "./dist/commands/env-sync.d.ts"
+    },
+    "./commands/config-sync": {
+      "import": "./dist/commands/config-sync.js",
+      "default": "./dist/commands/config-sync.js",
+      "types": "./dist/commands/config-sync.d.ts"
     }
   },
   "scripts": {
