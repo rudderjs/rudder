@@ -86,12 +86,13 @@
   },
   "dependencies": {
     "@rudderjs/console": "workspace:^",
+    "@rudderjs/json-schema": "workspace:^",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
-    "@rudderjs/orm": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@rudderjs/orm": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/core": {
@@ -106,16 +107,16 @@
   },
   "optionalDependencies": {
     "@anthropic-ai/sdk": ">=0.91.1",
-    "openai": ">=4.70.0",
+    "@aws-sdk/client-bedrock-runtime": ">=3.600.0",
     "@google/genai": ">=1.0.0",
     "cohere-ai": ">=7.0.0",
-    "@aws-sdk/client-bedrock-runtime": ">=3.600.0"
+    "openai": ">=4.70.0"
   },
   "devDependencies": {
-    "@rudderjs/core": "workspace:^",
-    "@rudderjs/console": "workspace:^",
-    "@rudderjs/orm": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/console": "workspace:^",
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/orm": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

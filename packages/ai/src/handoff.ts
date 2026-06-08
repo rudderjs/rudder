@@ -121,7 +121,7 @@ export function handoff(
       return {
         name,
         description,
-        parameters: zodToJsonSchema(inputSchema),
+        parameters: zodToJsonSchema(inputSchema, 'input'),
       }
     },
   }

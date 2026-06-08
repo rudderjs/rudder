@@ -97,6 +97,9 @@ importers:
       '@rudderjs/console':
         specifier: workspace:^
         version: link:../console
+      '@rudderjs/json-schema':
+        specifier: workspace:^
+        version: link:../json-schema
       zod:
         specifier: ^4.0.0
         version: 4.3.6

@@ -230,7 +230,7 @@ export class ToolBuilder<
     const schema: ToolDefinitionSchema = {
       name: this.options.name,
       description: this.options.description,
-      parameters: this.options.jsonSchema ?? zodToJsonSchema(this.options.inputSchema),
+      parameters: this.options.jsonSchema ?? zodToJsonSchema(this.options.inputSchema, 'input'),
     }
     if (this.options.providerHint) schema.providerHint = this.options.providerHint
     return schema
@@ -327,7 +327,7 @@ export function toolToSchema(tool: { definition: ToolDefinitionOptions }): ToolD
   const schema: ToolDefinitionSchema = {
     name: tool.definition.name,
     description: tool.definition.description,
-    parameters: tool.definition.jsonSchema ?? zodToJsonSchema(tool.definition.inputSchema),
+    parameters: tool.definition.jsonSchema ?? zodToJsonSchema(tool.definition.inputSchema, 'input'),
   }
   // Propagate provider-specific hints so adapters that recognize the
   // `providerHint.type` can substitute their native tool block (see
