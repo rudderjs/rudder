@@ -13,6 +13,10 @@ import { makeException } from './make/exception.js'
 import { makeListener } from './make/listener.js'
 import { makeMail } from './make/mail.js'
 import { makeTest } from './make/test.js'
+import { makePolicy } from './make/policy.js'
+import { makeObserver } from './make/observer.js'
+import { makeCast } from './make/cast.js'
+import { makeNotification } from './make/notification.js'
 
 export function makeCommand(program: Command): void {
   // CLI-owned generic scaffolders
@@ -28,6 +32,10 @@ export function makeCommand(program: Command): void {
   makeListener(program)
   makeMail(program)
   makeTest(program)
+  makePolicy(program)
+  makeObserver(program)
+  makeCast(program)
+  makeNotification(program)
 
   // Package-contributed scaffolders (registered via registerMakeSpecs)
   for (const spec of getMakeSpecs()) {
