@@ -157,7 +157,10 @@ test('same options on a re-boot reuses the cached driver (signature unchanged)',
   const url = join(dir, `sig-reuse-${++n}.db`)
   const conn = `sig-reuse-${n}`
 
-  const first = await NativeAdapter.make({ driver: 'sqlite', url, connectionName: conn, options: { timeout: 1000 } })
+  // First make() opens + caches the driver; the second with identical options
+  // must reuse it (signature unchanged), so they share one underlying driver —
+  // disconnect once via `second`.
+  await NativeAdapter.make({ driver: 'sqlite', url, connectionName: conn, options: { timeout: 1000 } })
   const sig1 = cache().get(conn)!.signature
   const second = await NativeAdapter.make({ driver: 'sqlite', url, connectionName: conn, options: { timeout: 1000 } })
   const sig2 = cache().get(conn)!.signature
