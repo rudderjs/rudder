@@ -40,10 +40,18 @@ describe('convertSchema — zod default converter', () => {
     assert.ok(!('$schema' in json))
   })
 
-  it('degrades z.date() to an open schema instead of throwing (unrepresentable: any)', () => {
-    // Should not throw, and should produce *something*.
-    const json = convertSchema(z.object({ when: z.date() }), 'input')
-    assert.ok(json)
+  it('maps z.date() to string + date-time (dates serialize to ISO strings on the wire)', () => {
+    const json = convertSchema(z.object({ when: z.date() }), 'input')!
+    const when = (json['properties'] as Record<string, unknown>)['when'] as Record<string, unknown>
+    assert.equal(when['type'], 'string')
+    assert.equal(when['format'], 'date-time')
+  })
+
+  it('leaves z.bigint() as an open schema (no single safe JSON representation)', () => {
+    // unrepresentable: 'any' degrades it to `{}` rather than throwing; we don't guess.
+    const json = convertSchema(z.object({ big: z.bigint() }), 'input')!
+    const big = (json['properties'] as Record<string, unknown>)['big']
+    assert.deepEqual(big, {})
   })
 })
 

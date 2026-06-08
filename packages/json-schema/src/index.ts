@@ -87,9 +87,24 @@ function stripSchemaDialect(json: JsonSchema): JsonSchema {
 
 const zodConverter: SchemaConverter = (schema, io) => {
   try {
-    // `unrepresentable: 'any'` keeps `z.date()` / `z.bigint()` from throwing —
-    // they degrade to an open `{}` schema instead of crashing the document.
-    const json = z.toJSONSchema(schema as z.ZodType, { io, unrepresentable: 'any' }) as JsonSchema
+    // `unrepresentable: 'any'` keeps types with no JSON Schema analogue (`z.date()`,
+    // `z.bigint()`) from throwing — they degrade to an open `{}` instead of crashing
+    // the document. The `override` then upgrades the ones we *can* hint usefully:
+    // `z.date()` serializes to an ISO string over the wire, so `string` + `date-time`
+    // is the right shape for an OpenAPI spec or an LLM tool parameter (it's also what
+    // the hand-rolled AI/MCP converters used to emit before they were consolidated here).
+    // `z.bigint()` stays open — it has no single safe JSON representation (number loses
+    // precision, string changes the type), so we don't guess.
+    const json = z.toJSONSchema(schema as z.ZodType, {
+      io,
+      unrepresentable: 'any',
+      override: (ctx) => {
+        if (ctx.zodSchema?._zod?.def?.type === 'date') {
+          ctx.jsonSchema.type = 'string'
+          ctx.jsonSchema.format = 'date-time'
+        }
+      },
+    }) as JsonSchema
     return stripSchemaDialect(json)
   } catch {
     return null

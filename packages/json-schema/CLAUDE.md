@@ -16,7 +16,7 @@ It's a **neutral home**: the registry mechanism needs no validator, but the bund
 
 ## Notes
 
-- The Zod default uses `z.toJSONSchema(schema, { io, unrepresentable: 'any' })` and strips the per-schema `$schema` dialect marker. `unrepresentable: 'any'` keeps `z.date()`/`z.bigint()` from throwing (they degrade to an open `{}`).
+- The Zod default uses `z.toJSONSchema(schema, { io, unrepresentable: 'any', override })` and strips the per-schema `$schema` dialect marker. `unrepresentable: 'any'` keeps types with no JSON Schema analogue from throwing; the `override` then upgrades `z.date()` → `{ type: 'string', format: 'date-time' }` (it serializes to an ISO string on the wire). `z.bigint()` stays an open `{}` — no single safe JSON representation, so we don't guess.
 - Self-registers the Zod converter on import, so a consumer just needs to import the package for Zod to work.
 
 ## Commands
