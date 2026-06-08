@@ -674,6 +674,28 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/openapi:
+    dependencies:
+      '@rudderjs/contracts':
+        specifier: workspace:^
+        version: link:../contracts
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
+    devDependencies:
+      '@rudderjs/core':
+        specifier: workspace:^
+        version: link:../core
+      '@rudderjs/router':
+        specifier: workspace:^
+        version: link:../router
+      '@types/node':
+        specifier: 20.19.35
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/orm:
     dependencies:
       '@rudderjs/contracts':
@@ -1494,6 +1516,9 @@ importers:
       '@rudderjs/notification':
         specifier: workspace:*
         version: link:../packages/notification
+      '@rudderjs/openapi':
+        specifier: workspace:*
+        version: link:../packages/openapi
       '@rudderjs/orm':
         specifier: workspace:*
         version: link:../packages/orm

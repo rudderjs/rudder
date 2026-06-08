@@ -35,6 +35,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 | `@rudderjs/mcp` | `make:mcp-server`, `make:mcp-tool`, `make:mcp-resource`, `make:mcp-prompt`, `mcp:start`, `mcp:list` |
 | `@rudderjs/orm` | `migrate`, `migrate:fresh`, `migrate:status`, `make:migration`, `schema:types`, `make:factory`, `make:seeder`, `db:push`, `db:generate`, `db:show`, `db:table`, `db:query`, `model:prune` |
 | `@rudderjs/router` | `route:list` |
+| `@rudderjs/openapi` | `openapi:generate` |
 | `@rudderjs/queue` | `queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry` |
 | `@rudderjs/cache` | `cache:clear` (registered in `CacheProvider.boot()`; flushes via lazy `CacheRegistry` lookup + `disconnect?.()` so redis doesn't hang the CLI) |
 | `@rudderjs/schedule` | `schedule:run`, `schedule:work`, `schedule:list` |
