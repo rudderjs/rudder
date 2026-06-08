@@ -159,27 +159,28 @@ const cors = config('server.cors')     // { origin: string; methods: string; hea
 const port = config('server.port')     // number
 ```
 
-No codegen and no sync step — the types flow straight from `config/index.ts` through one ambient declaration. Scaffolded apps ship it as `env.d.ts` at the project root:
+There's nothing to hand-write. Sibling to the [typed `Env`](#typed-env) scanner, `@rudderjs/vite`'s config scanner runs on every dev/build and emits `.rudder/types/config.d.ts` — an `AppConfig` augmentation pulled straight from your `config/index.ts` barrel:
 
 ```ts
-// env.d.ts
-import type { Configs } from './config/index.js'
-
+// .rudder/types/config.d.ts — AUTO-GENERATED; commit it
+type RudderAppConfig = (typeof import('../../config/index.js'))['default']
 declare module '@rudderjs/core' {
-  interface AppConfig extends Configs {}
+  interface AppConfig extends RudderAppConfig {}
 }
+export {}
 ```
 
-with `config/index.ts` exporting its own shape alongside the default export:
+The emit references your barrel by `import type`, so it's the same single file no matter what's in your config — editing a `config/*.ts` file (or adding a whole new section to the barrel) updates the types immediately, with nothing to regenerate. The only two states are "barrel present → emit" and "barrel gone → remove the stale emit". The one requirement is the [barrel itself](#barrel-export): `config/index.ts` must `export default` the object of named sections (the scaffolder convention).
 
-```ts
-// config/index.ts
-const configs = { app, server, database, auth }
-export type Configs = typeof configs
-export default configs
+### `rudder config:sync`
+
+The same emit, on demand — skip-boot, like [`env:sync`](#rudder-envsync) and `routes:sync`, so it works before the first `pnpm dev`:
+
+```bash
+pnpm rudder config:sync   # regenerate .rudder/types/config.d.ts
 ```
 
-Apps created before this template existed can paste the two snippets above — that's the entire migration. Editing a config file updates the types immediately; there is nothing to regenerate.
+Apps created before the scanner existed need no migration beyond running it once (and deleting any hand-written `interface AppConfig extends … {}` augmentation they used to keep at the project root — the scanner now owns it).
 
 Two things to know about the edges:
 
