@@ -7,6 +7,7 @@ import type {
   MiddlewareHandler,
   HttpMethod,
   RouteGroup,
+  StandardSchemaV1,
 } from '@rudderjs/contracts'
 
 import type { ZodType, z } from 'zod'
@@ -333,6 +334,9 @@ export class RouteBuilder<
     // Pass the definition itself so later `where*()` calls (which mutate
     // `definition.path`) are reflected when the named route is looked up.
     this._router._registerName(n, this.definition)
+    // Also retain the name on the definition so introspection (route:list,
+    // the OpenAPI emitter's operationId) has a single source.
+    this.definition.name = n
     return this
   }
 
@@ -473,6 +477,9 @@ export class RouteBuilder<
     this._guardMutation('query')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildQueryValidator(schema))
+    // Retain the raw schema for introspection (OpenAPI emitter). Validation
+    // still runs via the middleware above; this is the documentation source.
+    this.definition.querySchema = schema
     return this as unknown as RouteBuilder<P, z.infer<S>, B>
   }
 
@@ -500,8 +507,55 @@ export class RouteBuilder<
     this._guardMutation('body')
     // Prepend so the validator runs before any other per-route middleware.
     this.definition.middleware.unshift(buildBodyValidator(schema))
+    // Retain the raw schema for introspection (OpenAPI emitter). Validation
+    // still runs via the middleware above; this is the documentation source.
+    this.definition.bodySchema = schema
     return this as unknown as RouteBuilder<P, Q, z.infer<S>>
   }
+
+  /**
+   * Declare the shape this route returns, for a given HTTP status. This is a
+   * **contract declaration** consumed by the OpenAPI emitter — it does NOT
+   * validate the response at runtime (v1). Call it once per status code; a
+   * `z.union([...])` schema documents same-status variant shapes (→ `oneOf`).
+   *
+   * The schema is typed against **Standard Schema** (the `~standard` interface
+   * Zod 4 / Valibot / ArkType all implement), not `ZodType` — so any conforming
+   * validator works. Zod is the default.
+   *
+   * @example
+   * // single success shape (defaults to 200)
+   * Route.get('/users/:id', show).responds(z.object({ id: z.number(), name: z.string() }))
+   *
+   * // multiple status codes
+   * Route.get('/users/:id', show)
+   *   .responds(200, z.object({ id: z.number(), name: z.string() }))
+   *   .responds(404, z.object({ error: z.string() }))
+   */
+  responds(schema: StandardSchemaV1, opts?: RespondsOptions): this
+  responds(status: number, schema: StandardSchemaV1, opts?: RespondsOptions): this
+  responds(
+    a: number | StandardSchemaV1,
+    b?: StandardSchemaV1 | RespondsOptions,
+    c?: RespondsOptions,
+  ): this {
+    this._guardMutation('responds')
+    const status = typeof a === 'number' ? a : 200
+    const schema = (typeof a === 'number' ? b : a) as StandardSchemaV1
+    const opts   = (typeof a === 'number' ? c : b as RespondsOptions | undefined)
+    if (!this.definition.responses) this.definition.responses = {}
+    this.definition.responses[status] = {
+      schema,
+      ...(opts?.description !== undefined ? { description: opts.description } : {}),
+    }
+    return this
+  }
+}
+
+/** Options for {@link RouteBuilder.responds}. */
+export interface RespondsOptions {
+  /** Human-readable description for the OpenAPI response object. */
+  description?: string
 }
 
 // ─── Route Group Options ───────────────────────────────────
