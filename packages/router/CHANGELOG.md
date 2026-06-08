@@ -1,5 +1,31 @@
 # @rudderjs/router
 
+## 1.9.0
+
+### Minor Changes
+
+- 5c80378: Add `.responds()` and retain route schemas on the definition (typed-responses / OpenAPI groundwork).
+
+  `RouteBuilder.responds(status?, schema, opts?)` declares the shape a route returns, per HTTP status — completing the typed-route story (path/query/body, now response). It's a contract declaration consumed by introspection (the planned `@rudderjs/openapi` emitter); it does not validate the response at runtime. Call it once per status; a `z.union([...])` documents same-status variant shapes.
+
+  The schema params type against **Standard Schema** (the `~standard` interface Zod 4 / Valibot / ArkType all implement), exported from `@rudderjs/contracts` as `StandardSchemaV1` — so the typed surface isn't locked to Zod (Zod remains the default; a Zod schema satisfies it structurally).
+
+  To make routes introspectable, `RouteDefinition` now retains `name`, `bodySchema`, `querySchema`, and `responses`: `.body(schema)` / `.query(schema)` stash the raw schema alongside the validator they install (validation is unchanged), and `.name()` mirrors the name onto the definition. All fields are additive and optional — no behavior change for existing routes.
+
+### Patch Changes
+
+- 7c79edc: Converge the router's schema surface onto Standard Schema (validator-agnostic validation).
+
+  `.body()` / `.query()` (and `RouteOptions` + the verb overloads) now type against `StandardSchemaV1` instead of `ZodType`, matching `.responds()` — so the whole router schema surface accepts any Standard Schema validator (Zod 4, Valibot, ArkType). Zod stays the default and existing code is unaffected (a Zod schema satisfies `StandardSchemaV1` structurally, and `req.query`/`req.body` inference is now `StandardSchemaOutput<S>`, which resolves identically for Zod).
+
+  `@rudderjs/contracts` gains the shared validation funnel both validators route through: `standardValidate(schema, value)` (awaits `~standard.validate()`, which may be async, and normalizes it to a value or the framework's `{ [path]: string[] }` error map) + `standardIssuesToErrors()` + the `StandardSchemaIssue` type (the inlined `StandardSchemaResult` now carries `path`, matching the spec, so per-field errors survive). The error shape and HTTP-422 behavior are byte-for-byte unchanged — the existing body/query validator tests pin parity. The router no longer depends on `zod`.
+
+  This is Phase 1 of the Standard Schema convergence (`docs/plans/2026-06-08-standard-schema-convergence.md`); `@rudderjs/ai` tool schemas are the remaining user boundary, and `FormRequest` intentionally stays Zod-coupled (its `messages()` uses Zod's error map).
+
+- Updated dependencies [7c79edc]
+- Updated dependencies [5c80378]
+  - @rudderjs/contracts@1.15.0
+
 ## 1.8.0
 
 ### Minor Changes

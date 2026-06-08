@@ -1,5 +1,29 @@
 # rudderjs-playground
 
+## 0.0.134
+
+### Patch Changes
+
+- Updated dependencies [99611d5]
+- Updated dependencies [e8bd81f]
+- Updated dependencies [a1d2c80]
+- Updated dependencies [fd2bb54]
+- Updated dependencies [27eb426]
+- Updated dependencies [4e6c67d]
+- Updated dependencies [7c79edc]
+- Updated dependencies [6441725]
+- Updated dependencies [5c80378]
+  - @rudderjs/ai@1.11.1
+  - @rudderjs/core@1.11.0
+  - @rudderjs/schedule@1.2.0
+  - @rudderjs/mcp@6.2.1
+  - @rudderjs/openapi@1.1.0
+  - @rudderjs/passport@2.0.0
+  - @rudderjs/router@1.9.0
+  - @rudderjs/contracts@1.15.0
+  - @rudderjs/vite@2.11.0
+  - @rudderjs/storage@1.2.0
+
 ## 0.0.133
 
 ### Patch Changes

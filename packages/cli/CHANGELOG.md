@@ -1,5 +1,57 @@
 # @rudderjs/cli
 
+## 4.14.0
+
+### Minor Changes
+
+- e8bd81f: Add maintenance mode — `rudder down` / `rudder up` (Laravel parity).
+
+  `@rudderjs/schedule` already had `evenInMaintenanceMode()` on tasks, but nothing ever checked app maintenance state, so the flag was dead. This wires up the missing piece end to end:
+
+  - **`@rudderjs/core`** gains node-only helpers (`isDownForMaintenance`, `maintenanceData`, `down`, `up`) backed by a JSON flag file at `storage/framework/down` (fields: `time`, `message`, `retry`, `secret`, `allow`), plus a kernel `maintenanceMiddleware()`. The middleware is auto-installed first in the request pipeline (a pure `existsSync` no-op when the app is up) and returns `503` with a `Retry-After` header while down — except requests matching the allow-list or carrying the bypass secret (`?secret=<token>` sets a bypass cookie). All exported from the main entry only, never `@rudderjs/core/client` (it statically imports `node:fs`); `app-builder` reaches it via a lazy server-only import, so the client bundle stays clean.
+  - **`@rudderjs/cli`** adds the skip-boot `down` (`--secret`, `--retry`, `--message`, `--allow`) and `up` commands.
+  - **`@rudderjs/schedule`** now skips due tasks while down unless they're flagged `evenInMaintenanceMode()`, in both `schedule:run` and `schedule:work`.
+
+- ca13326: Add four missing `make:*` generators — `make:policy`, `make:observer`, `make:cast`, `make:notification`.
+
+  Each scaffolds against a real framework base class:
+
+  - **`make:policy`** → `app/Policies/<Name>Policy.ts`, `extends Policy` (`@rudderjs/auth`) with ability methods.
+  - **`make:observer`** → `app/Observers/<Name>Observer.ts`, `implements ModelObserver` (`@rudderjs/orm`) with lifecycle hooks (`Model.observe(...)`).
+  - **`make:cast`** → `app/Casts/<Name>.ts` (no suffix, Laravel parity), `implements CastUsing` (`@rudderjs/orm`) with the sync `get`/`set` pair.
+  - **`make:notification`** → `app/Notifications/<Name>Notification.ts`, `extends Notification` (`@rudderjs/notification`) with `via()` + a `toDatabase()` builder.
+
+  All four support `--with-test` (unit). `make:rule` and `make:scope` were deliberately **not** shipped: Rudder validation is zod-based via `FormRequest` (no first-class `Rule` type) and global scopes are inline `ScopeFn` functions in `static globalScopes` (no standalone `Scope` class) — neither has an abstraction to scaffold against.
+
+- fd2bb54: New opt-in package: `@rudderjs/openapi` — auto-generate an OpenAPI 3.1 spec from typed routes.
+
+  Walks `router.list()` and turns the introspectable schemas Phase 1 retains on each route (`name` / `bodySchema` / `querySchema` / `responses`) into an OpenAPI 3.1 document — path templating (`:id{[0-9]+}` → `{id}`, integer-typed), query parameters, `requestBody`, per-status `responses`, and unique `operationId`s.
+
+  **Converter registry.** Standard Schema standardizes validate+infer but not JSON-Schema export, so emission dispatches a per-validator converter by the `~standard` vendor tag. zod 4's native `z.toJSONSchema()` is registered as the default (`'zod'`); `registerSchemaConverter(vendor, fn)` lets a Valibot/ArkType user plug in their own. A route whose validator has no registered converter is warned about and skipped — never a broken document.
+
+  **Surface.**
+
+  - `generateOpenApiDocument(router, info)` — the emitter.
+  - `rudder openapi:generate [--out=openapi.json] [--yaml]` — write the spec from the live route table (CLI loader entry added).
+  - `registerOpenApiRoutes(router, { path, specPath })` — serve Swagger UI at `/docs` + the spec JSON. **Opt-in only**; gate behind auth in production.
+  - `OpenApiProvider` — wires `config('openapi')`; auto-discovery is OFF by default so docs are never exposed unless the app asks.
+
+  Depends on `@rudderjs/contracts` (types) and zod; `@rudderjs/core`/`@rudderjs/router` are optional peers. v1 inlines schemas (no `$ref` de-dup) and omits auth-scheme docs / response validation (deferred).
+
+- 6441725: Auto-generate the typed `config()` registry — no more hand-written `AppConfig` augmentation.
+
+  `@rudderjs/core` already types `config('section.key')` over an `AppConfig` interface, but apps had to hand-write `declare module '@rudderjs/core' { interface AppConfig extends typeof configs {} }` to populate it. A new config scanner (sibling to the typed-env scanner) emits `.rudder/types/config.d.ts` augmenting `AppConfig` from the app's `config/index.ts` barrel via `import type` — so `config('app.name')` autocompletes and returns the real section type with zero boilerplate.
+
+  The scanner runs in the same Vite generation pass as the env/routes scanners (dev + build), and ships a skip-boot `rudder config:sync` command to regenerate on demand. A missing `config/index.ts` removes any stale emit (symmetric shrink). Like the other registries, `.rudder/types/config.d.ts` is committed so `tsc` stays green on fresh clones.
+
+### Patch Changes
+
+- Updated dependencies [e8bd81f]
+- Updated dependencies [7c79edc]
+- Updated dependencies [5c80378]
+  - @rudderjs/core@1.11.0
+  - @rudderjs/router@1.9.0
+
 ## 4.13.0
 
 ### Minor Changes
