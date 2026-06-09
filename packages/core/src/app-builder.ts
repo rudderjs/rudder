@@ -24,6 +24,7 @@ import {
   wantsJson,
 } from './exceptions.js'
 import { ValidationError, ValidationResponse } from './validation.js'
+import { registerWsContextRunner } from './ws-context-runner.js'
 
 // ─── Dev HMR: in-flight request drain barrier ───────────────
 //
@@ -571,6 +572,12 @@ export class RudderJS {
   private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
+    // Register the WebSocket-upgrade context runner on its globalThis seam.
+    // Runs here (at `.create()`, dev + prod) where the web group is already
+    // resolvable — `@rudderjs/sync` reads the seam to run session/auth around
+    // `onAuth`. Resolver is lazy so it tracks the current group store across
+    // dev HMR re-boots.
+    registerWsContextRunner(() => mw.getGroupHandlers('web'))
     const exc = new ExceptionConfigurator()
     this._excFn?.(exc)
     const errorHandler = exc.buildHandler()

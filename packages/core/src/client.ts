@@ -99,3 +99,5 @@ export type {
   FetchHandler,
   ServerAdapterProvider,
 } from '@rudderjs/contracts'
+
+export { REQUEST_CONTEXT } from '@rudderjs/contracts'
