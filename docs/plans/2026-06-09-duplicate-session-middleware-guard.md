@@ -1,6 +1,6 @@
 # `@rudderjs/session` — duplicate `sessionMiddleware` installs are silent and clobber auth cookies
 
-**Status:** proposed (2026-06-09)
+**Status:** implemented (2026-06-09) — both options shipped; detection is request-bag-based rather than ALS-based (workspace dev runs two module copies of the package, each with its own ALS — discovered during playground verification)
 **Packages:** `@rudderjs/session` (primary), `@rudderjs/core` (pipeline-assembly warning, optional)
 **Driver:** pilotiq-pro collab IDOR investigation (pilotiq-pro PR #32). The playground ran `sessionMiddleware` twice — `SessionProvider.boot()` auto-installs it on the `web` group AND `bootstrap/app.ts` had a global `m.use(sessionMiddleware(cfg))`. The result silently broke login persistence and presented as a framework WS-auth bug; root-causing it cost a full debugging cycle. The framework was fine — but it let the misconfiguration through without a whisper.
 

@@ -127,6 +127,52 @@ export class MiddlewareConfigurator {
   }
 }
 
+// Constructed via the global symbol registry rather than imported from
+// @rudderjs/contracts so the check works against a version-skewed session
+// install (same key → same symbol regardless of which package defined it).
+const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
+
+let _duplicateSessionWarned = false
+
+/**
+ * Warn (once per boot) when more than one session middleware is installed
+ * across the effective `global → web group` chain. The canonical mistake:
+ * `SessionProvider.boot()` auto-installs `sessionMiddleware` on the `web`
+ * group, and the app ALSO registers a global `m.use(sessionMiddleware(...))`
+ * in bootstrap/app.ts. Two instances silently double-append `Set-Cookie`,
+ * and the trailing anonymous cookie clobbers the authenticated one on
+ * cookie-less requests — presenting as intermittent login loss / deny-all
+ * WS auth, two layers away from the misconfigured line.
+ *
+ * Identity-based dedupe can't catch this (each `sessionMiddleware(cfg)` call
+ * returns a fresh closure), so we count the `SESSION_MIDDLEWARE` marker the
+ * session factory tags onto every instance it returns.
+ *
+ * @internal — exported for tests; called from `_createHandler`'s assembly.
+ */
+export function warnIfDuplicateSessionMiddleware(handlers: MiddlewareHandler[]): boolean {
+  const installs = handlers.filter(
+    (h) => (h as unknown as Record<symbol, unknown>)[SESSION_MIDDLEWARE] === true,
+  ).length
+  if (installs <= 1) return false
+  if (!_duplicateSessionWarned) {
+    _duplicateSessionWarned = true
+    console.warn(
+      `[RudderJS] sessionMiddleware is installed ${installs} times on the request pipeline ` +
+      '(global + web group). @rudderjs/session auto-installs it on the `web` group — remove ' +
+      'the redundant install (usually a global `m.use(sessionMiddleware(...))` in bootstrap/app.ts). ' +
+      'Duplicate session middleware double-appends Set-Cookie and can clobber the authenticated ' +
+      'session cookie on first-visit requests.',
+    )
+  }
+  return true
+}
+
+/** @internal — test seam: re-arm the once-per-boot duplicate-session warning. */
+export function resetDuplicateSessionWarning(): void {
+  _duplicateSessionWarned = false
+}
+
 // ─── Exception Configurator ────────────────────────────────
 
 export type ErrorRenderer = (err: unknown, req: AppRequest) => Response | Promise<Response>
@@ -589,6 +635,10 @@ export class RudderJS {
     const server = await this._resolveServer()
     this._handler = await server.createFetchHandler((adapter: ServerAdapter) => {
       adapter.applyMiddleware(maintenanceMiddleware())
+      // Providers have booted by now, so the group store is fully populated —
+      // catch a duplicate session install (global + web group) at boot, in the
+      // server log, before the first request hits the subtly-broken pipeline.
+      warnIfDuplicateSessionMiddleware([...mw.getHandlers(), ...mw.getGroupHandlers('web')])
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       if (adapter.applyGroupMiddleware) {
         for (const h of mw.getGroupHandlers('web')) adapter.applyGroupMiddleware('web', h)

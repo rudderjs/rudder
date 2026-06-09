@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { ServerAdapter, ServerAdapterProvider } from '@rudderjs/contracts'
+import type { MiddlewareHandler, ServerAdapter, ServerAdapterProvider } from '@rudderjs/contracts'
 import {
   Application,
   ServiceProvider,
@@ -9,6 +9,7 @@ import {
   rudder,
   resetGroupMiddleware,
 } from './index.js'
+import { warnIfDuplicateSessionMiddleware, resetDuplicateSessionWarning } from './app-builder.js'
 
 // ─── Application.configure() — server adapter resolution ────────────────────
 //
@@ -124,5 +125,66 @@ describe('Application.configure() — server adapter resolution', () => {
     const resolved = await (instance as unknown as HasResolve)._resolveServer()
     assert.equal(resolved.type, 'fake')
     assert.equal((instance as unknown as HasResolve)._autoServer, null, 'no auto-resolution kicked off')
+  })
+})
+
+// ─── warnIfDuplicateSessionMiddleware ────────────────────────────────────────
+//
+// Duplicate session installs (SessionProvider's web-group auto-install + a
+// global m.use(sessionMiddleware(...))) double-append Set-Cookie and clobber
+// the authenticated cookie on cookie-less requests. Identity dedupe can't
+// catch it (fresh closure per factory call), so the assembly counts the
+// SESSION_MIDDLEWARE marker the session factory tags onto every instance.
+
+describe('warnIfDuplicateSessionMiddleware', () => {
+  const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
+  const tagged = (): MiddlewareHandler => {
+    const fn: MiddlewareHandler = async (_req, _res, next) => next()
+    ;(fn as unknown as Record<symbol, unknown>)[SESSION_MIDDLEWARE] = true
+    return fn
+  }
+  const plain: MiddlewareHandler = async (_req, _res, next) => next()
+
+  const captureWarns = async (fn: () => void): Promise<string[]> => {
+    const warns: string[] = []
+    const original = console.warn
+    console.warn = (msg: unknown) => { warns.push(String(msg)) }
+    try { fn() } finally { console.warn = original }
+    return warns
+  }
+
+  beforeEach(() => resetDuplicateSessionWarning())
+
+  it('warns when two marker-tagged handlers are in the effective chain', async () => {
+    let result = false
+    const warns = await captureWarns(() => {
+      result = warnIfDuplicateSessionMiddleware([plain, tagged(), tagged()])
+    })
+    assert.equal(result, true)
+    assert.equal(warns.length, 1)
+    assert.ok(warns[0]!.includes('installed 2 times'))
+  })
+
+  it('stays silent for a single install (the normal SessionProvider topology)', async () => {
+    let result = true
+    const warns = await captureWarns(() => {
+      result = warnIfDuplicateSessionMiddleware([plain, tagged()])
+    })
+    assert.equal(result, false)
+    assert.equal(warns.length, 0)
+  })
+
+  it('stays silent with no session middleware at all', async () => {
+    const warns = await captureWarns(() => warnIfDuplicateSessionMiddleware([plain]))
+    assert.equal(warns.length, 0)
+  })
+
+  it('warns once per boot, not once per assembly', async () => {
+    const dup = [tagged(), tagged()]
+    const warns = await captureWarns(() => {
+      warnIfDuplicateSessionMiddleware(dup)
+      warnIfDuplicateSessionMiddleware(dup)
+    })
+    assert.equal(warns.length, 1)
   })
 })

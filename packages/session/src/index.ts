@@ -480,10 +480,48 @@ function makeDriver(config: SessionConfig): InternalDriver {
 
 // ─── Session Middleware ────────────────────────────────────
 
+// Constructed via the global symbol registry rather than imported from
+// @rudderjs/contracts so this file works against an older pinned contracts
+// (same key → same symbol; an import would add a version floor for no gain).
+const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
+
+let _duplicateInstallWarned = false
+
 export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
   const driver = makeDriver(config)
 
   const fn = async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
+    // An outer sessionMiddleware already ran on this request — the canonical
+    // misconfiguration is SessionProvider's `web`-group auto-install PLUS a
+    // global `m.use(sessionMiddleware(...))` in bootstrap/app.ts. A second
+    // SessionInstance would append a second Set-Cookie whose (anonymous)
+    // value clobbers the outer authenticated cookie on cookie-less requests —
+    // silent login loss, deny-all WS auth.
+    //
+    // Detection reads the request bag (`attachSession`'s `__rjs_session` key),
+    // NOT `_als.getStore()`: in workspace/linked dev the two installs can come
+    // from two module copies of this package (Vite module-runner symlink path
+    // vs Node realpath), each with its own `_als` — but `req.raw` is the same
+    // object in both. Duck-typed presence check, no `instanceof` (a cross-copy
+    // instance has a different class identity).
+    //
+    // Reuse the outer session: re-enter it on THIS copy's ALS so `Session.*`
+    // consumers bound to this copy resolve too, skip the save — the outer
+    // instance owns the single Set-Cookie write.
+    const existing = (req.raw as Record<string, unknown>)[SESSION_KEY] as SessionInstance | undefined
+    if (existing !== undefined) {
+      if (!_duplicateInstallWarned) {
+        _duplicateInstallWarned = true
+        console.warn(
+          '[RudderJS] sessionMiddleware is installed more than once on this request pipeline. ' +
+          '@rudderjs/session auto-installs it on the `web` group — remove the redundant install ' +
+          '(usually a global `m.use(sessionMiddleware(...))` in bootstrap/app.ts). ' +
+          'The inner instance passed through; one session and one Set-Cookie were used.',
+        )
+      }
+      return _als.run(existing, next)
+    }
+
     const cookieHeader = req.headers['cookie'] ?? ''
     const cookieValue  = parseCookie(cookieHeader, config.cookie.name)
     const payload      = await driver.load(cookieValue)
@@ -523,6 +561,9 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
   // sync `onAuth` callback, so `Session.*` resolves on an upgrade exactly as
   // in an HTTP handler (without CSRF / rate-limit / app middleware running).
   ;(fn as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT] = true
+  // Session marker — @rudderjs/core's pipeline assembly counts these across
+  // the global + web-group chains and warns at boot on a duplicate install.
+  ;(fn as unknown as Record<symbol, unknown>)[SESSION_MIDDLEWARE] = true
   return fn
 }
 

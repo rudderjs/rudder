@@ -1019,6 +1019,23 @@ export type MiddlewareHandler = (
  */
 export const REQUEST_CONTEXT: unique symbol = Symbol.for('rudderjs.requestContext')
 
+/**
+ * Marker tagging a middleware as a **session middleware** — `@rudderjs/session`'s
+ * `sessionMiddleware` sets `fn[SESSION_MIDDLEWARE] = true` on the function it
+ * returns. `@rudderjs/core`'s pipeline assembly counts handlers carrying this
+ * marker across the global + `web` group chains and warns at boot when more
+ * than one is installed (the canonical mistake: `SessionProvider` auto-installs
+ * on the `web` group AND the app adds a global `m.use(sessionMiddleware(...))`,
+ * which double-appends `Set-Cookie` and clobbers the authenticated cookie on
+ * cookie-less requests).
+ *
+ * Uses the global symbol registry (`Symbol.for`), so consumers can construct
+ * the same symbol locally with `Symbol.for('rudderjs.sessionMiddleware')`
+ * instead of importing this constant — that keeps the check working across
+ * version-skewed installs where this export doesn't exist yet.
+ */
+export const SESSION_MIDDLEWARE: unique symbol = Symbol.for('rudderjs.sessionMiddleware')
+
 // ─── HTTP Methods ──────────────────────────────────────────
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
