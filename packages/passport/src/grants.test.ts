@@ -6,11 +6,7 @@ import { createHash } from 'node:crypto'
 
 import {
   Passport,
-  DeviceCode,
-  BearerMiddleware,
-  scope,
   scopeAny,
-  issueTokens,
   validateAuthorizationRequest,
   validateScopes,
   OAuthError,

@@ -6,8 +6,6 @@ import assert from 'node:assert/strict'
 import {
   Passport,
   hashDeviceSecret,
-  DeviceCode,
-  issueTokens,
   OAuthError,
   requestDeviceCode,
   approveDeviceCode,

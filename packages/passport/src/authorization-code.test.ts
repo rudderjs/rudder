@@ -5,9 +5,6 @@ import assert from 'node:assert/strict'
 
 import {
   Passport,
-  AuthCode,
-  RequireBearer,
-  issueTokens,
   issueAuthCode,
   exchangeAuthCode,
   OAuthError,

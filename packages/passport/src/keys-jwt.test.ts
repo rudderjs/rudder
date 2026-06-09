@@ -6,17 +6,11 @@ import { createHash } from 'node:crypto'
 
 import {
   Passport,
-  PassportProvider,
   hashClientSecret,
   verifyClientSecret,
   createToken,
   verifyToken,
   unsafeDecodeToken,
-  BearerMiddleware,
-  scope,
-  generateKeys,
-  createClient,
-  issueTokens,
   OAuthError,
   clientCredentialsGrant,
 } from './index.js'

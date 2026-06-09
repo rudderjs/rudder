@@ -5,9 +5,6 @@ import assert from 'node:assert/strict'
 
 import {
   Passport,
-  PassportProvider,
-  createToken,
-  verifyToken,
   decodeToken,
   OAuthClient,
   AccessToken,
@@ -16,11 +13,8 @@ import {
   DeviceCode,
   RequireBearer,
   resolveClientGrantTypes,
-  issueTokens,
-  issueAuthCode,
   exchangeAuthCode,
   OAuthError,
-  pollDeviceCode,
   registerPassportRoutes,
   registerPassportApiRoutes,
 } from './index.js'
