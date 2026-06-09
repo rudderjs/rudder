@@ -7,11 +7,16 @@
  * `Retry-After` header for every request — except requests that match the
  * allow-list or carry the bypass secret.
  *
- * **Node-only.** This module statically imports `node:fs`/`node:path`, so it is
+ * **Node-only.** This module statically imports `node:fs`/`node:path` and is
  * exported only from `@rudderjs/core`'s main entry, never from
  * `@rudderjs/core/client`. `app-builder` reaches it via a lazy
- * `await import('./maintenance.js')` inside `_createHandler` (server-only), so
- * the client bundle never evaluates it.
+ * `await import('./maintenance.js')` inside `_createHandler` (server-only).
+ *
+ * It must stay **client-eval-safe**: the main entry is Node-only but survives
+ * browser bundles by being tree-shaken, so this module must have **no
+ * module-top-level `fs`/`path` access** (the static imports bind to access-
+ * throwing stubs under Vite, which is fine — only an actual `.join()`/
+ * `.existsSync()` at eval crashes). Keep every `node:*` call inside a function.
  */
 
 import fs from 'node:fs'
@@ -32,14 +37,15 @@ export interface MaintenanceData {
   allow?:   string[]
 }
 
-/** App-relative path to the maintenance flag file. */
-const DOWN_FILE = path.join('storage', 'framework', 'down')
-
 /** Cookie name carrying the bypass secret on subsequent requests. */
 export const MAINTENANCE_BYPASS_COOKIE = 'rudder_maintenance_bypass'
 
+/**
+ * Absolute path to the maintenance flag file. Joined lazily (never at module
+ * top level) so this module evaluates harmlessly if it lands in a client graph.
+ */
 function downPath(cwd: string): string {
-  return path.join(cwd, DOWN_FILE)
+  return path.join(cwd, 'storage', 'framework', 'down')
 }
 
 /** `true` when the app is in maintenance mode (the flag file exists). */
