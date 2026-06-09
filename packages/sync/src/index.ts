@@ -831,12 +831,11 @@ async function handleConnection(
   // state vector. Fail closed — a throwing check denies. Closes with WS code
   // 4401 (application-range "unauthorized").
   if (onAuth) {
-    let allowed = false
-    try {
-      allowed = await onAuth({ headers: req.headers, url: req.url ?? '/' }, docName)
-    } catch {
-      allowed = false
-    }
+    // `Promise.resolve().then(...)` folds a synchronous throw and an async
+    // rejection into one `.catch` — both fail closed to `false`.
+    const allowed = await Promise.resolve()
+      .then(() => onAuth({ headers: req.headers, url: req.url ?? '/' }, docName))
+      .catch(() => false)
     if (!allowed) {
       try { ws.close(4401, 'unauthorized') } catch { /* already closing */ }
       return
