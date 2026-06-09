@@ -242,6 +242,43 @@ describe('sessionMiddleware', () => {
     assert.equal((mw as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT], true)
   })
 
+  it('tags the returned middleware with the SESSION_MIDDLEWARE marker (duplicate-install detection)', () => {
+    const mw = sessionMiddleware(config)
+    assert.equal((mw as unknown as Record<symbol, unknown>)[Symbol.for('rudderjs.sessionMiddleware')], true)
+  })
+
+  it('a nested duplicate install passes through: one session, one Set-Cookie, warn emitted', async () => {
+    const outer = sessionMiddleware(config)
+    const inner = sessionMiddleware(config) // fresh closure — identity dedupe can't catch this
+    const { req, res, setCookies } = makeReqRes()
+
+    const warns: string[] = []
+    const originalWarn = console.warn
+    console.warn = (msg: unknown) => { warns.push(String(msg)) }
+    let outerSession!: SessionInstance
+    let innerSawSameSession = false
+    try {
+      await outer(req, res, async () => {
+        outerSession = readSession(req)
+        outerSession.put('userId', 42) // the "login write" the duplicate used to clobber
+        await inner(req, res, async () => {
+          innerSawSameSession = readSession(req) === outerSession
+        })
+      })
+    } finally {
+      console.warn = originalWarn
+    }
+
+    assert.ok(innerSawSameSession, 'inner middleware must reuse the outer session')
+    assert.equal(setCookies.length, 1, 'exactly one Set-Cookie — the duplicate must not clobber')
+    const reloaded = await runRequest(`rjs_sess=${extractCookieValue(setCookies[0]!)}`)
+    assert.equal(reloaded.session.get('userId'), 42, 'authenticated session must survive')
+    assert.ok(
+      warns.some((w) => w.includes('installed more than once')),
+      'duplicate install must warn',
+    )
+  })
+
   it('attaches session to req.raw.__rjs_session', async () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes()
