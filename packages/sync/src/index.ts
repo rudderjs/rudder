@@ -831,11 +831,27 @@ async function handleConnection(
   // state vector. Fail closed — a throwing check denies. Closes with WS code
   // 4401 (application-range "unauthorized").
   if (onAuth) {
-    // `Promise.resolve().then(...)` folds a synchronous throw and an async
-    // rejection into one `.catch` — both fail closed to `false`.
-    const allowed = await Promise.resolve()
-      .then(() => onAuth({ headers: req.headers, url: req.url ?? '/' }, docName))
-      .catch(() => false)
+    const authReq = { headers: req.headers, url: req.url ?? '/' }
+    const decide = () => onAuth(authReq, docName)
+
+    // When the framework registered its WS-upgrade context runner (core's
+    // `_createHandler()`), route `onAuth` THROUGH it: the runner establishes
+    // the same session + auth AsyncLocalStorage scopes an HTTP request gets, so
+    // `Auth.user()` / `Session.*` resolve inside `onAuth` exactly as in a
+    // controller. Standalone sync (no server adapter → no runner) keeps the raw
+    // call — backward compatible. Sync gains nothing but a `globalThis` read;
+    // no dependency on `@rudderjs/core`/session/auth.
+    //
+    // Fail closed either way: the runner propagates throws, so `.catch(() =>
+    // false)` covers a runner error, a context-middleware throw, AND a
+    // synchronous/async `onAuth` rejection. The raw branch keeps the
+    // `Promise.resolve().then(...)` fold so a synchronous throw also denies.
+    const runner = (globalThis as Record<string, unknown>)['__rudderjs_ws_context_runner__'] as
+      | (<T>(rawReq: IncomingMessage, fn: () => T | Promise<T>) => Promise<T>)
+      | undefined
+    const allowed = runner
+      ? await runner(req, decide).catch(() => false)
+      : await Promise.resolve().then(decide).catch(() => false)
     if (!allowed) {
       try { ws.close(4401, 'unauthorized') } catch { /* already closing */ }
       return

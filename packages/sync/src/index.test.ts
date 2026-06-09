@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import { EventEmitter } from 'node:events'
 import assert from 'node:assert/strict'
 import * as Y from 'yjs'
@@ -863,6 +863,98 @@ describe('onAuth enforcement (server-side)', () => {
 
     assert.strictEqual(peer.readyState, 1, 'no onAuth → connection allowed')
     assert.strictEqual(Sync.getClientCount(docName), 1, 'no onAuth → joins the room')
+  })
+})
+
+// ─── onAuth via the framework context runner ─────────────────
+//
+// When core registers `globalThis['__rudderjs_ws_context_runner__']`,
+// `handleConnection` must route `onAuth` THROUGH it (so session/auth ALS is
+// live inside `onAuth`) rather than calling it raw. These stub the runner —
+// the real runner is exercised in @rudderjs/core + @rudderjs/auth.
+
+describe('onAuth delegates to the WS-upgrade context runner when present', () => {
+  const RUNNER_KEY = '__rudderjs_ws_context_runner__'
+  const g = globalThis as Record<string, unknown>
+  let previous: unknown
+
+  beforeEach(() => { previous = g[RUNNER_KEY] })
+  // Always restore so the raw-path enforcement tests above/below are unaffected
+  // by a leaked stub (globalThis is process-wide).
+  afterEach(() => {
+    if (previous === undefined) delete g[RUNNER_KEY]
+    else g[RUNNER_KEY] = previous
+  })
+
+  it('runs onAuth inside the runner, passing the raw req, and honors its result', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-runner-allow-${Date.now()}`
+    const peer = new MockWsSocket()
+    const rawReq = { url: `/ws-sync/${docName}`, headers: { cookie: 'rjs_sess=abc' } }
+
+    let runnerCalledWith: unknown
+    let onAuthRanInsideRunner = false
+    // Stub runner: records the raw req it got and wraps the callback so we can
+    // assert onAuth executed *inside* the runner (not raw).
+    g[RUNNER_KEY] = async (req: unknown, fn: () => unknown) => {
+      runnerCalledWith = req
+      return fn()
+    }
+
+    await _handleConnection(
+      peer as never,
+      rawReq as never,
+      persistence,
+      undefined,
+      undefined,
+      () => { onAuthRanInsideRunner = true; return true },
+    )
+
+    assert.strictEqual(runnerCalledWith, rawReq, 'runner must receive the raw IncomingMessage')
+    assert.strictEqual(onAuthRanInsideRunner, true, 'onAuth must run through the runner')
+    assert.strictEqual(peer.readyState, 1, 'runner-approved socket stays open')
+    assert.strictEqual(Sync.getClientCount(docName), 1, 'runner-approved socket joins the room')
+  })
+
+  it('denies (4401) when onAuth returns false through the runner', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-runner-deny-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    g[RUNNER_KEY] = async (_req: unknown, fn: () => unknown) => fn()
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      () => false,
+    )
+
+    assert.strictEqual(peer.closeCode, 4401, 'runner-denied socket closes 4401')
+    assert.strictEqual(Sync.getClientCount(docName), 0, 'runner-denied socket does not join')
+  })
+
+  it('fails closed when the runner itself rejects', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-runner-throw-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    // Runner rejects (e.g. a context middleware threw) — must deny, not crash.
+    g[RUNNER_KEY] = async () => { throw new Error('context middleware blew up') }
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      () => true,   // onAuth would allow, but the runner failed first
+    )
+
+    assert.strictEqual(peer.closeCode, 4401, 'a runner rejection denies the connection')
+    assert.strictEqual(Sync.getClientCount(docName), 0, 'no room join on a runner failure')
   })
 })
 
