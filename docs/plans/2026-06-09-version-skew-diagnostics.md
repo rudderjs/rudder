@@ -1,6 +1,6 @@
 # `@rudderjs/*` — cross-package version skew fails with cryptic ESM errors; needs a diagnostic
 
-**Status:** proposed (2026-06-09)
+**Status:** implemented (2026-06-09) — option 1 shipped as the `deps:version-skew` built-in doctor check (it lives in `@rudderjs/cli`'s `doctor/built-in/`, not console — console owns the registry, cli owns the built-ins). Option 2 (per-pair boot asserts) intentionally not built: the doctor check covers the class generically, and the session/core SESSION_MIDDLEWARE marker work (sibling plan) showed the skew-safe pattern for new cross-package symbols is local `Symbol.for` construction rather than imports — shrinking the fragile-pair surface instead of asserting around it.
 **Packages:** `@rudderjs/console` (doctor check — primary), optionally `@rudderjs/support` (boot-time assert helper)
 **Driver:** pilotiq-pro dep bump 2026-06-09 — two independent skew breaks, each surfacing as a cryptic ESM link error naming no package and no version. Both were root-caused by hand and mitigated app-side with exact `pnpm.overrides` pins.
 
