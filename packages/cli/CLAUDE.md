@@ -43,7 +43,7 @@ The `rudder` CLI — Laravel Artisan equivalent. Commander.js-based runner that 
 | `@rudderjs/sync` | `sync:docs`, `sync:clear`, `sync:inspect` |
 | `@rudderjs/broadcast` | `broadcast:connections` |
 | `@rudderjs/boost` | `boost:install`, `boost:update`, `boost:mcp` |
-| CLI + all framework packages | `doctor` — green/yellow/red pre-flight across 37 checks. CLI ships `env` / `structure` / `deps` / `runtime` checks; framework packages contribute via a `./doctor` subpath export (see `load-package-checks.ts`) |
+| CLI + all framework packages | `doctor` — green/yellow/red pre-flight across 38 checks. CLI ships `env` / `structure` / `deps` / `runtime` checks; framework packages contribute via a `./doctor` subpath export (see `load-package-checks.ts`) |
 
 ## Doctor pattern
 

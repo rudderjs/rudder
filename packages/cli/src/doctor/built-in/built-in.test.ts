@@ -329,3 +329,80 @@ describe('built-in checks — monorepo friendliness', () => {
     assert.ok(o.message.includes('parses'))
   })
 })
+
+// ─── deps:version-skew ───────────────────────────────────────────────────────
+//
+// Skewed sibling installs (exact pnpm.overrides pins below a sibling's
+// declared floor) fail at runtime as a bare ESM link error. The check reads
+// each installed @rudderjs package's declared sibling ranges and verifies
+// them against what actually resolves from that package's location.
+
+function writeInstalledPkg(name: string, version: string, extra: Record<string, unknown> = {}): void {
+  writeFile(path.join('node_modules', name, 'package.json'), JSON.stringify({ name, version, ...extra }))
+}
+
+describe('deps:version-skew', () => {
+  it('ok when no @rudderjs packages are installed', async () => {
+    writeFile('package.json', JSON.stringify({ name: 'demo' }))
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'ok')
+  })
+
+  it('flags a sibling pinned below a declared floor, naming both versions', async () => {
+    // The 2026-06-09 field case: session@2.3.0 needs contracts ^1.16.0,
+    // app's pnpm.overrides pinned contracts to 1.15.2.
+    writeInstalledPkg('@rudderjs/session', '2.3.0', {
+      dependencies: { '@rudderjs/contracts': '^1.16.0' },
+    })
+    writeInstalledPkg('@rudderjs/contracts', '1.15.2')
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'error')
+    assert.ok(o.message.includes('@rudderjs/session@2.3.0 requires @rudderjs/contracts ^1.16.0'))
+    assert.ok(o.message.includes('found 1.15.2'))
+    assert.ok(o.fix?.includes('overrides'))
+  })
+
+  it('ok when every sibling range is satisfied', async () => {
+    writeInstalledPkg('@rudderjs/session', '2.3.0', {
+      dependencies:     { '@rudderjs/contracts': '^1.16.0' },
+      peerDependencies: { '@rudderjs/core': '>=1.11.0' },
+    })
+    writeInstalledPkg('@rudderjs/contracts', '1.16.2')
+    writeInstalledPkg('@rudderjs/core', '1.12.1')
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'ok')
+    assert.ok(o.message.includes('2 sibling ranges satisfied'))
+  })
+
+  it('caret does not cross majors — peer on ^1 with 2.x installed is a violation', async () => {
+    writeInstalledPkg('@rudderjs/auth', '6.5.0', {
+      peerDependencies: { '@rudderjs/session': '^1.0.0' },
+    })
+    writeInstalledPkg('@rudderjs/session', '2.3.0')
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'error')
+  })
+
+  it('absent optional peers and workspace: ranges are skipped, unparseable ranges fail open', async () => {
+    writeInstalledPkg('@rudderjs/session', '2.3.0', {
+      peerDependencies:     { '@rudderjs/vite': '^2.0.0', '@rudderjs/contracts': 'workspace:^', '@rudderjs/core': 'beta-weird' },
+      peerDependenciesMeta: { '@rudderjs/vite': { optional: true } },
+    })
+    writeInstalledPkg('@rudderjs/core', '1.12.1') // 'beta-weird' is unreadable — must not fire
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'ok')
+  })
+
+  it('resolves a package-nested sibling copy ahead of the top level (npm nesting / pnpm store)', async () => {
+    // session carries its OWN nested contracts@1.16.0 (satisfying) while the
+    // top level holds 1.15.2 — what session loads is fine, so no violation.
+    writeInstalledPkg('@rudderjs/session', '2.3.0', {
+      dependencies: { '@rudderjs/contracts': '^1.16.0' },
+    })
+    writeFile(path.join('node_modules', '@rudderjs/session', 'node_modules', '@rudderjs/contracts', 'package.json'),
+      JSON.stringify({ name: '@rudderjs/contracts', version: '1.16.0' }))
+    writeInstalledPkg('@rudderjs/contracts', '1.15.2')
+    const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
+    assert.equal(o.status, 'ok')
+  })
+})

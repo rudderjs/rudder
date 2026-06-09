@@ -8,6 +8,7 @@ import './package-manager.js'
 import './env-vars.js'
 import './structure.js'
 import './deps.js'
+import './version-skew.js'
 import './runtime.js'
 import './production.js'
 

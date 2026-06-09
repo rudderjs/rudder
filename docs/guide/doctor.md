@@ -152,6 +152,7 @@ A fixer that throws is reported as a red fix outcome; doctor itself never crashe
 |---|---|
 | `deps:providers-manifest` | `bootstrap/cache/providers.json` exists and is newer than `package.json`. _Has fixer._ |
 | `deps:declared-installed` | Every `@rudderjs/*` in `package.json` resolves from `node_modules/`. |
+| `deps:version-skew` | Every installed `@rudderjs/*` package's declared ranges on sibling `@rudderjs/*` packages are satisfied by the versions that actually resolve. Catches exact `pnpm.overrides` pins that fall below a sibling's floor — the failure otherwise surfaces at runtime as a bare ESM link error (`does not provide an export named '…'`) naming no package and no version. |
 
 ### `runtime` (only under `--deep`)
 
