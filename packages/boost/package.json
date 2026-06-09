@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/boost",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "rudderjs": {
     "provider": "BoostProvider",
     "stage": "feature"
