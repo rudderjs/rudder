@@ -102,8 +102,13 @@ export interface SyncConfig {
    */
   providers?: SyncClientProvider[]
   /**
-   * Auth callback — return true to allow, false to deny.
-   * Receives the upgrade request and the document name.
+   * Authorization callback — return `true` to allow the connection, `false` to
+   * deny. Receives the upgrade request (headers + url) and the resolved
+   * document name. Runs BEFORE the socket joins the room or any document state
+   * is read/sent, so a denied client can observe nothing. Enforcement is fail
+   * closed: a rejected promise or a thrown error denies the connection (the
+   * socket is closed with WS code 4401). When omitted, every connection is
+   * allowed — set this on any multi-tenant deployment to scope rooms per user.
    */
   onAuth?: (req: { headers: Record<string, string | string[] | undefined>; url: string; token?: string }, docName: string) => boolean | Promise<boolean>
   /**
@@ -795,20 +800,48 @@ function encodeAwarenessRemoval(entries: Array<{ clientID: number; clock: number
   return out
 }
 
+// Extract docName from URL path: /ws-sync/my-doc → my-doc.
+// Strips the query string, then takes the LAST non-empty path segment.
+// Composite room ids must be flattened with a non-slash separator before
+// mounting (see SyncConfig.path JSDoc). Multi-segment paths only honor the
+// final segment, so distinct logical rooms with the same trailing segment
+// would otherwise collide into one Y.Doc.
+//
+// Shared so the auth gate (`onAuth`) and the room join resolve the SAME
+// docName from a URL — a divergence would let a client authorize one room and
+// join another.
+function extractDocName(url: string | undefined): string {
+  return ((url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
+}
+
 async function handleConnection(
   ws:              WsSocket,
   req:             IncomingMessage,
   persistence:     SyncPersistence,
   onChange?:       SyncConfig['onChange'],
   onFirstConnect?: SyncConfig['onFirstConnect'],
+  onAuth?:         SyncConfig['onAuth'],
 ): Promise<void> {
-  // Extract docName from URL path: /ws-sync/my-doc → my-doc.
-  // Strips the query string, then takes the LAST non-empty path segment.
-  // Composite room ids must be flattened with a non-slash separator before
-  // mounting (see SyncConfig.path JSDoc). Multi-segment paths only honor the
-  // final segment, so distinct logical rooms with the same trailing segment
-  // would otherwise collide into one Y.Doc.
-  const docName  = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
+  const docName  = extractDocName(req.url)
+
+  // Authorization gate. `onAuth` is optional: unset → every connection is
+  // allowed (backward-compatible default). Set → it runs BEFORE the doc is
+  // touched: a rejected socket never joins the room, never fires the
+  // first-connect seed (which reads the backing DB row), and is never sent a
+  // state vector. Fail closed — a throwing check denies. Closes with WS code
+  // 4401 (application-range "unauthorized").
+  if (onAuth) {
+    // `Promise.resolve().then(...)` folds a synchronous throw and an async
+    // rejection into one `.catch` — both fail closed to `false`.
+    const allowed = await Promise.resolve()
+      .then(() => onAuth({ headers: req.headers, url: req.url ?? '/' }, docName))
+      .catch(() => false)
+    if (!allowed) {
+      try { ws.close(4401, 'unauthorized') } catch { /* already closing */ }
+      return
+    }
+  }
+
   const clientId = getClientId(ws)
   const room     = getOrCreateRoom(docName, persistence)
   room.clients.add(ws)
@@ -1137,7 +1170,7 @@ export class SyncProvider extends ServiceProvider {
       const wss = new WebSocketServer({ noServer: true })
 
       wss.on('connection', (ws, req) => {
-        void handleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect)
+        void handleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect, cfg.onAuth)
       })
 
       // Cross-package WebSocket upgrade chain — these key names are part of

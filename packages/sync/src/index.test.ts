@@ -628,14 +628,19 @@ describe('MemoryPersistence instances are independent', () => {
 class MockWsSocket extends EventEmitter {
   public readyState = 1 // ws.OPEN
   public sent: Uint8Array[] = []
+  public closeCode: number | undefined
+  public closeReason: string | undefined
 
   send(data: Uint8Array | Buffer): void {
     this.sent.push(data instanceof Buffer ? new Uint8Array(data) : data)
   }
 
-  // The handler calls `ws.close()` in some paths; no-op in the mock.
-  close(): void {
+  // The handler calls `ws.close(code, reason)` in some paths (auth denial,
+  // persistence-load failure); capture the args so tests can assert them.
+  close(code?: number, reason?: string): void {
     this.readyState = 3 // ws.CLOSED
+    this.closeCode = code
+    this.closeReason = reason
   }
 
   // Inject an inbound frame as if it had arrived over the wire.
@@ -743,6 +748,121 @@ describe('Multi-peer WS broadcast', () => {
       peerInBBaseline,
       'peer in a different room should NOT receive frames from another room',
     )
+  })
+})
+
+// ─── onAuth enforcement ──────────────────────────────────────
+//
+// The unit tests above (SyncConfig.onAuth) only call the callback in
+// isolation. These drive `_handleConnection` to assert the SERVER actually
+// enforces it: a denied socket joins no room, receives no state, and closes
+// with 4401; failures fail closed; an absent callback allows everyone.
+
+describe('onAuth enforcement (server-side)', () => {
+  it('denies the connection when onAuth returns false — no room join, no state sent', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-deny-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      () => false,
+    )
+
+    assert.strictEqual(peer.readyState, 3, 'socket should be closed')
+    assert.strictEqual(peer.closeCode, 4401, 'should close with the unauthorized code')
+    assert.strictEqual(peer.sent.length, 0, 'a denied socket must never be sent a state vector')
+    assert.strictEqual(Sync.getClientCount(docName), 0, 'a denied socket must not join the room')
+  })
+
+  it('allows the connection when onAuth returns true', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-allow-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      () => true,
+    )
+
+    assert.strictEqual(peer.readyState, 1, 'socket should stay open')
+    assert.strictEqual(decodeSyncSubType(peer.sent[0]!), 0 /* syncStep1 */, 'authorized socket gets a state vector')
+    assert.strictEqual(Sync.getClientCount(docName), 1, 'authorized socket joins the room')
+  })
+
+  it('receives the resolved docName and request headers', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-args-${Date.now()}`
+    const peer = new MockWsSocket()
+    let seenDoc: string | undefined
+    let seenAuth: unknown
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}?v=1`, headers: { authorization: 'Bearer tok' } } as never,
+      persistence,
+      undefined,
+      undefined,
+      (req, doc) => { seenDoc = doc; seenAuth = req.headers.authorization; return true },
+    )
+
+    assert.strictEqual(seenDoc, docName, 'onAuth sees the same docName the room join uses')
+    assert.strictEqual(seenAuth, 'Bearer tok', 'onAuth receives the request headers')
+  })
+
+  it('fails closed when onAuth throws', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-throw-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      () => { throw new Error('resolver blew up') },
+    )
+
+    assert.strictEqual(peer.closeCode, 4401, 'a throwing resolver denies the connection')
+    assert.strictEqual(Sync.getClientCount(docName), 0, 'no room join on a thrown auth error')
+  })
+
+  it('fails closed when onAuth rejects (async)', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-reject-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    await _handleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+      undefined,
+      undefined,
+      async () => { throw new Error('async denial') },
+    )
+
+    assert.strictEqual(peer.closeCode, 4401, 'a rejected promise denies the connection')
+    assert.strictEqual(Sync.getClientCount(docName), 0, 'no room join on a rejected auth promise')
+  })
+
+  it('allows everyone when onAuth is absent (backward-compatible default)', async () => {
+    const persistence = new MemoryPersistence()
+    const docName = `auth-absent-${Date.now()}`
+    const peer = new MockWsSocket()
+
+    await _handleConnection(peer as never, { url: `/ws-sync/${docName}` } as never, persistence)
+
+    assert.strictEqual(peer.readyState, 1, 'no onAuth → connection allowed')
+    assert.strictEqual(Sync.getClientCount(docName), 1, 'no onAuth → joins the room')
   })
 })
 
