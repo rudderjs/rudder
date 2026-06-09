@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
-  <a href="https://www.npmjs.com/package/create-rudder"><img src="https://img.shields.io/npm/v/create-rudder?label=create-rudder&color=f5a623" alt="create-rudder" /></a>
+  <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f97316" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/create-rudder"><img src="https://img.shields.io/npm/v/create-rudder?label=create-rudder&color=f97316" alt="create-rudder" /></a>
   <a href="https://github.com/rudderjs/rudder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
@@ -45,15 +45,15 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## Highlights
 
-- **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
-- **AI-native** — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage), agents with tools, streaming, MCP, queue-backed runs, approval gates.
-- **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
-- **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (built-in native engine, or Prisma / Drizzle), one bootstrap file.
-- **Pay-as-you-go** — 51 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
-- **Auto-discovery** — install a `@rudderjs/*` package, done. The provider manifest self-heals at boot: no command to run, no imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
-- **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones. Introspection on tap — `route:list --verbose`, `event:list`, `config:show` for the "where is this wired up?" questions.
-- **TypeScript-first** — typed everything from one convention each: views (`view('id', props)` checked against the component's `Props`), routes (path params, query / body / response schemas, + `route()` lookups), models (column types generated from migrations), `config()` (dot-paths from your own `config/`), and `Env.get()` (keys from `.env.example`). Validators are [Standard Schema](https://standardschema.dev) (Zod / Valibot / ArkType). Plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, WinterCG-compatible runtime.
-- **Code-first API docs** — declare responses with `.responds(schema)` and `@rudderjs/openapi` emits an [OpenAPI 3.1 spec + Swagger UI](./docs/guide/openapi.md) from your route table. No hand-written YAML, opt-in, FastAPI-style.
+- **SSR views from a controller** — `return view('id', props)` renders typed React / Vue / Solid through Vike: SPA nav, ~400 bytes/nav, no Inertia tax. `terminal('id', props)` does the same in the terminal via Ink.
+- **AI-native** — 15 providers (Anthropic, OpenAI, Google, Bedrock, Mistral, and more), agents with tools, streaming, MCP, queue-backed runs, and approval gates.
+- **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab on the same Hono server. No second daemon, no proxy.
+- **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, and an active-record ORM (native, Prisma, or Drizzle).
+- **Pay-as-you-go** — 51 `@rudderjs/*` packages; start with three. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without touching app code.
+- **Auto-discovery** — install a package, done. The provider manifest self-heals at boot — no imports, no provider array to maintain. Laravel-style discovery for Node.
+- **One CLI** — `rudder make:*`, `queue:*`, `db:*`, and your own commands, plus `doctor --fix` and introspection (`route:list`, `event:list`, `config:show`).
+- **Typed end to end** — views, routes, models, `config()`, and `Env.get()` each typed from one convention. Validators are [Standard Schema](https://standardschema.dev) (Zod / Valibot / ArkType); strict ESM + NodeNext, WinterCG-compatible.
+- **Code-first API docs** — `.responds(schema)` + `@rudderjs/openapi` emit an [OpenAPI 3.1 spec + Swagger UI](./docs/guide/openapi.md) from your route table. No YAML, opt-in, FastAPI-style.
 
 ---
 
