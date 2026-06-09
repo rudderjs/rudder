@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
+import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, Auth, runWithAuth, runWithTestUser, type AuthConfig } from './auth-manager.js'
 import type { Authenticatable } from './contracts.js'
@@ -87,7 +88,7 @@ export function userToPlain(user: unknown): AuthUser {
  * Attaches `req.user` if authenticated (does not block unauthenticated requests).
  */
 export function AuthMiddleware(guardName?: string): MiddlewareHandler {
-  return async function AuthMiddleware(req, res, next) {
+  const middleware: MiddlewareHandler = async function AuthMiddleware(req, res, next) {
     const manager = app().make<AuthManager>('auth.manager')
     const resolvedGuard = guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard
 
@@ -173,6 +174,12 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
       if (handlerThrew) throw handlerError
     })
   }
+
+  // Mark as a request-context middleware so the WS-upgrade context runner
+  // (@rudderjs/core) runs it around a sync `onAuth` — establishing the auth ALS
+  // scope so `Auth.user()` resolves on an upgrade as in an HTTP handler.
+  ;(middleware as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT] = true
+  return middleware
 }
 
 /**

@@ -590,6 +590,22 @@ export class RudderJS {
       router.mount(adapter)
       adapter.setErrorHandler?.(errorHandler)
     })
+
+    // WS-upgrade auth context: register a runner that establishes the same
+    // request-scoped context (session + auth ALS) an HTTP request gets, so a
+    // sync `onAuth` callback can call `Auth.user()` / `Session.*` directly. It
+    // closes over the web group's `REQUEST_CONTEXT`-tagged middleware (session,
+    // auth) — generic Node IncomingMessage → AppRequest synthesis, no
+    // server-hono dependency. `_createHandler()` runs at first request in both
+    // dev and prod (and re-runs on every dev re-boot with fresh middleware
+    // closures), so the seam is rebuilt in lockstep with the handler.
+    // `@rudderjs/sync` reads it off globalThis (fail-closed) when present;
+    // absent → `onAuth` runs raw (standalone sync, backward compatible).
+    // Lazy-imported so the module never lands in a client bundle (server-only
+    // path, same reason as maintenance above).
+    const { createWsContextRunner } = await import('./ws-context-runner.js')
+    ;(globalThis as Record<string, unknown>)['__rudderjs_ws_context_runner__'] =
+      createWsContextRunner(mw.getGroupHandlers('web'))
   }
 
   /** Boot providers without starting an HTTP server — used by the CLI */

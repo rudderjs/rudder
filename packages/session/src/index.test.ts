@@ -236,6 +236,11 @@ describe('SessionInstance — regenerate()', () => {
 // ─── sessionMiddleware ─────────────────────────────────────────────────────────
 
 describe('sessionMiddleware', () => {
+  it('tags its returned middleware with REQUEST_CONTEXT (WS-upgrade context runner)', () => {
+    const mw = sessionMiddleware(config)
+    assert.equal((mw as unknown as Record<symbol, unknown>)[Symbol.for('rudderjs.requestContext')], true)
+  })
+
   it('attaches session to req.raw.__rjs_session', async () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes()

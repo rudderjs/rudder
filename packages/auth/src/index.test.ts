@@ -464,6 +464,11 @@ describe('AuthMiddleware()', () => {
   it('returns a function', () => {
     assert.strictEqual(typeof AuthMiddleware(), 'function')
   })
+
+  it('tags its returned middleware with REQUEST_CONTEXT (WS-upgrade context runner)', () => {
+    const mw = AuthMiddleware()
+    assert.equal((mw as unknown as Record<symbol, unknown>)[Symbol.for('rudderjs.requestContext')], true)
+  })
 })
 
 // ─── Test-user override (for `@rudderjs/testing`'s actingAs) ──

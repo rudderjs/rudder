@@ -999,6 +999,27 @@ export type MiddlewareHandler = (
   next: () => Promise<void>
 ) => unknown | Promise<unknown>
 
+/**
+ * Marker for middleware that establish request-scoped context (the session and
+ * auth `AsyncLocalStorage` scopes) rather than gate or mutate a request.
+ *
+ * A middleware tags its returned function with this symbol:
+ *
+ *   const mw = async function SessionMiddleware(req, res, next) { … }
+ *   ;(mw as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT] = true
+ *
+ * The WebSocket-upgrade context runner (`@rudderjs/core`) filters the resolved
+ * `web` group to just the tagged handlers and runs them around a sync `onAuth`
+ * callback — so `Auth.user()` / `Session.*` resolve on an upgrade exactly as in
+ * an HTTP handler, without dragging CSRF / rate-limit / app middleware into the
+ * upgrade path. Apps that write their own ALS-establishing middleware can opt in
+ * by setting the same marker.
+ *
+ * Keyed via `Symbol.for` (global registry) so a package that references it by
+ * the literal string resolves to the same symbol.
+ */
+export const REQUEST_CONTEXT: unique symbol = Symbol.for('rudderjs.requestContext') as never
+
 // ─── HTTP Methods ──────────────────────────────────────────
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
