@@ -1,5 +1,12 @@
 # rudderjs-playground-web
 
+## 0.0.103
+
+### Patch Changes
+
+- Updated dependencies [94556fb]
+  - @rudderjs/boost@1.3.2
+
 ## 0.0.102
 
 ### Patch Changes
