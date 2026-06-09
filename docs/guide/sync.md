@@ -127,6 +127,27 @@ export default {
 
 `update` is the binary CRDT update (a `Uint8Array`). For semantic processing, decode it through the document type — see the editor adapters below.
 
+### Reading the signed-in user in `onAuth`
+
+When your app runs under the default server adapter (`@rudderjs/server-hono`), the framework establishes the **same session and auth context on a WebSocket upgrade that an HTTP request gets**, then runs `onAuth` inside it. So you can call `Auth.user()` / `Session` directly — exactly as in a controller — instead of re-parsing the cookie by hand:
+
+```ts
+// config/sync.ts
+import { Auth } from '@rudderjs/auth'
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  // Authorize a collab room by the signed-in user — no manual cookie/token parsing.
+  onAuth: async (_req, docName) => {
+    const user = await Auth.user()   // resolves from the session cookie, as in a controller
+    if (!user) return false          // unauthenticated upgrade → deny
+    return canAccess(user, docName)
+  },
+} satisfies SyncConfig
+```
+
+Only the middleware that establish request context — session and auth — run on the upgrade; CSRF, rate-limit, and other `web`-group middleware are skipped (a rate-limiter would otherwise spend a token per upgrade). Standalone `@rudderjs/sync` with no server adapter has no context runner, so there `onAuth` receives only the raw `headers` + `url` (use the token pattern above). Both forms **fail closed** — a thrown error, a rejected promise, or a `false` return all deny and close the socket with code 4401.
+
 ## Editor adapters
 
 The core `@rudderjs/sync` package handles transport and persistence. For server-side mutations against editor-specific document shapes (rich-text trees, structured documents), import an adapter from the matching subpath:
