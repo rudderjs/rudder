@@ -49,7 +49,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 - **AI-native** — 15 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina, OpenRouter, Bedrock, ElevenLabs, Voyage), agents with tools, streaming, MCP, queue-backed runs, approval gates.
 - **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
 - **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (built-in native engine, or Prisma / Drizzle), one bootstrap file.
-- **Pay-as-you-go** — 49 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
+- **Pay-as-you-go** — 51 first-party `@rudderjs/*` packages. Start with three, bolt on what you need. Swap adapters (native ↔ Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3) without changing app code.
 - **Auto-discovery** — install a `@rudderjs/*` package, done. The provider manifest self-heals at boot: no command to run, no imports to add, no provider array to maintain. Laravel-style package discovery for the Node ecosystem.
 - **One CLI** — `pnpm rudder make:*`, `queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, plus your own commands. Scaffolders ship with their owning packages. First-class diagnostics — `pnpm rudder doctor` pre-flights every layer green/yellow/red, with `--fix` for the safe ones. Introspection on tap — `route:list --verbose`, `event:list`, `config:show` for the "where is this wired up?" questions.
 - **TypeScript-first** — typed everything from one convention each: views (`view('id', props)` checked against the component's `Props`), routes (path params, query / body / response schemas, + `route()` lookups), models (column types generated from migrations), `config()` (dot-paths from your own `config/`), and `Env.get()` (keys from `.env.example`). Validators are [Standard Schema](https://standardschema.dev) (Zod / Valibot / ArkType). Plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext, WinterCG-compatible runtime.
@@ -477,13 +477,13 @@ Visit `http://localhost:3000`. Done.
 
 ---
 
-## Packages (49)
+## Packages (51)
 
 > Three foundation packages get you running. The rest are opt-in.
 
-**Foundation** — [`core`](./packages/core) · [`router`](./packages/router) · [`server-hono`](./packages/server-hono) · [`middleware`](./packages/middleware) · [`console`](./packages/console) · [`cli`](./packages/cli) · [`terminal`](./packages/terminal) · [`support`](./packages/support) · [`contracts`](./packages/contracts)
+**Foundation** — [`core`](./packages/core) · [`router`](./packages/router) · [`server-hono`](./packages/server-hono) · [`middleware`](./packages/middleware) · [`console`](./packages/console) · [`cli`](./packages/cli) · [`terminal`](./packages/terminal) · [`support`](./packages/support) · [`contracts`](./packages/contracts) · [`json-schema`](./packages/json-schema)
 
-**HTTP & frontend** — [`view`](./packages/view) · [`vite`](./packages/vite) · [`session`](./packages/session)
+**HTTP & frontend** — [`view`](./packages/view) · [`vite`](./packages/vite) · [`session`](./packages/session) · [`openapi`](./packages/openapi)
 
 **Data** — [`orm`](./packages/orm) · [`database`](./packages/database) · [`orm-prisma`](./packages/orm-prisma) · [`orm-drizzle`](./packages/orm-drizzle) · [`cache`](./packages/cache) · [`storage`](./packages/storage)
 
