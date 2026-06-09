@@ -100,7 +100,7 @@ Route.get('/dashboard', async () => view('dashboard'))
 ```ts
 // routes/api.ts — typed path, query, AND body in one declaration
 import { Route, route } from '@rudderjs/router'
-import { z } from 'zod'
+import { z } from '@rudderjs/core'
 
 Route.post(
   '/api/users/:id',
@@ -238,7 +238,7 @@ One Model API over three engines: the **built-in native engine** (`@rudderjs/dat
 
 ```ts
 import { agent, toolDefinition } from '@rudderjs/ai'
-import { z } from 'zod'
+import { z } from '@rudderjs/core'
 
 const getWeather = toolDefinition({
   name: 'get_weather',
@@ -381,7 +381,7 @@ export class EchoServer extends McpServer {
 
 ```ts
 // app/Mcp/EchoTool.ts — typed input, DI-injected dependencies
-import { z } from 'zod'
+import { z } from '@rudderjs/core'
 import { McpTool, McpResponse, Description, Handle } from '@rudderjs/mcp'
 import { GreetingService } from 'App/Services/GreetingService.js'
 

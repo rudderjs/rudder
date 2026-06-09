@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '@rudderjs/core'
 import { McpTool, McpResponse, Description, Handle } from '@rudderjs/mcp'
 import type { McpToolResult } from '@rudderjs/mcp'
 import { GreetingService } from 'App/Services/GreetingService.js'

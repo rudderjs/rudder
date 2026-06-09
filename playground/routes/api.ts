@@ -1,6 +1,6 @@
 import { Route } from '@rudderjs/router'
 import { view } from '@rudderjs/view'
-import { resolve, dd, dump, config, validate } from '@rudderjs/core'
+import { resolve, dd, dump, config, validate, z } from '@rudderjs/core'
 import { broadcast, broadcastStats } from '@rudderjs/broadcast'
 import { getLocale, runWithLocale, setLocale, trans } from '@rudderjs/localization'
 import { Cache } from '@rudderjs/cache'
@@ -17,7 +17,6 @@ import { Post } from 'App/Models/Post.js'
 import { Video } from 'App/Models/Video.js'
 import { Comment } from 'App/Models/Comment.js'
 import { Tag } from 'App/Models/Tag.js'
-import { z } from 'zod'
 
 // Register decorator-based controllers
 Route.registerController(TestController)

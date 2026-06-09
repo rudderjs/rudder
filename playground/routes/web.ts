@@ -576,7 +576,7 @@ Route.get('/test/mcp', async (_req, res) => {
 // GET /test/ai — fires an AI agent execution for telescope testing
 Route.get('/test/ai', async (_req, res) => {
   const { agent, toolDefinition } = await import('@rudderjs/ai')
-  const { z } = await import('zod')
+  const { z } = await import('@rudderjs/core')
 
   const calculator = toolDefinition({
     name: 'calculator',
