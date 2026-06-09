@@ -24,7 +24,7 @@ export interface GenerateClaudeMdInput {
 
 const MCP_TOOLS: ReadonlyArray<{ name: string; summary: string }> = [
   { name: 'app_info',         summary: 'installed `@rudderjs/*` versions, Node version, package manager' },
-  { name: 'db_schema',        summary: 'parsed Prisma schema models + raw `.prisma` source' },
+  { name: 'db_schema',        summary: 'parsed schema models + raw source (native `.rudder` registry, or Prisma schema)' },
   { name: 'route_list',       summary: 'registered HTTP routes (method, path, middleware, source file)' },
   { name: 'model_list',       summary: 'ORM models in `app/Models/` with tables + fields' },
   { name: 'config_get',       summary: 'read `config/*.ts` files by key' },
