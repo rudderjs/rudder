@@ -119,3 +119,19 @@ export type {
   FetchHandler,
   ServerAdapterProvider,
 } from '@rudderjs/contracts'
+
+// Runtime marker for request-scoped-context middleware — consumed by the
+// WS-upgrade context runner registered below. Value export (not type-only).
+export { REQUEST_CONTEXT } from '@rudderjs/contracts'
+
+// ─── WebSocket-upgrade context runner ──────────────────────
+// Server-only (uses a `node:http` type). Exposed so adapters/tests can build a
+// runner directly; the framework registers it on its globalThis seam at boot.
+
+export {
+  createWsContextRunner,
+  registerWsContextRunner,
+  synthesizeRequest,
+  makeThrowawayResponse,
+} from './ws-context-runner.js'
+export type { WsContextRunner } from './ws-context-runner.js'

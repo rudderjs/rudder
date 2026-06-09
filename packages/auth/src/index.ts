@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
+import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, Auth, runWithAuth, runWithTestUser, type AuthConfig } from './auth-manager.js'
 import type { Authenticatable } from './contracts.js'
@@ -87,7 +88,7 @@ export function userToPlain(user: unknown): AuthUser {
  * Attaches `req.user` if authenticated (does not block unauthenticated requests).
  */
 export function AuthMiddleware(guardName?: string): MiddlewareHandler {
-  return async function AuthMiddleware(req, res, next) {
+  const fn: MiddlewareHandler = async function AuthMiddleware(req, res, next) {
     const manager = app().make<AuthManager>('auth.manager')
     const resolvedGuard = guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard
 
@@ -173,6 +174,13 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
       if (handlerThrew) throw handlerError
     })
   }
+
+  // Tag as a request-scoped-context middleware. The framework's WS-upgrade
+  // context runner runs only REQUEST_CONTEXT-tagged web middleware around a
+  // sync `onAuth` callback, so `Auth.user()` resolves on an upgrade exactly as
+  // in an HTTP handler (without CSRF / rate-limit / app middleware running).
+  ;(fn as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT] = true
+  return fn
 }
 
 /**

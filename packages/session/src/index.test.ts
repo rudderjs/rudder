@@ -1,5 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
 import { SessionInstance, Session, sessionMiddleware, SessionProvider, RedisDriver, type SessionConfig } from './index.js'
@@ -236,6 +237,11 @@ describe('SessionInstance — regenerate()', () => {
 // ─── sessionMiddleware ─────────────────────────────────────────────────────────
 
 describe('sessionMiddleware', () => {
+  it('tags the returned middleware with REQUEST_CONTEXT (WS-upgrade context runner)', () => {
+    const mw = sessionMiddleware(config)
+    assert.equal((mw as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT], true)
+  })
+
   it('attaches session to req.raw.__rjs_session', async () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes()

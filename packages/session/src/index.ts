@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import { reusableConnection } from '@rudderjs/support'
+import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 
 // Side-effect import — pulls in the Vike.PageContext.flash augmentation so
@@ -482,7 +483,7 @@ function makeDriver(config: SessionConfig): InternalDriver {
 export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
   const driver = makeDriver(config)
 
-  return async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
+  const fn = async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
     const cookieHeader = req.headers['cookie'] ?? ''
     const cookieValue  = parseCookie(cookieHeader, config.cookie.name)
     const payload      = await driver.load(cookieValue)
@@ -516,6 +517,13 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
     }
     if (nextErrored) throw nextErr
   }
+
+  // Tag as a request-scoped-context middleware. The framework's WS-upgrade
+  // context runner runs only REQUEST_CONTEXT-tagged web middleware around a
+  // sync `onAuth` callback, so `Session.*` resolves on an upgrade exactly as
+  // in an HTTP handler (without CSRF / rate-limit / app middleware running).
+  ;(fn as unknown as Record<symbol, unknown>)[REQUEST_CONTEXT] = true
+  return fn
 }
 
 // ─── Zero-config middleware (reads config from DI) ─────────
