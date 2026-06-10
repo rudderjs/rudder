@@ -268,19 +268,16 @@ async function packWorkspacePackages(): Promise<Record<string, string>> {
 /** Apply the @rudderjs/* + Prisma overrides to a scaffolded `package.json` in
  *  the field the PM understands. Mutates pkg in place; caller writes the file.
  *
- *  - pnpm: `pnpm.overrides` works for both direct + transitive deps.
+ *  - pnpm: no-op here. pnpm 11 no longer reads the `pnpm` field from
+ *    package.json, so the overrides go into `pnpm-workspace.yaml` instead —
+ *    written by the caller (see the pnpm-workspace.yaml block below).
  *  - npm: `overrides` rejects entries that conflict with direct deps (EOVERRIDE).
  *    Rewrite the matching entries in `dependencies`/`devDependencies` directly.
  *  - yarn (classic): `resolutions` covers transitive, but a direct dep with a
  *    `latest` literal will resolve to the published version first. Rewrite
  *    direct deps for parity with npm. */
 function applyOverrides(pkg: Record<string, unknown>, pm: PM, overrides: Record<string, string>): void {
-  if (pm === 'pnpm') {
-    const pnpm = (pkg['pnpm'] as Record<string, unknown> | undefined) ?? {}
-    pnpm['overrides'] = overrides
-    pkg['pnpm'] = pnpm
-    return
-  }
+  if (pm === 'pnpm') return
 
   const rewrittenDirect = new Set<string>()
   for (const field of ['dependencies', 'devDependencies'] as const) {
@@ -639,9 +636,23 @@ async function main(): Promise<void> {
 
     // pnpm needs a workspace marker so it doesn't walk up and pick up the parent
     // rudderjs workspace. npm + yarn use the `workspaces` field in package.json
-    // and never walk up, so the marker is pnpm-only.
+    // and never walk up, so the marker is pnpm-only. This file overwrites the one
+    // the scaffold template emits, so it must carry the same two settings the
+    // template relies on, plus the link: overrides:
+    //   - dangerouslyAllowAllBuilds: pnpm 11's strictDepBuilds turns an ignored
+    //     build script (e.g. the better-sqlite3 native binding) into a HARD install
+    //     failure. The template sets this; drop it and `pnpm install` exits 1.
+    //   - overrides: pnpm 11 ignores the package.json `pnpm` field, so the
+    //     @rudderjs/* link: specs + Prisma pins must live here, not in package.json.
     if (PM_FLAG === 'pnpm') {
-      await writeFile(path.join(target, 'pnpm-workspace.yaml'), 'packages: ["."]\n')
+      const overridesYaml = Object.entries(overrides)
+        .map(([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`)
+        .join('\n')
+      const workspaceYaml =
+        'packages: ["."]\n' +
+        'dangerouslyAllowAllBuilds: true\n' +
+        (overridesYaml ? `overrides:\n${overridesYaml}\n` : '')
+      await writeFile(path.join(target, 'pnpm-workspace.yaml'), workspaceYaml)
     }
 
     // Mirror the auth-view vendor step from create-rudder's interactive
