@@ -9,13 +9,22 @@ packages:
   - playground-rsc
   - docs
 
-onlyBuiltDependencies:
-  - '@prisma/engines'
-  - prisma
-  - msgpackr-extract
-  - protobufjs
-  - better-sqlite3
-  - sharp
+# pnpm 11 prompts before purging node_modules on a store-version change;
+# disable so non-TTY installs (CI, scripts) don't abort with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+confirmModulesPurge: false
+
+allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  msgpackr-extract: true
+  protobufjs: true
+  better-sqlite3: true
+  sharp: true
+  argon2: false
+  esbuild: false
+  leveldown: false
+  msw: false
+  rolldown: false
 
 overrides:
   tsdown>rolldown: 1.0.0-beta.8

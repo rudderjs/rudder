@@ -2,7 +2,7 @@
   "name": "rudderjs",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.29.3",
+  "packageManager": "pnpm@11.5.3",
   "scripts": {
     "build": "turbo run build",
     "build:publish": "turbo run build --filter=./packages/* --filter=./create-rudder --filter=./create-rudder-app",
