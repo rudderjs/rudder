@@ -11,7 +11,7 @@ Rudder Doctor
 
 env
   ✓ Node version             v22.14.0 (matches ^20.19.0 || >=22.12.0)
-  ✓ Package manager          pnpm 10.29.3 — lockfile present
+  ✓ Package manager          pnpm 11.5.3 — lockfile present
   ✓ APP_KEY                  set, 32 bytes
   ✗ AUTH_SECRET              missing
      fix: Add AUTH_SECRET to .env (any random string ≥ 32 chars)
