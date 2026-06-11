@@ -48,6 +48,49 @@ export const DDL = [
   `CREATE INDEX idx_post_tags_tag_id ON post_tags(tag_id)`,
 ]
 
+// Postgres DDL — the same shape mapped onto Postgres types: SERIAL for the
+// AUTOINCREMENT primary keys, real BOOLEAN for `published` (SQLite has no bool,
+// so it stores INTEGER 0/1; no op's result value exposes `published`, so this
+// divergence stays invisible to the parity gate). `created_at` is TEXT on both
+// engines so the stored bytes — and the hydration work — match exactly.
+export const PG_DDL = [
+  `CREATE TABLE users (
+     id         SERIAL PRIMARY KEY,
+     name       TEXT NOT NULL,
+     email      TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE TABLE posts (
+     id         SERIAL PRIMARY KEY,
+     user_id    INTEGER NOT NULL,
+     title      TEXT NOT NULL,
+     body       TEXT NOT NULL,
+     view_count INTEGER NOT NULL DEFAULT 0,
+     published  BOOLEAN NOT NULL DEFAULT false,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX idx_posts_user_id ON posts(user_id)`,
+  `CREATE TABLE comments (
+     id         SERIAL PRIMARY KEY,
+     post_id    INTEGER NOT NULL,
+     user_id    INTEGER NOT NULL,
+     body       TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX idx_comments_post_id ON comments(post_id)`,
+  `CREATE INDEX idx_comments_user_id ON comments(user_id)`,
+  `CREATE TABLE tags (
+     id   SERIAL PRIMARY KEY,
+     name TEXT NOT NULL
+   )`,
+  `CREATE TABLE post_tags (
+     post_id INTEGER NOT NULL,
+     tag_id  INTEGER NOT NULL,
+     PRIMARY KEY (post_id, tag_id)
+   )`,
+  `CREATE INDEX idx_post_tags_tag_id ON post_tags(tag_id)`,
+]
+
 // Connection pragmas applied IDENTICALLY by every contender's setup. WAL +
 // NORMAL is the standard production SQLite profile; pinning them removes
 // journal/sync mode as a hidden variable between ORMs.

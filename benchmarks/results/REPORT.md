@@ -4,7 +4,7 @@ RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an iden
 
 > Every op is result-parity asserted across all three ORMs before timing (`pnpm bench:parity`) — they each do identical work. Methodology + fairness rules: [`README.md`](../README.md) and [the plan](../../docs/plans/2026-06-11-comparative-orm-benchmark-suite.md).
 
-> **SQLite caveat:** SQLite removes network + connection-pool variance, which under-represents Prisma's query-engine overhead (more visible on Postgres over a socket). Read these as query-layer/hydration numbers; Postgres is the committed follow-up.
+> **SQLite caveat:** SQLite removes network + connection-pool variance, which under-represents Prisma's query-engine overhead (more visible on Postgres over a socket — see [`REPORT-postgres.md`](REPORT-postgres.md)). Read these as query-layer/hydration numbers.
 
 ## SQLite — 1k
 

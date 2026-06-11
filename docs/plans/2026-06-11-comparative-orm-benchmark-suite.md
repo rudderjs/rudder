@@ -1,8 +1,8 @@
 # Comparative ORM benchmark suite (§14 #11)
 
 **Filed:** 2026-06-11
-**Status:** ✅ SHIPPED (2026-06-11) — `benchmarks/` workspace package; SQLite 1k/10k committed in `benchmarks/results/`, 100k + Postgres are the documented follow-ups. See the "Definition of done" at the bottom; all but the 100k-numbers row are met.
-**Scope (decided 2026-06-11):** competitors = **Prisma + Drizzle only**; database = **SQLite first** (Postgres a follow-up); location = **in-monorepo `benchmarks/` workspace package**; this document is the methodology to sign off before building.
+**Status:** ✅ SHIPPED (2026-06-11) — `benchmarks/` workspace package; SQLite 1k/10k committed in `benchmarks/results/REPORT.md`. **Postgres follow-up shipped (2026-06-11):** the suite is now engine-parameterized (`BENCH_ENGINE`), with Postgres 1k/10k committed in `benchmarks/results/REPORT-postgres.md` (rudder + Drizzle on porsager, Prisma on node-pg, parity-gated). The only remaining row is 100k numbers on both engines (dedicated-machine heavy run).
+**Scope (decided 2026-06-11):** competitors = **Prisma + Drizzle only**; databases = **SQLite + Postgres** (Postgres shipped as the follow-up); location = **in-monorepo `benchmarks/` workspace package**; this document is the methodology signed off before building.
 
 ## Context
 
@@ -110,7 +110,8 @@ Each operation is implemented three times (rudder / drizzle / prisma) behind a u
 
 ## Definition of done
 
-- `benchmarks/` package runs `pnpm --filter @rudderjs/benchmarks bench` green on a clean clone after `bench:setup`.
-- `benchmarks/results/REPORT.md` committed with real SQLite 1k/10k/100k numbers for rudder/drizzle/prisma across all 10 ops, parity-asserted.
-- §Performance + §14 #11 updated to point at it; ROADMAP row added.
-- No changeset (private package, `chore:`); CI bench workflow is `workflow_dispatch`-only and non-gating.
+- `benchmarks/` package runs `pnpm --filter @rudderjs/benchmarks bench` green on a clean clone after `bench:setup`. ✅
+- `benchmarks/results/REPORT.md` committed with real SQLite 1k/10k numbers for rudder/drizzle/prisma across all 10 ops, parity-asserted. ✅ (100k = heavy follow-up)
+- **Postgres:** `BENCH_ENGINE=postgres` engine path + `benchmarks/results/REPORT-postgres.md` committed with real Postgres 1k/10k numbers, parity-asserted; rudder + Drizzle on porsager, Prisma on node-pg. ✅
+- §Performance + §14 #11 updated to point at it; ROADMAP row added. ✅
+- No changeset (private package, `chore:`); CI bench workflow is `workflow_dispatch`-only and non-gating. ✅

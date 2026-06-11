@@ -23,7 +23,7 @@ export async function checkParity(size, { quiet = false } = {}) {
     for (const contender of CONTENDERS) {
       // Write ops get a fresh scratch each so they all start from identical
       // state; read ops share the untouched seed.
-      const file = op.write ? scratchCopy(size, `parity-${contender.name}-${op.id}`) : dbPath(size)
+      const file = op.write ? await scratchCopy(size, `parity-${contender.name}-${op.id}`) : dbPath(size)
       const ctx = await contender.connect(file)
       try {
         const ops = contender.build(ctx, fx)
@@ -45,7 +45,7 @@ export async function checkParity(size, { quiet = false } = {}) {
     }
   }
 
-  cleanScratch()
+  await cleanScratch()
   if (failures.length) {
     const detail = failures.map((f) => `  ${f.op}: ${f.results.join('  ')}`).join('\n')
     throw new assert.AssertionError({
