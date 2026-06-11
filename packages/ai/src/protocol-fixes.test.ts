@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { toGeminiContents } from './providers/google.js'
 import { toAnthropicMessages } from './providers/anthropic.js'
-import { toOpenAIMessages } from './providers/openai.js'
+import { toOpenAIMessages, normalizeToolTranscript } from './providers/openai.js'
 import { base64ToUtf8 } from './base64.js'
 import { AI } from './facade.js'
 import { AiRegistry } from './registry.js'
@@ -186,5 +186,140 @@ describe('AI.embed cache keying', () => {
 
     await AI.embed('hello', { model: 'fake-embed/m1', cache: true })
     assert.strictEqual(networkCalls, 1, 'post-reset call must hit the new adapter, not the cached one')
+  })
+})
+
+// ─── DeepSeek / OpenAI-compatible: tool-call ↔ tool-result adjacency ──
+// Regression for `400 Messages with role 'tool' must be a response to a
+// preceding message with 'tool_calls'` on DeepSeek and other strict
+// OpenAI-protocol providers. Anthropic tolerates loose ordering; OpenAI does
+// not. See docs/plans/2026-06-11-deepseek-tool-transcript-400.md.
+
+type OpenAIMsg = {
+  role:        string
+  content?:    unknown
+  tool_call_id?: string
+  tool_calls?: { id: string }[]
+}
+
+/**
+ * Assert the serialized OpenAI `messages` array satisfies BOTH protocol
+ * rules: every `tool` message follows its parent `assistant`+`tool_calls`,
+ * and every declared `tool_calls` id is answered before the next turn.
+ */
+function assertOpenAIToolInvariant(messages: OpenAIMsg[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!
+    if (m.role !== 'assistant' || !m.tool_calls?.length) continue
+    // Every declared id must be answered by a contiguous run of tool messages.
+    const expected = m.tool_calls.map(tc => tc.id)
+    const answered: string[] = []
+    let j = i + 1
+    while (j < messages.length && messages[j]!.role === 'tool') {
+      answered.push(messages[j]!.tool_call_id!)
+      j++
+    }
+    assert.deepStrictEqual(
+      answered.slice(0, expected.length),
+      expected,
+      `assistant at ${i} must be immediately followed by tool results for ${expected.join(', ')}`,
+    )
+  }
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!
+    if (m.role !== 'tool') continue
+    // Walk back over the contiguous tool run; the message before it must be
+    // an assistant whose tool_calls declares this id.
+    let k = i
+    while (k > 0 && messages[k - 1]!.role === 'tool') k--
+    const parent = messages[k - 1]
+    assert.ok(
+      parent && parent.role === 'assistant' && parent.tool_calls?.some(tc => tc.id === m.tool_call_id),
+      `tool message at ${i} (${m.tool_call_id}) must follow an assistant declaring it`,
+    )
+  }
+}
+
+describe('OpenAI tool transcript normalization', () => {
+  it('drops an orphan tool result with no preceding tool_calls (the DeepSeek 400)', () => {
+    const messages: AiMessage[] = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'edit the form' },
+      { role: 'assistant', content: 'Done.' },           // toolCalls dropped by the app
+      { role: 'tool', content: '{"ok":true}', toolCallId: 'call_x' },
+    ]
+    const normalized = normalizeToolTranscript(messages)
+    assert.ok(!normalized.some(m => m.role === 'tool'), 'orphan tool result is dropped')
+    assertOpenAIToolInvariant(toOpenAIMessages(messages) as OpenAIMsg[])
+  })
+
+  it('pulls a detached tool result back adjacent to its parent assistant', () => {
+    const messages: AiMessage[] = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'go' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 't', arguments: {} }] },
+      { role: 'assistant', content: 'interjected summary' },   // wrongly between call + result
+      { role: 'tool', content: 'result-a', toolCallId: 'a' },
+    ]
+    const out = toOpenAIMessages(messages) as OpenAIMsg[]
+    assertOpenAIToolInvariant(out)
+    // The result now sits immediately after its parent; the stray assistant trails.
+    const parentIdx = out.findIndex(m => m.role === 'assistant' && m.tool_calls?.length)
+    assert.strictEqual(out[parentIdx + 1]!.role, 'tool')
+    assert.strictEqual(out[parentIdx + 1]!.tool_call_id, 'a')
+  })
+
+  it('synthesizes a stub for an unanswered tool_call (reverse direction)', () => {
+    const messages: AiMessage[] = [
+      { role: 'user', content: 'go' },
+      { role: 'assistant', content: '', toolCalls: [
+        { id: 'a', name: 't', arguments: {} },
+        { id: 'b', name: 't', arguments: {} },
+      ] },
+      { role: 'tool', content: 'result-a', toolCallId: 'a' },   // b never answered
+    ]
+    const out = toOpenAIMessages(messages) as OpenAIMsg[]
+    assertOpenAIToolInvariant(out)
+    const toolMsgs = out.filter(m => m.role === 'tool')
+    assert.strictEqual(toolMsgs.length, 2, 'both calls answered after repair')
+    const stub = toolMsgs.find(m => m.tool_call_id === 'b')!
+    assert.match(String(stub.content), /tool result missing/)
+  })
+
+  it('preserves a well-formed parallel transcript unchanged', () => {
+    const messages: AiMessage[] = [
+      { role: 'user', content: 'go' },
+      { role: 'assistant', content: '', toolCalls: [
+        { id: 'a', name: 't', arguments: {} },
+        { id: 'b', name: 't', arguments: {} },
+      ] },
+      { role: 'tool', content: 'ra', toolCallId: 'a' },
+      { role: 'tool', content: 'rb', toolCallId: 'b' },
+      { role: 'assistant', content: 'summary' },
+    ]
+    const normalized = normalizeToolTranscript(messages)
+    assert.deepStrictEqual(
+      normalized.map(m => ({ role: m.role, id: m.toolCallId })),
+      messages.map(m => ({ role: m.role, id: m.toolCallId })),
+      'already-valid transcript is a no-op',
+    )
+    assertOpenAIToolInvariant(toOpenAIMessages(messages) as OpenAIMsg[])
+  })
+
+  it('repairs a two-call client-tool apply through a pause/resume cycle', () => {
+    // Simulates the pilotiq-pro repro: two field edits via a client tool, then
+    // the wrap-up call carries both results back — but persistence reordered
+    // them and one landed after an assistant interjection.
+    const messages: AiMessage[] = [
+      { role: 'user', content: 'set name and email' },
+      { role: 'assistant', content: '', toolCalls: [
+        { id: 'c1', name: 'update_form_state', arguments: { field: 'name' } },
+        { id: 'c2', name: 'update_form_state', arguments: { field: 'email' } },
+      ] },
+      { role: 'tool', content: '{"applied":true}', toolCallId: 'c2' },   // out of order
+      { role: 'assistant', content: 'thinking' },
+      { role: 'tool', content: '{"applied":true}', toolCallId: 'c1' },
+    ]
+    assertOpenAIToolInvariant(toOpenAIMessages(messages) as OpenAIMsg[])
   })
 })

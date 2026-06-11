@@ -224,8 +224,88 @@ function contentToOpenAIParts(content: string | import('../types.js').ContentPar
   })
 }
 
+/**
+ * Repair tool-call ↔ tool-result adjacency before serializing for an
+ * OpenAI-compatible provider.
+ *
+ * Anthropic carries tool results as content blocks inside user turns, so a
+ * loosely-ordered transcript round-trips fine. The OpenAI wire protocol (and
+ * strict implementers like DeepSeek) enforce two hard rules:
+ *
+ *   1. every `role:'tool'` message must immediately follow the `assistant`
+ *      message whose `tool_calls` declares its `tool_call_id`, and
+ *   2. every `tool_calls` entry on an assistant message must be answered by a
+ *      following `role:'tool'` message before the next assistant/user turn.
+ *
+ * A persist→resume cycle (client-tool pause, approval round-trip, or an app
+ * that re-stores assistant turns without their `toolCalls`) can violate
+ * either rule, yielding `400 Messages with role 'tool' must be a response to
+ * a preceding message with 'tool_calls'` — or its mirror, an unanswered
+ * `tool_calls`. See `docs/plans/2026-06-11-deepseek-tool-transcript-400.md`.
+ *
+ * This pass enforces BOTH directions:
+ *   - **Detached / out-of-order results** are pulled up to sit immediately
+ *     after their parent assistant, in `tool_calls` order.
+ *   - **Unanswered `tool_calls`** get a synthesized stub result so the
+ *     request is well-formed (mirrors the placeholder strategy in
+ *     `resumePendingToolCalls`).
+ *   - **Orphan tool results** — whose `tool_call_id` is declared by no
+ *     assistant message anywhere — are dropped; they can never be valid on
+ *     the wire. (Lossy only when the app already discarded the parent's
+ *     `toolCalls`; the framework can't reconstruct a deleted call.)
+ *
+ * Transcripts that already satisfy the invariant pass through unchanged
+ * (same message object references), so the common single-run path pays only
+ * a linear scan.
+ */
+export function normalizeToolTranscript(messages: AiMessage[]): AiMessage[] {
+  // Index tool results by the call id they answer (a FIFO queue per id
+  // tolerates pathological duplicate ids without dropping a message), and
+  // collect every call id any assistant message declares.
+  const resultsByCallId = new Map<string, AiMessage[]>()
+  const declaredCallIds = new Set<string>()
+  for (const m of messages) {
+    if (m.role === 'tool' && m.toolCallId) {
+      const queue = resultsByCallId.get(m.toolCallId)
+      if (queue) queue.push(m)
+      else resultsByCallId.set(m.toolCallId, [m])
+    } else if (m.role === 'assistant' && m.toolCalls?.length) {
+      for (const tc of m.toolCalls) declaredCallIds.add(tc.id)
+    }
+  }
+
+  const out: AiMessage[] = []
+  for (const m of messages) {
+    if (m.role === 'assistant' && m.toolCalls?.length) {
+      out.push(m)
+      // Emit each declared call's answer adjacent + in declaration order,
+      // claiming the real result wherever it sat or synthesizing a stub.
+      for (const tc of m.toolCalls) {
+        const real = resultsByCallId.get(tc.id)?.shift()
+        if (real) {
+          out.push(real)
+        } else {
+          out.push({
+            role:       'tool',
+            toolCallId: tc.id,
+            content:    '[RudderJS] tool result missing — synthesized to satisfy the OpenAI tool-call/tool-result protocol.',
+          })
+        }
+      }
+      continue
+    }
+    // A tool message is emitted only by its parent assistant block above —
+    // here it is either already-claimed (skip) or an orphan with no declaring
+    // assistant (drop). Either way, never emit it standalone.
+    if (m.role === 'tool') continue
+    out.push(m)
+  }
+
+  return out
+}
+
 export function toOpenAIMessages(messages: AiMessage[]): unknown[] {
-  return messages.map(m => {
+  return normalizeToolTranscript(messages).map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
       return {
         role: 'assistant',
