@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Node.js** `^20.19.0` or `>=22.12.0` (matches Vite 8's required runtime)
+- **Node.js** `>=22.12.0` (Node 20 reached end-of-life in April 2026; CI runs Node 22 and 24)
 - One of: **pnpm**, **npm**, **yarn**, or **bun**
 
 ## Scaffold a new project

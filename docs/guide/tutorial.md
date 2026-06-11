@@ -15,7 +15,7 @@ Nothing here is throwaway — it's the same shape as a real feature.
 
 ## Prerequisites
 
-- Node.js `^20.19.0` or `>=22.12.0`
+- Node.js `>=22.12.0`
 - pnpm (or npm/yarn/bun — the scaffolder adapts)
 
 ## 1. Scaffold the project
