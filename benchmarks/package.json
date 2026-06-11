@@ -1,0 +1,25 @@
+{
+  "name": "@rudderjs/benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Comparative query-layer ORM benchmark suite — RudderJS native engine vs Prisma vs Drizzle on an identical SQLite schema + dataset (§14 #11). Never published.",
+  "scripts": {
+    "bench:setup": "node src/setup.mjs",
+    "bench": "node src/run.mjs",
+    "bench:parity": "node src/parity.mjs",
+    "bench:report": "node src/report.mjs",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "@prisma/client-runtime-utils": "^7.0.0",
+    "@rudderjs/database": "workspace:*",
+    "@rudderjs/orm": "workspace:*",
+    "better-sqlite3": "^12.0.0",
+    "drizzle-orm": "^0.45.0",
+    "mitata": "^1.0.34",
+    "prisma": "^7.0.0"
+  }
+}

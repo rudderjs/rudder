@@ -46,6 +46,15 @@
       "cache": false,
       "persistent": true
     },
+    // The comparative ORM benchmark suite (@rudderjs/benchmarks). Timing must
+    // NEVER be cached, and it runs against compiled dist/ (prod builds only,
+    // never tsx source) — hence cache:false + dependsOn ^build.
+    "bench": {
+      "cache": false,
+      "dependsOn": [
+        "^build"
+      ]
+    },
     "lint": {},
     "typecheck": {
       "dependsOn": [

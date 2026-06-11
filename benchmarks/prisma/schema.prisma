@@ -1,0 +1,78 @@
+// Prisma's view of the shared schema. The DDL is owned by src/schema.mjs and
+// applied via raw better-sqlite3 — Prisma only MAPS onto the existing tables
+// (@@map / @map), it never creates them. No `db push` runs; we just generate
+// the client. Driver adapter (better-sqlite3) supplies the connection at
+// runtime, so the datasource needs no url here (mirrors playground-prisma).
+
+// Legacy `prisma-client-js` generator → emits a compiled JS client (the newer
+// `prisma-client` generator emits TypeScript, which our plain-node runner can't
+// import without tsx/a bundler). Custom output keeps it isolated from
+// playground-prisma's client (same 7.4.2 version → shared .pnpm dir otherwise).
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String
+  createdAt String    @map("created_at")
+  posts     Post[]
+  comments  Comment[]
+
+  @@map("users")
+}
+
+model Post {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String
+  body      String
+  viewCount Int       @default(0) @map("view_count")
+  published Boolean   @default(false)
+  createdAt String    @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+  comments  Comment[]
+  tags      PostTag[]
+
+  @@index([userId])
+  @@map("posts")
+}
+
+model Comment {
+  id        Int    @id @default(autoincrement())
+  postId    Int    @map("post_id")
+  userId    Int    @map("user_id")
+  body      String
+  createdAt String @map("created_at")
+  post      Post   @relation(fields: [postId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String
+  posts PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId Int  @map("post_id")
+  tagId  Int  @map("tag_id")
+  post   Post @relation(fields: [postId], references: [id])
+  tag    Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
+}
