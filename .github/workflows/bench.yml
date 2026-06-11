@@ -1,0 +1,58 @@
+# Comparative ORM benchmark suite (@rudderjs/benchmarks).
+#
+# MANUAL / opt-in only (workflow_dispatch) and NON-GATING — never on the PR
+# critical path. Timing on shared CI runners is noise, so this is a smoke run
+# (1k + 10k) that proves the suite still builds, seeds, parity-passes, and
+# produces results JSON; it uploads the JSON as an artifact. The 100k size and
+# the published HEADLINE numbers in benchmarks/results/REPORT.md come from a
+# pinned local machine, NOT from here.
+name: Bench (ORM, manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: 'Sizes to run (space-separated: 1k 10k 100k)'
+        required: false
+        default: '1k 10k'
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ORM query-layer bench
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build packages (prod dist — the bench imports dist/, never tsx)
+        run: pnpm turbo run build --filter='./packages/*'
+      - name: Generate Prisma client
+        run: pnpm --filter @rudderjs/benchmarks prisma:generate
+      - name: Seed databases
+        run: pnpm --filter @rudderjs/benchmarks bench:setup ${{ github.event.inputs.sizes }}
+      - name: Parity gate
+        run: pnpm --filter @rudderjs/benchmarks bench:parity
+      - name: Run benchmark
+        run: pnpm --filter @rudderjs/benchmarks bench ${{ github.event.inputs.sizes }}
+      - name: Render report
+        run: pnpm --filter @rudderjs/benchmarks bench:report
+      - name: Upload results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-results
+          path: |
+            benchmarks/results/sqlite-*.json
+            benchmarks/results/REPORT.md
+          if-no-files-found: error

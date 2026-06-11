@@ -134,13 +134,14 @@
 | Setup friction | low (scaffolder) / 2 imports standalone | schema+generate+adapter | config+schema+kit | reflect-metadata+tsconfig | interface+dialect | **highest** (UoW/RequestContext) |
 | Framework integration | ✅ full (auth/queue/telescope ride the ORM) | — | — | NestJS module | — | NestJS module |
 
-## Performance (claims landscape — to be verified by our own bench in Q3)
+## Performance (our comparative bench shipped — see RudderJS row + `benchmarks/`)
 
 - **Prisma 7** (own bench): 2–11× over its Rust era; bundle 1.6MB; ~320ms cold start (third-party).
 - **Drizzle**: thin-layer positioning, prepared statements; ~7.4kb/~45ms cold start (third-party).
 - **TypeORM**: weakest standing — class-hydration CPU saturation on large sets; ~450kb/~850ms.
 - **Kysely / MikroORM**: thin-layer / no headline bench.
-- **RudderJS banked**: toJSON fast-path (−39%), batched polymorphic eager-load (14.9×), shared positional bindings, model-layer WHERE-IN batching. **No published comparative bench yet** — that's deliverable Q3 (`~/perf-bench/rudderjs`, prod builds only).
+- **RudderJS banked**: toJSON fast-path (−39%), batched polymorphic eager-load (14.9×), shared positional bindings, model-layer WHERE-IN batching.
+- **Published comparative bench** ✅ — [`benchmarks/results/REPORT.md`](../benchmarks/results/REPORT.md) (the `@rudderjs/benchmarks` suite, §14 #11). RudderJS native engine vs Prisma vs Drizzle, query-layer only (no HTTP/server), identical SQLite schema + dataset, result-parity asserted before timing. Headline (SQLite 1k/10k, Apple M5 Pro, prod builds): RudderJS is fastest on **7 of 10** ops — single insert, **bulk insert (~5× faster than both)**, **findByPk (~2.5× vs Drizzle, ~4× vs Prisma)**, pivot eager-load (~2×), count/filtered-count, increment, single-level eager-load. Drizzle leads on the read/hydration-heavy ops — **large `get()` (~2.4×)**, small filtered list, and raw serialization — where RudderJS's Active-Record model wrapping costs vs Drizzle's plain rows (an honest, expected trade; the −39% toJSON figure was vs RudderJS's own prior baseline, not vs Drizzle). **SQLite caveat:** under-represents Prisma's query-engine overhead (more visible on Postgres over a socket); **Postgres is the committed follow-up**.
 
 ---
 
@@ -172,7 +173,7 @@
 10. ~~afterCommit hooks~~ — **SHIPPED post-audit**: `afterCommit(fn)` (orm) + `DB.afterCommit(fn)` / `DB.connection(name).afterCommit(fn)` (facade, via a new bridge runner). Queue lives in the orm's `transaction()` wrapper itself (above the adapter seam → all 3 adapters free): flush in order after the OUTERMOST commit (awaited `transaction()` resolves after the callbacks), drop on rollback; savepoint rollback discards only its own registrations, savepoint release hands them to the parent level; per-connection trees (named-connection transactions keep separate queues); no open transaction → run immediately.
 
 **Tier 3 — ecosystem/positioning (not engine code):**
-11. Published comparative benchmark suite (Q3 deliverable).
+11. ~~Published comparative benchmark suite~~ — **SHIPPED**: `@rudderjs/benchmarks` (private workspace package, `benchmarks/`). Query-layer head-to-head vs Prisma + Drizzle on an identical SQLite schema/dataset, 10 ops, **result-parity asserted before timing**, mitata runner, committed [`results/REPORT.md`](../benchmarks/results/REPORT.md). RudderJS fastest on 7/10 (writes, findByPk, pivot eager-load, aggregates); Drizzle leads the hydration/serialization-heavy reads. SQLite-first; **Postgres is the committed follow-up**. Methodology: `docs/plans/2026-06-11-comparative-orm-benchmark-suite.md`.
 12. ~~`db:show` / `db:table` CLI introspection commands~~ — **SHIPPED post-audit**: native-engine inspection (`inspectDatabase`/`inspectTable` in `@rudderjs/database` + orm `db-inspect` command; `--counts`/`--views`/`--json`; prisma/drizzle pointed at their studios).
 13. Studio/GUI story — likely "integrate, don't build" (Telescope already records queries; an admin data browser is a separate product call).
 14. Set operators intersect/except — low demand, log only.

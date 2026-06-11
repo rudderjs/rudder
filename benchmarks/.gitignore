@@ -1,0 +1,7 @@
+# Generated seeded SQLite databases (rebuilt by `pnpm bench:setup`)
+.dbs/
+# Per-run write-bench scratch copies
+.scratch/
+# Prisma client generated from prisma/schema.prisma (rebuilt by `pnpm prisma:generate`)
+generated/
+node_modules/
