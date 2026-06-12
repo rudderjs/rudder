@@ -32,7 +32,7 @@ RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)
 | `.by(fn)` | Custom key function — receives `req` |
 | `.message(text)` | Body returned on 429 |
 | `.skipIf(fn)` | Skip rate-limiting when the predicate returns true |
-| `.toHandler()` | Convert to a `MiddlewareHandler` (mostly automatic — the handler is itself callable) |
+| `.toHandler()` | _Deprecated._ The builder is already a `MiddlewareHandler` — use it directly. Kept for backwards compatibility. |
 
 The builder is immutable — chaining returns a new instance, so it's safe to share between routes:
 
@@ -96,11 +96,12 @@ X-RateLimit-Limit: 5
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1714000060
 Retry-After: 32
+Content-Type: application/json
 
-Too many login attempts.
+{"message":"Too many login attempts."}
 ```
 
-`Retry-After` is the seconds until the next allowed request. The body comes from `.message(...)` (default: `"Too many requests. Please slow down."`).
+`Retry-After` is the seconds until the next allowed request. The body is JSON with a `message` key drawn from `.message(...)` (default: `"Too many requests. Please slow down."`).
 
 ## Pitfalls
 

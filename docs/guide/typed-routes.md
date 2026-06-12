@@ -150,7 +150,7 @@ Route.get('/users/:id', show)
 - `.responds(status, schema, { description })` adds a description to the OpenAPI response object.
 - A `z.union(...)` documents same-status variant shapes.
 
-Unlike `.body()` / `.query()`, `.responds()` does **not** install a validator — it's a contract declaration, not runtime enforcement (the handler isn't forced to return the declared shape). Its payoff is twofold: the response type threads onto the handler (returning the wrong shape is a `tsc` error, parity with how `.body()` types `req.body`), and `@rudderjs/openapi` reads it to document each route's responses. See [OpenAPI](/guide/openapi) for auto-generating a spec from these declarations.
+Unlike `.body()` / `.query()`, `.responds()` does **not** install a validator, and it does **not** type-check the handler's return value — it's a contract declaration, not runtime or compile-time enforcement (the handler isn't forced to return the declared shape). Its payoff is documentation: `@rudderjs/openapi` reads these declarations to document each route's responses. See [OpenAPI](/guide/openapi) for auto-generating a spec from them.
 
 ## Standard Schema — bring your own validator
 

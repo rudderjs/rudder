@@ -198,7 +198,7 @@ router.get('/users/:user', (req) => {
 })
 ```
 
-The default resolver runs `User.findForRoute(value)` (which delegates to `Model.where(routeKey, value).first()`); override `static routeKey` on your model to resolve by slug or another unique column. Pass `{ optional: true }` to set `req.bound!.name = null` instead of throwing when no record matches.
+The default resolver runs `User.findForRoute(value)` (which delegates to `Model.where(routeKey, value).first()`); override `static routeKey` on your model to resolve by slug or another unique column. Pass `{ optional: true }` to set the binding (`req.bound!['user']` for a `:user` param) to `null` instead of throwing when no record matches.
 
 A non-resolving required binding throws `RouteModelNotFoundError`; the framework's HTTP layer renders that as a 404. See the [route binding section in Models](/guide/database/models#route-model-binding) for resolver overrides.
 

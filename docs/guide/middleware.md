@@ -158,7 +158,7 @@ m.use(new CorsMiddleware({
 }).toHandler())
 ```
 
-Defaults: `origin: '*'`, standard HTTP methods, `Content-Type` + `Authorization` headers.
+Defaults: `origin: '*'`, methods `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']`, headers `['Content-Type', 'Authorization']`.
 
 ### `LoggerMiddleware`
 
