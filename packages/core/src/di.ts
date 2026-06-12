@@ -298,13 +298,12 @@ export class Container {
     // Deferred provider hook — give the missing handler a chance to register the binding
     if (this._missingHandler) {
       this._missingHandler(key)
-      // Retry after handler may have registered the binding
-      if (this.instances.has(key)) return this.instances.get(key) as T
-      const retryBinding = this.bindings.get(key)
-      if (retryBinding) {
-        const value = this.runExtenders(key, retryBinding.factory(this) as T)
-        if (retryBinding.singleton) this.instances.set(key, value)
-        return value
+      // If the handler registered the binding/instance, resolve it through the
+      // normal path so singleton AND scoped semantics apply (a hand-rolled retry
+      // here previously skipped the scoped branch). The binding now exists, so
+      // this can't re-enter the missing handler — no infinite recursion.
+      if (this.instances.has(key) || this.bindings.has(key)) {
+        return this.make<T>(token)
       }
     }
 
