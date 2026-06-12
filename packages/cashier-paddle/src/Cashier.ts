@@ -20,6 +20,13 @@ export interface CashierConfig {
   sandbox?:                         boolean
   /** Webhook receiver path. Default: '/paddle/webhook' */
   webhookPath?:                     string
+  /**
+   * Maximum age (seconds) a signed webhook may be when it arrives, guarding
+   * against replay of a captured request. The `ts` is part of Paddle's signed
+   * payload, so it cannot be tampered with — this rejects an authentic request
+   * replayed outside the window. Default: 300 (5 min). Set `0` to disable.
+   */
+  webhookTolerance?:                number
   /** Default currency code (ISO 4217). Default: 'USD' */
   currency?:                        string
   /** Locale used by formatAmount(). Default: 'en' */
@@ -57,6 +64,7 @@ export class Cashier {
   // ── Behavior ──────────────────────────────────────────
   private static _sandbox             = false
   private static _webhookPath         = '/paddle/webhook'
+  private static _webhookTolerance    = 300
   private static _currency            = 'USD'
   private static _currencyLocale      = 'en'
   private static _keepPastDueActive   = false
@@ -78,6 +86,7 @@ export class Cashier {
     if (cfg.webhookSecret   !== undefined) this._webhookSecret   = cfg.webhookSecret || null
     if (cfg.sandbox         !== undefined) this._sandbox         = !!cfg.sandbox
     if (cfg.webhookPath     !== undefined) this._webhookPath     = cfg.webhookPath
+    if (cfg.webhookTolerance!== undefined) this._webhookTolerance= Math.max(0, cfg.webhookTolerance)
     if (cfg.currency        !== undefined) this._currency        = cfg.currency
     if (cfg.currencyLocale  !== undefined) this._currencyLocale  = cfg.currencyLocale
     if (cfg.keepPastDueSubscriptionsActive !== undefined) {
@@ -109,6 +118,12 @@ export class Cashier {
   static webhookPath(path?: string): string {
     if (path !== undefined) this._webhookPath = path
     return this._webhookPath
+  }
+
+  /** Replay-window tolerance in seconds (0 disables). Default: 300. */
+  static webhookTolerance(seconds?: number): number {
+    if (seconds !== undefined) this._webhookTolerance = Math.max(0, seconds)
+    return this._webhookTolerance
   }
 
   static currency(code?: string): string {
@@ -181,6 +196,7 @@ export class Cashier {
     this._webhookSecret   = null
     this._sandbox             = false
     this._webhookPath         = '/paddle/webhook'
+    this._webhookTolerance    = 300
     this._currency            = 'USD'
     this._currencyLocale      = 'en'
     this._keepPastDueActive   = false

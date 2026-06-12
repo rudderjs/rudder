@@ -576,6 +576,19 @@ In the Paddle dashboard, [register your webhook URL](https://vendors.paddle.com/
 > [!WARNING]
 > Always set `PADDLE_WEBHOOK_SECRET`. The signature middleware fails closed (HTTP 500) if the secret is missing — this is intentional. A misconfigured secret is a bug, not a "let everything through" condition.
 
+On top of the HMAC check, `verifyPaddleWebhook` enforces a **replay window**: the signed timestamp must be within `webhookTolerance` seconds of now, otherwise the request is rejected with HTTP 403. The timestamp is part of Paddle's signed payload, so it can't be forged — this only rejects an authentic request replayed outside the window. The default is 300 seconds (5 minutes); set `webhookTolerance: 0` in `config/cashier.ts` to disable it for environments with large clock skew.
+
+```ts
+// config/cashier.ts
+export default {
+  apiKey:          Env.get('PADDLE_API_KEY', ''),
+  clientSideToken: Env.get('PADDLE_CLIENT_SIDE_TOKEN', ''),
+  webhookSecret:   Env.get('PADDLE_WEBHOOK_SECRET', ''),
+  sandbox:         Env.get('PADDLE_SANDBOX', 'true') === 'true',
+  webhookTolerance: 300, // seconds; 0 disables the replay window
+} satisfies CashierConfig
+```
+
 ### Defining event handlers
 
 Cashier emits framework events for each canonical webhook. Listen via `eventsProvider`:

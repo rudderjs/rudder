@@ -47,6 +47,19 @@ export function verifyPaddleWebhook(): MiddlewareHandler {
       return
     }
 
+    // Replay guard. `parsed.ts` is part of the signed payload, so a forged
+    // request can't reach here — this rejects an AUTHENTIC request replayed
+    // outside the tolerance window. Disabled when tolerance is 0.
+    const tolerance = Cashier.webhookTolerance()
+    if (tolerance > 0) {
+      const tsSeconds  = Number(parsed.ts)
+      const nowSeconds = Date.now() / 1000
+      if (!Number.isFinite(tsSeconds) || Math.abs(nowSeconds - tsSeconds) > tolerance) {
+        res.status(403).json({ error: 'timestamp_out_of_tolerance' })
+        return
+      }
+    }
+
     await next()
   }
 }
