@@ -135,6 +135,14 @@ app().when(ReportRunner)
   .give((c) => c.tagged<Exporter>('reports.exporters').filter((e) => e.enabled))
 ```
 
+The same `when().needs().give()` chain also overrides a single dependency of a specific class (not only tagged sets): pass a plain token to `needs()` and a factory or a value to `give()`.
+
+```ts
+app().when(PhotoController)
+  .needs(StorageDisk)
+  .give(() => new S3Storage())   // only PhotoController gets this disk
+```
+
 `@Tag` is constructor-only. Method-parameter metadata is dropped by esbuild/Vite, so method-level `@Tag` won't work — see the Tips section.
 
 ## Extending bindings
@@ -229,9 +237,11 @@ All mutating methods return `this` for fluent chaining. Tokens can be a `string`
 |---|---|
 | `bind(token, factory)` | Factory binding — new instance on every `make()`. Factory receives the container as its argument. |
 | `singleton(token, factory)` | Singleton — factory runs once; result cached for subsequent calls. |
-| `scoped(token, factory)` | Per-request singleton via AsyncLocalStorage — one instance per HTTP request scope. |
+| `scoped(token, factory)` | Per-request singleton via AsyncLocalStorage: one instance per `runScoped()` scope. Resolving it outside an active scope throws `Cannot resolve scoped binding outside of a request scope`. |
+| `runScoped(fn)` | Runs `fn` inside a fresh scope, so `scoped()` bindings resolve and cache for that scope. You establish the scope yourself (there is no built-in middleware that does it) wherever you resolve scoped services. |
 | `instance(token, value)` | Registers a pre-built value. Always returns the same object reference. |
 | `bindIf` / `singletonIf` / `scopedIf` | Same as `bind` / `singleton` / `scoped` but only when the token is currently unbound. |
+| `when(concrete)` | Starts a contextual binding: `when(Class).needs(token).give(factory \| value)` overrides what `token` resolves to while building `Class`. |
 | `tag(tokens, tags)` | Adds one or more tokens to one or more tag names. Additive across calls. |
 | `tagged<T>(tag)` | Resolves every token under `tag` in insertion order. Returns `[]` for unknown tags. |
 | `extend(token, fn)` | Wraps the resolved value with a decorator. Chains in registration order. |

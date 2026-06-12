@@ -10,13 +10,16 @@ This page explains what that means and which patterns to reach for.
 
 ## Three scopes
 
-Every value in your application lives in exactly one of three scopes:
+Every value in your application lives in exactly one of these scopes:
 
 | Scope | Lifetime | Created with | Examples |
 |---|---|---|---|
 | **Process** | Until `node` exits | `app.singleton(Foo, ...)` | `AuthManager`, `CacheStore`, `QueueManager`, `PrismaClient` |
 | **Request** | One HTTP request | `runWithX()` establishes, `currentX()` reads | Current user, current session |
+| **Scoped** | One request scope | `app.scoped(Foo, ...)`, resolved inside `app.runScoped(fn)` | Per-request services the container manages for you |
 | **Transient** | Per `app().make()` call | `app.bind(Foo, ...)` | Stateless helpers, per-call builders |
+
+The **Scoped** row is the container-managed form of request scope: `app.scoped(token, factory)` caches one instance per `app.runScoped(fn)` scope, and resolving it outside a scope throws `Cannot resolve scoped binding outside of a request scope`.
 
 The single core rule follows directly:
 
@@ -145,7 +148,7 @@ Pass the user ID explicitly to queries, or store it in ALS and read it from a wr
 
 ### Calling `currentX()` from `register()` or `boot()`
 
-`ServiceProvider.register()` and `boot()` run at app startup, not per request. There is no request scope at boot time. Calling `currentAuth()`, `currentContext()`, or `currentSession()` from either method throws.
+`ServiceProvider.register()` and `boot()` run at app startup, not per request. There is no request scope at boot time, so request-scoped reads come back empty or throw: `currentAuth()` and `Session.get()` throw, while `Context.get()` soft-returns `undefined`.
 
 ## Coming from Laravel
 

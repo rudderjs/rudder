@@ -57,7 +57,7 @@ export default {
 |---|---|
 | `Env.get(key, fallback?)` | String value or fallback. Throws if the key is missing AND no fallback was supplied. |
 | `Env.getNumber(key, fallback?)` | Parsed number (via `Number(...)`, so floats are accepted); throws on `NaN`. |
-| `Env.getBool(key, fallback?)` | Parses `'true'` / `'false'` / `'1'` / `'0'`. |
+| `Env.getBool(key, fallback?)` | Returns `true` for `'true'` (case-insensitive) or `'1'`; any other value is `false`. |
 | `Env.has(key)` | Existence check; doesn't read the value. |
 
 For critical values, validate at startup with `defineEnv`:
@@ -217,7 +217,7 @@ export default Application.configure({ config, providers })
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    m.use(RateLimit.perMinute(60).toHandler())
+    m.use(RateLimit.perMinute(60))
   })
   .create()
 ```
@@ -246,7 +246,7 @@ The middleware configurator registers global middleware and group-specific middl
 
 ```ts
 .withMiddleware((m) => {
-  m.use(RateLimit.perMinute(60).toHandler())     // every request
+  m.use(RateLimit.perMinute(60))                 // every request
   m.web(SomeWebOnlyMiddleware().toHandler())     // web routes only
   m.api(SomeApiOnlyMiddleware().toHandler())     // api routes only
 })
