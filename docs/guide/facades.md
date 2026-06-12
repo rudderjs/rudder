@@ -59,19 +59,18 @@ Session.put('flash.success', 'Saved!')   // Session writes are sync
 
 ## Request-scoped facades
 
-`auth()` and `Session` both live behind AsyncLocalStorage — they read from the current request's scope. They behave slightly differently when called outside a request:
+`auth()` and `Session` both live behind AsyncLocalStorage — they read from the current request's scope, which middleware populates. Called outside that scope they throw:
 
-- **`auth().user()` soft-fails to `null`.** Matches Laravel's `Auth::user()` semantics — unauthenticated, not a hard error. Safe to reference from api handlers (which run without `AuthMiddleware` by default), CLI scripts, or background jobs; it just returns `null`.
+- **`auth()` throws without a request context.** The context is set up by `AuthMiddleware`, which auto-installs only on the `web` route group. So `auth()` works inside a web request but throws from CLI scripts, queue jobs, a provider `boot()`, or api routes (where `AuthMiddleware` does not run) — there, wrap the call in `runWithAuth(manager, …)` yourself, or pass the user id explicitly. Within a web request, `auth().user()` returns the authenticated user, or `null` when nobody is logged in (the guard soft-fails — Laravel's `Auth::user()` semantics).
 - **`Session.get(...)` / `Session.flash(...)` throw.** Session data lives in cookies that only exist inside an HTTP request — there's no sensible fallback. Use `Session.maybeCurrent()` for a non-throwing check before calling other methods.
 
 ```ts
-// ✓ Safe — returns null outside a request
+// ✓ Inside a web request handler, after AuthMiddleware has run
 import { auth } from '@rudderjs/auth'
 
-class AppServiceProvider extends ServiceProvider {
-  async boot() {
-    const user = await auth().user()  // null during boot
-  }
+async function dashboard(req: AppRequest, res: AppResponse) {
+  const user = await auth().user()  // the logged-in user, or null if not authenticated
+  // ...
 }
 ```
 

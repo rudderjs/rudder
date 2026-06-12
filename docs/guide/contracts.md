@@ -17,7 +17,7 @@ You usually don't import from `@rudderjs/contracts` directly — most types re-e
 | `MiddlewareHandler` | Type | `(req, res, next) => unknown \| Promise<unknown>` |
 | `RouteDefinition` | Interface | A registered route — method, path, handler, middleware |
 | `ServerAdapter` | Interface | Implemented by server-adapter packages |
-| `FetchHandler` | Type | WinterCG-compatible `(req: Request) => Promise<Response>` |
+| `FetchHandler` | Type | WinterCG-compatible `(request: Request, env?: unknown, ctx?: unknown) => Promise<Response>` |
 | `HttpMethod` | Union | `'GET' \| 'POST' \| ... \| 'ALL'` |
 | `InputTypeError` | Class | Thrown by typed input accessors when coercion fails |
 | `attachInputAccessors` | Function | Used by server adapters to attach typed input methods |
@@ -49,7 +49,7 @@ export const requireAdmin: MiddlewareHandler = async (req, res, next) => {
 The `ServerAdapter` interface is what ports the framework to a new HTTP runtime — Bun's native server, Cloudflare Workers, Deno Deploy. Implementing it requires translating between the runtime's native request/response and the framework's normalized `AppRequest` / `AppResponse`.
 
 ```ts
-import type { ServerAdapter, AppRequest, AppResponse, RouteDefinition } from '@rudderjs/contracts'
+import type { ServerAdapter, AppRequest, AppResponse, RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 
 export class MyAdapter implements ServerAdapter {
   registerRoute(route: RouteDefinition): void { /* ... */ }
