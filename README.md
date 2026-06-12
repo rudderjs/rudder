@@ -234,6 +234,8 @@ const authors   = await User.whereExists(
 
 One Model API over three engines: the **built-in native engine** (`@rudderjs/database` — zero codegen, Laravel-style migrations + rollback, types generated from the schema as a migrate side effect) or **Prisma** / **Drizzle**. Swap engines in config without touching model code; relations (incl. polymorphic + through), soft deletes, observers, factories, casts, and read/write splitting with sticky reads work on all three.
 
+**Fast where it counts.** In a parity-gated query-layer benchmark vs Prisma and Drizzle (SQLite / Postgres / MySQL, up to 100k rows), the native engine leads on bulk writes, hydration, and eager + pivot loading — competitors take the latency-bound single-statement ops, reported openly. → [benchmarks](./benchmarks)
+
 ### 6. AI agents — 15 providers, tools, streaming
 
 ```ts
