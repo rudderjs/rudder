@@ -76,7 +76,16 @@ jobs:
             # app-only build does not trigger it (0/30 in the first probe run).
             rm -rf playground*/dist node_modules/.cache/turbo
             log="$RUNNER_TEMP/diag/iter-$i.log"
-            DIAG_ASSETS_MANIFEST=1 pnpm turbo run build --force --concurrency=100% > "$log" 2>&1 || true
+            # --env-mode=loose so DIAG_ASSETS_MANIFEST reaches the vite task
+            # subprocess; turbo's default strict mode strips undeclared env vars,
+            # which silently disabled the probe in the previous heavy run.
+            DIAG_ASSETS_MANIFEST=1 pnpm turbo run build --force --concurrency=100% --env-mode=loose > "$log" 2>&1 || true
+
+            # Verify the apps actually built (guard against a masked build failure
+            # producing a false "no leak"). Count emitted server JS across apps.
+            srv=$(find playground*/dist/server -name '*.js' 2>/dev/null | wc -l | tr -d ' ')
+            diag=$(grep -c '\[DIAG\]' "$log" 2>/dev/null || echo 0)
+            echo "iter $i: serverJsFiles=$srv diagLines=$diag" >> "$RUNNER_TEMP/diag/_summary.txt"
 
             if grep -rl '__VITE_ASSETS_MANIFEST__' playground*/dist/server 2>/dev/null; then
               leaks=$((leaks + 1))
@@ -92,6 +101,7 @@ jobs:
               rm -f "$log"
             fi
           done
+          echo "=== per-iteration build verification ==="; cat "$RUNNER_TEMP/diag/_summary.txt"
           echo "=============================================="
           echo "  $leaks / $N iterations leaked the placeholder"
           echo "=============================================="
