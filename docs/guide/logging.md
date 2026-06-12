@@ -93,7 +93,7 @@ Each channel has a minimum level — messages below it are silently dropped.
 Every driver accepts a `formatter` option: `'line'` (default) or `'json'`.
 
 ```
-[2026-04-06T12:00:00.000Z] console.INFO  User logged in {"userId":42}
+[2026-04-06T12:00:00.000Z] console.INFO      User logged in {"userId":42}
 ```
 
 ```json
@@ -155,7 +155,7 @@ Log.listen((entry) => {
 })
 ```
 
-Listeners fire after the channel has handled the entry. Use them for cross-cutting concerns (alerting, derived metrics, audit trails).
+Listeners fire when the entry is created, before it is dispatched to the channel's adapter. Use them for cross-cutting concerns (alerting, derived metrics, audit trails).
 
 ## Testing
 

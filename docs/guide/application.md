@@ -61,10 +61,10 @@ Use the explicit form when swapping in a different adapter, or when bundling the
 
 | Method | Signature | Description |
 |---|---|---|
-| `withRouting` | `(options: { web?, api?, commands? }) => AppBuilder` | Registers lazy route loader functions. Each loader is a dynamic import returning a side-effect module. |
+| `withRouting` | `(options: { web?, api?, commands?, channels? }) => AppBuilder` | Registers lazy route loader functions (`channels` loads broadcast channel routes). Each loader is a dynamic import returning a side-effect module. |
 | `withMiddleware` | `(fn: (m: MiddlewareConfigurator) => void) => AppBuilder` | Registers global middleware. See [Middleware](/guide/middleware) for the configurator API. |
 | `withExceptions` | `(fn: (e: ExceptionConfigurator) => void) => AppBuilder` | Registers custom error renderers, ignored types, and the report destination. See [Error Handling](/guide/error-handling). |
-| `create` | `() => RudderJS` | Finalises configuration and returns the application instance. Does not boot providers yet. |
+| `create` | `() => RudderJS` | Finalises configuration and returns the application instance. Provider boot (phase 1) is kicked off eagerly but not awaited; the HTTP handler (phase 2) is built lazily on the first request. |
 
 ## RudderJS instance API
 
@@ -72,7 +72,7 @@ Use the explicit form when swapping in a different adapter, or when bundling the
 
 | Method | Signature | Description |
 |---|---|---|
-| `handleRequest` | `(req: Request, env?, ctx?) => Promise<Response>` | Lazily bootstraps all service providers on the first call, then handles the incoming HTTP request. |
+| `handleRequest` | `(req: Request, env?, ctx?) => Promise<Response>` | Awaits provider boot (started at construction) and builds the HTTP handler on the first call, then handles the incoming HTTP request. |
 | `boot` | `() => Promise<void>` | Boots all service providers without starting an HTTP server. Used by the Rudder CLI and background workers. |
 | `fetch` | `(req: Request, env?, ctx?) => Promise<Response>` | WinterCG-compatible alias for `handleRequest`. Works with Vike, Cloudflare Workers, and any platform that consumes a `fetch` handler. |
 
@@ -99,7 +99,8 @@ Common framework primitives are re-exported from `@rudderjs/core` so most apps n
 | `Container`, `container`, `Injectable`, `Inject` | core DI |
 | `Listener`, `EventDispatcher`, `dispatch`, `dispatcher`, `EventFake` | core Events |
 | `FormRequest`, `ValidationError`, `validate`, `z` | core Validation |
-| `Env`, `env`, `Collection`, `config`, `resolveOptionalPeer`, `dump`, `dd`, `sleep`, `tap` | `@rudderjs/support` |
+| `Env`, `env`, `Collection`, `resolveOptionalPeer`, `dump`, `dd`, `sleep`, `tap` | `@rudderjs/support` |
+| `config` (typed; overrides the untyped `config` from `@rudderjs/support`) | core Config |
 | `AppRequest`, `AppResponse`, `RouteHandler`, `MiddlewareHandler` | `@rudderjs/contracts` |
 | `HttpException`, `abort`, `abort_if`, `abort_unless`, `report`, `setExceptionReporter` | core Exceptions |
 

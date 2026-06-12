@@ -175,12 +175,14 @@ Each `@rudderjs/*` package that ships a `doctor.ts` registers its own checks at 
 | `@rudderjs/cashier-paddle` | `cashier-paddle:api-key`, `cashier-paddle:webhook-secret`. |
 | `@rudderjs/queue-bullmq` | `queue-bullmq:redis-url`. Under `--deep`: `queue-bullmq:redis-ping`. |
 | `@rudderjs/queue-inngest` | `queue-inngest:event-key`, `queue-inngest:signing-key`. |
+| `@rudderjs/orm` | Under `--deep`: `orm-native:db-connect` (native engine connectivity). |
+| `@rudderjs/broadcast-redis` | `broadcast-redis:url`. Under `--deep`: `broadcast-redis:connectivity`. |
 | `@rudderjs/mail` | Under `--deep`: `mail:smtp-connect`. |
 | `@rudderjs/ai` | `ai:provider-keys` (at least one key set for the providers listed in `config/ai.ts`). |
 | `@rudderjs/mcp` | `mcp:route-mounted` (warns if `app/Mcp/` has tools but no MCP route is registered). |
 | `@rudderjs/telescope` / `@rudderjs/pulse` / `@rudderjs/horizon` | `{telescope,pulse,horizon}:dashboard` — warns if the package is installed but its dashboard route isn't registered. |
 
-Total: 37 checks across 11 categories.
+The exact set of checks depends on which `@rudderjs/*` packages are installed — each package's `doctor.ts` registers its own at startup.
 
 ## Contributing a check
 

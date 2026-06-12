@@ -217,7 +217,7 @@ const { page, perPage } = await validate(PaginationSchema, req)
 ## Pitfalls
 
 - **`validateWith()` doesn't attach to `req.body`.** Re-parse inside the handler with `validate()` to get the typed value, or use `FormRequest` if you only want to write the schema once.
-- **Merge priority surprises.** `params` wins over `body` wins over `query`. If you have `:id` in the path *and* `id` in the body, the path value wins.
+- **Merge priority surprises.** `params` wins over `query` wins over `body`. If you have `:id` in the path *and* `id` in the body, the path value wins.
 - **`authorize()` is sync.** Don't make it async — the result is read synchronously by `validate()`. For async authorization checks (DB lookup), do them in middleware before the validator runs.
-- **`prepareForValidation()` is sync.** Async normalization (DB lookups, remote calls) belongs in middleware before validation runs — the hook is for in-memory mutation only.
+- **`prepareForValidation()` may be async.** It's awaited, so a subclass can return a `Promise`. Still, prefer middleware before the validator for blocking work (DB lookups, remote calls); the hook is best kept to in-memory mutation.
 - **`after()` returns an array of callbacks, not a single callback.** Each callback gets `{ data, req, addError }`. Returning a single function from `after()` is a type error; wrap it: `return [({ data, addError }) => …]`.

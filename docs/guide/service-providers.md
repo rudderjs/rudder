@@ -70,7 +70,8 @@ In **production** the cached manifest always wins: a stale manifest is honored (
 
 | Field | Purpose |
 |---|---|
-| `provider` | The PascalCase class name exported from the package's main entry |
+| `provider` | The PascalCase class name exported from the package's main entry (or from `providerSubpath`) |
+| `providerSubpath` | Import the provider class from this subpath (e.g. `./server`) instead of the main entry, for packages whose main entry must stay runtime-agnostic (used by `@rudderjs/ai`) |
 | `stage` | One of `foundation`, `infrastructure`, `feature`, `monitoring` — coarse boot order |
 | `depends` | Package names that must boot before this one — topo-sorted within the stage |
 | `optional` | If `true`, missing peer is silently skipped. Use for drivers (e.g. one of two ORM packages) |

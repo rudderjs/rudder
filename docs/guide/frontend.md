@@ -84,7 +84,7 @@ export default function Invoice({ number, lines }: InvoiceProps) {
   return html`
     <h1>Invoice #${number}</h1>
     <ul>${lines.map(l => html`<li>${l.name}: ${l.amount}</li>`)}</ul>
-  `
+  `.toString()
 }
 ```
 

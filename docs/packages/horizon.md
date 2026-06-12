@@ -67,7 +67,7 @@ maxJobs:    1000,
 | Driver | Persistence | Cross-process | When to use |
 |---|---|---|---|
 | `memory` *(default)* | In-process, bounded by `maxJobs` | No | Dev with the `sync` queue driver, single-process apps, anywhere job history doesn't need to survive a restart |
-| `sqlite` | `better-sqlite3` file (WAL mode) | Limited (single host, file locking) | Production single-node deployments, or any time you want job history across restarts |
+| `sqlite` | `better-sqlite3` file (rollback journal mode) | Limited (single host, file locking) | Production single-node deployments, or any time you want job history across restarts |
 | `redis` | Redis hashes + sorted sets | **Yes** | Multi-process deployments — required when running BullMQ workers, since the dashboard process and the worker process need to share state |
 
 ### Choosing a driver

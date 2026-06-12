@@ -1,6 +1,6 @@
 # Telescope
 
-Debug dashboard for Rudder. Records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes, CLI commands, outgoing HTTP, authorization decisions, WebSocket lifecycle, Yjs CRDT events, AI agent runs, MCP activity, and `dump()` calls. Serves a built-in UI at `/telescope`.
+Debug dashboard for Rudder. Records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes, CLI commands, outgoing HTTP, authorization decisions, WebSocket lifecycle, Yjs CRDT events, AI agent runs, MCP activity, view renders, and `dump()` calls. Serves a built-in UI at `/telescope`.
 
 ::: tip About the version number
 Telescope is currently published at v13.x. The high major doesn't reflect 13 ground-up rewrites — it's the result of Changesets peer-bump cascades across the `@rudderjs/*` workspace. The public API has been stable since v6.
@@ -30,11 +30,12 @@ Run `pnpm rudder providers:discover` after install. The UI lives at `/{path}` (d
 
 ## What it records
 
-19 entry types via the observer-registry pattern: each peer package exports a process-wide observer singleton; the matching collector subscribes at boot. Missing peers silently skip — no crash.
+20 entry types via the observer-registry pattern: each peer package exports a process-wide observer singleton; the matching collector subscribes at boot. Missing peers silently skip — no crash.
 
 | Type | Source | Records |
 |---|---|---|
 | `request` | router | HTTP requests + responses |
+| `view` | router | Rendered view id, props snapshot, and timing (when `recordViews` is on) |
 | `query` | orm | DB queries (flags slow ones) |
 | `job` | queue | Job lifecycle — one entry per terminal state (`dispatched`, `completed`, `failed`) with shared `jobId` |
 | `exception` | core | Unhandled exceptions |
@@ -106,7 +107,7 @@ recordQueries:  true,
 ignoreRequests:     ['/telescope*', '/health'],
 slowQueryThreshold: 100,      // ms
 
-hideRequestHeaders: ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key'],
+hideRequestHeaders: ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key', 'x-real-ip'],
 hideRequestFields:  ['password', 'password_confirmation', 'token', 'secret'],
 
 auth: (req) => req.user?.isAdmin ?? false,    // gate the dashboard

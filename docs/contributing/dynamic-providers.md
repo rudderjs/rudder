@@ -30,8 +30,8 @@ import { ReportingServiceProvider } from '../Modules/Reporting/ReportingServiceP
 
 export class AppServiceProvider {
   async boot() {
-    app().register(TodoServiceProvider)
-    app().register(ReportingServiceProvider)
+    await app().register(TodoServiceProvider)
+    await app().register(ReportingServiceProvider)
   }
 }
 ```
@@ -49,7 +49,7 @@ export class AppServiceProvider {
   async boot() {
     if (Env.get('ENABLE_ANALYTICS')) {
       const { AnalyticsProvider } = await import('../Providers/AnalyticsProvider.js')
-      app().register(AnalyticsProvider)
+      await app().register(AnalyticsProvider)
     }
   }
 }

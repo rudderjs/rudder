@@ -50,7 +50,6 @@ pnpm rudder boost:install                          # generate per-agent configs,
 pnpm rudder boost:install --agent=cursor,copilot   # restrict to specific agents
 pnpm rudder boost:install --include-all-skills     # install every shipped skill, even ones whose target package isn't present
 pnpm rudder boost:update                           # re-scan packages and update all agent configs
-                                                   # --discover flag re-runs for newly installed packages
 pnpm rudder boost:mcp                              # start the MCP server (stdio transport)
 ```
 
@@ -78,7 +77,7 @@ Boost ships an MCP server that runs alongside your app. AI agents connect and ca
 | Tool | Description |
 |---|---|
 | `app_info` | Installed `@rudderjs/*` packages, versions, Node.js version, package manager |
-| `db_schema` | Prisma schema — parsed models with fields/types, or raw `.prisma` source |
+| `db_schema` | Native typed registry (`.rudder/types/models.d.ts`) or Prisma schema — parsed models with fields/types, or raw source |
 | `route_list` | All HTTP routes with methods, paths, middleware, source files |
 | `model_list` | ORM models in `app/Models/` with table names and field types |
 | `config_get` | Read config files — list all or read a specific one by key |
@@ -155,6 +154,6 @@ Useful for custom dashboards, CI checks, or embedding project context into your 
 ## Notes
 
 - `boost:mcp` requires a fully bootstrapped application — it reads live routes, models, and config from the running DI container.
-- `db_schema` reads the Prisma schema file directly; Drizzle support reads the schema directory.
+- `db_schema` reads the native typed registry (`.rudder/types/models.d.ts`, written by `rudder migrate`) or the Prisma schema (single- or multi-file).
 - `last_error` returns the most recent entries from `storage/logs/` filtered by level.
 - Works with any MCP-compatible AI client beyond the listed agents — the standard MCP protocol is the wire format.

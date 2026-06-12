@@ -162,7 +162,7 @@ The full Model API — defining models, mass assignment, hidden fields, custom s
 import { Env } from '@rudderjs/support'
 
 export default {
-  default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'mysql' | 'libsql',
+  default: Env.get('DB_CONNECTION', 'sqlite') as 'sqlite' | 'postgresql' | 'mysql' | 'libsql',
   connections: {
     sqlite:     { driver: 'sqlite'     as const, url: Env.get('DATABASE_URL', 'file:./dev.db') },
     postgresql: { driver: 'postgresql' as const, url: Env.get('DATABASE_URL', '') },
@@ -183,6 +183,9 @@ The framework wraps every engine's schema tooling behind a uniform set of `rudde
 ```bash
 pnpm rudder migrate              # apply pending migrations (production-safe)
 pnpm rudder migrate:fresh        # drop all tables and re-migrate from scratch (dev only)
+pnpm rudder migrate:rollback     # roll back the last batch of migrations
+pnpm rudder migrate:reset        # roll back every migration
+pnpm rudder migrate:refresh      # roll back every migration, then re-migrate
 pnpm rudder migrate:status       # show migration status
 pnpm rudder make:migration <name>  # create a new migration file
 pnpm rudder db:push              # push schema directly without a migration file (dev only — Prisma/Drizzle)

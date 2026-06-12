@@ -85,13 +85,15 @@ await Http.withBasicAuth('user', 'pass').get('/api/protected')
 
 ```ts
 await Http.post('/api/users', { name: 'Alice' })             // JSON (default)
-await Http.asForm().withBody({ email, password }).post('/login')   // form-encoded
+await Http.withBody({ email, password }).asForm().post('/login')   // form-encoded
 ```
+
+Call `asForm()` *after* setting the body, and don't pass the body to `post()` — both `withBody(data)` and `post(url, data)` set the encoding to JSON, so they would otherwise override `asForm()`.
 
 ## Retries and timeouts
 
 ```ts
-await Http.retry(3, 200).get('/api/flaky-endpoint')   // 3 attempts, 200/400/600 ms backoff
+await Http.retry(3, 200).get('/api/flaky-endpoint')   // up to 4 attempts (1 + 3 retries), 200/400/600 ms backoff
 await Http.timeout(5000).get('/api/slow-endpoint')    // throws after 5s
 ```
 

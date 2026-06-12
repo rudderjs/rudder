@@ -214,9 +214,9 @@ The fake records writes in memory and never touches the disk or network. Call `S
 ## Pitfalls
 
 - **Forgetting `pnpm rudder storage:link`.** The public disk's URLs return 404 until the symlink exists. Run `storage:link` once after scaffolding.
-- **Missing `@aws-sdk/client-s3`.** It's an optional peer dependency. The S3 disk throws at boot if not installed.
+- **Missing `@aws-sdk/client-s3`.** It's an optional dependency, imported lazily. The S3 disk throws on first use if not installed, not at boot.
 - **Calling `Storage.path(...)` on an S3 disk.** Throws — there's no filesystem path for remote files. Use `url()` or `temporaryUrl()` instead.
 - **Public disk with sensitive files.** Anything written to the public disk is reachable by URL. For access-controlled files, use the local disk and serve through an authenticated route.
 - **Forgetting `await serveTemporaryUrls(...)`.** It's `async` (dynamic-imports `@rudderjs/router`). Without `await`, the route never registers and `temporaryUrl()` returns 404s.
-- **Cross-disk `move()` / `copy()`.** These are single-disk in v1 — calls that span disks throw an explicit error. Use `get()` + `put()` to bridge disks.
+- **Cross-disk `move()` / `copy()`.** `move(from, to)` and `copy(from, to)` operate within a single disk — they take two paths, not two disks, so there is no way to span disks directly. Use `get()` + `put()` (or read/write streams) to bridge disks.
 - **`temporaryUploadUrl()` on local disk.** Throws `StorageNotSupportedError` — there is no signed-POST equivalent for the local adapter. In dev, use a normal `POST /api/upload` with multipart middleware.

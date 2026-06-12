@@ -78,6 +78,7 @@ Your application code, organized by concern.
 | `Http/Middleware/` | scaffolder + `make:middleware` | Custom HTTP middleware classes |
 | `Http/Requests/` | `make:request` | Form-request validators |
 | `Models/` | scaffolder (with auth) + `make:model` | ORM model classes |
+| `Resources/` | `make:resource` | `JsonResource` API response transformers |
 | `Providers/` | scaffolder + `make:provider` | Service providers wiring up dependencies |
 | `Views/` | scaffolder + vendor:publish | Controller-returned views — see [Frontend](/guide/frontend) |
 | `Jobs/` | `make:job` | Queue jobs extending `Job` |

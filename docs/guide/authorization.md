@@ -40,7 +40,7 @@ if (await Gate.allows('edit-post', post)) {
 `Gate.before(fn)` runs before any gate check — useful for an admin override:
 
 ```ts
-Gate.before((user) => user.role === 'admin' ? true : undefined)
+Gate.before((user, ability) => user.role === 'admin' ? true : undefined)
 ```
 
 Returning `true` short-circuits and authorizes; returning `undefined` (or nothing) lets the regular gate run; returning `false` denies.
@@ -137,7 +137,7 @@ import { PostPolicy } from '../Policies/PostPolicy.js'
 
 export class AuthServiceProvider extends ServiceProvider {
   async boot() {
-    Gate.before((user) => user.role === 'admin' ? true : undefined)
+    Gate.before((user, ability) => user.role === 'admin' ? true : undefined)
     Gate.policy(Post, PostPolicy)
     Gate.define('settings.edit', (user) => user.role === 'owner')
   }

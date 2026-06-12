@@ -39,10 +39,8 @@ export default {
     sync:   { driver: 'sync' },
     bullmq: {
       driver: 'bullmq',
-      connection: {
-        host: Env.get('REDIS_HOST', 'localhost'),
-        port: Env.getNumber('REDIS_PORT', 6379),
-      },
+      host: Env.get('REDIS_HOST', '127.0.0.1'),
+      port: Env.getNumber('REDIS_PORT', 6379),
     },
     inngest: {
       driver:    'inngest',

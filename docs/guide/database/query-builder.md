@@ -22,6 +22,7 @@ unsupported throws a clear error naming the alternative — never a silent no-op
 | CTEs (`withExpression`) | ✅ | `DB.select` | `DB.select` |
 | Window functions (`selectWindow`) | ✅ | `DB.select` | `DB.select` |
 | `whereExists` / `whereNotExists` | ✅ | `DB.select` | `DB.select` |
+| INSERT…SELECT (`insertUsing`) | ✅ | `DB.statement` | `DB.statement` |
 | `whereColumn` | ✅ | ✅ | `DB.select` |
 | Date helpers (`whereDate` …) | ✅ | ✅ | `DB.select` |
 | JSON paths (`meta->lang`, contains, length, updates) | ✅ | ✅ | `DB.select` |
@@ -189,6 +190,35 @@ const inactive = await User.whereNotExists(
 `whereGroup` callbacks. For relation-shaped checks, `whereHas` stays the right
 tool — `whereExists` is the escape hatch when no declared relation describes
 the subquery.
+
+## Bulk insert from a query (`insertUsing`)
+
+`insertUsing(columns, query, bindings?)` compiles to `INSERT INTO table (cols)
+SELECT …`, inserting rows produced by a subquery in a single statement without
+round-tripping them through the app. The body takes the same forms as
+`whereExists` (a native query builder, or raw SQL plus bindings); the column
+list is required and maps the subquery's projection positionally. It returns the
+inserted-row count.
+
+```ts
+// Snapshot active users into an archive table
+const copied = await ArchivedUser.query().insertUsing(
+  ['id', 'email', 'name'],
+  User.query().select('id', 'email', 'name').where('active', true),
+)
+
+// Raw body plus bindings
+await ArchivedUser.query().insertUsing(
+  ['id', 'email'],
+  'SELECT id, email FROM users WHERE created_at < ?',
+  ['2026-01-01'],
+)
+```
+
+Like `insertMany` / `upsert`, this is a bulk data-plane write: no observer
+events, no `fillable` / `guarded` filtering, and no key generation. Native
+engine only; on Drizzle and Prisma route the equivalent SQL through
+`DB.statement`.
 
 ## Column comparisons — `whereColumn`
 
