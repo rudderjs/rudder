@@ -139,6 +139,18 @@ const results = await Http.pool((pool) => {
 // results[0] — users, results[1] — posts, results[2] — comments (submission order)
 ```
 
+A failed request does not abort the batch. Its slot holds the `Error` instead of a response, every other request still runs to completion, and `send()` never rejects — matching Laravel's `Http::pool()`. Each result is therefore `HttpResponseData | Error`, so narrow before use:
+
+```ts
+for (const result of results) {
+  if (result instanceof Error) {
+    console.error('request failed:', result.message)
+    continue
+  }
+  console.log(result.status, result.body)
+}
+```
+
 ## Testing
 
 `Http.fake()` returns a `FakeManager` that registers stub responses and records every request:

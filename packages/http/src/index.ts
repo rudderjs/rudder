@@ -388,13 +388,28 @@ export class Pool {
     return this
   }
 
-  /** Execute all requests and return responses in submission order. */
-  async send(): Promise<HttpResponseData[]> {
-    const results: HttpResponseData[] = new Array(this._tasks.length)
+  /**
+   * Execute all requests and return their outcomes in submission order.
+   *
+   * A failed request does NOT abort the batch — its slot holds the `Error`
+   * instead of an `HttpResponseData`, and every other request still runs to
+   * completion (Laravel `Http::pool()` parity). This is why the result element
+   * type is `HttpResponseData | Error`: narrow each slot before use, e.g.
+   * `if (r instanceof Error) { ... } else { r.body }`. The pool never rejects on
+   * a request failure, so in-flight siblings are never abandoned mid-flight.
+   */
+  async send(): Promise<(HttpResponseData | Error)[]> {
+    const results: (HttpResponseData | Error)[] = new Array(this._tasks.length)
     let index = 0
     let active = 0
 
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
+      const settle = (i: number, value: HttpResponseData | Error) => {
+        results[i] = value
+        active--
+        next()
+      }
+
       const next = () => {
         if (index >= this._tasks.length && active === 0) {
           resolve()
@@ -405,14 +420,8 @@ export class Pool {
           const i = index++
           active++
           this._tasks[i]!()
-            .then(res => {
-              results[i] = res
-              active--
-              next()
-            })
-            .catch(err => {
-              reject(err as Error)
-            })
+            .then(res => settle(i, res))
+            .catch(err => settle(i, err instanceof Error ? err : new Error(String(err))))
         }
       }
       next()

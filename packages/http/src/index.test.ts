@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { PendingRequest, FakeManager, Pool, Http, http } from './index.js'
+import type { HttpResponseData } from './index.js'
 
 // ─── PendingRequest ───────────────────────────────────────
 
@@ -312,9 +313,10 @@ describe('Pool', () => {
     const results = await pool.send()
 
     assert.equal(results.length, 3)
-    assert.equal(results[0]!.body, 'A')
-    assert.equal(results[1]!.body, 'B')
-    assert.equal(results[2]!.body, 'C')
+    assert.ok(results.every((r) => !(r instanceof Error)))
+    assert.equal((results[0] as HttpResponseData).body, 'A')
+    assert.equal((results[1] as HttpResponseData).body, 'B')
+    assert.equal((results[2] as HttpResponseData).body, 'C')
   })
 
   it('handles empty pool', async () => {
@@ -322,6 +324,63 @@ describe('Pool', () => {
     const pool = new Pool(builder)
     const results = await pool.send()
     assert.equal(results.length, 0)
+  })
+
+  it('surfaces a failed request as an Error in its slot without throwing (Laravel parity)', async () => {
+    const fake = new FakeManager()
+    fake.register('/a', { status: 200, body: 'A', headers: {} })
+    fake.register('/c', { status: 200, body: 'C', headers: {} })
+
+    const builder = fake.client().baseUrl('https://example.com')
+    const pool = new Pool(builder)
+      .add((http) => http.get('/a'))
+      .add(() => Promise.reject(new Error('boom')))
+      .add((http) => http.get('/c'))
+
+    // Does not reject the batch — the failure lands in its slot.
+    const results = await pool.send()
+
+    assert.equal(results.length, 3)
+    assert.equal((results[0] as HttpResponseData).body, 'A')
+    assert.ok(results[1] instanceof Error)
+    assert.equal((results[1] as Error).message, 'boom')
+    assert.equal((results[2] as HttpResponseData).body, 'C')
+  })
+
+  it('runs every sibling to completion when one request fails (no abandon)', async () => {
+    let siblingCompleted = false
+    const pool = new Pool(new PendingRequest())
+      .add(() => Promise.reject(new Error('fast failure')))
+      .add(
+        () =>
+          new Promise<HttpResponseData>((res) =>
+            setTimeout(() => {
+              siblingCompleted = true
+              res({ status: 200, body: 'slow', headers: {} } as HttpResponseData)
+            }, 20),
+          ),
+      )
+
+    const results = await pool.send()
+
+    // send() only resolves after the slow sibling settled — it was not abandoned.
+    assert.ok(siblingCompleted)
+    assert.ok(results[0] instanceof Error)
+    assert.equal((results[1] as HttpResponseData).body, 'slow')
+  })
+
+  it('captures multiple failures without rejecting the pool', async () => {
+    const pool = new Pool(new PendingRequest())
+      .add(() => Promise.reject(new Error('err-A')))
+      .add(() => Promise.reject(new Error('err-B')))
+
+    const results = await pool.send()
+
+    assert.equal(results.length, 2)
+    assert.ok(results[0] instanceof Error)
+    assert.ok(results[1] instanceof Error)
+    assert.equal((results[0] as Error).message, 'err-A')
+    assert.equal((results[1] as Error).message, 'err-B')
   })
 })
 
