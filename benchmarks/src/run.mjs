@@ -21,6 +21,8 @@ import { dbPath } from './setup.mjs'
 import { scratchCopy, cleanScratch } from './scratch.mjs'
 import { checkParity } from './parity.mjs'
 import { SIZES, SEED } from './schema.mjs'
+import { ENGINE, IS_PG, pgSizeDb } from './engine.mjs'
+import { dbExists, serverVersion } from './pg.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const RESULTS_DIR = join(HERE, '..', 'results')
@@ -36,12 +38,26 @@ function depVersion(pkg) {
   }
 }
 
-function provenance(size) {
+async function provenance(size) {
   const cpu = os.cpus()
+  // Driver/version block differs per engine — SQLite shares better-sqlite3
+  // across all three; Postgres shares porsager (rudder + drizzle) with Prisma on
+  // node-pg, plus the live server version.
+  const versions = {
+    '@rudderjs/orm': depVersion('@rudderjs/orm'),
+    '@rudderjs/database': depVersion('@rudderjs/database'),
+    'drizzle-orm': depVersion('drizzle-orm'),
+    '@prisma/client': depVersion('@prisma/client'),
+    ...(IS_PG
+      ? { postgres: depVersion('postgres'), pg: depVersion('pg'), 'postgres-server': await serverVersion() }
+      : { 'better-sqlite3': depVersion('better-sqlite3') }),
+    mitata: depVersion('mitata'),
+  }
   return {
     // Date is overridable so published runs are reproducible/pinned (plan §
     // runtime constraint) — set BENCH_DATE=2026-06-11 for a fixed stamp.
     date: process.env['BENCH_DATE'] ?? new Date().toISOString(),
+    engine: ENGINE,
     size,
     users: SIZES[size],
     seed: SEED,
@@ -50,14 +66,7 @@ function provenance(size) {
     arch: process.arch,
     cpu: cpu[0]?.model ?? 'unknown',
     cores: cpu.length,
-    versions: {
-      '@rudderjs/orm': depVersion('@rudderjs/orm'),
-      '@rudderjs/database': depVersion('@rudderjs/database'),
-      'drizzle-orm': depVersion('drizzle-orm'),
-      '@prisma/client': depVersion('@prisma/client'),
-      'better-sqlite3': depVersion('better-sqlite3'),
-      mitata: depVersion('mitata'),
-    },
+    versions,
   }
 }
 
@@ -66,7 +75,7 @@ function provenance(size) {
 const MEASURE_OPTS = { min_cpu_time: 500_000_000 }
 
 async function benchOp(op, contender, size, fx) {
-  const file = op.write ? scratchCopy(size, `${contender.name}-${op.id}`) : dbPath(size)
+  const file = op.write ? await scratchCopy(size, `${contender.name}-${op.id}`) : dbPath(size)
   const ctx = await contender.connect(file)
   try {
     const run = contender.build(ctx, fx)[op.id]
@@ -87,8 +96,10 @@ async function benchOp(op, contender, size, fx) {
 }
 
 async function runSize(size) {
-  if (!existsSync(dbPath(size))) {
-    throw new Error(`Seed DB missing for ${size}. Run: pnpm bench:setup ${size}`)
+  const ready = IS_PG ? await dbExists(pgSizeDb(size)) : existsSync(dbPath(size))
+  if (!ready) {
+    const cmd = IS_PG ? `pnpm bench:pg:setup ${size}` : `pnpm bench:setup ${size}`
+    throw new Error(`Seed DB missing for ${size}. Run: ${cmd}`)
   }
   const fx = fixtures(size)
   console.log(`\n━━ size ${size} (${SIZES[size]} users) ━━`)
@@ -110,11 +121,11 @@ async function runSize(size) {
     console.log(`${op.id.padEnd(13)} ${line}`)
     ops.push({ id: op.id, label: op.label, write: op.write, results })
   }
-  cleanScratch()
+  await cleanScratch()
 
   mkdirSync(RESULTS_DIR, { recursive: true })
-  const out = join(RESULTS_DIR, `sqlite-${size}.json`)
-  writeFileSync(out, JSON.stringify({ provenance: provenance(size), ops }, null, 2))
+  const out = join(RESULTS_DIR, `${ENGINE}-${size}.json`)
+  writeFileSync(out, JSON.stringify({ provenance: await provenance(size), ops }, null, 2))
   console.log(`\n[run] wrote ${out.split('/').slice(-2).join('/')}`)
 }
 

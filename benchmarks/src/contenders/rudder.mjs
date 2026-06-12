@@ -1,11 +1,14 @@
 // ─── Contender: RudderJS native engine ───────────────────────────────────────
-// Drives @rudderjs/orm's Model layer over @rudderjs/database's native
-// better-sqlite3 driver — the exact path an app uses, minus the HTTP stack.
-// Imports resolve to the packages' compiled dist/ (prod builds only).
+// Drives @rudderjs/orm's Model layer over @rudderjs/database's native driver —
+// better-sqlite3 on SQLite, the porsager `postgres` driver on Postgres — the
+// exact path an app uses, minus the HTTP stack. The Model API is identical
+// across engines, so only connect() branches; build() (the timed + parity work)
+// is shared. Imports resolve to the packages' compiled dist/ (prod builds only).
 
 import { Model, ModelRegistry } from '@rudderjs/orm'
-import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/database/native'
+import { NativeAdapter, BetterSqlite3Driver, PostgresDriver, PgDialect } from '@rudderjs/database/native'
 import { PRAGMAS } from '../schema.mjs'
+import { IS_PG } from '../engine.mjs'
 
 export const name = 'rudder'
 
@@ -43,6 +46,13 @@ class Tag extends Model {
 }
 
 export async function connect(file) {
+  // `file` is a .sqlite path on SQLite, a connection URL on Postgres.
+  if (IS_PG) {
+    const driver = await PostgresDriver.open({ url: file })
+    ModelRegistry.reset()
+    ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver, dialect: new PgDialect() }))
+    return { driver }
+  }
   const driver = await BetterSqlite3Driver.open({ filename: file })
   for (const p of PRAGMAS) await driver.execute(p, [])
   ModelRegistry.reset()

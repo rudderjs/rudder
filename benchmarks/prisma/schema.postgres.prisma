@@ -1,0 +1,76 @@
+// Prisma's POSTGRES view of the shared schema — identical models to
+// schema.prisma, only the datasource provider (postgresql) and the generated
+// client output differ. The DDL is owned by src/schema.mjs (PG_DDL) and applied
+// via porsager; Prisma only MAPS onto the existing tables (@@map / @map), it
+// never creates them. No `db push` runs; we just generate the client. The
+// @prisma/adapter-pg driver adapter supplies the connection at runtime, so the
+// datasource needs no url here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-pg"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String
+  createdAt String    @map("created_at")
+  posts     Post[]
+  comments  Comment[]
+
+  @@map("users")
+}
+
+model Post {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String
+  body      String
+  viewCount Int       @default(0) @map("view_count")
+  published Boolean   @default(false)
+  createdAt String    @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+  comments  Comment[]
+  tags      PostTag[]
+
+  @@index([userId])
+  @@map("posts")
+}
+
+model Comment {
+  id        Int    @id @default(autoincrement())
+  postId    Int    @map("post_id")
+  userId    Int    @map("user_id")
+  body      String
+  createdAt String @map("created_at")
+  post      Post   @relation(fields: [postId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String
+  posts PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId Int  @map("post_id")
+  tagId  Int  @map("tag_id")
+  post   Post @relation(fields: [postId], references: [id])
+  tag    Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
+}

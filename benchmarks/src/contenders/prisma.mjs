@@ -1,17 +1,35 @@
 // ─── Contender: Prisma ───────────────────────────────────────────────────────
-// PrismaClient over the better-sqlite3 driver adapter, against the same file.
-// The generated client (prisma/schema.prisma → generated/prisma) only MAPS onto
-// the existing tables — no `db push`, the DDL is owned by src/schema.mjs.
+// PrismaClient over a driver adapter against the same database the others use:
+// @prisma/adapter-better-sqlite3 on SQLite, @prisma/adapter-pg (node-postgres)
+// on Postgres. Each engine has its own generated client (different datasource
+// provider) but the SAME models — both only MAP onto tables owned by
+// src/schema.mjs (no `db push`). The Prisma query API is engine-identical, so
+// build() is shared; only the client/adapter differ.
+//
+// Driver note: Prisma has no porsager adapter, so on Postgres it runs over
+// node-pg while rudder + drizzle share porsager. That's an idiomatic-path
+// difference (documented in the README fairness rules), not a thumb on the scale.
 
-import { PrismaClient } from '../../generated/prisma/index.js'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PRAGMAS } from '../schema.mjs'
+import { IS_PG } from '../engine.mjs'
+
+const { PrismaClient } = IS_PG
+  ? await import('../../generated/prisma-pg/index.js')
+  : await import('../../generated/prisma/index.js')
 
 export const name = 'prisma'
 
 const toUserData = (r) => ({ name: r.name, email: r.email, createdAt: r.created_at })
 
 export async function connect(file) {
+  if (IS_PG) {
+    const adapter = new PrismaPg({ connectionString: file })
+    const prisma = new PrismaClient({ adapter })
+    await prisma.$connect()
+    return { prisma }
+  }
   const adapter = new PrismaBetterSqlite3({ url: `file:${file}` })
   const prisma = new PrismaClient({ adapter })
   await prisma.$connect()
