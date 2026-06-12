@@ -1,5 +1,27 @@
 # @rudderjs/orm
 
+## 1.21.0
+
+### Minor Changes
+
+- d4d757c: feat(orm): add `.lean()` read mode for plain-record reads
+
+  `Model.query().lean().get()` (and `.first()`/`.all()`/`.find()`/`.paginate()`/`.pluck()`/`.value()`, plus the `Model.lean()` static) now return the plain adapter records instead of hydrated Model instances, skipping `Model.hydrate` per row.
+
+  Profiling the comparative ORM benchmark suite showed per-row hydration (`new Model()` + `Object.assign` + the dirty-tracking baseline) is ~75% of the cost of a bulk `get()`. `.lean()` bypasses it: a 1,000-row `get()` drops from ~920µs to ~230µs (~4× faster) — for read-only/serialization paths (e.g. `res.json(await User.query().where(...).lean().get())`) where you don't need instance methods, dirty tracking, or relations.
+
+  Lean rows lose instance methods (`save`/`fill`/`toJSON`/`related`) and dirty tracking. In-SQL aggregates (`withCount` and friends) compose with `.lean()` (the alias lands on the plain row); eager loading (`.with(...)` / `withDefault`) is incompatible and throws a clear error rather than silently dropping the relation.
+
+### Patch Changes
+
+- 15151b5: perf(orm): ~2.8× faster bulk reads via a leaner hydration copy
+
+  `Model.hydrate` — the per-row funnel for every read terminal (`find`/`first`/`all`/`get`/`paginate`/`where().get()`/…) — copied columns onto the new instance with `Object.assign(instance, record)`. Profiling the comparative ORM benchmark suite showed that copy is the dominant cost of a bulk read.
+
+  Replacing it with a manual `Object.keys` `[[Set]]` loop is ~6× faster on the copy itself (V8 keeps the plain loop monomorphic; `Object.assign` pays per-call descriptor + own-key-enumeration overhead). A 1,000-row `get()` drops from ~990µs to ~357µs (~2.8× faster end-to-end) — applied to the **default** hydrated path, so every read benefits with no code change.
+
+  Semantics are identical: own-enumerable keys only, assigned via `[[Set]]` (prototype accessors/mutators still fire), `instanceof`/dirty-tracking/observer behavior unchanged. Pairs with `.lean()` (which skips hydration entirely when you don't need instances).
+
 ## 1.20.0
 
 ### Minor Changes
