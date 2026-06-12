@@ -511,7 +511,7 @@ Visit `http://localhost:3000`. Done.
 |---|---|---|
 | HTTP | Hono | pluggable server adapter |
 | ORM / database | Native engine (built-in, `@rudderjs/database`) | Prisma, Drizzle |
-| Auth | Native session | Sanctum (API tokens), Socialite (OAuth) |
+| Auth | Native session | Sanctum (API tokens), Socialite (OAuth login), Passport (OAuth2 server) |
 | Queue | Native (database-backed, `@rudderjs/queue/native`) | BullMQ (Redis), Inngest |
 | Cache | In-memory | Redis |
 | Storage | Local disk | S3, R2, MinIO |
