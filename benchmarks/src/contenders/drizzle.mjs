@@ -11,12 +11,15 @@
 // behind a shim — a benchmark should run each ORM's real documented path.
 //
 // On Postgres, Drizzle uses postgres-js (porsager), the SAME underlying driver
-// as the rudder native engine — so rudder vs drizzle is a pure query-layer
-// comparison over one driver. (Prisma is on node-pg; see prisma.mjs.)
+// as the rudder native engine; on MySQL it uses mysql2, again the SAME driver as
+// rudder — so rudder vs drizzle is a pure query-layer comparison over one driver
+// on each server engine. (Prisma is on node-pg / mariadb respectively; see
+// prisma.mjs.)
 
 import Database from 'better-sqlite3'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
 import { drizzle as drizzlePg } from 'drizzle-orm/postgres-js'
+import { drizzle as drizzleMysql } from 'drizzle-orm/mysql2'
 import { sqliteTable, integer, text, primaryKey } from 'drizzle-orm/sqlite-core'
 import {
   pgTable,
@@ -26,10 +29,17 @@ import {
   boolean as pgBoolean,
   primaryKey as pgPrimaryKey,
 } from 'drizzle-orm/pg-core'
+import {
+  mysqlTable,
+  int as myInt,
+  text as myText,
+  boolean as myBoolean,
+  primaryKey as myPrimaryKey,
+} from 'drizzle-orm/mysql-core'
 import { relations, eq, gt, inArray, count, sql } from 'drizzle-orm'
 import postgres from 'postgres'
 import { PRAGMAS } from '../schema.mjs'
-import { IS_PG } from '../engine.mjs'
+import { IS_PG, IS_MYSQL } from '../engine.mjs'
 
 export const name = 'drizzle'
 
@@ -104,7 +114,49 @@ function pgSchema() {
   return { users, posts, comments, tags, postTags }
 }
 
-const { users, posts, comments, tags, postTags } = IS_PG ? pgSchema() : sqliteSchema()
+function mysqlSchema() {
+  // `int().autoincrement()` (not mysql-core `serial`, which is BIGINT UNSIGNED) so
+  // ids map to the schema's INT AUTO_INCREMENT and read back as plain numbers.
+  // `boolean` maps to TINYINT(1) — what BOOLEAN aliases — so `published` round-trips.
+  const users = mysqlTable('users', {
+    id: myInt('id').autoincrement().primaryKey(),
+    name: myText('name').notNull(),
+    email: myText('email').notNull(),
+    createdAt: myText('created_at').notNull(),
+  })
+  const posts = mysqlTable('posts', {
+    id: myInt('id').autoincrement().primaryKey(),
+    userId: myInt('user_id').notNull(),
+    title: myText('title').notNull(),
+    body: myText('body').notNull(),
+    viewCount: myInt('view_count').notNull().default(0),
+    published: myBoolean('published').notNull().default(false),
+    createdAt: myText('created_at').notNull(),
+  })
+  const comments = mysqlTable('comments', {
+    id: myInt('id').autoincrement().primaryKey(),
+    postId: myInt('post_id').notNull(),
+    userId: myInt('user_id').notNull(),
+    body: myText('body').notNull(),
+    createdAt: myText('created_at').notNull(),
+  })
+  const tags = mysqlTable('tags', {
+    id: myInt('id').autoincrement().primaryKey(),
+    name: myText('name').notNull(),
+  })
+  const postTags = mysqlTable(
+    'post_tags',
+    { postId: myInt('post_id').notNull(), tagId: myInt('tag_id').notNull() },
+    (t) => ({ pk: myPrimaryKey({ columns: [t.postId, t.tagId] }) }),
+  )
+  return { users, posts, comments, tags, postTags }
+}
+
+const { users, posts, comments, tags, postTags } = IS_PG
+  ? pgSchema()
+  : IS_MYSQL
+    ? mysqlSchema()
+    : sqliteSchema()
 
 const usersRelations = relations(users, ({ many }) => ({ posts: many(posts) }))
 const postsRelations = relations(posts, ({ one, many }) => ({
@@ -136,6 +188,13 @@ export async function connect(file) {
     const db = drizzlePg(client, { schema })
     return { client, db }
   }
+  if (IS_MYSQL) {
+    // `mode: 'default'` is required for relational queries (db.query.*) on mysql2.
+    const mysql = await import('mysql2/promise')
+    const client = mysql.createPool(file)
+    const db = drizzleMysql(client, { schema, mode: 'default' })
+    return { client, db }
+  }
   const sqlite = new Database(file)
   for (const p of PRAGMAS) sqlite.exec(p)
   const db = drizzleSqlite(sqlite, { schema })
@@ -144,6 +203,7 @@ export async function connect(file) {
 
 export async function disconnect(ctx) {
   if (IS_PG) return ctx.client.end({ timeout: 5 })
+  if (IS_MYSQL) return ctx.client.end()
   ctx.sqlite.close()
 }
 
@@ -301,6 +361,25 @@ function buildPg(ctx, fx) {
   }
 }
 
-export const build = IS_PG ? buildPg : buildSqlite
+// ── MySQL build: mysql2 is async like postgres-js, so the op logic is identical
+// to buildPg — EXCEPT increment: MySQL has no `UPDATE … RETURNING`, so the
+// idiomatic Drizzle path is UPDATE then read the new value back (two statements).
+// The returned value is identical (parity-gated); only the round-trip count
+// differs, which the report's increment caveat already explains.
+function buildMysql(ctx, fx) {
+  const ops = buildPg(ctx, fx)
+  const { db } = ctx
+  ops.increment = async () => {
+    await db
+      .update(posts)
+      .set({ viewCount: sql`${posts.viewCount} + 1` })
+      .where(eq(posts.id, fx.incrementPostId))
+    const r = (await db.select({ v: posts.viewCount }).from(posts).where(eq(posts.id, fx.incrementPostId)))[0]
+    return r.v
+  }
+  return ops
+}
+
+export const build = IS_PG ? buildPg : IS_MYSQL ? buildMysql : buildSqlite
 
 export const writeOps = new Set(['insertSingle', 'insertBulk', 'increment'])

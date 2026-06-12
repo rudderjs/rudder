@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import postgres from 'postgres'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { DDL, PG_DDL, FANOUT, SEED } from './schema.mjs'
+import { DDL, PG_DDL, MYSQL_DDL, FANOUT, SEED } from './schema.mjs'
 import { mulberry32, randInt, words } from './prng.mjs'
 
 // Fixed base epoch so created_at strings are deterministic (no Date.now()).
@@ -162,5 +162,81 @@ export async function buildSeedPg(url, userCount) {
     }
   } finally {
     await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Seed an EMPTY MySQL database at `url` (created by mysql.mjs#createFreshDb) with
+ * the same dataset shape as the SQLite/Postgres seeders — same PRNG, same fan-out,
+ * same row counts — so all three engines' datasets are equivalent. Rows are
+ * bulk-inserted via raw mysql2 (`INSERT … VALUES ?` with a nested array, the
+ * driver's native multi-row form), ORM-neutral like better-sqlite3 / porsager, so
+ * no contender gets a seeding-path edge. AUTO_INCREMENT assigns ids in insertion
+ * order (1..N), matching the ids the fixtures assume.
+ * @param {string} url   connection URL for the (already-created) database
+ * @param {number} userCount
+ */
+export async function buildSeedMysql(url, userCount) {
+  const mysql = await import('mysql2/promise')
+  const conn = await mysql.createConnection({ uri: url })
+  try {
+    for (const stmt of MYSQL_DDL) await conn.query(stmt)
+
+    const rng = mulberry32(SEED ^ userCount) // same stream as the SQLite/PG seeders
+
+    // Rows are built as positional arrays (mysql2's bulk form takes [[...], ...]).
+    const tags = []
+    for (let t = 1; t <= FANOUT.tagCount; t++) tags.push([`tag-${t}`])
+
+    const users = []
+    const posts = []
+    const comments = []
+    const postTags = new Set() // dedup (post_id,tag_id) like SQLite's INSERT OR IGNORE
+
+    let postId = 0
+    let counter = 0
+    for (let u = 1; u <= userCount; u++) {
+      users.push([`User ${u}`, `user${u}@bench.test`, isoAt(counter++)])
+      for (let p = 0; p < FANOUT.postsPerUser; p++) {
+        postId++
+        // PRNG call order mirrors the SQLite/PG seeders exactly (title, body,
+        // view_count, published, then per-comment user+body, then tags).
+        const title = words(rng, 6)
+        const body = words(rng, 30)
+        const view_count = randInt(rng, 0, 5000)
+        const published = rng() < 0.7 ? 1 : 0 // TINYINT(1); read back as boolean
+        posts.push([u, title, body, view_count, published, isoAt(counter++)])
+        for (let c = 0; c < FANOUT.commentsPerPost; c++) {
+          const cu = randInt(rng, 1, userCount)
+          comments.push([postId, cu, words(rng, 12), isoAt(counter++)])
+        }
+        for (let k = 0; k < FANOUT.tagsPerPost; k++) {
+          postTags.add(`${postId},${randInt(rng, 1, FANOUT.tagCount)}`)
+        }
+      }
+    }
+
+    const chunk = async (rows, text) => {
+      for (let i = 0; i < rows.length; i += 5000) await conn.query(text, [rows.slice(i, i + 5000)])
+    }
+    await conn.beginTransaction()
+    await conn.query('INSERT INTO tags (name) VALUES ?', [tags])
+    await chunk(users, 'INSERT INTO users (name, email, created_at) VALUES ?')
+    await chunk(posts, 'INSERT INTO posts (user_id, title, body, view_count, published, created_at) VALUES ?')
+    await chunk(comments, 'INSERT INTO comments (post_id, user_id, body, created_at) VALUES ?')
+    const ptRows = [...postTags].map((s) => s.split(',').map(Number))
+    await chunk(ptRows, 'INSERT INTO post_tags (post_id, tag_id) VALUES ?')
+    await conn.commit()
+
+    const count = async (t) => Number((await conn.query(`SELECT COUNT(*) n FROM ${t}`))[0][0].n)
+    return {
+      users: await count('users'),
+      posts: await count('posts'),
+      comments: await count('comments'),
+      tags: await count('tags'),
+      post_tags: await count('post_tags'),
+    }
+  } finally {
+    await conn.end()
   }
 }

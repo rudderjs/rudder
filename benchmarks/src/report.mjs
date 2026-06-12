@@ -7,14 +7,14 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ENGINE, IS_PG } from './engine.mjs'
+import { ENGINE, IS_PG, IS_MYSQL } from './engine.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RESULTS_DIR = join(HERE, '..', 'results')
 
 const ORDER = ['rudder', 'drizzle', 'prisma']
 const LABELS = { rudder: 'RudderJS', drizzle: 'Drizzle', prisma: 'Prisma' }
-const ENGINE_NAME = IS_PG ? 'Postgres' : 'SQLite'
+const ENGINE_NAME = IS_PG ? 'Postgres' : IS_MYSQL ? 'MySQL' : 'SQLite'
 
 const us = (ns) => (ns / 1000).toFixed(2)
 
@@ -63,6 +63,18 @@ function intro() {
       'per-call wall time from [mitata](https://github.com/evanwashere/mitata).'
     )
   }
+  if (IS_MYSQL) {
+    return (
+      'RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an ' +
+      'identical MySQL database over a local socket — no HTTP, no server, no Vike. ' +
+      'rudder + Drizzle both run on **`mysql2`**, so that pair is a pure query-layer ' +
+      'comparison over one driver; **Prisma runs on the `mariadb` driver** ' +
+      '(@prisma/adapter-mariadb — it has no mysql2 adapter, an idiomatic-path ' +
+      'difference, not a thumb on the scale). Lower is faster; **bold** is the fastest ' +
+      'for that op. Numbers are mean per-call wall time from ' +
+      '[mitata](https://github.com/evanwashere/mitata).'
+    )
+  }
   return (
     'RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an ' +
     'identical `better-sqlite3` file — no HTTP, no server, no Vike. Lower is ' +
@@ -88,6 +100,23 @@ function caveat() {
       '`UPDATE … RETURNING`. On SQLite the extra round-trip is ~free; over a socket it ' +
       'roughly doubles that one op. The result value is identical (parity-gated) — only ' +
       'the round-trip count differs.'
+    )
+  }
+  if (IS_MYSQL) {
+    return (
+      '> **Reading these numbers:** every call pays a real network round-trip ' +
+      '(~80–120µs floor on a localhost socket), so single-statement ops ' +
+      '(insert/find/list/increment/aggregate) cluster near that floor. The ORMs ' +
+      'separate on the query-layer-heavy ops (bulk insert, large hydration, eager + ' +
+      'pivot loading), where RudderJS\'s leaner engine leads. Read alongside the ' +
+      'Postgres report ([`REPORT-postgres.md`](REPORT-postgres.md)) — the two socket ' +
+      'engines tell the same per-statement-cost story SQLite\'s in-process reads hide.\n' +
+      '>\n' +
+      "> **Increment caveat:** RudderJS's op uses its idiomatic instance path " +
+      '(`find()` then `increment()` = two round-trips). MySQL has no ' +
+      '`UPDATE … RETURNING`, so Drizzle issues UPDATE-then-SELECT and Prisma does the ' +
+      'equivalent internally — every contender pays two statements here, so this op is ' +
+      'a closer read than on Postgres. The result value is identical (parity-gated).'
     )
   }
   return (
@@ -123,7 +152,11 @@ function render(docs) {
   }
   out.push('---')
   out.push('')
-  const setup = IS_PG ? 'pnpm bench:pg:setup && pnpm bench:pg && pnpm bench:pg:report' : 'pnpm bench:setup && pnpm bench && pnpm bench:report'
+  const setup = IS_PG
+    ? 'pnpm bench:pg:setup && pnpm bench:pg && pnpm bench:pg:report'
+    : IS_MYSQL
+      ? 'pnpm bench:mysql:setup && pnpm bench:mysql && pnpm bench:mysql:report'
+      : 'pnpm bench:setup && pnpm bench && pnpm bench:report'
   out.push(
     `_Regenerate: \`${setup}\`. ` +
       'Headline published numbers come from a pinned local machine, not CI ' +
@@ -142,12 +175,12 @@ const docs = existsSync(RESULTS_DIR)
   : []
 
 if (!docs.length) {
-  const cmd = IS_PG ? 'pnpm bench:pg' : 'pnpm bench'
+  const cmd = IS_PG ? 'pnpm bench:pg' : IS_MYSQL ? 'pnpm bench:mysql' : 'pnpm bench'
   console.error(`[report] no results/${ENGINE}-*.json found — run \`${cmd}\` first`)
   process.exit(1)
 }
 
-const outFile = IS_PG ? 'REPORT-postgres.md' : 'REPORT.md'
+const outFile = IS_PG ? 'REPORT-postgres.md' : IS_MYSQL ? 'REPORT-mysql.md' : 'REPORT.md'
 const out = join(RESULTS_DIR, outFile)
 writeFileSync(out, render(docs))
 console.log(`[report] wrote ${out.split('/').slice(-2).join('/')} (${docs.length} size(s))`)

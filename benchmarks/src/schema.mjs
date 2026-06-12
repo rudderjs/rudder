@@ -91,6 +91,54 @@ export const PG_DDL = [
   `CREATE INDEX idx_post_tags_tag_id ON post_tags(tag_id)`,
 ]
 
+// MySQL DDL — the same shape mapped onto MySQL types: INT AUTO_INCREMENT for the
+// primary keys (matching SQLite AUTOINCREMENT / Postgres SERIAL), real BOOLEAN
+// for `published` (MySQL aliases BOOLEAN → TINYINT(1); the native driver casts
+// TINY(1) back to a JS boolean on read, so it round-trips like Postgres — and no
+// op's result exposes `published`, so the divergence stays invisible to the
+// parity gate anyway). `created_at` is TEXT on every engine so the stored bytes —
+// and the hydration work — match exactly. No FOREIGN KEY constraints (parity with
+// the other engines, and so cloneDb's table-copy order is irrelevant). InnoDB +
+// the server's default charset are used (no per-table overrides) so nothing about
+// the storage layer advantages one ORM.
+export const MYSQL_DDL = [
+  `CREATE TABLE users (
+     id         INT AUTO_INCREMENT PRIMARY KEY,
+     name       TEXT NOT NULL,
+     email      TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE TABLE posts (
+     id         INT AUTO_INCREMENT PRIMARY KEY,
+     user_id    INT NOT NULL,
+     title      TEXT NOT NULL,
+     body       TEXT NOT NULL,
+     view_count INT NOT NULL DEFAULT 0,
+     published  BOOLEAN NOT NULL DEFAULT false,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX idx_posts_user_id ON posts(user_id)`,
+  `CREATE TABLE comments (
+     id         INT AUTO_INCREMENT PRIMARY KEY,
+     post_id    INT NOT NULL,
+     user_id    INT NOT NULL,
+     body       TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX idx_comments_post_id ON comments(post_id)`,
+  `CREATE INDEX idx_comments_user_id ON comments(user_id)`,
+  `CREATE TABLE tags (
+     id   INT AUTO_INCREMENT PRIMARY KEY,
+     name TEXT NOT NULL
+   )`,
+  `CREATE TABLE post_tags (
+     post_id INT NOT NULL,
+     tag_id  INT NOT NULL,
+     PRIMARY KEY (post_id, tag_id)
+   )`,
+  `CREATE INDEX idx_post_tags_tag_id ON post_tags(tag_id)`,
+]
+
 // Connection pragmas applied IDENTICALLY by every contender's setup. WAL +
 // NORMAL is the standard production SQLite profile; pinning them removes
 // journal/sync mode as a hidden variable between ORMs.

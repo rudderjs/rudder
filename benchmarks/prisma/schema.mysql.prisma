@@ -1,0 +1,76 @@
+// Prisma's MYSQL view of the shared schema — identical models to schema.prisma /
+// schema.postgres.prisma, only the datasource provider (mysql) and the generated
+// client output differ. The DDL is owned by src/schema.mjs (MYSQL_DDL) and applied
+// via mysql2; Prisma only MAPS onto the existing tables (@@map / @map), it never
+// creates them. No `db push` runs; we just generate the client. The
+// @prisma/adapter-mariadb driver adapter supplies the connection at runtime, so
+// the datasource needs no url here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-mysql"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.Text
+  email     String    @db.Text
+  createdAt String    @map("created_at") @db.Text
+  posts     Post[]
+  comments  Comment[]
+
+  @@map("users")
+}
+
+model Post {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String    @db.Text
+  body      String    @db.Text
+  viewCount Int       @default(0) @map("view_count")
+  published Boolean   @default(false)
+  createdAt String    @map("created_at") @db.Text
+  user      User      @relation(fields: [userId], references: [id])
+  comments  Comment[]
+  tags      PostTag[]
+
+  @@index([userId])
+  @@map("posts")
+}
+
+model Comment {
+  id        Int    @id @default(autoincrement())
+  postId    Int    @map("post_id")
+  userId    Int    @map("user_id")
+  body      String @db.Text
+  createdAt String @map("created_at") @db.Text
+  post      Post   @relation(fields: [postId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @db.Text
+  posts PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId Int  @map("post_id")
+  tagId  Int  @map("tag_id")
+  post   Post @relation(fields: [postId], references: [id])
+  tag    Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
+}
