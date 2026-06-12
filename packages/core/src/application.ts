@@ -282,6 +282,11 @@ export class Application {
           _resolving.delete(key)
         }
       })
+    } else {
+      // A dev re-boot may have dropped every deferred provider; clear any handler
+      // a prior boot left on the shared (process-wide) container so it doesn't
+      // point at the superseded Application's stale deferred map.
+      this.container.setMissingHandler(null)
     }
   }
 

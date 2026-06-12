@@ -149,7 +149,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
   entries = entries.filter(e => e.autoDiscover !== false)
 
   // 5. Resolve multi-driver collisions (e.g. orm-prisma vs orm-drizzle)
-  entries = resolveMultiDriver(entries, '@rudderjs/orm-', 'database.driver')
+  entries = resolveMultiDriver(entries, '@rudderjs/orm-', 'database.driver', 'DB_DRIVER')
 
   // 6. Filter installed + skipped, then resolve each class
   const providers: ProviderClass[] = []
@@ -193,28 +193,33 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
 
 /**
  * When multiple packages share a prefix (e.g. `@rudderjs/orm-prisma`,
- * `@rudderjs/orm-drizzle`), pick one driver based on a config key.
- * The chosen driver wins; the others are filtered out of the entry list.
+ * `@rudderjs/orm-drizzle`), pick one driver; the others are filtered out.
  *
- * Falls back to "first installed wins" when the config key is unset.
+ * `defaultProviders()` runs at module-eval time (in `bootstrap/providers.ts`),
+ * BEFORE `Application.create()` binds the config repository, so `config(configKey)`
+ * reads `undefined` here. The env var IS available at eval time, so it is the
+ * primary selector; `config()` is a fallback for callers that run after the repo
+ * is bound. Falls back to "first installed wins" when neither is set.
  */
-function resolveMultiDriver(
+export function resolveMultiDriver(
   entries:   ProviderEntry[],
   prefix:    string,
   configKey: string,
+  envKey:    string,
 ): ProviderEntry[] {
   const drivers = entries.filter(e => e.package.startsWith(prefix))
   if (drivers.length <= 1) return entries
 
-  const chosen = config<string>(configKey)
+  const chosen = Env.get(envKey, '') || config<string>(configKey)
   let winner: ProviderEntry | undefined
 
   if (chosen) {
     winner = drivers.find(d => d.package.includes(chosen))
     if (!winner) {
       throw new Error(
-        `[RudderJS] Multiple ${prefix}* drivers installed but config('${configKey}') is "${chosen}", ` +
-        `which doesn't match any of: ${drivers.map(d => d.package).join(', ')}.`,
+        `[RudderJS] Multiple ${prefix}* drivers installed but the selected driver "${chosen}" ` +
+        `(from ${envKey} env or config('${configKey}')) doesn't match any of: ` +
+        `${drivers.map(d => d.package).join(', ')}.`,
       )
     }
   } else {
