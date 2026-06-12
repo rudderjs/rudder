@@ -188,6 +188,65 @@ describe('Sanctum.validateToken', () => {
     }
   })
 
+  it('honors config.expiration as a global lifetime when no per-token expiresAt is set', async () => {
+    const { sanctum } = makeSanctum([fakeUser()], { expiration: 60 }) // 60 minutes
+    const { plainTextToken } = await sanctum.createToken('1', 'global-expiry')
+
+    // Valid now.
+    assert.ok(await sanctum.validateToken(plainTextToken))
+
+    // 61 minutes later it has aged past the global lifetime.
+    const realNow = Date.now
+    Date.now = () => realNow() + 61 * 60_000
+    try {
+      assert.strictEqual(await sanctum.validateToken(plainTextToken), null)
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('per-token expiresAt overrides config.expiration', async () => {
+    // Global lifetime is 1 minute, but this token is given a 1-hour expiresAt —
+    // the explicit per-token value wins, so it survives past the global window.
+    const { sanctum } = makeSanctum([fakeUser()], { expiration: 1 })
+    const exp = new Date(Date.now() + 60 * 60_000)
+    const { plainTextToken } = await sanctum.createToken('1', 'override', undefined, exp)
+
+    const realNow = Date.now
+    Date.now = () => realNow() + 5 * 60_000 // 5 min: past the 1-min global, before the explicit expiry
+    try {
+      assert.ok(await sanctum.validateToken(plainTextToken))
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('tokens never expire when neither expiresAt nor config.expiration is set', async () => {
+    const { sanctum } = makeSanctum() // no expiration config
+    const { plainTextToken } = await sanctum.createToken('1', 'no-expiry')
+
+    const realNow = Date.now
+    Date.now = () => realNow() + 365 * 24 * 60 * 60 * 1000 // 1 year forward
+    try {
+      assert.ok(await sanctum.validateToken(plainTextToken))
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('ignores a non-positive config.expiration (treated as no global expiry)', async () => {
+    const { sanctum } = makeSanctum([fakeUser()], { expiration: 0 })
+    const { plainTextToken } = await sanctum.createToken('1', 'zero-expiry')
+
+    const realNow = Date.now
+    Date.now = () => realNow() + 10 * 60_000
+    try {
+      assert.ok(await sanctum.validateToken(plainTextToken))
+    } finally {
+      Date.now = realNow
+    }
+  })
+
   it('accepts a lowercase "bearer" prefix (T6, RFC 6750 case-insensitive)', async () => {
     const { sanctum } = makeSanctum()
     const { plainTextToken } = await sanctum.createToken('1', 'test')

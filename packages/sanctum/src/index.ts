@@ -179,12 +179,12 @@ export class Sanctum {
     if (!token) return null
     if (token.id !== id) return null
 
-    // Check expiry — `<=` rejects a token whose expiry is exactly `now` (the
+    // Check expiry. `<=` rejects a token whose expiry is exactly `now` (the
     // millisecond it expires it's no longer valid). The previous `<` allowed
     // a one-millisecond window of "expired but still accepted" use, which
     // was both technically wrong and a source of flaky millisecond-boundary
     // tests.
-    if (token.expiresAt && token.expiresAt.getTime() <= Date.now()) return null
+    if (this.isExpired(token)) return null
 
     // Resolve user
     const user = await this.users.retrieveById(token.userId)
@@ -194,6 +194,23 @@ export class Sanctum {
     await this.tokens.updateLastUsed(token.id, new Date())
 
     return { user, token }
+  }
+
+  /**
+   * Whether a token has expired. A per-token `expiresAt` is an explicit
+   * override and always wins; otherwise the global `config.expiration`
+   * (minutes from `createdAt`) applies, Laravel Sanctum-style. With neither set
+   * the token never expires.
+   */
+  isExpired(token: PersonalAccessToken): boolean {
+    if (token.expiresAt) return token.expiresAt.getTime() <= Date.now()
+
+    const minutes = this.config.expiration
+    if (minutes != null && minutes > 0) {
+      return token.createdAt.getTime() + minutes * 60_000 <= Date.now()
+    }
+
+    return false
   }
 
   /** Check if a token has a specific ability. */
@@ -353,7 +370,11 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
 export interface SanctumConfig {
   /** Domains allowed for SPA cookie auth (default: []) */
   stateful?: string[]
-  /** Token expiration in minutes (null = no expiry, default: null) */
+  /**
+   * Global token lifetime in minutes, measured from each token's `createdAt`.
+   * A per-token `expiresAt` passed to `createToken()` overrides this. `null` or
+   * a non-positive value means no global expiry (default: null).
+   */
   expiration?: number | null
   /** Prefix for generated tokens (default: '') */
   tokenPrefix?: string
