@@ -18,7 +18,7 @@ dist/
 └── assets.json      # asset manifest
 ```
 
-Run with `node ./dist/server/index.mjs`. The server binds to `PORT` (default `3000`).
+Run with `NODE_ENV=production node ./dist/server/index.mjs`. Set `NODE_ENV=production` (the scaffolded `start` script does this) — the framework gates dev-only behavior on it. The server binds to `PORT` (default `3000`).
 
 ## Environment
 
