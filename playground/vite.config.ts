@@ -3,6 +3,7 @@ import rudderjs from '@rudderjs/vite'
 import vike from 'vike/plugin'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { diagAssetsManifest } from './vite-diag-assets-manifest.ts'
 
 export default defineConfig({
   plugins: [
@@ -10,6 +11,9 @@ export default defineConfig({
     vike(),
     tailwindcss(),
     react(),
+    // Opt-in (DIAG_ASSETS_MANIFEST=1) build-topology probe for rolldown#9592.
+    // `false` when off; Vite ignores falsy plugin entries.
+    diagAssetsManifest(),
   ],
   server: {
     allowedHosts: true,
