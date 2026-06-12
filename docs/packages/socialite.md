@@ -9,7 +9,7 @@ pnpm add @rudderjs/socialite
 ```
 
 ```ts
-// config/services.ts
+// config/socialite.ts
 import { Env } from '@rudderjs/support'
 
 export default {
@@ -96,9 +96,9 @@ Socialite.driver('github').withScopes(['repo', 'gist'])        // append
 
 | Provider | Default scopes |
 |---|---|
-| `github` | `user:email` |
+| `github` | `read:user`, `user:email` |
 | `google` | `openid`, `profile`, `email` |
-| `facebook` | `email` |
+| `facebook` | `email`, `public_profile` |
 | `apple` | `name`, `email` |
 
 ## Sign-in-with-Apple
@@ -150,12 +150,12 @@ State isn't generated automatically — apps that need CSRF protection on the OA
 
 ## Custom providers
 
-Extend `SocialiteProvider` to wire any OAuth 2.0 service:
+Extend `SocialiteDriver` to wire any OAuth 2.0 service (the built-in `GitHubProvider`, `GoogleProvider`, etc. extend it too):
 
 ```ts
-import { Socialite, SocialiteProvider, SocialUser } from '@rudderjs/socialite'
+import { Socialite, SocialiteDriver, SocialUser } from '@rudderjs/socialite'
 
-class GitLabProvider extends SocialiteProvider {
+class GitLabProvider extends SocialiteDriver {
   protected defaultScopes() { return ['read_user'] }
   protected authUrl()       { return 'https://gitlab.com/oauth/authorize' }
   protected tokenUrl()      { return 'https://gitlab.com/oauth/token' }

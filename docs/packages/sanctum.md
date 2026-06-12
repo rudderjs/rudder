@@ -21,7 +21,7 @@ pnpm add @rudderjs/sanctum
 import type { SanctumConfig } from '@rudderjs/sanctum'
 
 export default {
-  expiration:  null,    // token lifetime in minutes (null = no expiry)
+  expiration:  null,    // reserved; not applied automatically yet — pass expiresAt to createToken()
   tokenPrefix: '',      // optional prefix on generated tokens
   // provider: 'users', // override the user provider — required for pure-API
                         //   apps that don't configure a session guard
@@ -153,11 +153,13 @@ A Prisma-backed implementation is ~30 lines — see the package source for a ref
 ```ts
 interface SanctumConfig {
   stateful?:    string[]      // domains allowed for SPA cookie auth (default: [])
-  expiration?:  number | null // minutes; null = no expiry
+  expiration?:  number | null // reserved; not yet applied automatically (default: null)
   tokenPrefix?: string        // optional prefix on generated tokens
   provider?:    string        // user provider name (default: default guard's provider)
 }
 ```
+
+> `expiration` is currently a declared config field that the guard does not yet read — token lifetime is set per token by passing an explicit `expiresAt` to `createToken()`. Treat it as reserved until it's wired up.
 
 `stateful` is for first-party SPAs that share a domain with the API — those requests authenticate via the session cookie instead of a Bearer token. Set this to your SPA's domain(s) when applicable.
 
@@ -183,4 +185,4 @@ These columns will be omitted from `req.user` (and `req.user`'s JSON serializati
 - **`MemoryTokenRepository` in production.** Tokens disappear on restart. Implement `TokenRepository` against your database before going live.
 - **Plain-text token leaking.** It comes back from `createToken()` once. Never log it, never persist it server-side beyond the response.
 - **Tokens with `null` abilities.** They have unrestricted access. Either explicitly require abilities (`RequireToken('admin')`) or be sure that's what you want.
-- **Expired tokens not auto-deleted.** Past-`expiresAt` tokens are rejected at validation but stay in the table. Run a periodic cleanup job (`sanctum.purgeExpired()` if you implement it on your repository).
+- **Expired tokens not auto-deleted.** Past-`expiresAt` tokens are rejected at validation but stay in the table. There is no built-in purge — run a periodic cleanup that deletes rows where `expiresAt` is in the past (e.g. a scheduled task against your `TokenRepository` or a direct `DELETE` on the tokens table).

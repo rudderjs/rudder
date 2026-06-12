@@ -39,7 +39,7 @@ export default [
 ]
 ```
 
-The auth provider auto-installs `AuthMiddleware` on the `web` route group, so every web request has `req.user` populated before your handler runs. API routes stay stateless.
+The auth provider auto-installs `AuthMiddleware` on the `web` route group, so every authenticated web request has `req.user` populated before your handler runs (unauthenticated requests leave it unset). API routes stay stateless.
 
 ## Reading the current user
 
