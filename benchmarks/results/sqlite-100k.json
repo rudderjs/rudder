@@ -1,0 +1,364 @@
+{
+  "provenance": {
+    "date": "2026-06-12",
+    "engine": "sqlite",
+    "size": "100k",
+    "users": 100000,
+    "seed": 2654435769,
+    "node": "v24.16.0",
+    "os": "Darwin 25.4.0",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "cores": 15,
+    "versions": {
+      "@rudderjs/orm": "1.21.0",
+      "@rudderjs/database": "1.5.1",
+      "drizzle-orm": "0.45.2",
+      "@prisma/client": "7.4.2",
+      "better-sqlite3": "12.6.2",
+      "mitata": "1.0.34"
+    }
+  },
+  "ops": [
+    {
+      "id": "insertSingle",
+      "label": "insert single row",
+      "write": true,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 16654.4477742513,
+          "p50_ns": 16674.37744140625,
+          "p99_ns": 17340.627197265625,
+          "min_ns": 15588.2568359375,
+          "samples": 12,
+          "opsPerSec": 60044.020285443235
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 17993.487040201824,
+          "p50_ns": 17659.708740234375,
+          "p99_ns": 17921.956298828125,
+          "min_ns": 17422.607421875,
+          "samples": 12,
+          "opsPerSec": 55575.66455939068
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 33041.43526204427,
+          "p50_ns": 32645.731689453125,
+          "p99_ns": 33768.88037109375,
+          "min_ns": 32183.329345703125,
+          "samples": 12,
+          "opsPerSec": 30265.02910873037
+        }
+      ]
+    },
+    {
+      "id": "insertBulk",
+      "label": "insert bulk (1k rows)",
+      "write": true,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 655106.3701731025,
+          "p50_ns": 592959,
+          "p99_ns": 3218417,
+          "min_ns": 549875,
+          "samples": 751,
+          "opsPerSec": 1526.4696628362267
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 3345596.673611111,
+          "p50_ns": 3254417,
+          "p99_ns": 3773208,
+          "min_ns": 3152333,
+          "samples": 144,
+          "opsPerSec": 298.9003450080065
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 3386184.8732394367,
+          "p50_ns": 3180833,
+          "p99_ns": 4590459,
+          "min_ns": 3058125,
+          "samples": 142,
+          "opsPerSec": 295.3176029763955
+        }
+      ]
+    },
+    {
+      "id": "findByPk",
+      "label": "findByPk (hot loop)",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 5488.049432051809,
+          "p50_ns": 5769.093994140625,
+          "p99_ns": 5900.492431640625,
+          "min_ns": 4794.1181640625,
+          "samples": 19,
+          "opsPerSec": 182214.10218350228
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 15313.560506184896,
+          "p50_ns": 15109.619140625,
+          "p99_ns": 15486.613037109375,
+          "min_ns": 14852.8037109375,
+          "samples": 12,
+          "opsPerSec": 65301.59982037596
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 25343.961059570312,
+          "p50_ns": 25180.755615234375,
+          "p99_ns": 25820.90234375,
+          "min_ns": 24849.79248046875,
+          "samples": 12,
+          "opsPerSec": 39457.131331977915
+        }
+      ]
+    },
+    {
+      "id": "list",
+      "label": "where + order + limit 50",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 72503.8442108337,
+          "p50_ns": 71000,
+          "p99_ns": 94167,
+          "min_ns": 64875,
+          "samples": 6849,
+          "opsPerSec": 13792.37212708478
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 95066.2722402908,
+          "p50_ns": 93583,
+          "p99_ns": 123333,
+          "min_ns": 85334,
+          "samples": 5227,
+          "opsPerSec": 10518.977724006958
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 108391.88096280087,
+          "p50_ns": 104500,
+          "p99_ns": 135875,
+          "min_ns": 96417,
+          "samples": 4570,
+          "opsPerSec": 9225.783251636634
+        }
+      ]
+    },
+    {
+      "id": "largeGet",
+      "label": "where get 1k rows (hydration)",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 375681.29598788795,
+          "p50_ns": 371250,
+          "p99_ns": 588208,
+          "min_ns": 346000,
+          "samples": 1321,
+          "opsPerSec": 2661.8306811639627
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 437256.598944591,
+          "p50_ns": 433208,
+          "p99_ns": 610500,
+          "min_ns": 405000,
+          "samples": 1137,
+          "opsPerSec": 2286.9866399128255
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 725134.4273127753,
+          "p50_ns": 681584,
+          "p99_ns": 2104459,
+          "min_ns": 637542,
+          "samples": 681,
+          "opsPerSec": 1379.0546446757876
+        }
+      ]
+    },
+    {
+      "id": "eagerPosts",
+      "label": "eager-load posts (50 users)",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 156759.6892958636,
+          "p50_ns": 152167,
+          "p99_ns": 190625,
+          "min_ns": 140708,
+          "samples": 3167,
+          "opsPerSec": 6379.191005620263
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 368866.07583643124,
+          "p50_ns": 364667,
+          "p99_ns": 449208,
+          "min_ns": 340250,
+          "samples": 1345,
+          "opsPerSec": 2711.0110294974284
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 342837.7340277778,
+          "p50_ns": 310625,
+          "p99_ns": 2294834,
+          "min_ns": 290292,
+          "samples": 1440,
+          "opsPerSec": 2916.8317858470527
+        }
+      ]
+    },
+    {
+      "id": "m2mEager",
+      "label": "eager-load tags via pivot (200 posts)",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 267244.2968159741,
+          "p50_ns": 256292,
+          "p99_ns": 364416,
+          "min_ns": 236833,
+          "samples": 1853,
+          "opsPerSec": 3741.894633166318
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 782899.824088748,
+          "p50_ns": 774125,
+          "p99_ns": 1098667,
+          "min_ns": 719625,
+          "samples": 631,
+          "opsPerSec": 1277.3026244627715
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 996321.7444219067,
+          "p50_ns": 920167,
+          "p99_ns": 2903666,
+          "min_ns": 879667,
+          "samples": 493,
+          "opsPerSec": 1003.6918350911106
+        }
+      ]
+    },
+    {
+      "id": "aggregate",
+      "label": "count + filtered count",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 50912.31453450521,
+          "p50_ns": 50937.0830078125,
+          "p99_ns": 51548.4619140625,
+          "min_ns": 49872.334716796875,
+          "samples": 12,
+          "opsPerSec": 19641.613412060888
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 59857.36465486086,
+          "p50_ns": 58750,
+          "p99_ns": 73541,
+          "min_ns": 53583,
+          "samples": 8301,
+          "opsPerSec": 16706.38200939895
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 857510.5410122164,
+          "p50_ns": 837333,
+          "p99_ns": 1317625,
+          "min_ns": 767208,
+          "samples": 573,
+          "opsPerSec": 1166.1664226536357
+        }
+      ]
+    },
+    {
+      "id": "increment",
+      "label": "increment view_count",
+      "write": true,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 21281.030436197918,
+          "p50_ns": 20846.19140625,
+          "p99_ns": 22454.742431640625,
+          "min_ns": 20478.057861328125,
+          "samples": 12,
+          "opsPerSec": 46990.20580784718
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 22856.880187988125,
+          "p50_ns": 22692.474365232512,
+          "p99_ns": 24232.696533204988,
+          "min_ns": 20709.859130857512,
+          "samples": 12,
+          "opsPerSec": 43750.50277095671
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 34304.161031086616,
+          "p50_ns": 34006.80541992001,
+          "p99_ns": 35003.0009765625,
+          "min_ns": 33186.53344726376,
+          "samples": 12,
+          "opsPerSec": 29150.98256138066
+        }
+      ]
+    },
+    {
+      "id": "toJSON",
+      "label": "serialize 1k hydrated rows",
+      "write": false,
+      "results": [
+        {
+          "contender": "rudder",
+          "avg_ns": 310258.0295598684,
+          "p50_ns": 299875,
+          "p99_ns": 364207.9999923706,
+          "min_ns": 275750,
+          "samples": 1590,
+          "opsPerSec": 3223.1236736035444
+        },
+        {
+          "contender": "drizzle",
+          "avg_ns": 217487.58546255506,
+          "p50_ns": 208500,
+          "p99_ns": 244916,
+          "min_ns": 191292,
+          "samples": 2270,
+          "opsPerSec": 4597.963593522769
+        },
+        {
+          "contender": "prisma",
+          "avg_ns": 220331.387455516,
+          "p50_ns": 212333,
+          "p99_ns": 263916,
+          "min_ns": 194167,
+          "samples": 2248,
+          "opsPerSec": 4538.61799514105
+        }
+      ]
+    }
+  ]
+}
