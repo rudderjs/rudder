@@ -146,5 +146,5 @@ The emitter dispatches on the schema's `~standard` vendor tag. A route whose val
 
 - **`.responds()` doesn't validate.** It documents the contract; it doesn't enforce that the handler returns the declared shape. Dev-mode response validation is a deferred follow-up.
 - **An open `/docs` leaks your API.** `registerOpenApiRoutes()` is opt-in and unauthenticated by default — gate it behind auth in production or ship the static spec.
-- **Unsupported schema nodes are dropped, not errored.** Watch the generation warnings — a `z.date()` field won't appear in the spec. Model dates as `z.string().datetime()` if you need them documented.
+- **Unsupported schema nodes are dropped, not errored.** Watch the generation warnings — a node with no JSON Schema analogue (e.g. `z.bigint()`) degrades to an open `{}`. `z.date()` is the exception: it's documented as an ISO string (`type: 'string', format: 'date-time'`), so dates appear in the spec without rewriting them to `z.string().datetime()`.
 - **GraphQL is out of scope.** Rudder is SSR-first — `view()` already hands pages exactly their data, so REST is the core. A GraphQL layer, if ever, would be a separate opt-in package.

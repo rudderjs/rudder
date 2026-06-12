@@ -13,7 +13,7 @@ await page.setViewportSize({ width: 1280, height: 800 })
 await page.goto('https://example.com')
 
 class BrowserAgent extends Agent {
-  model() { return 'anthropic/claude-sonnet-4-5' }
+  model() { return 'anthropic/claude-sonnet-4-6' }
 
   tools() {
     return [
@@ -55,7 +55,7 @@ Configure the provider in `config/ai.ts`:
 import type { AiConfig } from '@rudderjs/ai'
 
 export default {
-  default: 'anthropic/claude-sonnet-4-5',
+  default: 'anthropic/claude-sonnet-4-6',
   providers: {
     anthropic: { driver: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
   },
@@ -90,7 +90,7 @@ When OpenAI's `computer_use_preview` matures or we add a wrapper fallback for no
 computerUseTool({
   page,                                         // required: Playwright Page (or any PageLike)
   viewport: { width: 1280, height: 800 },       // default: 1280×800 (Anthropic's training distribution)
-  model:    'anthropic/claude-sonnet-4-5',      // optional: triggers upfront ComputerUseProviderError check
+  model:    'anthropic/claude-sonnet-4-6',      // optional: triggers upfront ComputerUseProviderError check
   needsApproval: true,                          // default: true (every action gates through approval)
   maxActions: 50,                               // default: 50 (throws ComputerUseLimitError on overflow)
   state: undefined,                             // default: fresh state per tool instance

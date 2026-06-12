@@ -43,16 +43,15 @@ You register the classes, not instances.
 
 ```ts
 // app/Mcp/WeatherServer.ts
-import { McpServer } from '@rudderjs/mcp'
+import { McpServer, Name } from '@rudderjs/mcp'
 import { CurrentWeatherTool } from './Tools/CurrentWeatherTool.js'
 import { ForecastTool } from './Tools/ForecastTool.js'
 
+@Name('weather')
 export class WeatherServer extends McpServer {
-  name() { return 'Weather' }
-
-  tools()     { return [CurrentWeatherTool, ForecastTool] }
-  resources() { return [] }
-  prompts()   { return [] }
+  protected tools     = [CurrentWeatherTool, ForecastTool]
+  protected resources = []
+  protected prompts   = []
 }
 ```
 
@@ -166,27 +165,27 @@ class ExperimentalTool extends McpTool {
 }
 ```
 
-Returning `false` hides the primitive from `tools/list` AND blocks `tools/call` (returning "Unknown tool"), so direct calls can't bypass the gate. The same hook works on `McpResource` and `McpPrompt`. Async hooks are supported. The hook runs with no arguments today; per-request gating (auth-scoped tools) is roadmap work — see `docs/plans/2026-05-09-mcp-roadmap.md`.
+Returning `false` hides the primitive from `tools/list` AND blocks `tools/call` (returning "Unknown tool"), so direct calls can't bypass the gate. The same hook works on `McpResource` and `McpPrompt`. Async hooks are supported. The hook runs with no arguments today; per-request gating (auth-scoped tools) is roadmap work.
 
 ## Resources and prompts
 
 ```ts
 @Description('Latest weather report')
 export class LatestReport extends McpResource {
-  uri()  { return 'weather://latest' }
-  async read() { return McpResponse.text(await fetchLatestReport()) }
+  uri() { return 'weather://latest' }
+  async handle() { return await fetchLatestReport() }   // returns a plain string
 }
 
 @Description('Compose a weather summary')
 export class WeatherSummaryPrompt extends McpPrompt {
-  schema() { return z.object({ location: z.string() }) }
-  async render({ location }) {
-    return McpResponse.prompt(`Summarize today's weather in ${location} for a casual reader.`)
+  arguments() { return z.object({ location: z.string() }) }
+  async handle({ location }) {
+    return [{ role: 'user', content: `Summarize today's weather in ${location} for a casual reader.` }]
   }
 }
 ```
 
-Resources can use URI templates: `weather://{city}` accepts `weather://paris` and exposes `city: 'paris'` to `read()`.
+A resource's `handle()` returns a plain string (its body); a prompt's `handle()` returns an array of `{ role, content }` messages. Resources can use URI templates: `weather://{city}` accepts `weather://paris` and exposes `city: 'paris'` to `handle()`.
 
 ## Authentication
 

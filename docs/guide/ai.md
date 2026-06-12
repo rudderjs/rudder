@@ -30,7 +30,7 @@ Provider SDKs are optional peers — install only what you use. Each adapter laz
 import type { AiConfig } from '@rudderjs/ai'
 
 export default {
-  default: 'anthropic/claude-sonnet-4-5',
+  default: 'anthropic/claude-sonnet-4-6',
   providers: {
     anthropic: { driver: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
     openai:    { driver: 'openai',    apiKey: process.env.OPENAI_API_KEY! },
@@ -80,14 +80,14 @@ const r2 = await AI.prompt('Hello world')
 // Configured anonymous agent — tools + options together
 const r3 = await agent({
   instructions: 'You help find users.',
-  model: 'anthropic/claude-sonnet-4-5',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [searchTool],
 }).prompt('Find all admins')
 
 // Reusable typed class
 class SearchAgent extends Agent {
   instructions() { return 'You help find users.' }
-  model()        { return 'anthropic/claude-sonnet-4-5' }
+  model()        { return 'anthropic/claude-sonnet-4-6' }
   tools()        { return [searchTool] }
   stopWhen()     { return stepCountIs(5) }
 }
@@ -578,7 +578,7 @@ import { OrmUserMemory } from '@rudderjs/ai/memory-orm'
 import { EmbeddingUserMemory } from '@rudderjs/ai/memory-embedding'
 
 export default {
-  default: 'anthropic/claude-sonnet-4-5',
+  default: 'anthropic/claude-sonnet-4-6',
   providers: { /* ... */ },
   memory: new EmbeddingUserMemory({
     inner: new OrmUserMemory(),
@@ -835,7 +835,7 @@ Telescope subscribes to the `agent.eval.completed` observer event (emitted by `r
 
 ## Pitfalls
 
-- **Bare model names.** `model: 'claude-sonnet-4-5'` throws — must be `provider/model`.
+- **Bare model names.** `model: 'claude-sonnet-4-6'` throws — must be `provider/model`.
 - **Tool handlers throwing.** The agent gets the error message back as the tool result. Catch known errors inside the handler and return a structured failure shape.
 - **Streaming `response` not resolving.** `await response` only resolves after the `stream` iterator has been fully consumed. Always iterate the stream first, even if you only care about the final result.
 - **`forUser()` / `continue()` throw.** Conversation methods need a registered store — call `setConversationStore(...)` (or wire one through `AiConfig.conversations`) before they're called.
