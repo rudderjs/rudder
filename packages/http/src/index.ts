@@ -106,6 +106,8 @@ export class PendingRequest {
     c._timeout          = this._timeout
     c._reqInterceptors  = [...this._reqInterceptors]
     c._resInterceptors  = [...this._resInterceptors]
+    c._body             = this._body
+    c._bodyType         = this._bodyType
     c._fake             = this._fake
     c._recorder         = this._recorder
     return c
@@ -142,10 +144,14 @@ export class PendingRequest {
     return this
   }
 
-  /** Send body as JSON (sets Content-Type: application/json). */
+  /**
+   * Set the request body. Defaults the encoding to JSON, but only when no
+   * explicit encoding was chosen — so a prior `asForm()` is respected rather
+   * than silently overridden (this is also the path `post(url, data)` takes).
+   */
   withBody(data: unknown): this {
-    this._body     = data
-    this._bodyType = 'json'
+    this._body = data
+    if (this._bodyType === 'none') this._bodyType = 'json'
     return this
   }
 

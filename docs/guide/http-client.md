@@ -84,11 +84,12 @@ await Http.withBasicAuth('user', 'pass').get('/api/protected')
 ## Bodies
 
 ```ts
-await Http.post('/api/users', { name: 'Alice' })             // JSON (default)
-await Http.withBody({ email, password }).asForm().post('/login')   // form-encoded
+await Http.post('/api/users', { name: 'Alice' })                   // JSON (default)
+await Http.asForm().post('/login', { email, password })            // form-encoded
+await Http.withBody({ email, password }).asForm().post('/login')   // form-encoded (equivalent)
 ```
 
-Call `asForm()` *after* setting the body, and don't pass the body to `post()` — both `withBody(data)` and `post(url, data)` set the encoding to JSON, so they would otherwise override `asForm()`.
+`asForm()` switches the encoding to `application/x-www-form-urlencoded` and sticks regardless of order — passing the body to `post(url, data)` after `asForm()` keeps the form encoding. Without `asForm()`, bodies are sent as JSON.
 
 ## Retries and timeouts
 

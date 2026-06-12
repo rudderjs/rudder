@@ -67,6 +67,69 @@ describe('PendingRequest', () => {
     fake.assertSentCount(6)
   })
 
+  it('sends a JSON body by default', async () => {
+    const fake = new FakeManager()
+    fake.register('example.com', { status: 200, body: 'ok', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.post('/users', { name: 'Alice' })
+
+    fake.assertSent((r) =>
+      (r.options.headers as Record<string, string>)['Content-Type'] === 'application/json' &&
+      r.options.body === JSON.stringify({ name: 'Alice' }),
+    )
+  })
+
+  it('asForm() encodes the body as form data passed to post(url, data)', async () => {
+    const fake = new FakeManager()
+    fake.register('example.com', { status: 200, body: 'ok', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.asForm().post('/login', { email: 'a@b.c', password: 'pw' })
+
+    fake.assertSent((r) =>
+      (r.options.headers as Record<string, string>)['Content-Type'] === 'application/x-www-form-urlencoded' &&
+      r.options.body === 'email=a%40b.c&password=pw',
+    )
+  })
+
+  it('asForm() encodes the body set via withBody() (documented pattern)', async () => {
+    const fake = new FakeManager()
+    fake.register('example.com', { status: 200, body: 'ok', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.withBody({ email: 'a@b.c', password: 'pw' }).asForm().post('/login')
+
+    fake.assertSent((r) =>
+      (r.options.headers as Record<string, string>)['Content-Type'] === 'application/x-www-form-urlencoded' &&
+      r.options.body === 'email=a%40b.c&password=pw',
+    )
+  })
+
+  it('a body set via withBody() survives the per-verb clone', async () => {
+    const fake = new FakeManager()
+    fake.register('example.com', { status: 200, body: 'ok', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    // No data passed to post() — the body must come from the prior withBody().
+    await client.withBody({ name: 'Bob' }).post('/users')
+
+    fake.assertSent((r) => r.options.body === JSON.stringify({ name: 'Bob' }))
+  })
+
+  it('explicit post(url, data) overrides a builder body but keeps asForm encoding', async () => {
+    const fake = new FakeManager()
+    fake.register('example.com', { status: 200, body: 'ok', headers: {} })
+
+    const client = fake.client().baseUrl('https://example.com')
+    await client.withBody({ stale: true }).asForm().post('/login', { fresh: 'yes' })
+
+    fake.assertSent((r) =>
+      (r.options.headers as Record<string, string>)['Content-Type'] === 'application/x-www-form-urlencoded' &&
+      r.options.body === 'fresh=yes',
+    )
+  })
+
   it('clones do not share state', async () => {
     const fake = new FakeManager()
     fake.register('example.com', { status: 200, body: 'ok', headers: {} })
