@@ -2,9 +2,9 @@ import { Env } from '@rudderjs/core'
 import type { HorizonConfig } from '@rudderjs/horizon'
 
 // When QUEUE_CONNECTION=bullmq, default to Redis storage so the dashboard
-// process and the worker process share state. With the sync driver both
-// halves run in one process, so MemoryStorage is fine.
-const queueConnection = Env.get('QUEUE_CONNECTION', 'bullmq')
+// process and the worker process share state. With the database/sync drivers
+// both halves run against one local store, so MemoryStorage is fine.
+const queueConnection = Env.get('QUEUE_CONNECTION', 'database')
 
 export default {
   enabled:           Env.getBool('HORIZON_ENABLED', true),

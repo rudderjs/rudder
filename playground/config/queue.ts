@@ -4,7 +4,7 @@ import { WelcomeUserJob } from 'App/Jobs/WelcomeUserJob.js'
 import { FailingJob } from 'App/Jobs/FailingJob.js'
 
 export default {
-  default: Env.get('QUEUE_CONNECTION', 'bullmq'),
+  default: Env.get('QUEUE_CONNECTION', 'database'),
 
   connections: {
     sync: {
