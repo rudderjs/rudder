@@ -1,6 +1,6 @@
 # Notifications
 
-`@rudderjs/notification` is a multi-channel notification layer. You define a notification once and the framework dispatches it through any combination of channels — email, database, in-app feed, push — without your code knowing the difference.
+`@rudderjs/notification` is a multi-channel notification layer. You define a notification once and the framework dispatches it through any combination of channels — mail, database, broadcast, and your own custom channels — without your code knowing the difference.
 
 ## Setup
 
@@ -100,6 +100,16 @@ pnpm rudder migrate
 ```
 
 `toDatabase()` returns a JSON-serializable payload. The framework writes a row with the recipient, type, and payload. Read them back by querying your own model on the `notifications` table, filtering on the `notifiable_id` column.
+
+### Broadcast
+
+Pushes the notification over WebSockets via `@rudderjs/broadcast` (install it to enable the channel). Implement `toBroadcast()` to return the payload; the channel emits it as an event named after the notification class. The target channel is the notifiable's `broadcast` route when set (anonymous notifiables via `.route('broadcast', ...)`), otherwise `user.{id}`.
+
+```ts
+toBroadcast(user: Notifiable) {
+  return { message: 'Your report is ready', url: '/reports/latest' }
+}
+```
 
 ### Custom
 

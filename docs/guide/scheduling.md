@@ -114,7 +114,7 @@ schedule.call(syncData)
   .description('Sync (no overlap)')
 ```
 
-`withoutOverlapping()` uses a cache lock keyed by the task. Requires `@rudderjs/cache` to be registered. Without a cache, the lock is local to the process — fine for single-instance deployments.
+`withoutOverlapping()` uses a cache lock keyed by the task, so it requires `@rudderjs/cache` to be registered. Without a cache there is no lock at all — the overlap guard is skipped entirely, even within a single process. Register a cache for it to take effect.
 
 ## Single-server execution
 
@@ -130,7 +130,7 @@ This also uses cache locks — Redis-backed cache is required.
 
 ## Running rudder commands on a schedule
 
-`Scheduler.call(callback)` is the only entry point — there is no `schedule.command()` shortcut. Either extract the work into a plain function that both your rudder command and the schedule call into, or shell out via `@rudderjs/process`:
+`schedule.call(callback)` is the only entry point — there is no `schedule.command()` shortcut. Either extract the work into a plain function that both your rudder command and the schedule call into, or shell out via `@rudderjs/process`:
 
 ```ts
 // Recommended — share the work as a function

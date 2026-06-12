@@ -129,7 +129,8 @@ await someCodeThatDispatches()
 fake.assertDispatched('UserRegistered')
 fake.assertDispatched('UserRegistered', (e) => e.user.id === '42')
 fake.assertDispatchedTimes('UserRegistered', 1)
-fake.assertNothingDispatched()
+fake.assertNotDispatched('PaymentFailed')   // a specific event did NOT fire
+// fake.assertNothingDispatched()           // use when you expect zero dispatches
 ```
 
 `EventFake` swaps the dispatcher for the duration of the test — no listeners run, but every dispatch is recorded for assertion.
