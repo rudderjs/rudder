@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Comparative query-layer ORM benchmark suite — RudderJS native engine vs Prisma vs Drizzle on an identical schema + dataset, on SQLite AND Postgres (§14 #11). Never published.",
+  "description": "Comparative query-layer ORM benchmark suite — RudderJS native engine vs Prisma vs Drizzle on an identical schema + dataset, on SQLite, Postgres AND MySQL (§14 #11). Never published.",
   "scripts": {
     "bench:setup": "node src/setup.mjs",
     "bench": "node src/run.mjs",
@@ -14,10 +14,16 @@
     "bench:pg": "BENCH_ENGINE=postgres node src/run.mjs",
     "bench:pg:parity": "BENCH_ENGINE=postgres node src/parity.mjs",
     "bench:pg:report": "BENCH_ENGINE=postgres node src/report.mjs",
-    "prisma:generate:pg": "prisma generate --schema=prisma/schema.postgres.prisma"
+    "prisma:generate:pg": "prisma generate --schema=prisma/schema.postgres.prisma",
+    "bench:mysql:setup": "BENCH_ENGINE=mysql node src/setup.mjs",
+    "bench:mysql": "BENCH_ENGINE=mysql node src/run.mjs",
+    "bench:mysql:parity": "BENCH_ENGINE=mysql node src/parity.mjs",
+    "bench:mysql:report": "BENCH_ENGINE=mysql node src/report.mjs",
+    "prisma:generate:mysql": "prisma generate --schema=prisma/schema.mysql.prisma"
   },
   "devDependencies": {
     "@prisma/adapter-better-sqlite3": "^7.0.0",
+    "@prisma/adapter-mariadb": "^7.0.0",
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",
     "@prisma/client-runtime-utils": "^7.0.0",
@@ -25,7 +31,9 @@
     "@rudderjs/orm": "workspace:*",
     "better-sqlite3": "^12.0.0",
     "drizzle-orm": "^0.45.0",
+    "mariadb": "^3.4.0",
     "mitata": "^1.0.34",
+    "mysql2": "^3.11.0",
     "pg": "^8.13.0",
     "postgres": "^3.4.0",
     "prisma": "^7.0.0"

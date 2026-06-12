@@ -1,23 +1,28 @@
 // ─── Contender: Prisma ───────────────────────────────────────────────────────
 // PrismaClient over a driver adapter against the same database the others use:
 // @prisma/adapter-better-sqlite3 on SQLite, @prisma/adapter-pg (node-postgres)
-// on Postgres. Each engine has its own generated client (different datasource
-// provider) but the SAME models — both only MAP onto tables owned by
-// src/schema.mjs (no `db push`). The Prisma query API is engine-identical, so
-// build() is shared; only the client/adapter differ.
+// on Postgres, @prisma/adapter-mariadb (the `mariadb` driver) on MySQL. Each
+// engine has its own generated client (different datasource provider) but the
+// SAME models — all only MAP onto tables owned by src/schema.mjs (no `db push`).
+// The Prisma query API is engine-identical, so build() is shared; only the
+// client/adapter differ.
 //
 // Driver note: Prisma has no porsager adapter, so on Postgres it runs over
-// node-pg while rudder + drizzle share porsager. That's an idiomatic-path
-// difference (documented in the README fairness rules), not a thumb on the scale.
+// node-pg while rudder + drizzle share porsager; on MySQL it runs over `mariadb`
+// while rudder + drizzle share `mysql2`. That's an idiomatic-path difference
+// (documented in the README fairness rules), not a thumb on the scale.
 
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaMariaDb } from '@prisma/adapter-mariadb'
 import { PRAGMAS } from '../schema.mjs'
-import { IS_PG } from '../engine.mjs'
+import { IS_PG, IS_MYSQL } from '../engine.mjs'
 
 const { PrismaClient } = IS_PG
   ? await import('../../generated/prisma-pg/index.js')
-  : await import('../../generated/prisma/index.js')
+  : IS_MYSQL
+    ? await import('../../generated/prisma-mysql/index.js')
+    : await import('../../generated/prisma/index.js')
 
 export const name = 'prisma'
 
@@ -26,6 +31,27 @@ const toUserData = (r) => ({ name: r.name, email: r.email, createdAt: r.created_
 export async function connect(file) {
   if (IS_PG) {
     const adapter = new PrismaPg({ connectionString: file })
+    const prisma = new PrismaClient({ adapter })
+    await prisma.$connect()
+    return { prisma }
+  }
+  if (IS_MYSQL) {
+    // Pass a parsed PoolConfig (not the raw mysql:// string) — the `mariadb`
+    // driver's URL scheme handling differs from mysql2's, so explicit fields are
+    // unambiguous. `database` is also given to PrismaMariaDb so generated queries
+    // resolve unqualified table names against the right schema.
+    const u = new URL(file)
+    const database = u.pathname.replace(/^\//, '')
+    const adapter = new PrismaMariaDb(
+      {
+        host: u.hostname,
+        port: u.port ? Number(u.port) : 3306,
+        user: decodeURIComponent(u.username),
+        ...(u.password ? { password: decodeURIComponent(u.password) } : {}),
+        database,
+      },
+      { database },
+    )
     const prisma = new PrismaClient({ adapter })
     await prisma.$connect()
     return { prisma }

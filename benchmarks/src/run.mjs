@@ -21,8 +21,12 @@ import { dbPath } from './setup.mjs'
 import { scratchCopy, cleanScratch } from './scratch.mjs'
 import { checkParity } from './parity.mjs'
 import { SIZES, SEED } from './schema.mjs'
-import { ENGINE, IS_PG, pgSizeDb } from './engine.mjs'
-import { dbExists, serverVersion } from './pg.mjs'
+import { ENGINE, IS_PG, IS_MYSQL, IS_SERVER, serverSizeDb } from './engine.mjs'
+import * as pg from './pg.mjs'
+import * as mysql from './mysql.mjs'
+
+// The active server engine's admin module (dbExists/serverVersion); unused on SQLite.
+const srv = IS_PG ? pg : mysql
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const RESULTS_DIR = join(HERE, '..', 'results')
@@ -42,15 +46,18 @@ async function provenance(size) {
   const cpu = os.cpus()
   // Driver/version block differs per engine — SQLite shares better-sqlite3
   // across all three; Postgres shares porsager (rudder + drizzle) with Prisma on
-  // node-pg, plus the live server version.
+  // node-pg; MySQL shares mysql2 (rudder + drizzle) with Prisma on mariadb — plus
+  // the live server version on both server engines.
   const versions = {
     '@rudderjs/orm': depVersion('@rudderjs/orm'),
     '@rudderjs/database': depVersion('@rudderjs/database'),
     'drizzle-orm': depVersion('drizzle-orm'),
     '@prisma/client': depVersion('@prisma/client'),
     ...(IS_PG
-      ? { postgres: depVersion('postgres'), pg: depVersion('pg'), 'postgres-server': await serverVersion() }
-      : { 'better-sqlite3': depVersion('better-sqlite3') }),
+      ? { postgres: depVersion('postgres'), pg: depVersion('pg'), 'postgres-server': await srv.serverVersion() }
+      : IS_MYSQL
+        ? { mysql2: depVersion('mysql2'), mariadb: depVersion('mariadb'), 'mysql-server': await srv.serverVersion() }
+        : { 'better-sqlite3': depVersion('better-sqlite3') }),
     mitata: depVersion('mitata'),
   }
   return {
@@ -96,9 +103,13 @@ async function benchOp(op, contender, size, fx) {
 }
 
 async function runSize(size) {
-  const ready = IS_PG ? await dbExists(pgSizeDb(size)) : existsSync(dbPath(size))
+  const ready = IS_SERVER ? await srv.dbExists(serverSizeDb(size)) : existsSync(dbPath(size))
   if (!ready) {
-    const cmd = IS_PG ? `pnpm bench:pg:setup ${size}` : `pnpm bench:setup ${size}`
+    const cmd = IS_PG
+      ? `pnpm bench:pg:setup ${size}`
+      : IS_MYSQL
+        ? `pnpm bench:mysql:setup ${size}`
+        : `pnpm bench:setup ${size}`
     throw new Error(`Seed DB missing for ${size}. Run: ${cmd}`)
   }
   const fx = fixtures(size)

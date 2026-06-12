@@ -1,14 +1,22 @@
 // ─── Contender: RudderJS native engine ───────────────────────────────────────
 // Drives @rudderjs/orm's Model layer over @rudderjs/database's native driver —
-// better-sqlite3 on SQLite, the porsager `postgres` driver on Postgres — the
-// exact path an app uses, minus the HTTP stack. The Model API is identical
-// across engines, so only connect() branches; build() (the timed + parity work)
-// is shared. Imports resolve to the packages' compiled dist/ (prod builds only).
+// better-sqlite3 on SQLite, the porsager `postgres` driver on Postgres, mysql2
+// on MySQL — the exact path an app uses, minus the HTTP stack. The Model API is
+// identical across engines, so only connect() branches; build() (the timed +
+// parity work) is shared. Imports resolve to the packages' compiled dist/ (prod
+// builds only).
 
 import { Model, ModelRegistry } from '@rudderjs/orm'
-import { NativeAdapter, BetterSqlite3Driver, PostgresDriver, PgDialect } from '@rudderjs/database/native'
+import {
+  NativeAdapter,
+  BetterSqlite3Driver,
+  PostgresDriver,
+  PgDialect,
+  MysqlDriver,
+  MysqlDialect,
+} from '@rudderjs/database/native'
 import { PRAGMAS } from '../schema.mjs'
-import { IS_PG } from '../engine.mjs'
+import { IS_PG, IS_MYSQL } from '../engine.mjs'
 
 export const name = 'rudder'
 
@@ -46,11 +54,17 @@ class Tag extends Model {
 }
 
 export async function connect(file) {
-  // `file` is a .sqlite path on SQLite, a connection URL on Postgres.
+  // `file` is a .sqlite path on SQLite, a connection URL on Postgres/MySQL.
   if (IS_PG) {
     const driver = await PostgresDriver.open({ url: file })
     ModelRegistry.reset()
     ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver, dialect: new PgDialect() }))
+    return { driver }
+  }
+  if (IS_MYSQL) {
+    const driver = await MysqlDriver.open({ url: file })
+    ModelRegistry.reset()
+    ModelRegistry.set(await NativeAdapter.make({ driverInstance: driver, dialect: new MysqlDialect() }))
     return { driver }
   }
   const driver = await BetterSqlite3Driver.open({ filename: file })
