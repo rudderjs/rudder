@@ -47,6 +47,34 @@ function paddleErrorCode(err: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Backfill the `billableId` / `billableType` on transactions that were recorded
+ * (by webhook) before this Paddle customer was linked to a local billable.
+ * Matches by `paddleCustomerId` and an empty `billableId`. Best-effort: a
+ * failure here must not block customer creation, so it's caught and ignored.
+ */
+async function linkOrphanedTransactions(
+  paddleCustomerId: string,
+  billableId: string,
+  billableType: string,
+): Promise<void> {
+  try {
+    const Transaction = await Cashier.transactionModel()
+    const orphans = await Transaction
+      .where('paddleCustomerId', paddleCustomerId)
+      .where('billableId', '')
+      .get() as unknown as TransactionRecord[]
+    for (const tx of orphans) {
+      await Transaction.update((tx as { id: string }).id, {
+        billableId,
+        billableType,
+      } as Record<string, unknown>)
+    }
+  } catch {
+    // Backfill is opportunistic — never fail customer creation over it.
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────
 
 export interface BillableInstance {
@@ -174,7 +202,7 @@ export function Billable<T extends abstract new (...args: any[]) => any>(
         }
       }
 
-      return await Customer.create({
+      const customer = await Customer.create({
         paddleId,
         billableId:   id,
         billableType: type,
@@ -182,6 +210,15 @@ export function Billable<T extends abstract new (...args: any[]) => any>(
         email,
         trialEndsAt:  opts.trialEndsAt ?? null,
       } as Record<string, unknown>) as unknown as CustomerRecord
+
+      // A transaction webhook can land before this billable is linked to its
+      // Paddle customer (webhook racing the local row write, or an imported
+      // dashboard customer). Those rows were written with an empty billableId
+      // and would be invisible to `transactions()`. Now that we know the
+      // paddleId → billable mapping, claim them.
+      if (paddleId) await linkOrphanedTransactions(paddleId, id, type)
+
+      return customer
     }
 
     // ── Checkout ─────────────────────────────────────

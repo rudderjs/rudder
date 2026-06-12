@@ -234,11 +234,15 @@ async function handleSubscriptionPaused(payload: Json): Promise<void> {
   const merged: Json = { ...payload, data: { ...(payload['data'] as Json), status: 'paused' } }
   const result = await upsertSubscription(merged)
   if (!result) return
-  // Stamp pausedAt if upsertSubscription didn't pick it up from scheduled_change
+  // Stamp pausedAt if upsertSubscription didn't pick it up from scheduled_change.
+  // Re-read after the write so the dispatched event reflects the persisted row
+  // (server-set updatedAt etc.) rather than an in-memory patch.
   if (frag.pausedAt && !result.record.pausedAt) {
     const Subscription = await Cashier.subscriptionModel()
-    await Subscription.update((result.record as { id: string }).id, { pausedAt: frag.pausedAt } as Record<string, unknown>)
-    result.record.pausedAt = frag.pausedAt
+    const id = (result.record as { id: string }).id
+    await Subscription.update(id, { pausedAt: frag.pausedAt } as Record<string, unknown>)
+    const refreshed = await Subscription.where('id', id).first() as unknown as SubscriptionRecord | null
+    if (refreshed) result.record = refreshed
   }
   await dispatch(new SubscriptionPaused(result.record))
 }
@@ -251,8 +255,10 @@ async function handleSubscriptionCanceled(payload: Json): Promise<void> {
   if (!result) return
   if (frag.endsAt && !result.record.endsAt) {
     const Subscription = await Cashier.subscriptionModel()
-    await Subscription.update((result.record as { id: string }).id, { endsAt: frag.endsAt } as Record<string, unknown>)
-    result.record.endsAt = frag.endsAt
+    const id = (result.record as { id: string }).id
+    await Subscription.update(id, { endsAt: frag.endsAt } as Record<string, unknown>)
+    const refreshed = await Subscription.where('id', id).first() as unknown as SubscriptionRecord | null
+    if (refreshed) result.record = refreshed
   }
   await dispatch(new SubscriptionCanceled(result.record))
 }

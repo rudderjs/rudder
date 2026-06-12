@@ -1,6 +1,7 @@
 import { test, describe, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
+import { dispatcher } from '@rudderjs/core'
 
 import {
   Cashier,
@@ -225,5 +226,60 @@ describe('handlePaddleWebhook persists subscription items', () => {
     assert.equal(FakeItem.creates[0]!['priceId'], 'pri_a')
     assert.equal(FakeItem.creates[0]!['quantity'], 2)
     assert.equal(FakeItem.creates[0]!['subscriptionId'], 'sub_local_1')
+  })
+})
+
+// ─── Fix (c): re-read after the secondary update ──────────
+
+// Existing-subscription stub. Each write bumps `updatedAt` to a new version so
+// a dispatched record sourced from a re-read (v2) is distinguishable from one
+// sourced from the in-memory patch (v1 + a manual field set).
+class FakeSubExisting {
+  static persisted: Record<string, any> = {}
+  static version = 0
+  static reset(): void {
+    this.version = 0
+    this.persisted = { id: 'sub_local_1', paddleId: 'sub_paddle_1', paddleStatus: 'active', pausedAt: null, endsAt: null, updatedAt: 'v0' }
+  }
+  static where(col: string, _val: unknown) {
+    return { async first() { return col === 'paddleId' || col === 'id' ? { ...FakeSubExisting.persisted } : null } }
+  }
+  static async create() { throw new Error('existing path expected — create() must not run') }
+  static async update(_id: string, data: Record<string, any>) {
+    this.version++
+    Object.assign(this.persisted, data, { updatedAt: `v${this.version}` })
+  }
+}
+
+describe('handler re-reads the row after the secondary stamp (paused/canceled)', () => {
+  const seen: { paused: any; canceled: any } = { paused: null, canceled: null }
+  dispatcher.register('SubscriptionPaused',   { handle(e: any) { seen.paused = e.subscription } } as any)
+  dispatcher.register('SubscriptionCanceled', { handle(e: any) { seen.canceled = e.subscription } } as any)
+
+  beforeEach(() => {
+    Cashier.reset()
+    seen.paused = null; seen.canceled = null
+    FakeSubExisting.reset(); FakeItem.reset()
+    Cashier.useSubscriptionModel(FakeSubExisting as unknown as Parameters<typeof Cashier.useSubscriptionModel>[0])
+    Cashier.useSubscriptionItemModel(FakeItem as unknown as Parameters<typeof Cashier.useSubscriptionItemModel>[0])
+    Cashier.useCustomerModel(FakeCustomerNone as unknown as Parameters<typeof Cashier.useCustomerModel>[0])
+  })
+
+  test('subscription.paused dispatches the re-read record (not the in-memory patch)', async () => {
+    const payload = { event_type: 'subscription.paused', data: { id: 'sub_paddle_1', status: 'paused', customer_id: 'cus_1', items: [] } }
+    const { res } = makeRes()
+    await handlePaddleWebhook({ raw: { __rjs_paddle_payload: payload } } as any, res as any)
+    assert.ok(seen.paused, 'SubscriptionPaused must dispatch')
+    assert.ok(seen.paused.pausedAt, 'pausedAt must be stamped')
+    assert.equal(seen.paused.updatedAt, 'v2', 'event must carry the re-read row (post secondary write), not the v1 snapshot')
+  })
+
+  test('subscription.canceled dispatches the re-read record', async () => {
+    const payload = { event_type: 'subscription.canceled', data: { id: 'sub_paddle_1', status: 'canceled', customer_id: 'cus_1', items: [] } }
+    const { res } = makeRes()
+    await handlePaddleWebhook({ raw: { __rjs_paddle_payload: payload } } as any, res as any)
+    assert.ok(seen.canceled, 'SubscriptionCanceled must dispatch')
+    assert.ok(seen.canceled.endsAt, 'endsAt must be stamped')
+    assert.equal(seen.canceled.updatedAt, 'v2', 'event must carry the re-read row, not the v1 snapshot')
   })
 })

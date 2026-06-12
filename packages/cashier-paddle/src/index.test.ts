@@ -450,6 +450,60 @@ describe('Billable.createAsCustomer', () => {
     assert.equal(FakeCustomer.lastCreateArgs?.['paddleId'], 'ctm_new')
   })
 
+  test('backfills transactions orphaned (empty billableId) before the billable was linked', async () => {
+    // Chainable-where stub: collects {paddleCustomerId, billableId} conditions
+    // and filters rows on get(); records update() calls.
+    class FakeTransaction {
+      static rows: Array<Record<string, any>> = []
+      static updates: Array<{ id: string; data: Record<string, any> }> = []
+      static _q(conds: Record<string, unknown>) {
+        const self = FakeTransaction
+        return {
+          where(col: string, val: unknown) { return self._q({ ...conds, [col]: val }) },
+          async get() { return self.rows.filter((r) => Object.entries(conds).every(([k, v]) => r[k] === v)) },
+        }
+      }
+      static where(col: string, val: unknown) { return this._q({ [col]: val }) }
+      static async update(id: string, data: Record<string, any>) {
+        this.updates.push({ id, data })
+        const r = this.rows.find((x) => x.id === id)
+        if (r) Object.assign(r, data)
+      }
+    }
+
+    setup()
+    Cashier.useTransactionModel(FakeTransaction as unknown as Parameters<typeof Cashier.useTransactionModel>[0])
+    FakeTransaction.rows = [
+      { id: 'tx_orphan', paddleCustomerId: 'ctm_new',   billableId: '' },        // ← should be claimed
+      { id: 'tx_other',  paddleCustomerId: 'ctm_other', billableId: '' },        // different customer
+      { id: 'tx_owned',  paddleCustomerId: 'ctm_new',   billableId: 'someone' }, // already linked
+    ]
+    setPaddleClientForTesting({
+      customers: { create: async () => ({ id: 'ctm_new' }) },
+    })
+
+    const user = new BilledUser()
+    await user.createAsCustomer()
+
+    assert.equal(FakeTransaction.updates.length, 1, 'only the orphan with the matching paddleCustomerId is claimed')
+    assert.equal(FakeTransaction.updates[0]!.id, 'tx_orphan')
+    assert.equal(FakeTransaction.updates[0]!.data['billableId'], 'user_1')
+  })
+
+  test('mock mode (paddleId null) does not attempt a transaction backfill', async () => {
+    setup()
+    let touched = false
+    class GuardTransaction {
+      static where() { touched = true; return { where() { return this }, async get() { return [] } } }
+      static async update() { touched = true }
+    }
+    Cashier.useTransactionModel(GuardTransaction as unknown as Parameters<typeof Cashier.useTransactionModel>[0])
+    // No paddle client → paddleId resolves null → backfill must be skipped.
+    const user = new BilledUser()
+    await user.createAsCustomer()
+    assert.equal(touched, false, 'no paddleId means no orphan lookup')
+  })
+
   test('customer_email_in_use → BillablePaddleError with code, no local row written', async () => {
     setup()
     setPaddleClientForTesting({
