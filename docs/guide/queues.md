@@ -1,6 +1,6 @@
 # Queues
 
-`@rudderjs/queue` is the framework's background job system. You define a job as a class with a `handle()` method, dispatch it from a route or service, and a worker process picks it up and runs it. The same job code runs against any adapter — BullMQ (Redis), Inngest, or the in-process `sync` driver for development.
+`@rudderjs/queue` is the framework's background job system. You define a job as a class with a `handle()` method, dispatch it from a route or service, and a worker process picks it up and runs it. The same job code runs against any adapter — the zero-infra `database` driver backed by the native engine (the default), BullMQ (Redis), Inngest, or the in-process `sync` driver for development.
 
 ## Setup
 
@@ -8,7 +8,7 @@
 pnpm add @rudderjs/queue
 ```
 
-For Redis-backed queues:
+The `database` driver ships in the core `@rudderjs/queue` package — no extra install. For Redis-backed queues:
 
 ```bash
 pnpm add @rudderjs/queue-bullmq bullmq ioredis
@@ -25,8 +25,17 @@ pnpm add @rudderjs/queue-inngest inngest
 import { Env } from '@rudderjs/support'
 
 export default {
-  default: Env.get('QUEUE_CONNECTION', 'sync'),
+  default: Env.get('QUEUE_CONNECTION', 'database'),
   connections: {
+    // Zero-infra default: a dedicated native-engine store. `engine` + `url`
+    // give the queue its OWN SQLite file (independent of the app's DB); the
+    // `jobs` / `failed_jobs` tables are auto-created on first use — no Redis,
+    // no migration step.
+    database: {
+      driver: 'database',
+      engine: 'sqlite',
+      url:    Env.get('QUEUE_DB_URL', './queue.db'),
+    },
     sync:   { driver: 'sync' },
     bullmq: {
       driver: 'bullmq',
@@ -44,7 +53,7 @@ export default {
 }
 ```
 
-The provider is auto-discovered. Use `sync` in development to skip setting up Redis; switch to BullMQ or Inngest in production.
+The provider is auto-discovered. The `database` driver is the zero-infra default — persistent jobs with no Redis. Use `sync` for tests (runs inline, no worker); switch to BullMQ or Inngest for high-throughput or serverless production.
 
 ## Defining a job
 
@@ -91,7 +100,7 @@ await SendWelcomeEmail.dispatch(user.id)
 
 ## Running workers
 
-For BullMQ, run a separate worker process:
+For the `database` and BullMQ drivers, run a separate worker process:
 
 ```bash
 pnpm rudder queue:work                       # default queue
@@ -116,6 +125,36 @@ Runs jobs **immediately** in the current process. No Redis, no separate worker. 
 ```
 
 `Job.dispatch(...).send()` becomes a regular function call. Useful for tests where you want side effects to happen synchronously.
+
+### Database (native)
+
+The zero-infrastructure default — persistent jobs backed by the native SQL engine, modeled on Laravel's `database` driver. Jobs live in a `jobs` table; the worker poll loop reserves them atomically with `FOR UPDATE SKIP LOCKED`, runs them through the shared job pipeline, and moves exhausted jobs to `failed_jobs`. No Redis, no external service.
+
+Two ways to point it at storage:
+
+```ts
+// Dedicated store — the queue opens its OWN native engine, independent of the
+// app's DB, and auto-creates its tables on first use. No migration step.
+// Use this when the app runs on a non-native ORM (Prisma / Drizzle).
+{
+  driver: 'database',
+  engine: 'sqlite',                 // 'sqlite' | 'pg' | 'mysql'
+  url:    './queue.db',             // file path or connection string
+}
+
+// App ORM — omit `engine`/`url` to run against the app's registered native
+// adapter. Create the tables first:
+//   pnpm rudder queue:table   # stubs create_jobs_table + create_failed_jobs_table
+//   pnpm rudder migrate
+{
+  driver: 'database',
+  table:  'jobs',                   // optional, defaults shown
+  // failedTable: 'failed_jobs',
+  // retryAfter:  90,               // seconds before a reserved-but-stalled job is retried
+}
+```
+
+Best for self-hosted apps that want durable background jobs without standing up Redis. Run the worker with `pnpm rudder queue:work` and supervise it like any other long-lived process.
 
 ### BullMQ (Redis)
 
@@ -201,7 +240,7 @@ The registry is a `globalThis` singleton (mirrors `@rudderjs/mcp/observers`, `@r
 
 ## Pitfalls
 
-- **`sync` driver in production.** Jobs run on the request thread, blocking the response. Switch to BullMQ or Inngest before deploy.
-- **No worker running.** With BullMQ, jobs queue but never execute until `pnpm rudder queue:work` is running. Add it to your process supervisor.
+- **`sync` driver in production.** Jobs run on the request thread, blocking the response. Switch to `database`, BullMQ, or Inngest before deploy.
+- **No worker running.** With the `database` or BullMQ drivers, jobs persist but never execute until `pnpm rudder queue:work` is running. Add it to your process supervisor.
 - **Constructor side effects.** Serialization happens at dispatch time. Avoid network calls in the constructor — fetch data inside `handle()` instead.
 - **Large payloads.** Job arguments serialize to JSON and live in Redis (or Inngest). Pass IDs and re-fetch records inside `handle()` rather than passing entire models.

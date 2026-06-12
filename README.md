@@ -430,7 +430,7 @@ await WelcomeUserJob.dispatch('Ada', 'ada@example.com').send()
 await WelcomeUserJob.dispatch('VIP', 'vip@example.com').onQueue('priority').send()
 ```
 
-Sync driver for dev, BullMQ + Inngest adapters for prod. Run workers with `pnpm rudder queue:work`. Monitor live with `@rudderjs/horizon` (Laravel Horizon equivalent).
+Zero-infra native driver (persists to the built-in ORM engine — auto-creates its `jobs`/`failed_jobs` tables, no Redis) by default; `sync` for dev, BullMQ (Redis) + Inngest adapters for prod. Run workers with `pnpm rudder queue:work`. Monitor live with `@rudderjs/horizon` (Laravel Horizon equivalent).
 
 ### 13. Schedule — fluent cron, no crontab edits
 
@@ -512,7 +512,7 @@ Visit `http://localhost:3000`. Done.
 | HTTP | Hono | pluggable server adapter |
 | ORM / database | Native engine (built-in, `@rudderjs/database`) | Prisma, Drizzle |
 | Auth | Native session | Sanctum (API tokens), Socialite (OAuth) |
-| Queue | BullMQ | Inngest |
+| Queue | Native (database-backed, `@rudderjs/queue/native`) | BullMQ (Redis), Inngest |
 | Cache | In-memory | Redis |
 | Storage | Local disk | S3, R2, MinIO |
 | Mail | Log (dev) | SMTP via Nodemailer |
