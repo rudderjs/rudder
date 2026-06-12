@@ -34,7 +34,6 @@ cd my-feature
   "description": "One-line description.",
   "type": "module",
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -42,7 +41,7 @@ cd my-feature
       "types":  "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "boost"],
   "rudderjs": {
     "provider": "MyFeatureProvider",
     "stage": "feature",
@@ -52,15 +51,14 @@ cd my-feature
     "build":     "tsc -p tsconfig.build.json",
     "dev":       "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "test":      "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
+    "test":      "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
   },
   "dependencies": {},
   "peerDependencies": {},
   "devDependencies": {
-    "@rudderjs/tsconfig": "workspace:*"
-  },
-  "publishConfig": {
-    "access": "public"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "tsx": "^4.0.0"
   }
 }
 ```

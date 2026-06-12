@@ -315,7 +315,9 @@ export class User extends Billable(Model) {
 ```ts
 import { Cashier } from '@rudderjs/cashier-paddle'
 
-const billable = await Cashier.findBillable(paddleCustomerId)  // → User instance or null
+const Customer = await Cashier.customerModel()
+const customer = await Customer.where('paddleId', paddleCustomerId).first()  // → Customer record or null
+// customer.billableId / customer.billableType point back to the owning model
 ```
 
 Or directly from a user:
@@ -407,7 +409,7 @@ await sub.chargeAndInvoice([{ priceId: 'pri_addon' }])
 Paddle stores one payment method per subscription. To let the customer update theirs, redirect them to Paddle's hosted update page:
 
 ```ts
-const url = await sub.updatePaymentMethodUrl()
+const url = await sub.redirectToUpdatePaymentMethod()
 return Response.redirect(url)
 ```
 
@@ -735,10 +737,10 @@ tx.invoicePdfUrl() // → presigned URL from Paddle
 ### Past and upcoming payments
 
 ```ts
-const last = await sub.lastPayment()    // Payment | null (null until first webhook)
-const next = await sub.nextPayment()    // Payment | null (null after cancelation)
+const last = await sub.lastPayment()    // TransactionResource | null (null until first webhook)
+const next = await sub.nextPayment()    // { date: Date; amount: string; currency: string } | null (null after cancelation)
 
-console.log(`Next: ${next.amount()} due ${next.date().toLocaleDateString()}`)
+console.log(`Next: ${next.amount} ${next.currency} due ${next.date.toLocaleDateString()}`)
 ```
 
 ## CLI

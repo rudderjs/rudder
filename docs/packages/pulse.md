@@ -63,6 +63,8 @@ export default {
 } satisfies PulseConfig
 ```
 
+`QueryRecorder` (slow-query capture) is always registered and has no toggle.
+
 ## Aggregation model
 
 Pulse stores **buckets**, not raw events. Every `Pulse.record(type, value, key?)` call increments the per-minute bucket for `(type, key)` — adding `1` to `count`, `value` to `sum`, and updating `min` / `max`. Reads then sum / average across buckets in the requested period.
