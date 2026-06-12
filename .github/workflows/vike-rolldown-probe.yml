@@ -18,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       iterations:
-        description: 'Number of concurrent uncached app builds to run'
+        description: 'Number of full cold builds (packages + all 4 apps) to run; each ~3 min'
         required: false
-        default: '30'
+        default: '20'
       stock_vike:
         description: 'Disable our FS-crawl patch so the leak can surface (true), or keep it (false, timeline only)'
         required: false
@@ -62,12 +62,7 @@ jobs:
           pnpm install --no-frozen-lockfile
           echo "Stock vike in use — set_macro uses the upstream in-memory lookup."
 
-      # Build the framework packages once (cached); the loop only re-runs the
-      # app builds, so each iteration is fast.
-      - name: Build packages
-        run: pnpm turbo run build --filter='./packages/*'
-
-      - name: Loop concurrent app builds with the probe
+      - name: Loop full cold builds with the probe
         env:
           DIAG_ASSETS_MANIFEST: '1'
         run: |
@@ -75,14 +70,13 @@ jobs:
           N='${{ github.event.inputs.iterations }}'
           leaks=0
           for i in $(seq 1 "$N"); do
-            rm -rf playground*/dist
+            # Faithful reproduction of the failing "Playground Build" job: a cold,
+            # uncached build of the WHOLE graph (packages + all 4 apps) under full
+            # turbo concurrency. That CPU contention is what the bug needs; a light
+            # app-only build does not trigger it (0/30 in the first probe run).
+            rm -rf playground*/dist node_modules/.cache/turbo
             log="$RUNNER_TEMP/diag/iter-$i.log"
-            # All four Vike apps build concurrently (topo order irrelevant —
-            # packages are already built), reproducing the failing CI load.
-            pnpm -r --parallel \
-              --filter './playground' --filter './playground-web' \
-              --filter './playground-prisma' --filter './playground-rsc' \
-              run build > "$log" 2>&1 || true
+            DIAG_ASSETS_MANIFEST=1 pnpm turbo run build --force --concurrency=100% > "$log" 2>&1 || true
 
             if grep -rl '__VITE_ASSETS_MANIFEST__' playground*/dist/server 2>/dev/null; then
               leaks=$((leaks + 1))

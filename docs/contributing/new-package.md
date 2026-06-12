@@ -4,7 +4,7 @@ This guide covers how to add a new `@rudderjs/*` package to the monorepo. Follow
 
 ---
 
-## Before you start — should this be a new package?
+## Before you start: should this be a new package?
 
 Apply the **tight-coupling checklist** from `Architecture.md` first. A new package is justified when:
 
@@ -43,6 +43,11 @@ cd my-feature
     }
   },
   "files": ["dist"],
+  "rudderjs": {
+    "provider": "MyFeatureProvider",
+    "stage": "feature",
+    "depends": ["@rudderjs/log"]
+  },
   "scripts": {
     "build":     "tsc -p tsconfig.build.json",
     "dev":       "tsc -p tsconfig.build.json --watch",
@@ -60,16 +65,18 @@ cd my-feature
 }
 ```
 
+The **`rudderjs`** field registers your package for [provider auto-discovery](#auto-discovery): apps that call `defaultProviders()` boot your provider automatically once it's installed. Omit the field for pure utility packages that ship no service provider.
+
 **Dependency rules:**
 
 | Use | When |
 |---|---|
 | `dependencies` | Always needed at runtime |
-| `peerDependencies` | Framework packages the user already has (`@rudderjs/core`, `@rudderjs/orm`) |
-| `devDependencies` | Build-time only — types, test utilities |
+| `peerDependencies` | Packages that `@rudderjs/core` itself loads at runtime (`@rudderjs/router`, `@rudderjs/server-hono`), or to keep a runtime-agnostic main entry |
+| `devDependencies` | Build-time only: types, test utilities |
 | `optionalDependencies` | Heavy drivers the user opts into (`ioredis`, `@aws-sdk/client-s3`) |
 
-> **Never** put `@rudderjs/core` in `dependencies`. It creates a circular dependency through the DI container. Use `peerDependencies` instead and resolve it at runtime with `resolveOptionalPeer('@rudderjs/core')`.
+> Most packages put `@rudderjs/core` in `dependencies` and import it directly: they sit downstream of core, so there's no cycle. The exception is a package that **core itself loads at runtime**, namely `@rudderjs/router` and `@rudderjs/server-hono`. Those must use `peerDependencies` only and resolve core lazily with `resolveOptionalPeer('@rudderjs/core')`, otherwise the DI container forms a circular dependency. A few packages also keep core as a peer for other reasons: a runtime-agnostic main entry (`@rudderjs/ai`) or to avoid bundling core into a build plugin (`@rudderjs/vite`).
 
 ---
 
@@ -77,7 +84,7 @@ cd my-feature
 
 Every package uses three tsconfig files so the editor, build, and test tasks each get the right settings.
 
-### `tsconfig.json` — editor / type-checking
+### `tsconfig.json`: editor / type-checking
 
 ```json
 {
@@ -89,7 +96,7 @@ Every package uses three tsconfig files so the editor, build, and test tasks eac
 }
 ```
 
-### `tsconfig.build.json` — production build
+### `tsconfig.build.json`: production build
 
 ```json
 {
@@ -103,7 +110,7 @@ Every package uses three tsconfig files so the editor, build, and test tasks eac
 }
 ```
 
-### `tsconfig.test.json` — test compilation
+### `tsconfig.test.json`: test compilation
 
 ```json
 {
@@ -125,7 +132,7 @@ Every package uses three tsconfig files so the editor, build, and test tasks eac
 ```
 packages/my-feature/
 ├── src/
-│   ├── index.ts          # public API — re-exports only, no logic here
+│   ├── index.ts          # public API: re-exports only, no logic here
 │   ├── MyFeature.ts      # main implementation
 │   └── index.test.ts     # tests (same directory, same rootDir)
 ├── tsconfig.json
@@ -141,7 +148,7 @@ packages/my-feature/
   import { helper } from './helper.js'   // ✓
   import { helper } from './helper'      // ✗
   ```
-- Top-level `await` is fine — all packages are ESM.
+- Top-level `await` is fine; all packages are ESM.
 - No CommonJS (`require`, `module.exports`).
 
 ### Strict TypeScript
@@ -160,31 +167,64 @@ All packages inherit `tsconfig.base.json` which enables:
 
 ## Service Provider pattern
 
-If your package needs to boot with the application, expose a **factory function** that returns a `ServiceProvider` class:
+If your package needs to boot with the application, export a **named `ServiceProvider` subclass**. It reads its own config from the config system, so the framework can construct it with no arguments, which is what makes it auto-discoverable.
 
 ```ts
 // src/index.ts
-import type { ServiceProvider } from '@rudderjs/core'
+import { ServiceProvider, config } from '@rudderjs/core'
 
 export interface MyFeatureConfig {
   option: string
 }
 
-export function myFeature(config: MyFeatureConfig): typeof ServiceProvider {
-  return class MyFeatureProvider extends (
-    require('@rudderjs/core') as typeof import('@rudderjs/core')
-  ).ServiceProvider {
-    async register() {
-      this.app.singleton('my-feature', () => new MyFeature(config))
-    }
-    async boot() { /* optional */ }
+export class MyFeatureProvider extends ServiceProvider {
+  register(): void {}
+
+  async boot(): Promise<void> {
+    const cfg = config<MyFeatureConfig>('my-feature')
+    this.app.instance('my-feature', new MyFeature(cfg))
   }
 }
 ```
 
-Then in the app's `providers.ts`:
+The class name must match the `provider` value in your `package.json` `rudderjs` field.
+
+### Auto-discovery
+
+Apps call `defaultProviders()` and receive every installed `@rudderjs/*` provider in stage and dependency order, read from each package's `rudderjs` manifest field, so a contributor never edits the app's `providers.ts` to wire in a new package. Declare it:
+
+```json
+"rudderjs": {
+  "provider": "MyFeatureProvider",
+  "stage": "feature",
+  "depends": ["@rudderjs/log"]
+}
+```
+
+| Field | Purpose |
+|---|---|
+| `provider` | Name of the exported `ServiceProvider` subclass to instantiate |
+| `stage` | Boot bucket, in order: `foundation`, `infrastructure`, `feature`, `monitoring` |
+| `depends` | Other `@rudderjs/*` packages whose providers must boot first (resolved within the stage) |
+| `providerSubpath` | Load the class from a subpath (e.g. `"./server"`) instead of the main entry. Use when the main entry must stay runtime-agnostic (browser, RN, edge) |
+| `autoDiscover` | Set `false` to opt out of discovery when the package needs explicit positioning or has boot side effects |
+
+The manifest is baked into `bootstrap/cache/providers.json` and self-heals in dev; for bundled or serverless deploys re-bake it at build time with `pnpm rudder providers:discover`. See [Service Providers](../guide/service-providers.md) for the full lifecycle.
+
+### Manual registration (opt-out)
+
+Apps that don't use `defaultProviders()`, or a package set to `autoDiscover: false`, register explicitly. If your package takes per-app config as an argument rather than from a config key, also export a factory:
 
 ```ts
+export function myFeature(config: MyFeatureConfig): typeof ServiceProvider {
+  return class extends ServiceProvider {
+    async boot() { this.app.instance('my-feature', new MyFeature(config)) }
+  }
+}
+```
+
+```ts
+// app's providers.ts
 import { myFeature } from '@rudderjs/my-feature'
 
 export default [myFeature({ option: 'value' })]
@@ -194,7 +234,7 @@ export default [myFeature({ option: 'value' })]
 
 ## Testing
 
-Use Node.js built-in `node:test` — no Jest, no Vitest.
+Use Node.js built-in `node:test`: no Jest, no Vitest.
 
 ```ts
 // src/index.test.ts
@@ -218,9 +258,9 @@ describe('@rudderjs/my-feature', () => {
 
 **Testing rules:**
 
-- Always read the source before writing tests — test actual behaviour, not assumptions.
+- Always read the source before writing tests; test actual behaviour, not assumptions.
 - One top-level `describe` per file named after the package (`'@rudderjs/my-feature'`). This prevents `node:test` concurrent describe interference.
-- No mocking of internal modules — test real behaviour. Mock only external I/O (network, filesystem) when unavoidable.
+- No mocking of internal modules; test real behaviour. Mock only external I/O (network, filesystem) when unavoidable.
 - Run with `pnpm test` from the package directory.
 
 ---
@@ -246,7 +286,7 @@ This avoids bundling packages the user may not have installed and prevents circu
 
 ## Bundled translations & overrides
 
-If your package ships its own UI strings (UI chrome, buttons, toasts, error messages — anything the end user reads), follow the **bundled defaults + JSON overrides** convention so apps can localize your package without forking it.
+If your package ships its own UI strings (UI chrome, buttons, toasts, error messages, anything the end user reads), follow the **bundled defaults + JSON overrides** convention so apps can localize your package without forking it.
 
 ### 1. Ship bundled defaults as TypeScript
 
@@ -274,7 +314,7 @@ export const ar: MyPackageI18n = {
 }
 ```
 
-Add at least `en` (acts as the universal fallback). Keep the schema **flat** unless you have a real reason to nest — it's easier to override.
+Add at least `en` (acts as the universal fallback). Keep the schema **flat** unless you have a real reason to nest; it's easier to override.
 
 ### 2. Provide a sync resolver with override support
 
@@ -310,9 +350,9 @@ function getOverride(locale: string): Partial<MyPackageI18n> | undefined {
   return data && Object.keys(data).length > 0 ? data : undefined
 }
 
-// deepMerge implementation — see packages/panels/src/i18n/index.ts
+// deepMerge implementation, see packages/panels/src/i18n/index.ts
 
-/** @internal — for tests + HMR */
+/** @internal: for tests + HMR */
 export function _clearI18nCache(): void { mergedCache.clear() }
 ```
 
@@ -342,7 +382,7 @@ async function preloadTranslations(): Promise<void> {
     // Drop anything merged before the override landed in cache.
     _clearI18nCache()
   } catch {
-    // @rudderjs/localization not installed — fall back to bundled defaults.
+    // @rudderjs/localization not installed; fall back to bundled defaults.
   }
 }
 
@@ -354,7 +394,7 @@ export class MyPackageServiceProvider extends ServiceProvider {
 }
 ```
 
-The dynamic import + try/catch makes `@rudderjs/localization` an **optional peer dependency** — your package still works standalone.
+The dynamic import + try/catch makes `@rudderjs/localization` an **optional peer dependency**: your package still works standalone.
 
 ### 4. Declare the optional peer
 
@@ -395,7 +435,7 @@ Add `"lang"` to your package.json `files` array so the directory ships to npm. U
 pnpm rudder vendor:publish --tag=my-package-translations
 ```
 
-### 6. Serialize the merged i18n to the client — never recompute
+### 6. Serialize the merged i18n to the client: never recompute
 
 This is the gotcha that bites every time. `@rudderjs/localization` reads files via `node:fs/promises`, so its cache only exists **on the server**. If your React components call `getMyPackageI18n(locale)` themselves on the client, they'll get bundled defaults (the cache is empty there) and overwrite the SSR'd HTML during hydration.
 
@@ -412,11 +452,11 @@ function MyProvider({ i18n, children }: { i18n: MyPackageI18n; children: ReactNo
 }
 ```
 
-If you have both a "navigation" meta and a "full" meta shape (like `Panel.toNavigationMeta()` vs `toMeta()`), make sure the layout's data source includes `i18n` — otherwise the client falls back to bundled defaults silently.
+If you have both a "navigation" meta and a "full" meta shape (like `Panel.toNavigationMeta()` vs `toMeta()`), make sure the layout's data source includes `i18n`; otherwise the client falls back to bundled defaults silently.
 
 ### 7. Document override keys
 
-Point users at your bundled `en.ts` as the canonical key list — that's the source of truth.
+Point users at your bundled `en.ts` as the canonical key list; that's the source of truth.
 
 ### 8. Naming conventions
 
@@ -434,7 +474,7 @@ Pick a short, distinct name so multiple packages don't collide on the same overr
 
 ## Exports checklist
 
-`src/index.ts` should export everything a user needs — and nothing internal:
+`src/index.ts` should export everything a user needs, and nothing internal:
 
 ```ts
 // ✓ Export the public class
@@ -463,7 +503,7 @@ export type { MyFeatureConfig, MyFeatureResult } from './types.js'
 ## Publishing
 
 ```bash
-# From the repo root — creates a changeset describing what changed
+# From the repo root: creates a changeset describing what changed
 pnpm changeset
 
 # Bump versions and update CHANGELOGs
@@ -480,4 +520,4 @@ cd packages/my-feature
 pnpm publish --access public --no-git-checks
 ```
 
-npm requires browser passkey auth — press Enter when prompted.
+npm requires browser passkey auth; press Enter when prompted.
