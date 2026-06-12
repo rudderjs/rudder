@@ -68,7 +68,7 @@ export type SyncEvent =
        * failure surface. Optional for backward compatibility with
        * existing emit sites that don't yet pass this field.
        */
-      op?:       'getYDoc' | 'storeUpdate' | 'onChange' | 'seed' | 'firstConnect' | 'message'
+      op?:       'getYDoc' | 'storeUpdate' | 'onChange' | 'seed' | 'firstConnect' | 'message' | 'connection'
     }
 
 export type SyncObserver = (event: SyncEvent) => void

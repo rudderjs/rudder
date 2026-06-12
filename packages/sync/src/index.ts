@@ -1102,8 +1102,41 @@ async function handleConnection(
 
 export const SYNC_UPGRADE_KEY = '__rudderjs_sync_upgrade__'
 
+/**
+ * Wrap {@link handleConnection} so a rejection can never escape as an unhandled
+ * promise rejection — `wss.on('connection')` invokes it fire-and-forget, and an
+ * unhandled rejection crashes the process on Node 15+. `handleConnection` has
+ * unguarded steps before its inner try/catch (room setup, the `doc.opened`
+ * observer fan-out, message-handler wiring), so a throwing observer or a
+ * synchronous setup failure would otherwise take the whole sync server down.
+ * Fail closed in keeping with the rest of the handler: surface via `sync.error`
+ * and close the socket cleanly so the client retries.
+ */
+async function safeHandleConnection(
+  ws:              WsSocket,
+  req:             IncomingMessage,
+  persistence:     SyncPersistence,
+  onChange?:       SyncConfig['onChange'],
+  onFirstConnect?: SyncConfig['onFirstConnect'],
+  onAuth?:         SyncConfig['onAuth'],
+): Promise<void> {
+  try {
+    await handleConnection(ws, req, persistence, onChange, onFirstConnect, onAuth)
+  } catch (err: unknown) {
+    syncObservers.emit({
+      kind:    'sync.error',
+      op:      'connection',
+      docName: extractDocName(req.url),
+      error:   err instanceof Error ? err.message : String(err),
+    })
+    try { ws.close(1011, 'internal error') } catch { /* already closing */ }
+  }
+}
+
 /** @internal — exposed for tests; do not use in application code. */
 export const _handleConnection = handleConnection
+/** @internal — exposed for tests; do not use in application code. */
+export const _safeHandleConnection = safeHandleConnection
 /** @internal — exposed for tests; clears the `firstConnectFired` Set so each
  *  test case starts with a fresh process-wide "no hook has fired" state. */
 export function _resetFirstConnectFired(): void {
@@ -1186,7 +1219,7 @@ export class SyncProvider extends ServiceProvider {
       const wss = new WebSocketServer({ noServer: true })
 
       wss.on('connection', (ws, req) => {
-        void handleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect, cfg.onAuth)
+        void safeHandleConnection(ws as WsSocket, req, persistence, cfg.onChange, cfg.onFirstConnect, cfg.onAuth)
       })
 
       // Cross-package WebSocket upgrade chain — these key names are part of
