@@ -12,6 +12,7 @@
 import { dispatch } from '@rudderjs/core'
 import { Cashier } from '../Cashier.js'
 import { markProcessed } from './idempotency.js'
+import { syncSubscriptionItems } from './items.js'
 import {
   fromCustomerUpdated,
   fromSubscriptionEvent,
@@ -194,6 +195,7 @@ async function upsertSubscription(payload: Json): Promise<{ record: Subscription
       endsAt:          frag.endsAt,
     } as Record<string, unknown>)
     const updated = await Subscription.where('id', (existing as { id: string }).id).first() as unknown as SubscriptionRecord
+    await syncSubscriptionItems((updated as { id: string }).id, frag.items)
     return { record: updated, created: false }
   }
 
@@ -208,6 +210,7 @@ async function upsertSubscription(payload: Json): Promise<{ record: Subscription
     pausedAt:        frag.pausedAt,
     endsAt:          frag.endsAt,
   } as Record<string, unknown>) as unknown as SubscriptionRecord
+  await syncSubscriptionItems((created as { id: string }).id, frag.items)
   return { record: created, created: true }
 }
 

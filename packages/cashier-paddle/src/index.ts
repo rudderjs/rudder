@@ -52,6 +52,8 @@ export {
 } from './webhooks/events.js'
 export { handlePaddleWebhook } from './webhooks/handler.js'
 export { markProcessed }       from './webhooks/idempotency.js'
+export { syncSubscriptionItems } from './webhooks/items.js'
+export type { SubscriptionItemFragment } from './webhooks/items.js'
 export {
   fromCustomerUpdated,
   fromSubscriptionEvent, fromSubscriptionPaused, fromSubscriptionCanceled,

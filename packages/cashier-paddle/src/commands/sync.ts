@@ -11,6 +11,7 @@ import {
   fromTransactionEvent,
   fromCustomerUpdated,
 } from '../webhooks/transformers.js'
+import { syncSubscriptionItems } from '../webhooks/items.js'
 
 interface PaddleListResult<T> {
   data: T[]
@@ -49,6 +50,7 @@ export async function runSync(args: string[]): Promise<void> {
         pausedAt:        frag.pausedAt,
         endsAt:          frag.endsAt,
       } as Record<string, unknown>)
+      await syncSubscriptionItems(existing.id, frag.items)
     }
   })
 
