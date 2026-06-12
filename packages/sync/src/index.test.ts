@@ -8,6 +8,7 @@ import {
   SyncProvider,
   Sync,
   _handleConnection,
+  _safeHandleConnection,
   type SyncPersistence,
   type SyncConfig,
 } from './index.js'
@@ -863,6 +864,44 @@ describe('onAuth enforcement (server-side)', () => {
 
     assert.strictEqual(peer.readyState, 1, 'no onAuth → connection allowed')
     assert.strictEqual(Sync.getClientCount(docName), 1, 'no onAuth → joins the room')
+  })
+})
+
+// ─── connection-handler crash safety ─────────────────────────
+//
+// `wss.on('connection')` invokes the handler fire-and-forget, so a rejection
+// thrown before handleConnection's own try/catch (room setup, the doc.opened
+// observer fan-out, message wiring) would become an unhandled promise
+// rejection and crash the process on Node 15+. `safeHandleConnection` must
+// absorb it: surface a sync.error and close the socket cleanly.
+
+describe('connection crash safety (safeHandleConnection)', () => {
+  it('absorbs a setup rejection — emits sync.error{op:connection}, closes the socket, never rejects', async () => {
+    const docName = `boom-${Date.now()}`
+    // getYDoc throws synchronously inside getOrCreateRoom, before
+    // handleConnection reaches any try/catch — the exact unguarded path.
+    const persistence = {
+      getYDoc()    { throw new Error('setup blew up') },
+      storeUpdate: async () => {},
+    } as unknown as SyncPersistence
+    const peer = new MockWsSocket()
+
+    const errors: string[] = []
+    const off = syncObservers.subscribe((e) => {
+      if (e.kind === 'sync.error' && e.op === 'connection') errors.push(e.error)
+    })
+
+    // Must resolve, never reject — that is the whole point of the wrapper.
+    await _safeHandleConnection(
+      peer as never,
+      { url: `/ws-sync/${docName}`, headers: {} } as never,
+      persistence,
+    )
+    off()
+
+    assert.deepStrictEqual(errors, ['setup blew up'], 'the rejection surfaces as a sync.error{op:connection}')
+    assert.strictEqual(peer.readyState, 3, 'the socket is closed')
+    assert.strictEqual(peer.closeCode, 1011, 'closed with the internal-error code so the client retries')
   })
 })
 
