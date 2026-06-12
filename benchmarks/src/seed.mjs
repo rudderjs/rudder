@@ -71,6 +71,13 @@ export function buildSeedDb(file, userCount) {
   })
   seedAll()
 
+  // Populate the query planner's statistics (sqlite_stat1) after the bulk load.
+  // Every realistic deployment has stats; benchmarking a never-analyzed database
+  // lets a cost-based planner mis-pick plans (e.g. a seq scan over an indexed
+  // `post_id IN (…)` pivot lookup at scale), which measures the planner's cold
+  // start, not the ORM. ANALYZE on all engines keeps the comparison honest.
+  db.exec('ANALYZE')
+
   // Flush the WAL into the main db file and truncate the sidecar, so a plain
   // copyFileSync of the .sqlite file (write-bench scratch copies) carries ALL
   // rows — otherwise recent writes stranded in -wal would be lost.
@@ -152,6 +159,11 @@ export async function buildSeedPg(url, userCount) {
     })
     await chunk(ptRows, (c) => sql`INSERT INTO post_tags ${sql(c, 'post_id', 'tag_id')}`)
 
+    // Refresh planner statistics after the bulk load (see the SQLite seeder note):
+    // without it, Postgres seq-scans the 1.4M-row pivot for an indexed
+    // `post_id IN (…)` eager load at 100k, measuring cold stats, not the ORM.
+    await sql.unsafe('ANALYZE')
+
     const count = async (t) => Number((await sql.unsafe(`SELECT COUNT(*) n FROM ${t}`))[0].n)
     return {
       users: await count('users'),
@@ -227,6 +239,11 @@ export async function buildSeedMysql(url, userCount) {
     const ptRows = [...postTags].map((s) => s.split(',').map(Number))
     await chunk(ptRows, 'INSERT INTO post_tags (post_id, tag_id) VALUES ?')
     await conn.commit()
+
+    // Refresh InnoDB's persistent statistics after the bulk load (see the SQLite
+    // seeder note) so the optimizer plans the pivot eager load against real stats,
+    // not cold ones. ANALYZE TABLE implicitly commits — the data is already committed.
+    await conn.query('ANALYZE TABLE users, posts, comments, tags, post_tags')
 
     const count = async (t) => Number((await conn.query(`SELECT COUNT(*) n FROM ${t}`))[0][0].n)
     return {

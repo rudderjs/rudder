@@ -18,16 +18,16 @@ RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an iden
 
 | Operation | RudderJS | Drizzle | Prisma | Fastest |
 |---|--:|--:|--:|---|
-| insert single row | 131.94µs (1.44×) | **91.43µs** | 345.46µs (3.78×) | Drizzle |
-| insert bulk (1k rows) | **2783.05µs** | 6638.12µs (2.39×) | 6564.46µs (2.36×) | RudderJS |
-| findByPk (hot loop) | **53.58µs** | 66.30µs (1.24×) | 131.17µs (2.45×) | RudderJS |
-| where + order + limit 50 | **426.11µs** | 471.93µs (1.11×) | 567.75µs (1.33×) | RudderJS |
-| where get 1k rows (hydration) | **525.37µs** | 754.15µs (1.44×) | 1366.95µs (2.60×) | RudderJS |
-| eager-load posts (50 users) | **416.96µs** | 750.98µs (1.80×) | 739.53µs (1.77×) | RudderJS |
-| eager-load tags via pivot (200 posts) | **672.69µs** | 1511.93µs (2.25×) | 3165.29µs (4.71×) | RudderJS |
-| count + filtered count | 224.10µs (1.03×) | **217.10µs** | 344.57µs (1.59×) | Drizzle |
-| increment view_count | 180.78µs (1.24×) | **146.27µs** | 443.98µs (3.04×) | Drizzle |
-| serialize 1k hydrated rows | 325.04µs (1.45×) | **224.89µs** | 227.22µs (1.01×) | Drizzle |
+| insert single row | 135.06µs (1.45×) | **93.36µs** | 354.02µs (3.79×) | Drizzle |
+| insert bulk (1k rows) | **2007.88µs** | 6093.67µs (3.03×) | 6883.40µs (3.43×) | RudderJS |
+| findByPk (hot loop) | **55.51µs** | 65.59µs (1.18×) | 136.33µs (2.46×) | RudderJS |
+| where + order + limit 50 | **443.04µs** | 530.77µs (1.20×) | 618.30µs (1.40×) | RudderJS |
+| where get 1k rows (hydration) | **527.94µs** | 771.27µs (1.46×) | 1404.15µs (2.66×) | RudderJS |
+| eager-load posts (50 users) | **414.60µs** | 766.94µs (1.85×) | 738.35µs (1.78×) | RudderJS |
+| eager-load tags via pivot (200 posts) | **673.31µs** | 1508.54µs (2.24×) | 3373.20µs (5.01×) | RudderJS |
+| count + filtered count | 224.71µs (1.02×) | **219.72µs** | 341.77µs (1.56×) | Drizzle |
+| increment view_count | 185.88µs (1.26×) | **147.40µs** | 447.10µs (3.03×) | Drizzle |
+| serialize 1k hydrated rows | 311.21µs (1.43×) | 217.56µs | **217.52µs** | Prisma |
 
 ## MySQL — 10k
 
@@ -39,16 +39,37 @@ RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an iden
 
 | Operation | RudderJS | Drizzle | Prisma | Fastest |
 |---|--:|--:|--:|---|
-| insert single row | 134.93µs (1.48×) | **90.89µs** | 339.63µs (3.74×) | Drizzle |
-| insert bulk (1k rows) | **2092.10µs** | 6036.84µs (2.89×) | 5820.69µs (2.78×) | RudderJS |
-| findByPk (hot loop) | **55.26µs** | 66.77µs (1.21×) | 127.83µs (2.31×) | RudderJS |
-| where + order + limit 50 | **550.36µs** | 597.13µs (1.08×) | 660.85µs (1.20×) | RudderJS |
-| where get 1k rows (hydration) | **525.36µs** | 770.01µs (1.47×) | 1360.34µs (2.59×) | RudderJS |
-| eager-load posts (50 users) | **418.28µs** | 765.23µs (1.83×) | 727.04µs (1.74×) | RudderJS |
-| eager-load tags via pivot (200 posts) | **673.65µs** | 1545.19µs (2.29×) | 2877.43µs (4.27×) | RudderJS |
-| count + filtered count | 332.21µs (1.12×) | **296.12µs** | 415.08µs (1.40×) | Drizzle |
-| increment view_count | 194.10µs (1.28×) | **151.75µs** | 456.59µs (3.01×) | Drizzle |
-| serialize 1k hydrated rows | 331.02µs (1.45×) | 228.46µs | **228.41µs** | Prisma |
+| insert single row | 137.26µs (1.46×) | **93.81µs** | 357.74µs (3.81×) | Drizzle |
+| insert bulk (1k rows) | **2365.78µs** | 6214.53µs (2.63×) | 7089.57µs (3.00×) | RudderJS |
+| findByPk (hot loop) | **53.53µs** | 63.32µs (1.18×) | 126.07µs (2.35×) | RudderJS |
+| where + order + limit 50 | **558.50µs** | 629.04µs (1.13×) | 667.41µs (1.19×) | RudderJS |
+| where get 1k rows (hydration) | **521.41µs** | 745.19µs (1.43×) | 1385.02µs (2.66×) | RudderJS |
+| eager-load posts (50 users) | **411.12µs** | 766.08µs (1.86×) | 732.39µs (1.78×) | RudderJS |
+| eager-load tags via pivot (200 posts) | **664.31µs** | 1539.86µs (2.32×) | 3062.29µs (4.61×) | RudderJS |
+| count + filtered count | 330.43µs (1.14×) | **290.79µs** | 393.66µs (1.35×) | Drizzle |
+| increment view_count | 182.78µs (1.25×) | **146.75µs** | 434.97µs (2.96×) | Drizzle |
+| serialize 1k hydrated rows | 311.06µs (1.43×) | **217.69µs** | 220.32µs (1.01×) | Drizzle |
+
+## MySQL — 100k
+
+**Size:** 100k (100000 users) · **Date:** 2026-06-12
+
+- **Machine:** Apple M5 Pro (15 cores) · Darwin 25.4.0 · arm64 · Node v24.16.0
+- **Versions:** `@rudderjs/orm@1.21.0`, `@rudderjs/database@1.5.1`, `drizzle-orm@0.45.2`, `@prisma/client@7.4.2`, `mysql2@3.15.3`, `mariadb@3.5.2`, `mysql-server@8.0.33`, `mitata@1.0.34`
+- **Seed:** `2654435769` (deterministic)
+
+| Operation | RudderJS | Drizzle | Prisma | Fastest |
+|---|--:|--:|--:|---|
+| insert single row | 134.23µs (1.45×) | **92.38µs** | 365.53µs (3.96×) | Drizzle |
+| insert bulk (1k rows) | **2975.44µs** | 7076.96µs (2.38×) | 7290.41µs (2.45×) | RudderJS |
+| findByPk (hot loop) | **52.31µs** | 61.92µs (1.18×) | 129.67µs (2.48×) | RudderJS |
+| where + order + limit 50 | **588.58µs** | 717.53µs (1.22×) | 803.98µs (1.37×) | RudderJS |
+| where get 1k rows (hydration) | **525.99µs** | 801.58µs (1.52×) | 1343.28µs (2.55×) | RudderJS |
+| eager-load posts (50 users) | **444.16µs** | 766.49µs (1.73×) | 864.14µs (1.95×) | RudderJS |
+| eager-load tags via pivot (200 posts) | **694.63µs** | 1695.93µs (2.44×) | 2980.36µs (4.29×) | RudderJS |
+| count + filtered count | 1361.65µs (1.06×) | **1288.53µs** | 1607.55µs (1.25×) | Drizzle |
+| increment view_count | 192.43µs (1.30×) | **148.00µs** | 463.48µs (3.13×) | Drizzle |
+| serialize 1k hydrated rows | 311.65µs (1.41×) | **220.75µs** | 221.54µs | Drizzle |
 
 ---
 
