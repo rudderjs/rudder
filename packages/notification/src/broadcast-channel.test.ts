@@ -4,6 +4,8 @@ import {
   initWsServer,
   resetBroadcast,
   broadcastObservers,
+  type BroadcastDriver,
+  type BroadcastMeta,
   type BroadcastEvent,
 } from '@rudderjs/broadcast'
 import {
@@ -104,5 +106,36 @@ describe('BroadcastChannel', () => {
     await Notifier.send(userA, new OrderShipped(99))
     const broadcasts = events.map(asBroadcastEvent).filter((e): e is NonNullable<typeof e> => e !== null)
     assert.equal(broadcasts[0]?.source, 'server')
+  })
+
+  // Regression: BroadcastChannel.send() must AWAIT broadcast(), which itself
+  // resolves only once the driver has accepted the message. With a driver that
+  // defers its publish (a Redis round-trip stand-in), a fire-and-forget call
+  // would let Notifier.send() resolve while the publish is still pending.
+  it('awaits the driver publish round-trip before Notifier.send() resolves', async () => {
+    class DeferredDriver implements BroadcastDriver {
+      published = false
+      private handlers: Array<(c: string, e: string, d: unknown, m?: BroadcastMeta) => void> = []
+      async publish(channel: string, event: string, data: unknown, meta?: BroadcastMeta): Promise<void> {
+        await new Promise<void>(resolve => setTimeout(resolve, 10))  // simulate a network hop
+        this.published = true
+        for (const h of this.handlers) { try { h(channel, event, data, meta) } catch { /* ignore */ } }
+      }
+      subscribe(handler: (c: string, e: string, d: unknown, m?: BroadcastMeta) => void): () => void {
+        this.handlers.push(handler)
+        return () => { this.handlers = this.handlers.filter(h => h !== handler) }
+      }
+    }
+
+    resetBroadcast()
+    const driver = new DeferredDriver()
+    initWsServer({ driver })
+    ChannelRegistry.reset()
+    ChannelRegistry.register('broadcast', new BroadcastChannel())
+
+    await Notifier.send(userA, new OrderShipped(5))
+
+    // Pre-fix this is false: send() resolved before the deferred publish completed.
+    assert.equal(driver.published, true)
   })
 })
