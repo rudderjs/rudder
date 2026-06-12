@@ -257,7 +257,7 @@ export class BroadcastChannel implements NotificationChannel {
       )
     }
 
-    let broadcastFn: (channel: string, event: string, data: unknown) => void
+    let broadcastFn: (channel: string, event: string, data: unknown) => Promise<void>
     try {
       // Dynamic import (not `require`) — `@rudderjs/broadcast` is ESM-only;
       // its `exports` lacks a `require` condition, so a synchronous require
@@ -276,7 +276,11 @@ export class BroadcastChannel implements NotificationChannel {
       ? notifiable.routeFor('broadcast') ?? `user.${notifiable.id}`
       : `user.${notifiable.id}`
 
-    broadcastFn(channelName, notification.constructor.name, data)
+    // Await the publish round-trip. `broadcast()` resolves only once the driver
+    // has accepted the message, so a fire-and-forget call would let Notifier.send()
+    // report success before a Redis-backed broadcast is actually dispatched — and
+    // would surface a rejecting driver as an unhandled rejection.
+    await broadcastFn(channelName, notification.constructor.name, data)
   }
 }
 
