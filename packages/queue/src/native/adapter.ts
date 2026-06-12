@@ -479,15 +479,22 @@ export class DatabaseQueueAdapter implements QueueAdapter {
     const rows = await adapter.query(this.failedTable).where('queue', queueName).get()
     const now = nowSec()
     for (const r of rows) {
-      await adapter.query(this.table).create({
-        queue:        String(r['queue']),
-        payload:      String(r['payload']),
-        attempts:     0,
-        reserved_at:  null,
-        available_at: now,
-        created_at:   now,
+      // Per-job transaction: re-enqueue and remove from failed_jobs atomically.
+      // A crash between the two would otherwise either duplicate the job (insert
+      // committed, delete lost) or strand it in failed_jobs (delete without the
+      // insert). One txn per job — not one big txn — so a single bad row can't
+      // roll back rows already retried.
+      await adapter.transaction(async (tx) => {
+        await tx.query(this.table).create({
+          queue:        String(r['queue']),
+          payload:      String(r['payload']),
+          attempts:     0,
+          reserved_at:  null,
+          available_at: now,
+          created_at:   now,
+        })
+        await tx.query(this.failedTable).where('id', r['id']).deleteAll()
       })
-      await adapter.query(this.failedTable).where('id', r['id']).deleteAll()
     }
     return rows.length
   }

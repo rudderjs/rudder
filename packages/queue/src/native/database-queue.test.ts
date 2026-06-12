@@ -134,6 +134,55 @@ test('failures() lists failed jobs and retryFailed() re-enqueues them', { skip: 
   await adapter.disconnect?.()
 })
 
+test('retryFailed() re-enqueues each job inside a per-job transaction (atomic)', { skip: !available }, async () => {
+  reset()
+  const real = await setup()
+
+  // Spy adapter: delegates to the real native engine but counts transaction()
+  // calls and any create() issued on the OUTER (non-transactional) adapter.
+  // The fix runs the re-enqueue + failed-row delete inside adapter.transaction()
+  // per job, so during retryFailed outerCreate must stay 0 and txCount must
+  // equal the number of failed jobs. Without it, the create() lands on the
+  // outer adapter and no transaction is opened.
+  let txCount = 0
+  let outerCreate = 0
+  const spy: any = {
+    query(table: string) {
+      const qb = real.query(table)
+      return new Proxy(qb, {
+        get(t: any, p: string) {
+          if (p === 'create') return async (d: unknown) => { outerCreate++; return t.create(d) }
+          const v = t[p]
+          return typeof v === 'function' ? v.bind(t) : v
+        },
+      })
+    },
+    transaction(fn: (tx: unknown) => Promise<unknown>) { txCount++; return real.transaction(fn) },
+    schemaBuilder: () => real.schemaBuilder(),
+    disconnect: () => real.disconnect?.(),
+  }
+
+  const q = database({ adapter: spy, jobs: [BoomJob] }).create()
+
+  // Drive two jobs to failure.
+  await q.dispatch(new BoomJob(), { queue: 'default' })
+  await q.dispatch(new BoomJob(), { queue: 'default' })
+  await q.work!('default', { stopWhenEmpty: true, backoff: 0 })
+  assert.equal(await real.query('failed_jobs').where('queue', 'default').count(), 2)
+
+  // Only count what retryFailed itself does.
+  txCount = 0
+  outerCreate = 0
+  const requeued = await q.retryFailed!('default')
+
+  assert.equal(requeued, 2)
+  assert.equal(txCount, 2, 'one transaction per failed job')
+  assert.equal(outerCreate, 0, 're-enqueue must happen inside the transaction, not on the outer adapter')
+  assert.equal(await real.query('jobs').where('queue', 'default').count(), 2)
+  assert.equal(await real.query('failed_jobs').where('queue', 'default').count(), 0)
+  await real.disconnect?.()
+})
+
 test('queue priority: higher-priority queue drains first', { skip: !available }, async () => {
   reset()
   const adapter = await setup()
