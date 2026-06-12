@@ -1,5 +1,13 @@
 # @rudderjs/notification
 
+## 1.1.2
+
+### Patch Changes
+
+- 7f6be3c: Await the broadcast publish round-trip in the notification broadcast channel. `BroadcastChannel.send()` called `broadcast()` without awaiting it, so `Notifier.send()` resolved before a Redis-backed broadcast was actually dispatched, and a rejecting driver surfaced as an unhandled rejection instead of propagating to the caller. The channel now awaits the call, matching the documented `Promise<void>` contract.
+- Updated dependencies [7f42787]
+  - @rudderjs/core@1.12.3
+
 ## 1.1.1
 
 ### Patch Changes
