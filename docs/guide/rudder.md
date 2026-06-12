@@ -129,12 +129,13 @@ The framework ships several built-in commands that show up automatically. The se
 | Command | Provided by | Purpose |
 |---|---|---|
 | `make:controller`, `make:model`, `make:middleware`, `make:request`, `make:provider`, `make:command`, `make:event`, `make:exception`, `make:listener`, `make:mail`, `make:job`, `make:policy`, `make:observer`, `make:cast`, `make:notification` | cli | Scaffold boilerplate files |
-| `make:module`, `module:publish` | core | Module scaffolding + Prisma shard merge |
+| `make:module`, `module:publish` | cli | Module scaffolding + Prisma shard merge |
 | `make:terminal` | terminal | Scaffold an Ink terminal component for `terminal('id', props)` |
 | `make:migration` | orm | `--vector` flag scaffolds pgvector extension + column add |
 | `make:factory` | orm | Scaffold a `ModelFactory` subclass at `app/Factories/<Name>Factory.ts` |
 | `make:seeder` | orm | Scaffold a `Seeder` subclass at `database/seeders/<Name>Seeder.ts` |
-| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM). On the native engine, `migrate*` also take `--connection=<name>` (run against a named connection, state table included) and `--path=<dir>` (migrations directory) — see [Connections — Multi-database migrations](./database/connections.md#multi-database-migrations) |
+| `make:resource` | orm | Scaffold a `JsonResource` subclass at `app/Resources/<Name>Resource.ts` |
+| `db:push`, `db:generate`, `migrate`, `migrate:fresh`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:status`, `db:seed` | orm-prisma / orm-drizzle | Database commands (auto-detects ORM). On the native engine, `migrate*` also take `--connection=<name>` (run against a named connection, state table included) and `--path=<dir>` (migrations directory) — see [Connections — Multi-database migrations](./database/connections.md#multi-database-migrations) |
 | `model:prune` | orm | Walk `prunable()` models and delete matching rows. Honors `pruneMode: 'instance' \| 'mass'` |
 | `db:show`, `db:table` | orm (native engine) | Inspect the live database — `db:show` lists tables with sizes (`--counts` adds row counts, `--views` adds views); `db:table <name>` shows columns, indexes, and foreign keys. `--json` machine-readable. Prisma/Drizzle apps are pointed at `prisma studio` / `drizzle-kit studio`. See [Native Engine — Inspecting](./database/native.md#inspecting-the-database). |
 | `db:query "<SELECT …>"` | orm (every adapter) | Run a one-off read-only SELECT through the `DB` facade and print JSON rows. Works on native, Prisma, and Drizzle; rejects non-SELECT statements. Backs `@rudderjs/boost`'s `db_query` MCP tool. |
@@ -252,7 +253,7 @@ For larger apps, group a feature's models, services, providers, and Prisma shard
 
 ```bash
 pnpm rudder make:module Blog
-# → app/Modules/Blog/{Blog.prisma, BlogService.ts, BlogServiceProvider.ts, Blog.test.ts}
+# → app/Modules/Blog/{BlogSchema.ts, BlogService.ts, BlogServiceProvider.ts, Blog.test.ts, Blog.prisma}
 
 pnpm rudder module:publish
 # Merges every app/Modules/*/*.prisma into prisma/schema/modules.prisma
