@@ -21,7 +21,7 @@ pnpm add @rudderjs/sanctum
 import type { SanctumConfig } from '@rudderjs/sanctum'
 
 export default {
-  expiration:  null,    // reserved; not applied automatically yet — pass expiresAt to createToken()
+  expiration:  null,    // minutes until tokens expire (null = no global expiry)
   tokenPrefix: '',      // optional prefix on generated tokens
   // provider: 'users', // override the user provider — required for pure-API
                         //   apps that don't configure a session guard
@@ -153,13 +153,13 @@ A Prisma-backed implementation is ~30 lines — see the package source for a ref
 ```ts
 interface SanctumConfig {
   stateful?:    string[]      // domains allowed for SPA cookie auth (default: [])
-  expiration?:  number | null // reserved; not yet applied automatically (default: null)
+  expiration?:  number | null // global token lifetime in minutes (default: null = no expiry)
   tokenPrefix?: string        // optional prefix on generated tokens
   provider?:    string        // user provider name (default: default guard's provider)
 }
 ```
 
-> `expiration` is currently a declared config field that the guard does not yet read — token lifetime is set per token by passing an explicit `expiresAt` to `createToken()`. Treat it as reserved until it's wired up.
+> `expiration` sets a global token lifetime in minutes: a token is rejected at validation once it is older than `expiration` minutes (measured from its `createdAt`). A per-token `expiresAt` passed to `createToken()` is an explicit override and always wins over the global value. With neither set, tokens never expire.
 
 `stateful` is for first-party SPAs that share a domain with the API — those requests authenticate via the session cookie instead of a Bearer token. Set this to your SPA's domain(s) when applicable.
 
