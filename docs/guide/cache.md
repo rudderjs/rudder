@@ -100,7 +100,7 @@ if (await lock.get()) {
 ```ts
 const lock  = Cache.lock('process-podcast:42', 120)
 await lock.get()
-const owner = lock.owner()                // 128-bit hex token
+const owner = lock.owner()                // UUID owner token (128 bits of entropy)
 
 // In the worker, restore by owner:
 await Cache.restoreLock('process-podcast:42', owner).release()
@@ -150,7 +150,7 @@ The `url` field is passed straight to ioredis, so for TLS (Redis Cloud, ElastiCa
 Implement `CacheAdapter` to plug in DynamoDB, Memcached, or a tiered store:
 
 ```ts
-import type { CacheAdapter } from '@rudderjs/cache'
+import type { CacheAdapter, Lock } from '@rudderjs/cache'
 import { CacheRegistry } from '@rudderjs/cache'
 
 class MyAdapter implements CacheAdapter {
@@ -159,6 +159,13 @@ class MyAdapter implements CacheAdapter {
   async has(key: string): Promise<boolean> { /* ... */ }
   async forget(key: string): Promise<void> { /* ... */ }
   async flush(): Promise<void> { /* ... */ }
+  // Atomic counter — initialise to `by` on first write, then preserve the original TTL.
+  async increment(key: string, by = 1, ttl?: number): Promise<number> { /* ... */ }
+  // Store only if absent; `true` when this writer won the race.
+  async add(key: string, value: unknown, ttl?: number): Promise<boolean> { /* ... */ }
+  lock(name: string, seconds: number): Lock { /* ... */ }
+  restoreLock(name: string, owner: string): Lock { /* ... */ }
+  // `disconnect?()` is optional — implement it if the store holds an open connection.
 }
 
 CacheRegistry.set(new MyAdapter())   // single adapter, no name — registry holds one active adapter

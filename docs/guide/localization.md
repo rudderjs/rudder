@@ -111,7 +111,7 @@ Route.post('/login', async (req) => {
 })
 ```
 
-`setLocale('es')` exists too, but it mutates the global default — useful in CLI commands or test setup, dangerous in concurrent request handling.
+`setLocale('es')` exists too, but it only changes the locale for the current request context (the active `runWithLocale()` / middleware scope). Outside such a context it is a no-op, so it does not provide a process-wide override — set `locale` in `config/localization.ts` for the default.
 
 ## Multiple namespaces
 
