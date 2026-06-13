@@ -1,5 +1,14 @@
 # @rudderjs/cli
 
+## 4.16.0
+
+### Minor Changes
+
+- 4fdacd4: Suggest the closest command on a typo. `rudder mgirate` now prints "Did you mean migrate?" before the usual unknown-command message, matching git/cargo/npm. Suggestions are ranked by edit distance against the live command list (so package-contributed and app commands are included), prefer the same namespace on ties, and are omitted entirely when nothing is close enough.
+- e7f4695: Add dynamic argument completion to the shell scripts. When completing the argument of a model-oriented make command (`make:factory`, `make:seeder`, `make:policy`, `make:observer`), the script now suggests the project's actual model names, read from `app/Models` via a new internal `rudder completion args` resolver (filesystem only, no app boot). Command-name completion stays static and instant. Non-model command arguments now correctly suggest nothing instead of falling back to the full command list. Works in bash (with the colon-word handling), zsh, and fish.
+- 1ec4f0f: Complete command flags. Typing `rudder make:model --<TAB>` now suggests that command's options (`--with-test`, `--force`, `--migration`, ...), and `rudder -<TAB>` offers the global flags. Candidates are read from the command's live commander definition via a new internal `rudder completion flags` resolver, so the list never drifts. Commands that parse flags by hand expose only `--help`; the make:\* family registers real options, which is where flag completion is most useful. Wired into bash (robust to intervening arguments), zsh, and fish.
+- 1b09488: Add `rudder completion` for shell tab-completion. `rudder completion <bash|zsh|fish>` prints a self-contained completion script to stdout; `rudder completion install` detects your shell, writes the script under `~/.rudder/`, and wires it into your rc file (fish autoloads, so no rc edit); `rudder completion uninstall` removes both cleanly and idempotently. Completion covers the built-in and framework command names, including namespaced ones (`make:model`, `migrate:fresh`), with the bash colon-word handling needed for `make:<TAB>` to work under the default `COMP_WORDBREAKS`. A tip pointing at `rudder completion install` now appears at the bottom of `rudder --help`. Static v1 (no per-keystroke CLI round-trip, no third-party dependency); dynamic completions (model/route names) are a future follow-up.
+
 ## 4.15.0
 
 ### Minor Changes

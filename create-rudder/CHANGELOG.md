@@ -1,5 +1,15 @@
 # create-rudder
 
+## 1.10.0
+
+### Minor Changes
+
+- 5470945: Scaffold a committed `.vscode/` directory so a fresh project is F5-debuggable out of the box. `launch.json` ships three Node debug configurations (Debug dev server, Debug rudder command, Debug current test file), `extensions.json` recommends the relevant extensions for the chosen stack (Vite always, plus Tailwind / Prisma / Vue only when selected), and `settings.json` pins the workspace TypeScript and leaves formatting to the user. Cursor reads the same files, so it benefits too. Delete the directory if your editor does not use it.
+
+### Patch Changes
+
+- 1b09488: Add a one-line hint to the post-scaffold panel pointing new projects at `rudder completion install` for shell tab-completion.
+
 ## 1.9.2
 
 ### Patch Changes
