@@ -20,6 +20,7 @@ import { tinkerCommand } from './commands/tinker.js'
 import { optimizeClearCommand } from './commands/optimize-clear.js'
 import { freshCommand } from './commands/fresh.js'
 import { downCommand, upCommand } from './commands/maintenance.js'
+import { completionCommand } from './commands/completion.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -379,6 +380,8 @@ async function main(): Promise<void> {
         }
       }
 
+      out += `\n  ${C.dim('Tip: enable tab-completion with')} ${C.green('rudder completion install')}\n`
+
       return out + '\n'
     },
   })
@@ -398,6 +401,7 @@ async function main(): Promise<void> {
   freshCommand(program)
   downCommand(program)
   upCommand(program)
+  completionCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
   // app cannot boot (e.g. fresh clone, missing manifest, broken provider config).
@@ -434,6 +438,10 @@ async function main(): Promise<void> {
     'migrate', 'migrate:fresh', 'migrate:status', 'migrate:rollback', 'migrate:refresh',
     'add', 'remove', 'upgrade', 'key:generate', 'about', 'test',
     'optimize:clear', 'fresh',
+    // `completion` only prints/writes static shell scripts — it never touches
+    // app state and must work outside a project (e.g. `rudder completion install`
+    // run once from anywhere).
+    'completion',
     // `down`/`up` just write/remove the storage/framework/down flag file — no
     // app context needed (and the app may be down because it can't boot).
     'down', 'up',
