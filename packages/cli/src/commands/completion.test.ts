@@ -5,8 +5,10 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'no
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { mkdirSync } from 'node:fs'
 import {
-  completionScript, installPlan, detectShell, COMMAND_NAMES, SUPPORTED_SHELLS, _internal,
+  completionScript, installPlan, detectShell, resolveArgCandidates,
+  COMMAND_NAMES, MODEL_ARG_COMMANDS, SUPPORTED_SHELLS, _internal,
 } from './completion.js'
 
 const { addSourceBlock, removeSourceBlock, runInstall, runUninstall, BLOCK_START } = _internal
@@ -62,6 +64,53 @@ describe('completion — completionScript', () => {
     const s = completionScript('fish')
     const sorted = [...COMMAND_NAMES].sort().join(' ')
     assert.ok(s.includes(sorted))
+  })
+
+  it('each shell wires dynamic argument completion via `completion args`', () => {
+    for (const shell of SUPPORTED_SHELLS) {
+      const s = completionScript(shell)
+      assert.ok(s.includes('completion args'), `${shell} script should call \`rudder completion args\``)
+      assert.ok(s.includes('make:factory'), `${shell} script should embed the model-arg command list`)
+    }
+  })
+})
+
+// ── resolveArgCandidates (dynamic model names) ─────────────────
+
+describe('completion — resolveArgCandidates', () => {
+  let proj: string
+
+  beforeEach(async () => {
+    proj = await fs.mkdtemp(path.join(os.tmpdir(), 'rudder-proj-'))
+    const models = path.join(proj, 'app', 'Models')
+    mkdirSync(models, { recursive: true })
+    for (const f of ['Post.ts', 'User.ts', 'Comment.js', 'index.ts', 'notes.md']) {
+      writeFileSync(path.join(models, f), '')
+    }
+  })
+  afterEach(async () => { await fs.rm(proj, { recursive: true, force: true }) })
+
+  it('lists model basenames (sorted) for a model-arg command, skipping index + non-source', () => {
+    assert.deepEqual(resolveArgCandidates('make:factory', proj), ['Comment', 'Post', 'User'])
+  })
+
+  it('covers every model-arg command', () => {
+    for (const cmd of MODEL_ARG_COMMANDS) {
+      assert.deepEqual(resolveArgCandidates(cmd, proj), ['Comment', 'Post', 'User'], `${cmd} should resolve models`)
+    }
+  })
+
+  it('returns [] for a command that takes no model argument', () => {
+    assert.deepEqual(resolveArgCandidates('migrate', proj), [])
+  })
+
+  it('returns [] when app/Models is absent (not a project)', () => {
+    const empty = mkdtempSync(path.join(os.tmpdir(), 'rudder-empty-'))
+    try {
+      assert.deepEqual(resolveArgCandidates('make:factory', empty), [])
+    } finally {
+      rmSync(empty, { recursive: true, force: true })
+    }
   })
 })
 
@@ -143,15 +192,24 @@ describe('completion — rc block editing', () => {
 describe('completion — bash script behaves under default COMP_WORDBREAKS', () => {
   // Source the emitted script in a real bash, drive _rudder_complete with the
   // word arrays bash produces (':' is a word-break char), and read COMPREPLY.
-  function complete(words: string[], cword: number): string[] {
+  // When `argStub` is set, a fake `rudder` is placed on PATH that emits those
+  // lines for `rudder completion args ...` — exercising the dynamic-arg branch
+  // without spawning node.
+  function complete(words: string[], cword: number, argStub?: string[]): string[] {
     // mkdtempSync gives a private 0700 dir with a random suffix, so the script
     // path is not predictable (no insecure-temp-file / symlink race).
     const dir = mkdtempSync(path.join(os.tmpdir(), 'rudder-comp-'))
     try {
       const scriptPath = path.join(dir, 'completion.bash')
       writeFileSync(scriptPath, completionScript('bash'))
+      // Stub `rudder` as a shell function (not a file): command-substitution
+      // subshells inherit functions, so the script's `$(rudder completion args)`
+      // resolves to it. Avoids chmod/PATH, which keeps the test OS-portable.
+      const stub = argStub
+        ? `rudder() { if [ "$1" = "completion" ] && [ "$2" = "args" ]; then printf '%s\\n' ${argStub.map(m => `'${m}'`).join(' ')}; fi; }\n`
+        : ''
       const driver = `
-        source '${scriptPath}'
+        ${stub}source '${scriptPath}'
         COMP_WORDS=(${words.map(w => `'${w}'`).join(' ')}); COMP_CWORD=${cword}
         _rudder_complete
         printf '%s\\n' "\${COMPREPLY[@]}"
@@ -182,6 +240,21 @@ describe('completion — bash script behaves under default COMP_WORDBREAKS', () 
     assert.ok(r.includes('model'))
     assert.ok(r.includes('controller'))
     assert.ok(!r.some(x => x.includes(':')), 'suggestions should be the bare suffix, not full names')
+  })
+
+  it('model arg: rudder make:factory <TAB> -> model names from the resolver', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'make', ':', 'factory', ''], 4, ['Post', 'Comment', 'User'])
+    assert.deepEqual(r.sort(), ['Comment', 'Post', 'User'])
+  })
+
+  it('model arg with prefix: rudder make:factory Po<TAB> -> Post', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'make', ':', 'factory', 'Po'], 4, ['Post', 'Comment', 'User'])
+    assert.deepEqual(r, ['Post'])
+  })
+
+  it('non-model command argument suggests nothing (not the command list)', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'migrate', ''], 2, ['Post', 'User'])
+    assert.deepEqual(r, [])
   })
 })
 
