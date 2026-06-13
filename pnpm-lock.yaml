@@ -7,6 +7,7 @@ settings:
 overrides:
   tsdown>rolldown: 1.0.0-beta.8
   vike: 0.4.257
+  '@brillout/vite-plugin-server-entry': 0.7.19
   '@types/node': 20.19.35
   hono: ^4.12.4
   protobufjs@7: ^7.6.1
@@ -22,7 +23,6 @@ overrides:
   valibot: ^1.2.0
 
 patchedDependencies:
-  '@brillout/vite-plugin-server-entry@0.7.18': 552296f3a1853d7b4029a4cae4b4f22bb6b17908243983ed63c1e2b1cf1e805a
   vike@0.4.257: d0da58ab1b73889f8c36913ee60ac89312744edfd41598ffc98af6332fc27ff3
 
 importers:
@@ -1441,8 +1441,8 @@ importers:
         specifier: ^0.5.15
         version: 0.5.22
       '@brillout/vite-plugin-server-entry':
-        specifier: ^0.7.5
-        version: 0.7.18(patch_hash=552296f3a1853d7b4029a4cae4b4f22bb6b17908243983ed63c1e2b1cf1e805a)
+        specifier: 0.7.19
+        version: 0.7.19
       '@hiogawa/transforms':
         specifier: ^0.0.0
         version: 0.0.0
@@ -2749,8 +2749,8 @@ packages:
   '@brillout/picocolors@1.0.30':
     resolution: {integrity: sha512-xJjdgyN1H0qh2nB2xlzazIipiDixuUd9oD5msh/Qv5bXJG9j8MSD/m4lREt6Z10ej6FF31b8vB4tdT7lDUbiyA==}
 
-  '@brillout/vite-plugin-server-entry@0.7.18':
-    resolution: {integrity: sha512-j3neG+vaIZ2AbP2/vGgaIyJwrFIxlK3xd3Ey2EGBswCvAGeI4QSSfXGbb7R3b3H8223PgTTsWOZuZH0Y8Ope2w==}
+  '@brillout/vite-plugin-server-entry@0.7.19':
+    resolution: {integrity: sha512-XIT5xAB4x3XPTLF+WfXI92zFAcIcYZqkFkYY1tpg7wrsTWMzllRF2Fbnzy8S/Dilsw9y1qJOHUVrmLtNp2/6Yw==}
 
   '@bufbuild/protobuf@2.11.0':
     resolution: {integrity: sha512-sBXGT13cpmPR5BMgHE6UEEfEaShh5Ror6rfN3yEK5si7QVrtZg8LEPQb0VVhiLRUslD2yLnXtnRzG035J/mZXQ==}
@@ -10515,7 +10515,7 @@ snapshots:
 
   '@brillout/picocolors@1.0.30': {}
 
-  '@brillout/vite-plugin-server-entry@0.7.18(patch_hash=552296f3a1853d7b4029a4cae4b4f22bb6b17908243983ed63c1e2b1cf1e805a)':
+  '@brillout/vite-plugin-server-entry@0.7.19':
     dependencies:
       '@brillout/import': 0.2.6
       '@brillout/picocolors': 1.0.30
@@ -17498,7 +17498,7 @@ snapshots:
       '@brillout/import': 0.2.6
       '@brillout/json-serializer': 0.5.22
       '@brillout/picocolors': 1.0.30
-      '@brillout/vite-plugin-server-entry': 0.7.18(patch_hash=552296f3a1853d7b4029a4cae4b4f22bb6b17908243983ed63c1e2b1cf1e805a)
+      '@brillout/vite-plugin-server-entry': 0.7.19
       '@universal-deploy/store': 0.2.1(srvx@0.11.15)
       '@universal-deploy/vite': 0.1.6(hono@4.12.23)(srvx@0.11.15)(vite@8.0.14(@types/node@20.19.35)(esbuild@0.27.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
       '@universal-middleware/core': 0.4.17(hono@4.12.23)(srvx@0.11.15)
