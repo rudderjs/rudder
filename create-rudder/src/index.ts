@@ -669,6 +669,7 @@ async function main(): Promise<void> {
   if (answers.packages.telescope) hints.push('  Telescope:   /telescope  (debug dashboard — requests, queries, jobs, AI, mail)')
   if (answers.packages.boost)     hints.push(`  Boost:       ${pmRun(pm, 'rudder')} boost:install  (wire your AI coding assistant)`)
   if (answers.packages.terminal)  hints.push(`  Terminal:    ${pmRun(pm, 'rudder')} make:terminal <Name>  (scaffold a terminal view)`)
+  hints.push(`  Completions: ${pmRun(pm, 'rudder')} completion install  (tab-complete rudder in bash/zsh/fish)`)
   const hintsStr = hints.length > 0 ? '\n\n' + hints.join('\n') : ''
 
   // GitHub's tree view of the framework playground (15 working demo views,
