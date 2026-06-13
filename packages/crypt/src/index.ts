@@ -10,6 +10,7 @@ export class CryptRegistry {
   static set(key: Buffer, previousKeys?: Buffer[]): void {
     this.key = key
     this.previousKeys = previousKeys ?? []
+    publishCryptBridge()
   }
 
   static getKey(): Buffer {
@@ -23,6 +24,21 @@ export class CryptRegistry {
   static reset(): void {
     this.key = null
     this.previousKeys = []
+    delete (globalThis as Record<string, unknown>)['__rudderjs_crypt_registry__']
+  }
+}
+
+// ─── globalThis bridge ────────────────────────────────────
+// `@rudderjs/orm`'s `encrypted` cast can't import this node-only package (its
+// cast funnel must stay client-bundle safe), so we publish a synchronous
+// encrypt/decrypt pair onto a globalThis registry — the same pattern the
+// `hashed` cast uses to reach `@rudderjs/hash` (`__rudderjs_hash_registry__`).
+// Published whenever a key is set; cleared on reset. The string forms are used
+// because the cast does its own JSON (de)serialization.
+function publishCryptBridge(): void {
+  ;(globalThis as Record<string, unknown>)['__rudderjs_crypt_registry__'] = {
+    encrypt: (value: string): string => Crypt.encryptString(value),
+    decrypt: (value: string): string => Crypt.decryptString(value),
   }
 }
 

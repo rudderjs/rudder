@@ -322,17 +322,23 @@ function _hash(key: string, value: unknown): string {
   return driver.makeSync(str)
 }
 
-// ─── Encryption stubs ───────────────────────────────────────
-// Uses @rudderjs/crypt if available, otherwise throws clearly.
+// ─── Encryption ─────────────────────────────────────────────
+// Uses @rudderjs/crypt if installed + booted, otherwise throws clearly.
 
+/**
+ * Read the encrypt/decrypt pair from `@rudderjs/crypt`'s globalThis-shared
+ * registry. We don't import `@rudderjs/crypt` here — it's a node-only package
+ * (`node:crypto`) and `cast.ts` must stay client-bundle safe — so we reach the
+ * singleton bridge directly, the same way `_getHashDriver()` reaches the hash
+ * registry. Returns `null` when no key is set (crypt not installed / not
+ * booted). The old `require('@rudderjs/crypt')` here was dead in this ESM
+ * package — `require` is undefined at runtime, so the cast always threw.
+ */
 function _getCrypt(): { encrypt(v: string): string; decrypt(v: string): string } | null {
-  try {
-    // Dynamic require — only works if @rudderjs/crypt is installed
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('@rudderjs/crypt') as { encrypt(v: string): string; decrypt(v: string): string }
-  } catch {
-    return null
-  }
+  const store = (globalThis as Record<string, unknown>)['__rudderjs_crypt_registry__'] as
+    | { encrypt(v: string): string; decrypt(v: string): string }
+    | undefined
+  return store ?? null
 }
 
 function _encrypt(castType: string, value: unknown): string {
