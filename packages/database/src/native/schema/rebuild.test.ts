@@ -84,3 +84,42 @@ describe('SchemaBuilder.table — change() guard rails (v1)', () => {
     )
   })
 })
+
+describe('SchemaBuilder.table — change() preserves constraints', () => {
+  // SQLite stores FK + CHECK constraints inside the CREATE TABLE body, invisible
+  // to PRAGMA table_info, so a naive column-by-column rebuild silently drops
+  // them. FKs are now reconstructed; CHECK refuses rather than corrupts.
+  beforeEach(async () => {
+    await driver.execute('CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT)', [])
+    await driver.execute(
+      `CREATE TABLE child (
+         id INTEGER PRIMARY KEY,
+         parent_id INTEGER REFERENCES parent(id) ON DELETE CASCADE,
+         note TEXT
+       )`, [])
+  })
+
+  it('preserves a foreign key (and its ON DELETE) across a change() on another column', async () => {
+    await schema.table('child', (t) => t.text('note').nullable().change())
+
+    // FK still declared on the rebuilt table.
+    const fks = await driver.execute(`PRAGMA foreign_key_list('child')`, [])
+    assert.strictEqual(fks.length, 1, `expected the FK to survive the rebuild: ${JSON.stringify(fks)}`)
+    assert.strictEqual(fks[0]?.['table'], 'parent')
+    assert.strictEqual(fks[0]?.['from'], 'parent_id')
+    assert.strictEqual(String(fks[0]?.['on_delete']).toUpperCase(), 'CASCADE')
+
+    // And it actually enforces: with foreign_keys ON, an orphan insert is rejected.
+    await driver.execute('PRAGMA foreign_keys = ON', [])
+    await assert.rejects(() => driver.execute('INSERT INTO child (parent_id, note) VALUES (?, ?)', [999, 'x']))
+  })
+
+  it('refuses to rebuild a table with a CHECK constraint rather than silently dropping it', async () => {
+    await driver.execute(
+      `CREATE TABLE item (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('active','inactive')), note TEXT)`, [])
+    await assert.rejects(
+      () => schema.table('item', (t) => t.text('note').nullable().change()),
+      (e: unknown) => e instanceof NativeOrmError && e.code === 'NATIVE_DDL_CHANGE_CHECK',
+    )
+  })
+})
