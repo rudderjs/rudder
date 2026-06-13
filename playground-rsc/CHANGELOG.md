@@ -1,5 +1,12 @@
 # rudderjs-playground-rsc
 
+## 0.0.29
+
+### Patch Changes
+
+- Updated dependencies [b9bddc5]
+  - vike-react-rsc-rudder@1.0.3
+
 ## 0.0.28
 
 ### Patch Changes
