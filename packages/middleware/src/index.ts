@@ -215,10 +215,15 @@ class _CsrfMiddleware extends Middleware {
   }
 
   async handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
-    // Skip static assets and Vite internals
-    if (req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')) {
-      return next()
-    }
+    const isSafe = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS'
+
+    // Skip static assets and Vite internals — but ONLY for safe methods. These
+    // are GET requests, so gating on the method costs nothing; without the gate
+    // the heuristic bypasses validation for ANY unsafe request whose last path
+    // segment contains a dot (e.g. `POST /users/john.doe`, `POST /report.csv`),
+    // silently disabling CSRF for those routes.
+    const isAssetLike = req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')
+    if (isSafe && isAssetLike) return next()
 
     const cookies  = parseCookies(req.headers['cookie'] ?? '')
     const existing = cookies[this.cookieName]
@@ -230,7 +235,7 @@ class _CsrfMiddleware extends Middleware {
     }
 
     // Safe methods — no validation needed
-    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+    if (isSafe) return next()
 
     // Excluded paths
     if (this.isExcluded(req.path)) return next()
