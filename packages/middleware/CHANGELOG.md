@@ -1,5 +1,25 @@
 # @rudderjs/middleware
 
+## 1.2.2
+
+### Patch Changes
+
+- d1e1242: Fix several CORS correctness issues in `CorsMiddleware`:
+
+  - **Preflight is now answered.** A CORS preflight (`OPTIONS` carrying `Access-Control-Request-Method`) is short-circuited with `204` instead of falling through to the router (which would 404/405, making the browser treat the real cross-origin request as blocked). A new `maxAge` option emits `Access-Control-Max-Age` so browsers can cache the preflight.
+  - **No more leaked origin on a non-match.** With an allowlist (`origin: [...]`), a request whose `Origin` isn't in the list now gets **no** `Access-Control-Allow-Origin` header, instead of the first allowlist entry.
+  - **`Vary: Origin`** is set whenever the allow-origin is reflected per request, so shared caches don't serve one origin's allow header to another.
+
+  Single-string and `*` origins, and the default method/header lists, are unchanged.
+
+- 34cac3a: Fix a CSRF bypass in `CsrfMiddleware`. The static-asset / Vite-internal skip (paths starting with `/@` or whose last segment contains a `.`) ran before the method check and token validation, so it short-circuited **every** request matching the heuristic — including unsafe ones. Any state-changing request to a path whose last segment contains a dot (e.g. `POST /users/john.doe`, `PUT /files/report.csv`, `DELETE /webhook.json`) skipped CSRF validation entirely.
+
+  The skip is now gated on safe methods (GET/HEAD/OPTIONS) only — those are the asset requests it was meant to fast-path — so it can never bypass validation for POST/PUT/PATCH/DELETE.
+
+- 8cab8e5: `ThrottleMiddleware` now warns once when `req.ip` is undefined instead of silently bucketing every client under one `'unknown'` key. Previously, behind a reverse proxy without `TRUST_PROXY=true`, all requests shared a single throttle counter (one client could lock out the whole site) with no indication of the misconfiguration. It now reuses the same `clientIp()` helper as `RateLimit`, which emits a one-time warning pointing at `TRUST_PROXY`. Keying behavior is otherwise unchanged.
+- Updated dependencies [273eaaa]
+  - @rudderjs/contracts@1.17.1
+
 ## 1.2.1
 
 ### Patch Changes
