@@ -68,20 +68,24 @@ describe('completion — completionScript', () => {
 // ── installPlan / detectShell ──────────────────────────────────
 
 describe('completion — installPlan', () => {
+  // Build expectations with path.join so they match the platform separator
+  // (installPlan uses path.join, so a hardcoded '/' literal fails on Windows).
+  const home = path.join('/home', 'u')
+
   it('bash/zsh write under ~/.rudder and source from an rc file', () => {
-    const bash = installPlan('bash', '/home/u')
-    assert.equal(bash.scriptPath, '/home/u/.rudder/completion.bash')
-    assert.equal(bash.rcFile, '/home/u/.bashrc')
+    const bash = installPlan('bash', home)
+    assert.equal(bash.scriptPath, path.join(home, '.rudder', 'completion.bash'))
+    assert.equal(bash.rcFile, path.join(home, '.bashrc'))
     assert.ok(bash.sourceLine.includes(bash.scriptPath))
 
-    const zsh = installPlan('zsh', '/home/u')
-    assert.equal(zsh.scriptPath, '/home/u/.rudder/completion.zsh')
-    assert.equal(zsh.rcFile, '/home/u/.zshrc')
+    const zsh = installPlan('zsh', home)
+    assert.equal(zsh.scriptPath, path.join(home, '.rudder', 'completion.zsh'))
+    assert.equal(zsh.rcFile, path.join(home, '.zshrc'))
   })
 
   it('fish autoloads from the completions dir with no rc file', () => {
-    const fish = installPlan('fish', '/home/u')
-    assert.equal(fish.scriptPath, '/home/u/.config/fish/completions/rudder.fish')
+    const fish = installPlan('fish', home)
+    assert.equal(fish.scriptPath, path.join(home, '.config', 'fish', 'completions', 'rudder.fish'))
     assert.equal(fish.rcFile, null)
   })
 })
