@@ -60,7 +60,7 @@
   },
   "dependencies": {
     "@brillout/json-serializer": "^0.5.15",
-    "@brillout/vite-plugin-server-entry": "^0.7.5",
+    "@brillout/vite-plugin-server-entry": "^0.7.19",
     "@hiogawa/transforms": "^0.0.0",
     "@hiogawa/utils": "^1.7.0",
     "@universal-middleware/core": "^0.4.17",
