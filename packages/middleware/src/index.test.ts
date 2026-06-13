@@ -404,14 +404,27 @@ describe('CsrfMiddleware()', () => {
     assert.ok(reached)
   })
 
-  it('skips static asset paths', async () => {
+  it('skips static asset paths for safe (GET) requests', async () => {
     let reached = false
     await CsrfMiddleware()(
-      makeReq({ method: 'POST', path: '/assets/app.css' }),
+      makeReq({ method: 'GET', path: '/assets/app.css' }),
       makeRes().res,
       async () => { reached = true }
     )
     assert.ok(reached)
+  })
+
+  it('does NOT skip validation for an unsafe request to an asset-like path', async () => {
+    // Regression: the asset/Vite skip must never bypass CSRF for unsafe methods.
+    // A POST to a path whose last segment contains a dot (e.g. /users/john.doe)
+    // previously skipped validation entirely.
+    const bag = makeRes()
+    await CsrfMiddleware()(
+      makeReq({ method: 'POST', path: '/users/john.doe', headers: { cookie: 'csrf_token=abc123' } }),
+      bag.res,
+      async () => {}
+    )
+    assert.strictEqual(bag.getStatus(), 419)
   })
 
   it('respects custom cookieName and headerName options', async () => {
