@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import type { Command } from 'commander'
@@ -181,9 +181,30 @@ function ensureDir(file: string): void {
   mkdirSync(path.dirname(file), { recursive: true })
 }
 
+/** Read a file, treating a missing one as empty. Avoids a check-then-read race. */
+function readOrEmpty(file: string): string {
+  try {
+    return readFileSync(file, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return ''
+    throw err
+  }
+}
+
+/** Remove a file if present, returning whether it existed. No check-then-use race. */
+function rmIfExists(file: string): boolean {
+  try {
+    rmSync(file)
+    return true
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw err
+  }
+}
+
 /** Idempotently add the source block to an rc file. Returns true if it changed. */
 function addSourceBlock(rcFile: string, sourceLine: string): boolean {
-  const existing = existsSync(rcFile) ? readFileSync(rcFile, 'utf8') : ''
+  const existing = readOrEmpty(rcFile)
   if (existing.includes(BLOCK_START)) return false
   const block = `${BLOCK_START}\n${sourceLine}\n${BLOCK_END}\n`
   const sep = existing.length > 0 && !existing.endsWith('\n') ? '\n' : ''
@@ -193,8 +214,7 @@ function addSourceBlock(rcFile: string, sourceLine: string): boolean {
 
 /** Remove the source block from an rc file. Returns true if it changed. */
 function removeSourceBlock(rcFile: string): boolean {
-  if (!existsSync(rcFile)) return false
-  const existing = readFileSync(rcFile, 'utf8')
+  const existing = readOrEmpty(rcFile)
   if (!existing.includes(BLOCK_START)) return false
   // Strip the marked block (and a single trailing newline left behind).
   const pattern = new RegExp(`\\n?${escapeRe(BLOCK_START)}[\\s\\S]*?${escapeRe(BLOCK_END)}\\n?`, 'g')
@@ -229,8 +249,9 @@ function runInstall(shell: Shell, home: string): void {
 
 function runUninstall(shell: Shell, home: string): void {
   const plan = installPlan(shell, home)
-  let removed = false
-  if (existsSync(plan.scriptPath)) { rmSync(plan.scriptPath); removed = true }
+  // rmIfExists attempts the remove and reports existence from the result, so
+  // there is no check-then-remove race.
+  let removed = rmIfExists(plan.scriptPath)
   if (plan.rcFile && removeSourceBlock(plan.rcFile)) removed = true
   console.log(removed
     ? C.green('✓') + ` Removed ${shell} completions`

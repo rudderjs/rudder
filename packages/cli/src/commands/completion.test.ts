@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
@@ -140,17 +140,23 @@ describe('completion — bash script behaves under default COMP_WORDBREAKS', () 
   // Source the emitted script in a real bash, drive _rudder_complete with the
   // word arrays bash produces (':' is a word-break char), and read COMPREPLY.
   function complete(words: string[], cword: number): string[] {
-    const dir = os.tmpdir()
-    const scriptPath = path.join(dir, `rudder-comp-${process.pid}.bash`)
-    writeFileSync(scriptPath, completionScript('bash'))
-    const driver = `
-      source '${scriptPath}'
-      COMP_WORDS=(${words.map(w => `'${w}'`).join(' ')}); COMP_CWORD=${cword}
-      _rudder_complete
-      printf '%s\\n' "\${COMPREPLY[@]}"
-    `
-    const out = execFileSync('bash', ['-c', driver], { encoding: 'utf8' })
-    return out.split('\n').filter(Boolean)
+    // mkdtempSync gives a private 0700 dir with a random suffix, so the script
+    // path is not predictable (no insecure-temp-file / symlink race).
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rudder-comp-'))
+    try {
+      const scriptPath = path.join(dir, 'completion.bash')
+      writeFileSync(scriptPath, completionScript('bash'))
+      const driver = `
+        source '${scriptPath}'
+        COMP_WORDS=(${words.map(w => `'${w}'`).join(' ')}); COMP_CWORD=${cword}
+        _rudder_complete
+        printf '%s\\n' "\${COMPREPLY[@]}"
+      `
+      const out = execFileSync('bash', ['-c', driver], { encoding: 'utf8' })
+      return out.split('\n').filter(Boolean)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   }
 
   let bashAvailable = true
