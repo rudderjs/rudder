@@ -306,6 +306,11 @@ export class RouteBuilder<
   constructor(
     private readonly definition: RouteDefinition,
     private readonly _router: Router,
+    /** Count of group-stack middleware prepended ahead of this route's own
+     *  middleware. `.query()`/`.body()` splice their validator AFTER these so a
+     *  `router.group({ middleware })` (e.g. auth) still runs first — matching the
+     *  opts-object form. Defaults to 0 (no group), where the splice == unshift. */
+    private readonly _groupMwCount: number = 0,
   ) {}
 
   /**
@@ -475,8 +480,9 @@ export class RouteBuilder<
    */
   query<S extends StandardSchemaV1>(schema: S): RouteBuilder<P, StandardSchemaOutput<S>, B> {
     this._guardMutation('query')
-    // Prepend so the validator runs before any other per-route middleware.
-    this.definition.middleware.unshift(buildQueryValidator(schema))
+    // Insert after group-stack middleware (auth/guards) but before per-route
+    // middleware — matching the opts-object form. With no group, this is unshift.
+    this.definition.middleware.splice(this._groupMwCount, 0, buildQueryValidator(schema))
     // Retain the raw schema for introspection (OpenAPI emitter). Validation
     // still runs via the middleware above; this is the documentation source.
     this.definition.querySchema = schema
@@ -506,8 +512,9 @@ export class RouteBuilder<
    */
   body<S extends StandardSchemaV1>(schema: S): RouteBuilder<P, Q, StandardSchemaOutput<S>> {
     this._guardMutation('body')
-    // Prepend so the validator runs before any other per-route middleware.
-    this.definition.middleware.unshift(buildBodyValidator(schema))
+    // Insert after group-stack middleware (auth/guards) but before per-route
+    // middleware — matching the opts-object form. With no group, this is unshift.
+    this.definition.middleware.splice(this._groupMwCount, 0, buildBodyValidator(schema))
     // Retain the raw schema for introspection (OpenAPI emitter). Validation
     // still runs via the middleware above; this is the documentation source.
     this.definition.bodySchema = schema
@@ -939,7 +946,10 @@ export class Router {
     const group = currentGroup()
     if (group) def.group = group
     this.routes.push(def)
-    return new RouteBuilder(def, this)
+    // Group-stack middleware is prepended ahead of `middleware`; record the
+    // boundary so a later `.query()`/`.body()` inserts after it (auth-first).
+    const groupMwCount = composed.middleware.length - middleware.length
+    return new RouteBuilder(def, this, groupMwCount)
   }
 
   /** Register all routes from a decorator-based controller class. */
@@ -1246,7 +1256,11 @@ export function route(name: string, params: Record<string, string | number> = {}
   let result = stripRegexSegments(path).replace(/:([a-zA-Z_][a-zA-Z0-9_]*)(\?)?/g, (_match, key: string, optional: string | undefined) => {
     if (key in params) {
       used.add(key)
-      return String(params[key])
+      // Encode so a value containing `/`, `?`, `#`, `&`, spaces, etc. can't
+      // inject extra path segments / a query / a fragment into the generated
+      // URL (Laravel `route()` parity). Query params below are already encoded
+      // via URLSearchParams.
+      return encodeURIComponent(String(params[key]))
     }
     if (optional) return ''
     throw new Error(`[RudderJS] Missing required parameter "${key}" for route "${name}".`)
