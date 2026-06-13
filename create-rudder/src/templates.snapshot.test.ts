@@ -59,10 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-07 — APP_KEY moved from the crypt-gated
-  // block to the unconditional .env/.env.example head (sessions sign with it
-  // regardless of @rudderjs/crypt; a non-crypt scaffold's first doctor was
-  // red). Same line count, two fewer blank separator lines → −2 bytes.
+  // Baseline last captured 2026-06-13 — added the three committed `.vscode/`
+  // scaffolder files (launch.json / extensions.json / settings.json), so the
+  // F5-debuggable-out-of-the-box DX win. +3 files, +1558 bytes.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,15 +70,18 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 62
-const EXPECTED_TOTAL_BYTES = 49669
-const EXPECTED_CONTENT_HASH = 'c9b448861f3f9363a80640094d4363f01abff9839fa09b09da2b47af1c7cad07'
+const EXPECTED_FILE_COUNT = 65
+const EXPECTED_TOTAL_BYTES = 51227
+const EXPECTED_CONTENT_HASH = 'cdb877bb20f97c7bb1a4447b0b8578237469f0b0a61690a1bca4dad2800b5d1e'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
   '.env.example',
   '.gitattributes',
   '.gitignore',
+  '.vscode/extensions.json',
+  '.vscode/launch.json',
+  '.vscode/settings.json',
   'app/Http/Controllers/AuthController.ts',
   'app/Mcp/EchoServer.ts',
   'app/Mcp/EchoTool.ts',

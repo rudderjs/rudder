@@ -193,6 +193,60 @@ describe('getTemplates() — tailwind + shadcn', () => {
   })
 })
 
+// ─── VS Code config ────────────────────────────────────────
+
+describe('getTemplates() — .vscode config', () => {
+  it('always generates the three .vscode files', () => {
+    const files = getTemplates(ctx())
+    assert.ok('.vscode/launch.json' in files)
+    assert.ok('.vscode/extensions.json' in files)
+    assert.ok('.vscode/settings.json' in files)
+  })
+
+  it('launch.json has the three debug configurations + a command input', () => {
+    const launch = JSON.parse(getTemplates(ctx())['.vscode/launch.json']!)
+    const names = launch.configurations.map((c: { name: string }) => c.name)
+    assert.deepEqual(names, ['Debug dev server', 'Debug rudder command', 'Debug current test file'])
+    assert.ok(launch.inputs.some((i: { id: string }) => i.id === 'rudderCommand'))
+    // The rudder-command config references the prompted input.
+    const rudderCfg = launch.configurations.find((c: { name: string }) => c.name === 'Debug rudder command')
+    assert.ok(rudderCfg.args.includes('${input:rudderCommand}'))
+    assert.ok(rudderCfg.args.some((a: string) => a.includes('@rudderjs/cli/dist/index.js')))
+  })
+
+  it('extensions.json always recommends Vite', () => {
+    const ext = JSON.parse(getTemplates(ctx())['.vscode/extensions.json']!)
+    assert.ok(ext.recommendations.includes('antfu.vite'))
+  })
+
+  it('extensions.json recommends Tailwind only when tailwind is selected', () => {
+    const on  = JSON.parse(getTemplates(ctx({ tailwind: true }))['.vscode/extensions.json']!)
+    const off = JSON.parse(getTemplates(ctx({ tailwind: false, shadcn: false }))['.vscode/extensions.json']!)
+    assert.ok(on.recommendations.includes('bradlc.vscode-tailwindcss'))
+    assert.ok(!off.recommendations.includes('bradlc.vscode-tailwindcss'))
+  })
+
+  it('extensions.json recommends Prisma only when orm=prisma', () => {
+    const prisma = JSON.parse(getTemplates(ctx({ orm: 'prisma' }))['.vscode/extensions.json']!)
+    const native = JSON.parse(getTemplates(ctx({ orm: 'native' }))['.vscode/extensions.json']!)
+    assert.ok(prisma.recommendations.includes('Prisma.prisma'))
+    assert.ok(!native.recommendations.includes('Prisma.prisma'))
+  })
+
+  it('extensions.json recommends Vue (Volar) only when Vue is in the framework set', () => {
+    const withVue = JSON.parse(getTemplates(ctx({ frameworks: ['react', 'vue'], primary: 'react' }))['.vscode/extensions.json']!)
+    const noVue   = JSON.parse(getTemplates(ctx({ frameworks: ['react'], primary: 'react' }))['.vscode/extensions.json']!)
+    assert.ok(withVue.recommendations.includes('Vue.volar'))
+    assert.ok(!noVue.recommendations.includes('Vue.volar'))
+  })
+
+  it('settings.json pins the workspace TypeScript and disables format-on-save', () => {
+    const settings = JSON.parse(getTemplates(ctx())['.vscode/settings.json']!)
+    assert.equal(settings['typescript.tsdk'], 'node_modules/typescript/lib')
+    assert.equal(settings['editor.formatOnSave'], false)
+  })
+})
+
 // ─── Framework page extensions ─────────────────────────────
 
 describe('getTemplates() — framework page files', () => {
