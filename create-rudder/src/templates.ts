@@ -51,6 +51,7 @@ import { demoPageConfig, demoPage } from './templates/pages/demo.js'
 import { packageJson } from './templates/package-json.js'
 import { tsconfigJson } from './templates/tsconfig.js'
 import { viteConfig } from './templates/vite.js'
+import { launchJson, extensionsJson, settingsJson } from './templates/vscode.js'
 
 export { detectPackageManager, pmExec, pmInstall, pmRun }
 export type { PackageManager }
@@ -110,6 +111,12 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['.env.example']         = dotenvExample(ctx)
   files['.gitignore']           = gitignore()
   files['.gitattributes']       = gitattributes()
+
+  // VS Code / Cursor: F5-debuggable out of the box. Committed (not gitignored) —
+  // these describe project debug entry points, not personal preferences.
+  files['.vscode/launch.json']     = launchJson(ctx)
+  files['.vscode/extensions.json'] = extensionsJson(ctx)
+  files['.vscode/settings.json']   = settingsJson()
 
   // Database schema
   if (ctx.orm === 'prisma') {
