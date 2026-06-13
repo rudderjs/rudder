@@ -160,7 +160,7 @@ _rudder_complete() {
   if [[ "\${cur}" == -* ]]; then
     local fcmd="\${COMP_WORDS[1]}" j=2
     while [ "\${COMP_WORDS[j]}" = ":" ] && [ -n "\${COMP_WORDS[j+1]}" ]; do
-      fcmd="\${fcmd}:\${COMP_WORDS[j+1]}"; j=\$((j+2))
+      fcmd="\${fcmd}:\${COMP_WORDS[j+1]}"; j=$((j+2))
     done
     local fl="--help --version"
     if [[ " ${words} " == *" \${fcmd} "* ]]; then
