@@ -108,6 +108,13 @@ export class Container {
   // ── Missing handler (for deferred providers) ──────────────
   private _missingHandler: ((token: string | symbol) => void) | null = null
 
+  // ── Circular dependency guard ─────────────────────────────
+  // Keys currently mid-construction. A token that re-enters make() while still
+  // on this set is a constructor cycle (A needs B, B needs A) — throw a clear
+  // error instead of recursing into a stack overflow. Laravel guards the same
+  // way with a build stack.
+  private _building = new Set<string | symbol>()
+
   reset(): this {
     this.bindings.clear()
     this.instances.clear()
@@ -269,49 +276,70 @@ export class Container {
       return this.instances.get(key) as T
     }
 
-    const binding = this.bindings.get(key)
-    if (binding) {
-      // Scoped binding: cache per-request in ALS store
-      if (binding.scoped) {
-        const scope = this._scopeAls.getStore()
-        if (!scope) {
-          throw new Error(
-            `[RudderJS] Cannot resolve scoped binding outside of a request scope.\n` +
-            `  Wrap the call in container.runScoped() or add ScopeMiddleware().`
-          )
+    if (this._building.has(key)) {
+      const chain = [...this._building, key].map(k => this._tokenLabel(k)).join(' → ')
+      throw new Error(
+        `[RudderJS] Circular dependency detected while resolving from the DI container:\n` +
+        `  ${chain}\n` +
+        `  Break the cycle with a deferred provider, a factory binding, or a setter dependency.`
+      )
+    }
+
+    this._building.add(key)
+    try {
+      const binding = this.bindings.get(key)
+      if (binding) {
+        // Scoped binding: cache per-request in ALS store
+        if (binding.scoped) {
+          const scope = this._scopeAls.getStore()
+          if (!scope) {
+            throw new Error(
+              `[RudderJS] Cannot resolve scoped binding outside of a request scope.\n` +
+              `  Wrap the call in container.runScoped() or add ScopeMiddleware().`
+            )
+          }
+          if (scope.has(key)) return scope.get(key) as T
+          const value = this.runExtenders(key, binding.factory(this) as T)
+          scope.set(key, value)
+          return value
         }
-        if (scope.has(key)) return scope.get(key) as T
+
         const value = this.runExtenders(key, binding.factory(this) as T)
-        scope.set(key, value)
+        if (binding.singleton) this.instances.set(key, value)
         return value
       }
 
-      const value = this.runExtenders(key, binding.factory(this) as T)
-      if (binding.singleton) this.instances.set(key, value)
-      return value
-    }
-
-    if (typeof token === 'function') {
-      return this.runExtenders(key, this.autoResolve(token as Constructor<T>))
-    }
-
-    // Deferred provider hook — give the missing handler a chance to register the binding
-    if (this._missingHandler) {
-      this._missingHandler(key)
-      // If the handler registered the binding/instance, resolve it through the
-      // normal path so singleton AND scoped semantics apply (a hand-rolled retry
-      // here previously skipped the scoped branch). The binding now exists, so
-      // this can't re-enter the missing handler — no infinite recursion.
-      if (this.instances.has(key) || this.bindings.has(key)) {
-        return this.make<T>(token)
+      if (typeof token === 'function') {
+        return this.runExtenders(key, this.autoResolve(token as Constructor<T>))
       }
-    }
 
-    const label = typeof key === 'symbol' ? key.toString() : `"${String(key)}"`
-    throw new Error(
-      `[RudderJS] Cannot resolve ${label} from the DI container.\n` +
-      `  Did you forget to add @Injectable() to the class, or register it in a ServiceProvider?`
-    )
+      // Deferred provider hook — give the missing handler a chance to register
+      // the binding. Hand off OUTSIDE the build guard (drop the marker first):
+      // the deferred-provider path has its own cycle detection (Application's
+      // `_resolving`, with a more actionable message), and a provider
+      // legitimately resolves sibling tokens during register/boot. Dropping the
+      // marker also lets the same-key retry below re-resolve cleanly (deferred
+      // registration, not recursion).
+      if (this._missingHandler) {
+        this._building.delete(key)
+        this._missingHandler(key)
+        if (this.instances.has(key) || this.bindings.has(key)) {
+          return this.make<T>(token)
+        }
+      }
+
+      const label = this._tokenLabel(key)
+      throw new Error(
+        `[RudderJS] Cannot resolve ${label} from the DI container.\n` +
+        `  Did you forget to add @Injectable() to the class, or register it in a ServiceProvider?`
+      )
+    } finally {
+      this._building.delete(key)
+    }
+  }
+
+  private _tokenLabel(key: string | symbol): string {
+    return typeof key === 'symbol' ? key.toString() : `"${String(key)}"`
   }
 
   has(token: string | symbol | Constructor): boolean {

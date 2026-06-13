@@ -72,6 +72,17 @@ describe('provider manifest round-trip (scan → write → load)', () => {
     }, {
       'index.js': 'export const notAProvider = true\n',
     })
+
+    // A rudderjs field with NO `provider` key — must be skipped with a warning,
+    // not written to the manifest (a provider-less entry hard-throws at load).
+    writePkg(path.join(scope, 'fake-no-provider'), {
+      name: '@rudderjs/fake-no-provider',
+      type: 'module',
+      main: './index.js',
+      rudderjs: { stage: 'feature' },
+    }, {
+      'index.js': 'export class SomethingElse {}\n',
+    })
   })
 
   after(() => {
@@ -86,7 +97,12 @@ describe('provider manifest round-trip (scan → write → load)', () => {
     assert.deepStrictEqual(
       names,
       ['@rudderjs/fake-sub', '@rudderjs/fake-main'],
-      'scan finds both providers in stage order (infrastructure → feature), excluding opt-outs and field-less packages',
+      'scan finds both providers in stage order (infrastructure → feature), excluding opt-outs, field-less packages, and rudderjs-fields with no provider',
+    )
+    assert.strictEqual(
+      entries.find(e => e.package === '@rudderjs/fake-no-provider'),
+      undefined,
+      'a rudderjs field with no provider is skipped, not scanned',
     )
     const sub = entries.find(e => e.package === '@rudderjs/fake-sub')
     assert.strictEqual(sub?.providerSubpath, './server', 'providerSubpath must survive the scan')

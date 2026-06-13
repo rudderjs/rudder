@@ -128,6 +128,17 @@ function scanNodeModules(nodeModules: string): ProviderEntry[] {
         // Honor opt-out: don't even include in the manifest.
         if (field.autoDiscover === false) continue
 
+        // A `rudderjs` field with no `provider` class name can't be loaded —
+        // skip it with a warning instead of writing a provider-less entry that
+        // hard-throws at load time (`mod[undefined]` is never a function).
+        if (!field.provider) {
+          console.warn(
+            `[RudderJS] ${pkgJson.name} has a "rudderjs" field but no "provider" — skipping discovery.\n` +
+            `  Add "rudderjs.provider" (the exported provider class name), or set "rudderjs.autoDiscover": false to silence this.`,
+          )
+          continue
+        }
+
         const entry: ProviderEntry = {
           package:  pkgJson.name,
           provider: field.provider,
