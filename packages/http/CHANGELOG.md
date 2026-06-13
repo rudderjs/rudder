@@ -1,5 +1,39 @@
 # @rudderjs/http
 
+## 1.3.0
+
+### Minor Changes
+
+- 4d5d4f3: fix(http): pool no longer abandons in-flight requests when one fails
+
+  `Pool.send()` rejected the whole batch on the first failed request (`reject(err)` on the first task rejection). That had two problems: the other requests already in flight were abandoned — their work still ran to completion server-side but their results were discarded and could never be awaited — and a single connection error threw away every sibling's successful response.
+
+  It now mirrors Laravel's `Http::pool()`: a failed request lands as an `Error` in its own slot, every other request runs to completion, and `send()` never rejects on a request failure. Concurrency limiting is unchanged.
+
+  Return type widened from `HttpResponseData[]` to `(HttpResponseData | Error)[]` — narrow each slot before use:
+
+  ```ts
+  const results = await Http.pool((p) => {
+    p.add((http) => http.get("/a"));
+    p.add((http) => http.get("/b"));
+  }).send();
+
+  for (const r of results) {
+    if (r instanceof Error) continue; // failed request
+    console.log(r.status, r.body);
+  }
+  ```
+
+  Previously a returned array was always all-success (any failure threw before returning), so existing runtime code that only read results after a successful batch keeps working; TypeScript callers now narrow the union.
+
+### Patch Changes
+
+- 4668c93: fix(http): make `asForm()` work and stop the per-request clone from dropping the body
+
+  `asForm()` was effectively a no-op. Two bugs combined: `_clone()` (run by every verb method before sending) did not copy `_body` or `_bodyType`, so any encoding or body set on the builder was discarded; and `withBody()` — the path `post(url, data)` takes — unconditionally forced the encoding back to JSON, clobbering a prior `asForm()`. The documented `Http.withBody({...}).asForm().post('/login')` pattern actually sent an empty body, and `Http.asForm().post(url, data)` sent JSON.
+
+  Now `_clone()` carries `_body`/`_bodyType` like every other field, and `withBody()` defaults the encoding to JSON only when none was chosen — so an explicit `asForm()` sticks regardless of call order. Form bodies are correctly serialized as `application/x-www-form-urlencoded`; JSON remains the default. Adds tests covering both `asForm()` paths, body survival across the clone, and JSON default (the body path had no test coverage before).
+
 ## 1.2.0
 
 ### Minor Changes
