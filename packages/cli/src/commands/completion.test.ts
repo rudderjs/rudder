@@ -202,15 +202,14 @@ describe('completion — bash script behaves under default COMP_WORDBREAKS', () 
     try {
       const scriptPath = path.join(dir, 'completion.bash')
       writeFileSync(scriptPath, completionScript('bash'))
-      let pathPrefix = ''
-      if (argStub) {
-        const stub = path.join(dir, 'rudder')
-        writeFileSync(stub, `#!/usr/bin/env bash\nif [ "$1" = "completion" ] && [ "$2" = "args" ]; then printf '%s\\n' ${argStub.map(m => `'${m}'`).join(' ')}; fi\n`)
-        execFileSync('chmod', ['+x', stub])
-        pathPrefix = `export PATH='${dir}':"$PATH"\n`
-      }
+      // Stub `rudder` as a shell function (not a file): command-substitution
+      // subshells inherit functions, so the script's `$(rudder completion args)`
+      // resolves to it. Avoids chmod/PATH, which keeps the test OS-portable.
+      const stub = argStub
+        ? `rudder() { if [ "$1" = "completion" ] && [ "$2" = "args" ]; then printf '%s\\n' ${argStub.map(m => `'${m}'`).join(' ')}; fi; }\n`
+        : ''
       const driver = `
-        ${pathPrefix}source '${scriptPath}'
+        ${stub}source '${scriptPath}'
         COMP_WORDS=(${words.map(w => `'${w}'`).join(' ')}); COMP_CWORD=${cword}
         _rudder_complete
         printf '%s\\n' "\${COMPREPLY[@]}"
