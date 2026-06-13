@@ -357,17 +357,28 @@ export interface QueueConfig {
 export function parseWorkerArgs(args: string[]): { queues: string; options: WorkerOptions } {
   const positional: string[] = []
   const options: WorkerOptions = {}
+  // Parse a numeric flag value, ignoring a missing or non-numeric one. A bare
+  // `--sleep` / `--tries` (no `=value`) yields `Number(undefined) === NaN`;
+  // because NaN is not nullish, leaving it on the option would defeat every
+  // downstream `?? default` (NaN sleep → busy-spin; NaN tries → `attempts >=
+  // NaN` is always false → the job is released forever and never dead-lettered).
+  // Returning undefined lets the default apply instead.
+  const num = (v: string | undefined): number | undefined => {
+    if (v === undefined || v === '') return undefined
+    const n = Number(v)
+    return Number.isFinite(n) ? n : undefined
+  }
   for (const arg of args) {
     if (!arg.startsWith('--')) { positional.push(arg); continue }
     const [flag, raw] = arg.slice(2).split('=')
     switch (flag) {
       case 'once':            options.once = true; break
       case 'stop-when-empty': options.stopWhenEmpty = true; break
-      case 'sleep':           options.sleep   = Number(raw); break
-      case 'tries':           options.tries   = Number(raw); break
-      case 'backoff':         options.backoff = Number(raw); break
-      case 'timeout':         options.timeout = Number(raw); break
-      case 'max-jobs':        options.maxJobs = Number(raw); break
+      case 'sleep':    { const n = num(raw); if (n !== undefined) options.sleep   = n; break }
+      case 'tries':    { const n = num(raw); if (n !== undefined) options.tries   = n; break }
+      case 'backoff':  { const n = num(raw); if (n !== undefined) options.backoff = n; break }
+      case 'timeout':  { const n = num(raw); if (n !== undefined) options.timeout = n; break }
+      case 'max-jobs': { const n = num(raw); if (n !== undefined) options.maxJobs = n; break }
     }
   }
   return { queues: positional[0] ?? 'default', options }

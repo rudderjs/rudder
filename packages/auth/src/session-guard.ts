@@ -78,7 +78,13 @@ export class SessionGuard implements Guard {
 
   async attempt(credentials: Record<string, unknown>, _remember?: boolean): Promise<boolean> {
     const user = await this.provider.retrieveByCredentials(credentials)
-    if (!user) return false
+    if (!user) {
+      // Equalize timing with the wrong-password path so an attacker can't
+      // enumerate accounts by latency (no user = instant; wrong password =
+      // slow bcrypt/argon verify).
+      await this.provider.fakeValidateCredentials?.(credentials)
+      return false
+    }
 
     const valid = await this.provider.validateCredentials(user, credentials)
     if (!valid) return false

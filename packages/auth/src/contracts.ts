@@ -30,6 +30,13 @@ export interface UserProvider {
   retrieveById(id: string): Promise<Authenticatable | null>
   retrieveByCredentials(credentials: Record<string, unknown>): Promise<Authenticatable | null>
   validateCredentials(user: Authenticatable, credentials: Record<string, unknown>): Promise<boolean>
+  /**
+   * Optional: perform a constant-cost dummy password verify when no user
+   * matched, to keep the failed-login timing independent of whether the
+   * account exists (anti-enumeration). Callers should invoke it on the
+   * no-user branch when present.
+   */
+  fakeValidateCredentials?(credentials: Record<string, unknown>): Promise<void>
 }
 
 // ─── Guard Contract ───────────────────────────────────────

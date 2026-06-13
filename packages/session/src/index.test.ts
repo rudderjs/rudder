@@ -312,6 +312,63 @@ describe('sessionMiddleware', () => {
     assert.strictEqual(second.get('key'), 'value')
   })
 
+  it('forces Secure when SameSite=None even if cookie.secure is false', async () => {
+    // Browsers silently drop a `SameSite=None` cookie that lacks `Secure`.
+    const cfg: SessionConfig = { ...config, cookie: { ...config.cookie, sameSite: 'none', secure: false } }
+    const mw = sessionMiddleware(cfg)
+    const { req, res, setCookies } = makeReqRes()
+    await mw(req, res, async () => {})
+    assert.ok(setCookies[0], 'a new session must set a cookie')
+    assert.match(setCookies[0]!, /SameSite=none/)
+    assert.match(setCookies[0]!, /; Secure/)
+  })
+
+  it('cookie driver rejects an expired cookie server-side', async () => {
+    const realNow = Date.now
+    let now = 1_700_000_000_000
+    Date.now = () => now
+    try {
+      const { setCookie } = await runRequest('', s => s.put('user', 'alice'))
+      const cookieValue = extractCookieValue(setCookie!)
+
+      // Within the lifetime → the cookie still loads and carries the data.
+      now += 60 * 1000 // 1 minute (lifetime is 120)
+      const { session: live } = await runRequest(`rjs_sess=${cookieValue}`)
+      assert.strictEqual(live.get('user'), 'alice')
+
+      // Past the lifetime → the signed `exp` is in the past, so the cookie is
+      // rejected server-side and a fresh empty session is started, even though
+      // the HMAC is still valid.
+      now += config.lifetime * 60 * 1000 + 1
+      const { session: expired } = await runRequest(`rjs_sess=${cookieValue}`)
+      assert.strictEqual(expired.get('user'), undefined, 'expired cookie must yield a fresh session')
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('a save() failure does not mask an otherwise-successful response', async () => {
+    const realError = console.error
+    console.error = () => {}
+    try {
+      const mw = sessionMiddleware(config)
+      const req = { headers: { cookie: '' }, raw: {} } as unknown as AppRequest
+      // A new session marks dirty, so save() writes Set-Cookie — make that throw.
+      const res = { raw: { header: () => { throw new Error('cookie write failed') } } } as unknown as AppResponse
+      await assert.doesNotReject(async () => { await mw(req, res, async () => { /* handler succeeds */ }) })
+
+      // But a handler error is still surfaced (never masked by the save path).
+      const res2 = { raw: { header: () => { throw new Error('cookie write failed') } } } as unknown as AppResponse
+      const req2 = { headers: { cookie: '' }, raw: {} } as unknown as AppRequest
+      await assert.rejects(
+        async () => { await mw(req2, res2, async () => { throw new Error('handler boom') }) },
+        /handler boom/,
+      )
+    } finally {
+      console.error = realError
+    }
+  })
+
   it('tampered cookie starts a fresh session', async () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes('rjs_sess=tampered.invalidsig')

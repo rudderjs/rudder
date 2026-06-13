@@ -73,16 +73,21 @@ export class RateLimited implements JobMiddleware {
       return next()
     }
 
+    // Atomic increment, not get → modify → set: the old pattern let two
+    // workers read the same count and both write count+1 (undercount, the
+    // limit leaks), and re-`set`ting with `_decaySeconds` every call slid the
+    // window forward indefinitely so a never-idle job stream's counter never
+    // expired. `increment` seeds the TTL on the first hit and preserves it
+    // thereafter, giving a race-free fixed window.
     const key   = `rudderjs:job-rate:${this._key}`
-    const count = Number(await cache.get(key) ?? 0)
+    const count = await cache.increment(key, 1, this._decaySeconds)
 
-    if (count >= this._maxAttempts) {
+    if (count > this._maxAttempts) {
       throw new Error(
         `[RudderJS Queue] Job rate limit exceeded for "${this._key}" (${this._maxAttempts}/${this._decaySeconds}s). Releasing back to queue.`
       )
     }
 
-    await cache.set(key, count + 1, this._decaySeconds)
     return next()
   }
 }
@@ -215,6 +220,7 @@ interface CacheLike {
   get(key: string): Promise<unknown>
   set(key: string, value: unknown, ttl?: number): Promise<void>
   forget(key: string): Promise<void>
+  increment(key: string, by?: number, ttl?: number): Promise<number>
 }
 
 async function _getCache(): Promise<CacheLike | null> {

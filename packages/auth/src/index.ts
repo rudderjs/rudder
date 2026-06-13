@@ -242,11 +242,13 @@ export class AuthProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg = config<AuthConfig>('auth')
 
-    // Resolve Hash.check from DI
+    // Resolve Hash.check + Hash.make from DI
     let hashCheck: (plain: string, hashed: string) => Promise<boolean>
+    let hashMake:  (plain: string) => Promise<string>
     try {
-      const hashDriver = this.app.make<{ check(v: string, h: string): Promise<boolean> }>('hash')
+      const hashDriver = this.app.make<{ check(v: string, h: string): Promise<boolean>; make(v: string): Promise<string> }>('hash')
       hashCheck = (plain, hashed) => hashDriver.check(plain, hashed)
+      hashMake  = (plain) => hashDriver.make(plain)
     } catch {
       throw new Error(
         '[RudderJS Auth] No hash driver found. Register HashProvider before AuthProvider.',
@@ -258,7 +260,7 @@ export class AuthProvider extends ServiceProvider {
       return this.app.make<SessionStore>('session.facade')
     }
 
-    const manager = new AuthManager(cfg, hashCheck, getSession)
+    const manager = new AuthManager(cfg, hashCheck, getSession, hashMake)
     this.app.instance('auth.manager', manager)
     this.app.instance('auth', Auth)
 
