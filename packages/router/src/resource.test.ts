@@ -191,6 +191,19 @@ describe('Router.apiResource()', () => {
     assert.strictEqual(r.has('posts.edit'),    false)
     assert.strictEqual(r.has('posts.show'),    true)
   })
+
+  it('honors an explicit `only`, which wins over the injected except', () => {
+    // Regression: `only` and `except` were AND-composed, so apiResource's
+    // injected `except: [create, edit]` silently stripped a verb the caller
+    // explicitly asked for via `only`. `only` must win outright (Laravel parity).
+    r.apiResource('posts', FullController, { only: ['index', 'show', 'create'] })
+    const sigs = r.list().map(rt => `${rt.method} ${rt.path}`)
+    assert.deepStrictEqual(sigs, [
+      'GET /posts',
+      'GET /posts/create',
+      'GET /posts/:post',
+    ])
+  })
 })
 
 describe('Router.singleton()', () => {

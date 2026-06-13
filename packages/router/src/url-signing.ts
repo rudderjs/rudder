@@ -133,8 +133,11 @@ export class Url {
     }
 
     const expected = _computeSignature(pathname, params)
-
-    if (!_crypto) return signature === expected
+    // _computeSignature throws if crypto is unavailable, so this guard is
+    // belt-and-braces — fail closed rather than fall back to a timing-unsafe
+    // `===` compare. Below is constant-time (length guard first, since
+    // timingSafeEqual throws on unequal-length buffers).
+    if (!_crypto) return false
     const sigBuf = Buffer.from(signature)
     const expBuf = Buffer.from(expected)
     if (sigBuf.length !== expBuf.length) return false

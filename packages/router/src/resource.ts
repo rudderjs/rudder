@@ -45,10 +45,18 @@ export const SINGLETON_DESTROY_VERBS: readonly ResourceVerbSpec[] = [
 
 /** @internal — apply `only` / `except` to a verb table. */
 export function filterVerbs(table: readonly ResourceVerbSpec[], opts: ResourceOptions): readonly ResourceVerbSpec[] {
-  let verbs = table
-  if (opts.only)   { const allow = new Set(opts.only);   verbs = verbs.filter(v => allow.has(v.verb)) }
-  if (opts.except) { const deny  = new Set(opts.except); verbs = verbs.filter(v => !deny.has(v.verb)) }
-  return verbs
+  // `only` and `except` are mutually exclusive (Laravel parity) — `only` wins
+  // outright. This also stops `apiResource`'s injected `except` from silently
+  // nullifying a caller's explicit `only` (e.g. `only: ['create']`).
+  if (opts.only) {
+    const allow = new Set(opts.only)
+    return table.filter(v => allow.has(v.verb))
+  }
+  if (opts.except) {
+    const deny = new Set(opts.except)
+    return table.filter(v => !deny.has(v.verb))
+  }
+  return table
 }
 
 /**

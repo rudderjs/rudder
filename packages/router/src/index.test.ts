@@ -691,6 +691,15 @@ describe('RouteBuilder.where()', () => {
     router.reset()
   })
 
+  it('route() URL-encodes path param values (no segment/query/fragment injection)', () => {
+    router.get('/users/:name', handler).name('rb.users.enc')
+    assert.strictEqual(
+      route('rb.users.enc', { name: 'a/b?c#d e' }),
+      '/users/a%2Fb%3Fc%23d%20e',
+    )
+    router.reset()
+  })
+
   it('route binding extraction ignores params named inside {regex} bodies', async () => {
     let called = false
     const resolver = { name: 'X', findForRoute: () => { called = true; return { ok: true } } }
@@ -802,6 +811,17 @@ describe('Router.group()', () => {
       r.get('/x', handler, [noop2])
     })
     assert.deepStrictEqual(r.list()[0]?.middleware, [noop, noop2])
+  })
+
+  it('chained .query()/.body() run AFTER group middleware (auth-first)', () => {
+    r.group({ middleware: [noop] }, () => {
+      r.get('/admin/users', handler).query(z.object({ page: z.coerce.number() }))
+    })
+    const mw = r.list()[0]?.middleware ?? []
+    // group middleware (e.g. auth) must come first; the validator is spliced
+    // in after it, not unshifted ahead of it.
+    assert.strictEqual(mw.length, 2)
+    assert.strictEqual(mw[0], noop, 'group middleware must run before the query validator')
   })
 
   it('routes outside the group are unaffected', () => {
