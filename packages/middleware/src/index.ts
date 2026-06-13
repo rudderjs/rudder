@@ -139,16 +139,14 @@ export class ThrottleMiddleware extends Middleware {
     return segment.includes('.')                  // any file extension → static asset
   }
 
-  /** Best-effort client identifier from request headers */
-  private clientKey(req: AppRequest): string {
-    return (req as unknown as Record<string, unknown>)['ip'] as string ?? 'unknown'
-  }
-
   handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
     // Never throttle static assets — would break Vite HMR and page loads in dev
     if (this.isAsset(req.path)) return next()
 
-    const key = this.clientKey(req)
+    // Key by client IP. Uses the shared clientIp() so a missing req.ip warns
+    // once (otherwise every client silently collapses into one 'unknown' bucket
+    // — the whole site shares a single quota).
+    const key = clientIp(req)
     const now = Date.now()
     const rec = this.hits.get(key)
 
@@ -323,7 +321,7 @@ function _warnNoIpOnce(): void {
   if (_warnedNoIp) return
   _warnedNoIp = true
   console.warn(
-    '[RudderJS Middleware] RateLimit is keyed by IP but req.ip is undefined — ' +
+    '[RudderJS Middleware] An IP-keyed rate limiter saw req.ip undefined — ' +
     'ALL clients share one rate-limit bucket. Behind a reverse proxy, set ' +
     'TRUST_PROXY=true so the client IP is read from x-forwarded-for.',
   )

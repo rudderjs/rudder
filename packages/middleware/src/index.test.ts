@@ -337,6 +337,24 @@ describe('ThrottleMiddleware', () => {
     assert.strictEqual(nextCount, 1)
     assert.strictEqual(blocked.getStatus(), 429)
   })
+
+  it('warns once when req.ip is undefined instead of silently sharing one bucket', async () => {
+    const warnings: string[] = []
+    const original = console.warn
+    console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')) }
+    try {
+      const throttle = new ThrottleMiddleware(5, 10_000)
+      const req = makeReq()
+      delete (req as unknown as Record<string, unknown>)['ip'] // simulate no resolved client IP
+      await throttle.handle(req, makeRes().res, async () => {})
+    } finally {
+      console.warn = original
+    }
+    assert.ok(
+      warnings.some(w => /req\.ip undefined/i.test(w)),
+      `expected an IP warning, got: ${JSON.stringify(warnings)}`,
+    )
+  })
 })
 
 // ─── CsrfMiddleware ────────────────────────────────────────
