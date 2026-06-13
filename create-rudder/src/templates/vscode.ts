@@ -18,7 +18,7 @@ import type { TemplateContext } from '../templates.js'
  * always in `node_modules/.bin`); the rudder + test configs drive `tsx`/`node`
  * the same way the scaffolded `package.json` scripts do.
  */
-export function launchJson(_ctx: TemplateContext): string {
+export function launchJson(): string {
   return JSON.stringify({
     version: '0.2.0',
     configurations: [

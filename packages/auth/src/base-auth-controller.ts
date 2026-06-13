@@ -239,6 +239,12 @@ export abstract class BaseAuthController {
       return
     }
 
+    // The broker's status (RESET_LINK_SENT / INVALID_USER / THROTTLED) is
+    // intentionally NOT surfaced. We always return `{ status: 'sent' }` to
+    // avoid an email-enumeration oracle: THROTTLED is only ever returned for a
+    // registered user (sendResetLink returns INVALID_USER first when no user
+    // exists), so exposing a distinct 429 on throttle would leak registration
+    // exactly the way exposing INVALID_USER would. Keep the response constant.
     await this.passwordBroker.sendResetLink({ email }, async (_user, token) => {
       await this.sendResetEmail(email, token)
     })
