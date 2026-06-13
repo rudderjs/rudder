@@ -21,7 +21,8 @@ import type { Dialect } from '../dialect.js'
 import { NativeOrmError } from '../errors.js'
 import type { AlterBlueprint } from './alter-blueprint.js'
 import { compileColumnSpec } from './ddl-compiler.js'
-import { readColumns, readIndexSql, isAutoincrement, type RawColumn } from './introspect.js'
+import { readColumns, readIndexSql, isAutoincrement, readTableSql, type RawColumn } from './introspect.js'
+import { readForeignKeys } from './inspect.js'
 
 /** Render one preserved (introspected) column to its shadow-table spec. The
  *  single INTEGER rowid primary key is re-emitted inline (with AUTOINCREMENT
@@ -59,6 +60,22 @@ export async function rebuildTable(executor: Executor, dialect: Dialect, bluepri
   if (current.length === 0) {
     throw new NativeOrmError('NATIVE_DDL_NO_TABLE', `[RudderJS ORM native] Cannot alter "${table}" — it has no columns or does not exist.`)
   }
+
+  // CHECK constraints live inside the CREATE TABLE body and aren't surfaced by
+  // PRAGMA table_info, so the column-by-column shadow reconstruction can't
+  // reproduce them — rebuilding would silently drop them (e.g. an enum column's
+  // `TEXT CHECK (col IN (...))`). Refuse rather than corrupt. Foreign keys, by
+  // contrast, are reconstructed from PRAGMA foreign_key_list below.
+  // (Full CHECK preservation is a documented follow-up.)
+  if (/\bCHECK\s*\(/i.test(await readTableSql(executor, table))) {
+    throw new NativeOrmError(
+      'NATIVE_DDL_CHANGE_CHECK',
+      `[RudderJS ORM native] Cannot rebuild "${table}" for change(): it has a CHECK constraint, ` +
+      `which the SQLite table rebuild can't yet preserve and would silently drop. Recreate the table ` +
+      `(or drop and re-add the CHECK) manually, or run this change on Postgres/MySQL where ALTER is in-place.`,
+    )
+  }
+
   const byName = new Map(current.map(c => [c.name, c]))
 
   const changeByName = new Map<string, typeof changes[number]>()
@@ -88,6 +105,22 @@ export async function rebuildTable(executor: Executor, dialect: Dialect, bluepri
   })
   if (pkCols.length && !singleIntPk) {
     colLines.push(`PRIMARY KEY (${pkCols.map(c => dialect.quoteId(c.name)).join(', ')})`)
+  }
+
+  // Reconstruct foreign keys as table-level clauses — they live in the CREATE
+  // TABLE body (invisible to table_info), so without this the rebuild drops
+  // them. readForeignKeys (PRAGMA foreign_key_list) gives the full structure.
+  // A FK with no referenced columns targets the parent's implicit PK -> emit
+  // `REFERENCES table` with no column list (SQLite resolves it).
+  for (const fk of await readForeignKeys(executor, dialect, table)) {
+    const cols   = fk.columns.map(c => dialect.quoteId(c)).join(', ')
+    const refCols = fk.foreignColumns.length
+      ? ` (${fk.foreignColumns.map(c => dialect.quoteId(c)).join(', ')})`
+      : ''
+    let clause = `FOREIGN KEY (${cols}) REFERENCES ${dialect.quoteId(fk.foreignTable)}${refCols}`
+    if (fk.onDelete && fk.onDelete.toUpperCase() !== 'NO ACTION') clause += ` ON DELETE ${fk.onDelete}`
+    if (fk.onUpdate && fk.onUpdate.toUpperCase() !== 'NO ACTION') clause += ` ON UPDATE ${fk.onUpdate}`
+    colLines.push(clause)
   }
 
   const shadow   = `__rudder_new_${table}`

@@ -125,6 +125,14 @@ export async function readIndexSql(executor: Executor, table: string): Promise<s
   return rows.map((r) => String(r['sql']))
 }
 
+/** The raw `CREATE TABLE` SQL for `table` from `sqlite_master`, or `''`. Used by
+ *  the rebuild to detect constraints (CHECK) that `PRAGMA` introspection can't
+ *  surface and the column-by-column reconstruction would therefore drop. */
+export async function readTableSql(executor: Executor, table: string): Promise<string> {
+  const rows = await executor.execute(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, [table])
+  return rows.length ? String(rows[0]?.['sql'] ?? '') : ''
+}
+
 /** Whether `table` uses `AUTOINCREMENT` (registered in `sqlite_sequence`). The
  *  `sqlite_sequence` table only exists once some table declares AUTOINCREMENT,
  *  so a missing-table error means "no". */
