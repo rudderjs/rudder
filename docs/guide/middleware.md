@@ -160,6 +160,8 @@ m.use(new CorsMiddleware({
 
 Defaults: `origin: '*'`, methods `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']`, headers `['Content-Type', 'Authorization']`.
 
+When `origin` is an array (an allowlist), the request's `Origin` is reflected only when it matches; a non-matching request gets **no** `Access-Control-Allow-Origin` header (the browser blocks it), and `Vary: Origin` is set so shared caches don't cross-serve the header. A CORS preflight (an `OPTIONS` carrying `Access-Control-Request-Method`) is answered with `204` and not passed to your route. Set `maxAge` (seconds) to emit `Access-Control-Max-Age` and let browsers cache the preflight.
+
 ### `LoggerMiddleware`
 
 Logs `METHOD path — Nms` to the console after each request:
