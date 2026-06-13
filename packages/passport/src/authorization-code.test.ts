@@ -193,6 +193,84 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
     Passport.reset()
   })
 
+  test('POST /oauth/authorize rejects scopes not authorized for the client', async () => {
+    // The POST body is attacker-controlled; the GET handler's scope check is
+    // only echoed to the consent UI, never enforced. Without re-validating
+    // here a client restricted to ['read'] could mint a code for ['write'].
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '["read"]', revoked: false,
+    }))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.ok(postHandler, 'POST /oauth/authorize must be registered')
+
+    let status = 0
+    let payload: any
+    const res = {
+      status(s: number) { status = s; return this },
+      json(p: any)      { payload = p },
+    }
+    const req = {
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://app.example.com/callback',
+        scopes:       ['read', 'write'],
+      },
+    }
+    await postHandler!(req, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'invalid_scope')
+    assert.match(payload.error_description, /not authorized for this client/)
+    Passport.reset()
+  })
+
+  test('POST /oauth/authorize issues a code for scopes the client IS authorized for', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '["read","write"]', revoked: false,
+    }))
+    Passport.useAuthCodeModel(fakeAuthCodeModel({}))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0
+    let payload: any
+    const res = {
+      status(s: number) { status = s; return this },
+      json(p: any)      { payload = p },
+    }
+    const req = {
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://app.example.com/callback',
+        scopes:       ['read'],
+      },
+    }
+    await postHandler!(req, res)
+    assert.equal(status, 0, 'no error status set')
+    assert.match(payload.redirect_uri, /[?&]code=/)
+    Passport.reset()
+  })
+
   test('DELETE /oauth/authorize rejects redirect_uri not on client whitelist', async () => {
     Passport.reset()
     Passport.useClientModel(fakeClientModel({

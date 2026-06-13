@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { Passport } from '../Passport.js'
-import { validateAuthorizationRequest, issueAuthCode } from '../grants/index.js'
+import { validateAuthorizationRequest, issueAuthCode, validateScopes } from '../grants/index.js'
 import type { Router } from './types.js'
 import { authErrorResponse, requesterIdFrom, validateClientRedirect } from './helpers.js'
 
@@ -75,12 +75,21 @@ export function registerAuthorizeRoutes(router: Router, prefix: string, mw: Midd
         return
       }
 
-      await validateClientRedirect(body['client_id'], body['redirect_uri'])
+      const client = await validateClientRedirect(body['client_id'], body['redirect_uri'])
+
+      // The POST body is attacker-controlled, so re-validate the requested
+      // scopes against the global registry and the client's allow-list — the
+      // GET handler's `validateAuthorizationRequest` check is only advisory
+      // (its result is echoed to the consent UI, never enforced here).
+      // Without this, a client could mint a code for scopes it isn't
+      // authorized for simply by POSTing them.
+      const requestedScopes: string[] = Array.isArray(body['scopes']) ? body['scopes'] : []
+      validateScopes(client, requestedScopes)
 
       const code = await issueAuthCode({
         userId,
         clientId:            body['client_id'],
-        scopes:              body['scopes'] ?? [],
+        scopes:              requestedScopes,
         redirectUri:         body['redirect_uri'],
         codeChallenge:       body['code_challenge'],
         codeChallengeMethod: body['code_challenge_method'],
