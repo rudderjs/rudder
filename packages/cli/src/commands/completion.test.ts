@@ -6,8 +6,9 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import { mkdirSync } from 'node:fs'
+import { Command } from 'commander'
 import {
-  completionScript, installPlan, detectShell, resolveArgCandidates,
+  completionScript, installPlan, detectShell, resolveArgCandidates, resolveFlagCandidates,
   COMMAND_NAMES, MODEL_ARG_COMMANDS, SUPPORTED_SHELLS, _internal,
 } from './completion.js'
 
@@ -72,6 +73,29 @@ describe('completion — completionScript', () => {
       assert.ok(s.includes('completion args'), `${shell} script should call \`rudder completion args\``)
       assert.ok(s.includes('make:factory'), `${shell} script should embed the model-arg command list`)
     }
+  })
+
+  it('each shell wires flag completion via `completion flags`', () => {
+    for (const shell of SUPPORTED_SHELLS) {
+      assert.ok(completionScript(shell).includes('completion flags'), `${shell} script should call \`rudder completion flags\``)
+    }
+  })
+})
+
+// ── resolveFlagCandidates (live commander options) ─────────────
+
+describe('completion — resolveFlagCandidates', () => {
+  it('lists a command\'s long flags plus --help, sorted', () => {
+    const cmd = new Command('make:model').option('-t, --with-test').option('--force').option('--migration')
+    assert.deepEqual(resolveFlagCandidates(cmd), ['--force', '--help', '--migration', '--with-test'])
+  })
+
+  it('returns just --help for a command with no options', () => {
+    assert.deepEqual(resolveFlagCandidates(new Command('tinker')), ['--help'])
+  })
+
+  it('returns the global flags when the command is unknown/top-level', () => {
+    assert.deepEqual(resolveFlagCandidates(undefined), ['--help', '--version'])
   })
 })
 
@@ -192,10 +216,10 @@ describe('completion — rc block editing', () => {
 describe('completion — bash script behaves under default COMP_WORDBREAKS', () => {
   // Source the emitted script in a real bash, drive _rudder_complete with the
   // word arrays bash produces (':' is a word-break char), and read COMPREPLY.
-  // When `argStub` is set, a fake `rudder` is placed on PATH that emits those
-  // lines for `rudder completion args ...` — exercising the dynamic-arg branch
-  // without spawning node.
-  function complete(words: string[], cword: number, argStub?: string[]): string[] {
+  // When `stubLines` is set, a fake `rudder` shell function emits those lines for
+  // any `rudder completion args|flags ...` call — exercising the dynamic-arg and
+  // flag branches without spawning node.
+  function complete(words: string[], cword: number, stubLines?: string[]): string[] {
     // mkdtempSync gives a private 0700 dir with a random suffix, so the script
     // path is not predictable (no insecure-temp-file / symlink race).
     const dir = mkdtempSync(path.join(os.tmpdir(), 'rudder-comp-'))
@@ -203,10 +227,10 @@ describe('completion — bash script behaves under default COMP_WORDBREAKS', () 
       const scriptPath = path.join(dir, 'completion.bash')
       writeFileSync(scriptPath, completionScript('bash'))
       // Stub `rudder` as a shell function (not a file): command-substitution
-      // subshells inherit functions, so the script's `$(rudder completion args)`
+      // subshells inherit functions, so the script's `$(rudder completion ...)`
       // resolves to it. Avoids chmod/PATH, which keeps the test OS-portable.
-      const stub = argStub
-        ? `rudder() { if [ "$1" = "completion" ] && [ "$2" = "args" ]; then printf '%s\\n' ${argStub.map(m => `'${m}'`).join(' ')}; fi; }\n`
+      const stub = stubLines
+        ? `rudder() { if [ "$1" = "completion" ]; then printf '%s\\n' ${stubLines.map(m => `'${m}'`).join(' ')}; fi; }\n`
         : ''
       const driver = `
         ${stub}source '${scriptPath}'
@@ -255,6 +279,28 @@ describe('completion — bash script behaves under default COMP_WORDBREAKS', () 
   it('non-model command argument suggests nothing (not the command list)', { skip: !bashAvailable }, () => {
     const r = complete(['rudder', 'migrate', ''], 2, ['Post', 'User'])
     assert.deepEqual(r, [])
+  })
+
+  it('flag: rudder make:model --<TAB> -> the command flags from the resolver', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'make', ':', 'model', '--'], 4, ['--force', '--help', '--with-test'])
+    assert.deepEqual(r.sort(), ['--force', '--help', '--with-test'])
+  })
+
+  it('flag with prefix: rudder make:model --wi<TAB> -> --with-test', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'make', ':', 'model', '--wi'], 4, ['--force', '--help', '--with-test'])
+    assert.deepEqual(r, ['--with-test'])
+  })
+
+  it('flag after an argument: rudder make:model Foo --f<TAB> -> --force', { skip: !bashAvailable }, () => {
+    const r = complete(['rudder', 'make', ':', 'model', 'Foo', '--f'], 5, ['--force', '--help', '--with-test'])
+    assert.deepEqual(r, ['--force'])
+  })
+
+  it('top-level flags: rudder -<TAB> -> global flags', { skip: !bashAvailable }, () => {
+    // No command yet, so the script offers the built-in global flags directly.
+    const r = complete(['rudder', '-'], 1)
+    assert.ok(r.includes('--help'))
+    assert.ok(r.includes('--version'))
   })
 })
 

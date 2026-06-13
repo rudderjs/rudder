@@ -15,10 +15,15 @@ import { CliError } from '../errors.js'
 //
 // Argument completion is DYNAMIC where it pays off: for the model-oriented make
 // commands, the script calls back into `rudder completion args <command>`, which
-// lists the project's models from app/Models (filesystem only, no app boot). The
-// resolver is centralized in TS (testable) and structured so more arg sources can
-// be added later. Route/package-command completion has no arg-taking command to
-// complete against yet, so models are the whole dynamic surface today.
+// lists the project's models from app/Models (filesystem only, no app boot).
+//
+// Flag completion is also DYNAMIC: when the current word starts with '-', the
+// script calls `rudder completion flags <command>`, which reads the command's
+// live commander option definitions (so the flag list never drifts). Commands
+// that parse flags by hand (allowUnknownOption) expose only --help; the make:*
+// family registers real options, which is where flag completion matters most.
+// Both resolvers live in TS (testable) and are structured so more sources can be
+// added later. Unknown/top-level falls back to the global flags.
 //
 // No third-party dependency: hand-rolled scripts for bash / zsh / fish. tabtab
 // was considered but its model is dynamic (a CLI round-trip per keystroke), which
@@ -94,6 +99,20 @@ export function resolveArgCandidates(command: string, cwd: string = process.cwd(
   return []
 }
 
+/**
+ * Resolve flag candidates from a command's live commander definition: its long
+ * options plus `--help` (every command has it). For an unknown command (or the
+ * top-level `rudder`) we return the global flags. Reading the real definitions
+ * means the list never drifts from the actual options.
+ */
+export function resolveFlagCandidates(cmd: Command | undefined): string[] {
+  if (!cmd) return ['--help', '--version']
+  const longs = cmd.options
+    .map(o => o.long)
+    .filter((l): l is string => Boolean(l))
+  return [...new Set([...longs, '--help'])].sort()
+}
+
 /** List model names from `app/Models` by filename, mirroring tinker's discovery. */
 function listModels(cwd: string): string[] {
   const dir = path.join(cwd, 'app', 'Models')
@@ -134,6 +153,22 @@ _rudder_complete() {
   local cur cword cmd k
   cword="\${COMP_CWORD}"
   cur="\${COMP_WORDS[cword]}"
+
+  # Flag completion: the word starts with '-'. Extract the command as the
+  # colon-run beginning at index 1 (robust to intervening arguments), then list
+  # its flags. Unknown/top-level falls back to the global flags.
+  if [[ "\${cur}" == -* ]]; then
+    local fcmd="\${COMP_WORDS[1]}" j=2
+    while [ "\${COMP_WORDS[j]}" = ":" ] && [ -n "\${COMP_WORDS[j+1]}" ]; do
+      fcmd="\${fcmd}:\${COMP_WORDS[j+1]}"; j=$((j+2))
+    done
+    local fl="--help --version"
+    if [[ " ${words} " == *" \${fcmd} "* ]]; then
+      fl=$(rudder completion flags "\${fcmd}" 2>/dev/null)
+    fi
+    COMPREPLY=( $(compgen -W "\${fl}" -- "\${cur}") )
+    return 0
+  fi
 
   # Reconstruct the command from the words between "rudder" and the current one.
   # Colon-split elements ("make" ":" "factory") concatenate back to "make:factory".
@@ -183,8 +218,21 @@ function zshScript(words: string, argCmds: string): string {
   return `#compdef rudder
 # rudder zsh completion. Source this file or use \`rudder completion install\`.
 _rudder() {
+  # Flag completion: the word being completed starts with '-'. $words[2] is the
+  # command (zsh does not split on ':'); unknown/top-level uses the global flags.
+  if [[ "\${words[CURRENT]}" == -* ]]; then
+    local cmd="\${words[2]}"
+    local -a fl
+    if [[ " ${words} " == *" \${cmd} "* ]]; then
+      fl=(\${(f)"$(rudder completion flags \${cmd} 2>/dev/null)"})
+    else
+      fl=(--help --version)
+    fi
+    compadd -a fl
+    return
+  fi
   # Past the command word: complete its argument dynamically for the model-arg
-  # commands ($words[2] is the command; zsh does not split on ':').
+  # commands ($words[2] is the command).
   if (( CURRENT >= 3 )); then
     local cmd="\${words[2]}"
     if [[ " ${argCmds} " == *" \${cmd} "* ]]; then
@@ -211,6 +259,9 @@ function fishScript(words: string, argCmds: string): string {
   return `# rudder fish completion. Autoloaded from the fish completions dir, or use \`rudder completion install\`.
 complete -c rudder -f -n '__fish_use_subcommand' -a '${words}'
 complete -c rudder -f -n '__fish_seen_subcommand_from ${argCmds}' -a '(rudder completion args (commandline -opc)[2] 2>/dev/null)'
+# Flag completion once a known command is present (fish offers these when the
+# token starts with '-'). Empty command list = every known command.
+complete -c rudder -f -n '__fish_seen_subcommand_from ${words}' -a '(rudder completion flags (commandline -opc)[2] 2>/dev/null)'
 `
 }
 
@@ -352,6 +403,14 @@ export function completionCommand(program: Command): void {
       // to resolve dynamic argument candidates (e.g. model names). One per line.
       if (action === 'args') {
         if (target) process.stdout.write(resolveArgCandidates(target).join('\n') + '\n')
+        return
+      }
+
+      // Internal: `rudder completion flags <command>` lists a command's option
+      // flags, read from its live commander definition. One per line.
+      if (action === 'flags') {
+        const cmd = target ? program.commands.find(c => c.name() === target) : undefined
+        process.stdout.write(resolveFlagCandidates(cmd).join('\n') + '\n')
         return
       }
 
