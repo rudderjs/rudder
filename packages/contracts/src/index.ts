@@ -857,8 +857,14 @@ export interface AppRequest {
   // ── Typed input accessors ─────────────────────────────────
   // Merge order: params > body > query (params take priority)
 
-  /** Raw merged input value for `key`. */
-  input<T = unknown>(key: string, fallback?: T): T
+  /**
+   * Raw merged input value for `key`. Without a `fallback` the result is
+   * `T | undefined` (the key may be absent); pass a `fallback` to get a
+   * guaranteed `T`. With the default `T = unknown`, the no-fallback form is
+   * just `unknown`, so existing untyped calls are unaffected.
+   */
+  input<T = unknown>(key: string): T | undefined
+  input<T = unknown>(key: string, fallback: T): T
   /** Input as a string. Throws `InputTypeError` if the value is an object or array. */
   string(key: string, fallback?: string): string
   /** Input as an integer. Throws `InputTypeError` if not parseable. */
@@ -898,9 +904,9 @@ export function attachInputAccessors(req: Record<string, unknown>): void {
     }
   }
 
-  req['input'] = function <T = unknown>(key: string, fallback?: T): T {
+  req['input'] = function <T = unknown>(key: string, fallback?: T): T | undefined {
     const val = merged()[key]
-    return (val !== undefined ? val : fallback) as T
+    return (val !== undefined ? val : fallback) as T | undefined
   }
 
   req['has'] = function (key: string): boolean {
