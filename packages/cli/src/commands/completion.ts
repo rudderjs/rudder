@@ -155,7 +155,7 @@ _rudder_complete() {
   cur="\${COMP_WORDS[cword]}"
 
   # Flag completion: the word starts with '-'. Extract the command as the
-  # colon-run beginning at index 1 (robust to intervening arguments), then list
+  # colon-joined word beginning at index 1 (robust to intervening arguments), then list
   # its flags. Unknown/top-level falls back to the global flags.
   if [[ "\${cur}" == -* ]]; then
     local fcmd="\${COMP_WORDS[1]}" j=2
@@ -218,8 +218,9 @@ function zshScript(words: string, argCmds: string): string {
   return `#compdef rudder
 # rudder zsh completion. Source this file or use \`rudder completion install\`.
 _rudder() {
-  # Flag completion: the word being completed starts with '-'. $words[2] is the
-  # command (zsh does not split on ':'); unknown/top-level uses the global flags.
+  # Flag completion: the word being completed starts with '-'. zsh arrays are
+  # 1-indexed, so $words[2] is the command token after 'rudder' (zsh does not
+  # split on ':'); unknown/top-level uses the global flags.
   if [[ "\${words[CURRENT]}" == -* ]]; then
     local cmd="\${words[2]}"
     local -a fl
@@ -259,8 +260,8 @@ function fishScript(words: string, argCmds: string): string {
   return `# rudder fish completion. Autoloaded from the fish completions dir, or use \`rudder completion install\`.
 complete -c rudder -f -n '__fish_use_subcommand' -a '${words}'
 complete -c rudder -f -n '__fish_seen_subcommand_from ${argCmds}' -a '(rudder completion args (commandline -opc)[2] 2>/dev/null)'
-# Flag completion once a known command is present (fish offers these when the
-# token starts with '-'). Empty command list = every known command.
+# Flag completion once a known subcommand is present; this condition matches the
+# full known-command list (${words}). fish offers these when the token starts with '-'.
 complete -c rudder -f -n '__fish_seen_subcommand_from ${words}' -a '(rudder completion flags (commandline -opc)[2] 2>/dev/null)'
 `
 }

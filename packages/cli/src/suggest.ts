@@ -39,7 +39,9 @@ export function suggestCommands(input: string, candidates: readonly string[], op
   const limit = opts.limit ?? 3
   // Allow more slack for longer inputs; a 2-char typo budget on short names.
   const maxDistance = Math.max(2, Math.floor(input.length / 3))
-  const inputNs = input.includes(':') ? input.slice(0, input.indexOf(':')) : ''
+  const colonIndex = input.indexOf(':')
+  const inputNs = colonIndex >= 0 ? input.slice(0, colonIndex) : ''
+  const inputNsPrefix = inputNs ? `${inputNs}:` : ''
 
   const scored = candidates
     .map(name => ({ name, dist: levenshtein(input, name) }))
@@ -47,8 +49,8 @@ export function suggestCommands(input: string, candidates: readonly string[], op
     .sort((a, b) => {
       if (a.dist !== b.dist) return a.dist - b.dist
       // Tie-break: same-namespace first, then alphabetical for stability.
-      const aNs = inputNs && a.name.startsWith(`${inputNs}:`) ? 0 : 1
-      const bNs = inputNs && b.name.startsWith(`${inputNs}:`) ? 0 : 1
+      const aNs = inputNsPrefix && a.name.startsWith(inputNsPrefix) ? 0 : 1
+      const bNs = inputNsPrefix && b.name.startsWith(inputNsPrefix) ? 0 : 1
       if (aNs !== bNs) return aNs - bNs
       return a.name < b.name ? -1 : 1
     })

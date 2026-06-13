@@ -114,7 +114,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   // VS Code / Cursor: F5-debuggable out of the box. Committed (not gitignored) —
   // these describe project debug entry points, not personal preferences.
-  files['.vscode/launch.json']     = launchJson(ctx)
+  files['.vscode/launch.json']     = launchJson()
   files['.vscode/extensions.json'] = extensionsJson(ctx)
   files['.vscode/settings.json']   = settingsJson()
 
