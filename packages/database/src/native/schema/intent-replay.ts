@@ -129,9 +129,12 @@ class IntentSchemaBuilder extends SchemaBuilder {
   override async table(table: string, build: (t: AlterBlueprint) => void): Promise<void> {
     const blueprint = new AlterBlueprint(table)
     build(blueprint)
-    // Order mirrors the real ALTER: adds/changes, renames, then drops.
-    for (const col of blueprint.columns) this.ledger.setColumn(table, col.name, col.type)
+    // Order mirrors the real ALTER (ddl-compiler.ts compileAlterTable): renames
+    // FIRST, then adds/changes, then drops. Applying changes before renames let
+    // a `.change()` on a column that is also being renamed land under the OLD
+    // name in the type registry, diverging from the executed schema.
     for (const { from, to } of blueprint.renamedColumns) this.ledger.renameColumn(table, from, to)
+    for (const col of blueprint.columns) this.ledger.setColumn(table, col.name, col.type)
     for (const name of blueprint.droppedColumns) this.ledger.dropColumn(table, name)
   }
 

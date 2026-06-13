@@ -857,7 +857,12 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
    * adapter, whose by-id writes also ignore chained wheres.
    */
   private _idState(): NativeQueryState {
-    return { ...this._state(), conditions: [], softDelete: 'with', lock: null }
+    // Drop whereHas/aggregate state too (not just where()/soft-delete scope) —
+    // a by-id write targets one row by PK (passed as an extraCondition), so a
+    // leftover relation-existence predicate or aggregate subselect has no place
+    // in it. Latent today (id-ops build a fresh QB), but defensive.
+    const { relationExists: _re, aggregates: _ag, ...rest } = this._state()
+    return { ...rest, conditions: [], softDelete: 'with', lock: null }
   }
 
   // ── no-RETURNING write path (MySQL) ──────────────────────

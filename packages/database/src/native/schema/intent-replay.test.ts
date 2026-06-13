@@ -83,6 +83,30 @@ describe('collectBlueprintIntent — ledger replay', () => {
     assert.strictEqual(intent.get('articles')?.get('title'), 'json')
   })
 
+  it('applies a rename before a change on the same column (DDL execution order)', async () => {
+    // The real ALTER (ddl-compiler) renames FIRST, then applies changes — so a
+    // rename + change of the same column resolves to: change the NEW name. The
+    // ledger must replay in the same order, else the change lands as a stray new
+    // column under the old name and the type registry diverges from the schema.
+    class RenameThenChange extends Migration {
+      async up() {
+        await Schema.table('articles', (t) => {
+          t.text('notes').change()        // change the post-rename name
+          t.renameColumn('meta', 'notes') // declared after, but renames execute first
+        })
+      }
+      async down() {}
+    }
+    const { intent } = await collectBlueprintIntent(
+      [loaded('m1', new CreateArticles()), loaded('m2', new RenameThenChange())],
+      ['m1', 'm2'],
+    )
+    const articles = intent.get('articles')
+    assert.ok(articles)
+    assert.strictEqual(articles.get('notes'), 'text', 'change applies to the renamed column')
+    assert.strictEqual(articles.has('meta'), false, 'old name is gone after rename')
+  })
+
   it('applies table rename and drop', async () => {
     class RenameThenDrop extends Migration {
       async up() {

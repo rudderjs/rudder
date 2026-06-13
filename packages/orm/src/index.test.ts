@@ -636,6 +636,28 @@ describe('Model scopes', () => {
     assert.ok(orderByCalled)
   })
 
+  it('global scope receives the Model-layer proxy (can use whereIn sugar)', () => {
+    const whereCalls: unknown[][] = []
+    ModelRegistry.set(makeAdapter(makeQb({
+      where: function(this: QueryBuilder<unknown>, ...args: unknown[]) {
+        whereCalls.push(args); return this
+      },
+    })))
+
+    class Post extends Model {
+      static table = 'posts'
+      static globalScopes = {
+        // whereIn is Model-layer sugar (composes the `where` primitive) — it only
+        // exists on the hydrating proxy, NOT the bare adapter QB. Before the fix
+        // this threw "q.whereIn is not a function".
+        active: (q: QueryBuilder<Post>) => (q as any).whereIn('status', ['published', 'draft']),
+      }
+    }
+
+    assert.doesNotThrow(() => Post.query())
+    assert.deepStrictEqual(whereCalls, [['status', 'IN', ['published', 'draft']]])
+  })
+
   it('withoutGlobalScope excludes a scope', () => {
     let whereCalled = false  // eslint-disable-line no-useless-assignment
     let orderByCalled = false // eslint-disable-line @typescript-eslint/no-unused-vars, no-useless-assignment

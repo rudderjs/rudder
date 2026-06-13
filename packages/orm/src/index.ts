@@ -2456,17 +2456,21 @@ export abstract class Model {
     const buildScoped = (): HydratingQueryBuilder<InstanceType<T>> => {
       const { qb, adapter } = Model._adapterQb<InstanceType<T>>(modelClass, modelClass.connection)
       ormTraceBuild(modelClass, adapter)
-      let raw = qb as HydratingQueryBuilder<InstanceType<T>>
+      const raw = qb as HydratingQueryBuilder<InstanceType<T>>
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (raw as any)._enableSoftDeletes?.()
       }
+      // Wrap BEFORE applying global scopes so scope callbacks receive the
+      // Model-layer hydrating proxy (whereIn/whereNull/when/...), matching what
+      // local scopes get — not the bare adapter QB.
+      let scoped = Model._hydratingQb(this, raw, adapter)
       for (const [scopeName, scopeFn] of Object.entries(globalScopes)) {
         if (!excludedScopes.has(scopeName)) {
-          raw = scopeFn(raw) as HydratingQueryBuilder<InstanceType<T>>
+          scoped = scopeFn(scoped) as HydratingQueryBuilder<InstanceType<T>>
         }
       }
-      return Model._hydratingQb(this, raw, adapter)
+      return scoped
     }
 
     const enhance = (q: HydratingQueryBuilder<InstanceType<T>>): HydratingQueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): HydratingQueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): HydratingQueryBuilder<InstanceType<T>> } => {
@@ -2521,15 +2525,18 @@ export abstract class Model {
     const ModelClass = self as typeof Model
     const { qb, adapter } = Model._adapterQb<InstanceType<T>>(ModelClass, connection ?? ModelClass.connection)
     ormTraceBuild(ModelClass, adapter)
-    let q = qb as HydratingQueryBuilder<InstanceType<T>>
+    const q = qb as HydratingQueryBuilder<InstanceType<T>>
     if (ModelClass.softDeletes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (q as any)._enableSoftDeletes?.()
     }
+    // Wrap BEFORE applying global scopes (see Model.query) so scope callbacks
+    // get the Model-layer hydrating proxy, not the bare adapter QB.
+    let scoped = Model._hydratingQb(self, q, adapter)
     for (const [, scopeFn] of Object.entries(ModelClass.globalScopes)) {
-      q = scopeFn(q) as HydratingQueryBuilder<InstanceType<T>>
+      scoped = scopeFn(scoped) as HydratingQueryBuilder<InstanceType<T>>
     }
-    return Model._hydratingQb(self, q, adapter)
+    return scoped
   }
 
   static async find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {

@@ -190,6 +190,54 @@ describe('Container.make() error cases', () => {
   })
 })
 
+// ─── Circular dependency detection ─────────────────────────
+
+describe('Container circular dependency detection', () => {
+  it('throws (instead of stack-overflowing) on a factory cycle', () => {
+    const c = new Container()
+    c.bind('A', () => ({ b: c.make('B') }))
+    c.bind('B', () => ({ a: c.make('A') }))
+    assert.throws(() => c.make('A'), /Circular dependency detected/)
+  })
+
+  it('names the cycle path in the error', () => {
+    const c = new Container()
+    c.bind('A', () => ({ b: c.make('B') }))
+    c.bind('B', () => ({ a: c.make('A') }))
+    assert.throws(() => c.make('A'), /"A" → "B" → "A"/)
+  })
+
+  it('detects a constructor cycle through autoResolve', () => {
+    @Injectable()
+    class Foo { constructor(@Inject('Bar') readonly bar: unknown) {} }
+    @Injectable()
+    class Bar { constructor(@Inject('Foo') readonly foo: unknown) {} }
+    const c = new Container()
+    c.bind('Foo', () => c.make(Foo))
+    c.bind('Bar', () => c.make(Bar))
+    assert.throws(() => c.make('Foo'), /Circular dependency detected/)
+  })
+
+  it('does not false-positive on a diamond (shared, non-cyclic) dependency', () => {
+    @Injectable() class Shared {}
+    @Injectable() class Left  { constructor(readonly s: Shared) {} }
+    @Injectable() class Right { constructor(readonly s: Shared) {} }
+    @Injectable() class Root  { constructor(readonly l: Left, readonly r: Right) {} }
+    const c = new Container()
+    assert.doesNotThrow(() => c.make(Root))
+  })
+
+  it('recovers after a thrown cycle — the build set is cleared', () => {
+    const c = new Container()
+    c.bind('A', () => ({ b: c.make('B') }))
+    c.bind('B', () => ({ a: c.make('A') }))
+    assert.throws(() => c.make('A'), /Circular dependency detected/)
+    // A subsequent independent resolution must not be poisoned by leftover state.
+    c.bind('ok', () => 42)
+    assert.strictEqual(c.make('ok'), 42)
+  })
+})
+
 // ─── Chaining ──────────────────────────────────────────────
 
 describe('Container fluent chaining', () => {
