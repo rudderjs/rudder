@@ -262,20 +262,33 @@ function normalizeResponse(c: Context): AppResponse {
     statusCode === 204 || statusCode === 205 || statusCode === 304 ||
     (statusCode >= 100 && statusCode < 200)
 
+  // Tracks whether the wrapper's pending headers/cookies have already been
+  // applied — either staged onto the Hono context by applyHeaders() (the
+  // json()/send()/redirect() path) or merged into a finalized Response by
+  // mergeInto() (the raw Response / ViewResponse path). Guards against applying
+  // them twice, which for Set-Cookie means a duplicated cookie.
+  let flushed = false
+
   const applyHeaders = () => {
     for (const [k, v] of Object.entries(headers)) c.header(k, v)
     for (const cookie of cookies) c.header('Set-Cookie', cookie, { append: true })
+    flushed = true
   }
 
-  // Merge pending headers/cookies into an already-finalized Response (used by
-  // route handler when a ViewResponse or raw Response is returned directly,
-  // bypassing res.json()/res.send() that would otherwise call applyHeaders()).
-  // Mutates res.headers in place — cloning via `new Response(body, { headers })`
-  // collapses multi-value Set-Cookie down to one in Node's undici-backed fetch.
+  // Merge pending headers/cookies into an already-finalized Response (used when
+  // a ViewResponse or raw Response is returned directly, and by applyMiddleware
+  // for global middleware that set headers then call next() — both bypass
+  // res.json()/res.send() so applyHeaders() never fired). No-op once flushed, so
+  // a double merge (or a merge after applyHeaders already ran) can't duplicate a
+  // Set-Cookie. Mutates res.headers in place — cloning via
+  // `new Response(body, { headers })` collapses multi-value Set-Cookie down to
+  // one in Node's undici-backed fetch.
   const mergeInto = (res: Response): Response => {
+    if (flushed) return res
     if (Object.keys(headers).length === 0 && cookies.length === 0) return res
     for (const [k, v] of Object.entries(headers)) res.headers.set(k, v)
     for (const cookie of cookies) res.headers.append('Set-Cookie', cookie)
+    flushed = true
     return res
   }
   stash(c)['__rjs_merge_pending'] = mergeInto
@@ -863,11 +876,19 @@ class HonoAdapter implements ServerAdapter {
     this.app.use('*', async (c, honoNext) => {
       const req = normalizeRequest(c, this._trustProxy)
       const res = normalizeResponse(c)
+      // Capture THIS wrapper's pending-merge now — a downstream normalizeResponse
+      // (route handler, inner global middleware) overwrites the stash before we
+      // unwind. On the short-circuit path (middleware called res.json()/send())
+      // applyHeaders already ran, so merge is a no-op via the flushed guard.
+      const merge = stash(c)['__rjs_merge_pending'] as ((r: Response) => Response) | undefined
       await middleware(req, res, honoNext)
+      // Apply anything the middleware wrote via res.header() on the pass-through
+      // path — without this, a global m.use middleware that sets a response
+      // header then calls next() (e.g. RateLimit's X-RateLimit-*) silently loses
+      // it, because the downstream response bypasses this wrapper's applyHeaders.
+      if (merge && c.res) c.res = merge(c.res)
       // Hono v4 requires the handler to finalize the context.
       // c.res is always a valid Response (downstream response, or Hono's 404 default).
-      // Returning it here covers both cases: pass-through (next was called) and
-      // short-circuit (middleware set c.res via normalizeResponse.json/send).
       return c.res
     })
   }
