@@ -178,13 +178,15 @@ export abstract class BaseAuthController {
 
   @Post('/sign-in/email')
   async signIn(req: AppRequest, res: AppResponse): Promise<void> {
-    const { email, password } = req.body as { email?: string; password?: string }
+    const { email, password, remember } = req.body as { email?: string; password?: string; remember?: unknown }
     if (!email || !password) {
       res.status(422).json({ message: 'Email and password are required.' })
       return
     }
 
-    const success = await Auth.attempt({ email, password })
+    // Accept a truthy `remember` flag (checkbox → `true`/`"on"`/`"1"`).
+    const rememberMe = remember === true || remember === 'on' || remember === '1' || remember === 1
+    const success = await Auth.attempt({ email, password }, rememberMe)
     if (!success) {
       res.status(401).json({ message: 'Invalid email or password.' })
       return

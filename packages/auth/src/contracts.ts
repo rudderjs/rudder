@@ -37,6 +37,11 @@ export interface UserProvider {
    * no-user branch when present.
    */
   fakeValidateCredentials?(credentials: Record<string, unknown>): Promise<void>
+  /** Optional: resolve a user by id and constant-time-validate a "remember me"
+   *  token. Required for persistent-login support. */
+  retrieveByToken?(userId: string, token: string): Promise<Authenticatable | null>
+  /** Optional: persist a new "remember me" token on the user (null clears it). */
+  updateRememberToken?(userId: string, token: string | null): Promise<void>
 }
 
 // ─── Guard Contract ───────────────────────────────────────
