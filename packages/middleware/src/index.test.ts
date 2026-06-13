@@ -212,13 +212,17 @@ describe('CorsMiddleware', () => {
     assert.strictEqual(bag.headers.get('access-control-allow-origin'),  'https://b.dev')
     assert.strictEqual(bag.headers.get('access-control-allow-methods'), 'GET, POST')
     assert.strictEqual(bag.headers.get('access-control-allow-headers'), 'Content-Type')
+    // A reflected origin must carry Vary: Origin so caches don't cross-serve it.
+    assert.strictEqual(bag.headers.get('vary'), 'Origin')
   })
 
-  it('falls back to first allowed origin when request origin is not in the list', async () => {
+  it('omits Access-Control-Allow-Origin when the request origin is not in the allowlist', async () => {
     const bag = makeRes()
     await new CorsMiddleware({ origin: ['https://a.dev', 'https://b.dev'] })
       .handle(makeReq({ headers: { origin: 'https://evil.com' } }), bag.res, async () => {})
-    assert.strictEqual(bag.headers.get('access-control-allow-origin'), 'https://a.dev')
+    // Must NOT leak a default allowed origin to a non-matching request.
+    assert.strictEqual(bag.headers.get('access-control-allow-origin'), undefined)
+    assert.strictEqual(bag.headers.get('vary'), 'Origin')
   })
 
   it('uses * for origin when not specified', async () => {
@@ -237,6 +241,31 @@ describe('CorsMiddleware', () => {
     let reached = false
     await new CorsMiddleware().handle(makeReq(), makeRes().res, async () => { reached = true })
     assert.ok(reached)
+  })
+
+  it('short-circuits a CORS preflight with 204 and does not call next', async () => {
+    const bag = makeRes()
+    let reached = false
+    await new CorsMiddleware().handle(
+      makeReq({ method: 'OPTIONS', headers: { origin: 'https://x.dev', 'access-control-request-method': 'POST' } }),
+      bag.res,
+      async () => { reached = true },
+    )
+    assert.strictEqual(bag.getStatus(), 204)
+    assert.strictEqual(reached, false)
+    assert.strictEqual(bag.headers.get('access-control-allow-methods'), 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  })
+
+  it('does not short-circuit a plain OPTIONS without a preflight header', async () => {
+    let reached = false
+    await new CorsMiddleware().handle(makeReq({ method: 'OPTIONS' }), makeRes().res, async () => { reached = true })
+    assert.ok(reached)
+  })
+
+  it('emits Access-Control-Max-Age when maxAge is set', async () => {
+    const bag = makeRes()
+    await new CorsMiddleware({ maxAge: 600 }).handle(makeReq(), bag.res, async () => {})
+    assert.strictEqual(bag.headers.get('access-control-max-age'), '600')
   })
 })
 

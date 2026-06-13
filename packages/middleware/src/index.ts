@@ -66,6 +66,8 @@ export class CorsMiddleware extends Middleware {
       origin?: string | string[]
       methods?: string[]
       headers?: string[]
+      /** Seconds a preflight result may be cached (`Access-Control-Max-Age`). */
+      maxAge?: number
     } = {}
   ) {
     super()
@@ -75,21 +77,34 @@ export class CorsMiddleware extends Middleware {
     const methods = (this.options.methods ?? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']).join(', ')
     const headers = (this.options.headers ?? ['Content-Type', 'Authorization']).join(', ')
 
-    // CORS spec: Access-Control-Allow-Origin must be '*' or a single origin.
-    // For an allowlist, reflect the request's Origin only when it matches.
+    // Resolve Access-Control-Allow-Origin. Per spec it is `*` or a single
+    // origin. For an allowlist (array) reflect the request Origin ONLY when it
+    // matches, and OMIT the header otherwise — emitting a default origin for a
+    // non-matching request is incorrect and pollutes shared caches. A reflected
+    // origin also requires `Vary: Origin` so a cache can't serve one origin's
+    // allow header to another.
     const requestOrigin = req.headers['origin'] as string | undefined
-    let origin: string
+    let allowOrigin: string | null
     if (Array.isArray(this.options.origin)) {
-      origin = (requestOrigin && this.options.origin.includes(requestOrigin))
-        ? requestOrigin
-        : this.options.origin[0] ?? '*'
+      res.header('Vary', 'Origin')
+      allowOrigin = requestOrigin && this.options.origin.includes(requestOrigin) ? requestOrigin : null
     } else {
-      origin = this.options.origin ?? '*'
+      allowOrigin = this.options.origin ?? '*'
     }
 
-    res.header('Access-Control-Allow-Origin',  origin)
+    if (allowOrigin !== null) res.header('Access-Control-Allow-Origin', allowOrigin)
     res.header('Access-Control-Allow-Methods', methods)
     res.header('Access-Control-Allow-Headers', headers)
+    if (this.options.maxAge !== undefined) res.header('Access-Control-Max-Age', String(this.options.maxAge))
+
+    // Short-circuit a CORS preflight (an OPTIONS carrying
+    // `Access-Control-Request-Method`) with 204 — it must not fall through to
+    // the router, which would 404/405 and the browser would then treat the
+    // actual cross-origin request as blocked.
+    if (req.method === 'OPTIONS' && req.headers['access-control-request-method']) {
+      res.status(204).send('')
+      return Promise.resolve()
+    }
 
     return next()
   }
