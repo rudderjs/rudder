@@ -21,6 +21,7 @@ import { optimizeClearCommand } from './commands/optimize-clear.js'
 import { freshCommand } from './commands/fresh.js'
 import { downCommand, upCommand } from './commands/maintenance.js'
 import { completionCommand } from './commands/completion.js'
+import { suggestCommands } from './suggest.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/console'
 import { CliError } from './errors.js'
 
@@ -562,7 +563,15 @@ async function main(): Promise<void> {
   // default message and set a non-zero exit code. `parseAsync()` resolves normally
   // (no `exitOverride`), so the process exits with this code once the loop drains.
   program.on('command:*', (operands: string[]) => {
-    console.error(`\x1b[31mUnknown command: ${operands[0]}\x1b[0m`)
+    const unknown = operands[0] ?? ''
+    console.error(`\x1b[31mUnknown command: ${unknown}\x1b[0m`)
+    // Suggest the closest real command(s) — candidates come from the live
+    // program, so package-contributed and app commands are included too.
+    const names = program.commands.map(c => c.name()).filter(n => n && n !== '*')
+    const guesses = suggestCommands(unknown, names)
+    if (guesses.length > 0) {
+      console.error(`Did you mean ${guesses.map(g => `\x1b[1m${g}\x1b[0m`).join(' or ')}?`)
+    }
     console.error(`Run \x1b[1mrudder --help\x1b[0m for a list of available commands.`)
     process.exitCode = 1
   })
