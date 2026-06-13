@@ -45,4 +45,5 @@ overrides:
   valibot: ^1.2.0
 
 patchedDependencies:
+  '@brillout/vite-plugin-server-entry@0.7.18': patches/@brillout__vite-plugin-server-entry@0.7.18.patch
   vike@0.4.257: patches/vike@0.4.257.patch
