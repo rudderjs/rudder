@@ -28,7 +28,10 @@ function buildIndex(cwd: string): DocSection[] {
 
   if (!fs.existsSync(nodeModules)) return sections
 
-  const packages = fs.readdirSync(nodeModules)
+  // Sort so the index order is deterministic across platforms/filesystems
+  // (readdir order is OS-dependent and would otherwise change which equally
+  // scored result wins the top-N cutoff).
+  const packages = fs.readdirSync(nodeModules).sort()
 
   for (const pkg of packages) {
     const pkgDir = path.join(nodeModules, pkg)
@@ -67,6 +70,7 @@ function buildIndex(cwd: string): DocSection[] {
 
 function collectMdFiles(dir: string, out: string[]): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
@@ -77,14 +81,18 @@ function collectMdFiles(dir: string, out: string[]): void {
   }
 }
 
-function splitByHeadings(content: string): { heading: string; content: string }[] {
+export function splitByHeadings(content: string): { heading: string; content: string }[] {
   const lines = content.split('\n')
   const sections: { heading: string; content: string }[] = []
   let currentHeading = '(top)'
   let currentLines: string[] = []
+  let inFence = false
 
   for (const line of lines) {
-    const match = line.match(/^#{1,3}\s+(.+)/)
+    // Track fenced code blocks so a `# comment` line inside ``` / ~~~ isn't
+    // mistaken for a markdown heading (which would split the doc spuriously).
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
+    const match = inFence ? null : line.match(/^#{1,3}\s+(.+)/)
     if (match) {
       if (currentLines.length > 0) {
         sections.push({ heading: currentHeading, content: currentLines.join('\n').trim() })
@@ -163,6 +171,11 @@ export function searchDocs(
     }
   }
 
-  scored.sort((a, b) => b.score - a.score)
+  scored.sort((a, b) =>
+    b.score - a.score ||
+    a.package.localeCompare(b.package) ||
+    a.file.localeCompare(b.file) ||
+    a.heading.localeCompare(b.heading),
+  )
   return scored.slice(0, maxResults)
 }

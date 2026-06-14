@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, cpSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent, SkillEntry } from './types.js'
-import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
+import { writeGuidelineBlock, mergeMcpServer, copySkill } from './merge.js'
 
 export class ClaudeCodeAgent implements BoostAgent {
   name = 'claude-code'
@@ -26,7 +26,7 @@ export class ClaudeCodeAgent implements BoostAgent {
     const dir = join(cwd, '.ai', 'skills')
     mkdirSync(dir, { recursive: true })
     for (const s of skills) {
-      cpSync(s.sourcePath, join(dir, s.skillName), { recursive: true })
+      copySkill(s.sourcePath, join(dir, s.skillName))
     }
   }
 }
