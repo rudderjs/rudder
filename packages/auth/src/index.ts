@@ -191,8 +191,10 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
       if (!initialUid) {
         const rememberRaw = parseCookie(req.headers['cookie'] ?? '', attrs.cookie)
         if (rememberRaw) {
-          let secret: string | null = null
-          try { secret = resolveRememberSecret() } catch { secret = null } // can't verify → fail closed
+          // Resolve the signing secret; if it's unavailable (prod without
+          // AUTH_SECRET) we can't verify the cookie, so fail closed.
+          let secret: string | null
+          try { secret = resolveRememberSecret() } catch { secret = null }
           const decoded = secret ? decodeRememberCookie(rememberRaw, secret) : null
           if (decoded) {
             const guard = Auth.guard(resolvedGuard) as unknown as SessionGuard
