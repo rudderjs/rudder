@@ -36,8 +36,30 @@ import {
   registerPassportRoutes,
   registerPassportWebRoutes,
   registerPassportApiRoutes,
+  checkOAuthKeysAtBoot,
 } from './index.js'
 import { safeCompare } from './grants/safe-compare.js'
+
+describe('checkOAuthKeysAtBoot — keypair fail-fast in production', () => {
+  test('returns null when keys are available (nothing to warn about)', () => {
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, isProduction: true, keyPath: 'storage' }), null)
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, isProduction: false, keyPath: 'storage' }), null)
+  })
+
+  test('warns (does NOT throw) when keys are missing outside production', () => {
+    const msg = checkOAuthKeysAtBoot({ keysAvailable: false, isProduction: false, keyPath: 'storage' })
+    assert.ok(typeof msg === 'string')
+    assert.match(msg!, /passport:keys/)
+    assert.match(msg!, /storage\/oauth-\{private,public\}\.key/)
+  })
+
+  test('throws in production when keys are missing (fail-fast deploy)', () => {
+    assert.throws(
+      () => checkOAuthKeysAtBoot({ keysAvailable: false, isProduction: true, keyPath: 'storage' }),
+      (e: unknown) => e instanceof Error && /Refusing to boot in production/.test(e.message),
+    )
+  })
+})
 
 describe('@rudderjs/passport exports', () => {
   test('Passport singleton is exported', () => {
