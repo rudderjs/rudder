@@ -397,7 +397,9 @@ async function onMessage(
         // the `!result` gate above but never register a member — the socket
         // would receive broadcasts yet stay invisible in the presence roster
         // (no presence.joined/left, absent from presence.members). Fail closed.
-        if (isPresence && (typeof result !== 'object' || result === null)) {
+        // `result` is already truthy here (the `!result` gate above returned on
+        // null/false/etc), so a truthy non-object is the only case left to reject.
+        if (isPresence && typeof result !== 'object') {
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
           broadcastObservers.emit({
             kind: 'subscribe', connectionId: id, channel, channelType,

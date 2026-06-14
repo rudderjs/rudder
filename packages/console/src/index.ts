@@ -117,7 +117,9 @@ export function parseSignature(signature: string): ParsedSignature {
   const args: CommandArgDef[] = []
   const opts: CommandOptDef[] = []
 
-  for (const [, block] of signature.matchAll(/\{([^}]+)\}/g)) {
+  // `[^{}]+` (not `[^}]+`) keeps the scan linear: an unclosed `{{{…` can't make
+  // the inner class run to end-of-string and backtrack per starting brace.
+  for (const [, block] of signature.matchAll(/\{([^{}]+)\}/g)) {
     // Inline description uses a spaced ` : ` delimiter (Laravel convention):
     //   {user : The user ID} → token=`user`, description=`The user ID`.
     // A bare ":" must NOT split, so colons inside a default value survive —
