@@ -1,5 +1,11 @@
 # @rudderjs/console
 
+## 1.4.2
+
+### Patch Changes
+
+- 809683b: Harden `parseSignature` against a polynomial-time regex blowup. The per-token scan used `\{([^}]+)\}`, which on a signature with many unclosed `{` (e.g. `{{{{…`) backtracks quadratically. The inner class is now `[^{}]+`, keeping the match linear. Behavior is unchanged for all valid signatures (a `{...}` block never contains `{`).
+
 ## 1.4.1
 
 ### Patch Changes
