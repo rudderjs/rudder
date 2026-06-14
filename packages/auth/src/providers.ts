@@ -1,10 +1,12 @@
 import type { Authenticatable, UserProvider } from './contracts.js'
+import { safeStringEqual } from './remember.js'
 
 // ─── Eloquent Provider ────────────────────────────────────
 
 type ModelClass = {
   query(): { where(col: string, val: unknown): { first(): Promise<Record<string, unknown> | null> } }
   find(id: string | number): Promise<Record<string, unknown> | null>
+  update?(id: string | number, data: Record<string, unknown>): Promise<unknown>
 }
 
 // A real bcrypt hash of a throwaway string. Used as the dummy-verify target
@@ -71,6 +73,26 @@ export class EloquentUserProvider implements UserProvider {
     const candidate = typeof plain === 'string' ? plain : ''
     const hashed    = this.hashMake ? await dummyHashFor(this.hashMake) : FALLBACK_DUMMY_HASH
     await this.hashCheck(candidate, hashed)
+  }
+
+  /**
+   * Resolve a user by id and validate a "remember me" token against the stored
+   * one in constant time. Returns null when the user is gone, has no stored
+   * token (remember-me was never enabled / was cycled by logout), or the token
+   * doesn't match — so a stolen-then-revoked cookie stops working immediately.
+   */
+  async retrieveByToken(userId: string, token: string): Promise<Authenticatable | null> {
+    const record = await this.model.find(userId)
+    if (!record) return null
+    const user   = toAuthenticatable(record)
+    const stored = user.getRememberToken()
+    if (!stored || !safeStringEqual(stored, token)) return null
+    return user
+  }
+
+  /** Persist a new remember token on the user's row (null clears it). */
+  async updateRememberToken(userId: string, token: string | null): Promise<void> {
+    await this.model.update?.(userId, { rememberToken: token })
   }
 }
 
