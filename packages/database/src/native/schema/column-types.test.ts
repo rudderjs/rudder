@@ -110,24 +110,18 @@ describe('foreign-key column helpers', () => {
     assert.match(sql, /"ownerId" INTEGER/)
   })
 
-  it('unsigned() emits the UNSIGNED modifier on MySQL numeric columns', () => {
-    assert.match(col(mysql, (t) => t.integer('a').unsigned()),       /`a` int unsigned/)
-    assert.match(col(mysql, (t) => t.bigInteger('a').unsigned()),    /`a` bigint unsigned/)
-    assert.match(col(mysql, (t) => t.tinyInteger('a').unsigned()),   /`a` tinyint unsigned/)
-    // Decimal keeps its precision before the modifier.
-    assert.match(col(mysql, (t) => t.decimal('a', 8, 2).unsigned()), /`a` decimal\(8, 2\) unsigned/)
-    // foreignId() is an unsigned big integer.
-    assert.match(col(mysql, (t) => t.foreignId('userId')),           /`userId` bigint unsigned/)
-  })
-
-  it('unsigned() is a no-op on Postgres and SQLite (no UNSIGNED type)', () => {
-    assert.match(col(pg, (t) => t.integer('a').unsigned()), /"a" integer/)
+  it('unsigned() is intentionally a no-op in the emitted DDL on every dialect', () => {
+    // The auto-increment PK is signed `bigint`; emitting UNSIGNED on a foreignId
+    // FK column would make MySQL reject the FK (ER_FK_INCOMPATIBLE_COLUMNS).
+    assert.match(col(mysql, (t) => t.integer('a').unsigned()), /`a` int(?! unsigned)/)
+    assert.doesNotMatch(col(mysql, (t) => t.bigInteger('a').unsigned()), /unsigned/i)
     assert.doesNotMatch(col(pg, (t) => t.integer('a').unsigned()), /unsigned/i)
     assert.doesNotMatch(col(sqlite, (t) => t.integer('a').unsigned()), /unsigned/i)
   })
 
-  it('the MySQL auto-increment primary key stays signed (FK signedness parity)', () => {
+  it('foreignId() stays a signed bigint so its FK matches the signed PK (MySQL)', () => {
+    assert.match(col(mysql, (t) => t.foreignId('userId')), /`userId` bigint(?! unsigned)/)
     assert.match(col(mysql, () => {}), /`id` bigint AUTO_INCREMENT PRIMARY KEY/)
-    assert.doesNotMatch(col(mysql, () => {}), /`id` bigint unsigned/)
+    assert.doesNotMatch(col(mysql, () => {}), /unsigned/i)
   })
 })
