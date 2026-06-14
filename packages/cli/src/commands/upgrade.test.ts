@@ -606,7 +606,7 @@ describe('upgrade — replaceYamlOverride', () => {
   it('rewrites the version, preserving quotes, operator and trailing comment', () => {
     const r1 = replaceYamlOverride(yaml, '@rudderjs/core', '1.12.4')
     assert.ok(r1.replaced)
-    assert.match(r1.text, /'@rudderjs\/core': 1\.12\.4   # keep me/)
+    assert.match(r1.text, /'@rudderjs\/core': 1\.12\.4 {3}# keep me/)
 
     const r2 = replaceYamlOverride(r1.text, '@rudderjs/orm', '1.21.2')
     assert.ok(r2.replaced)
@@ -623,7 +623,7 @@ describe('upgrade — replaceYamlOverride', () => {
     const withCatalog = `${yaml}\n\ncatalog:\n  '@rudderjs/core': 1.12.2\n`
     const r = replaceYamlOverride(withCatalog, '@rudderjs/core', '1.12.4')
     assert.ok(r.replaced)
-    assert.match(r.text, /catalog:\n  '@rudderjs\/core': 1\.12\.2/)   // catalog untouched
+    assert.match(r.text, /catalog:\n {2}'@rudderjs\/core': 1\.12\.2/)   // catalog untouched
   })
 })
 
