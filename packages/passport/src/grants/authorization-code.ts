@@ -299,7 +299,12 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
  * token already has its own narrowing logic (can only narrow vs. the original
  * issuance, never widen) and skips this helper.
  *
- * The `*` wildcard is always allowed — same convention as `Passport.validScopes()`.
+ * The `*` wildcard is exempt from the GLOBAL registry gate (it's a meta-scope,
+ * never an entry in `tokensCan(...)`), but it is NOT exempt from the PER-CLIENT
+ * allow-list: a client the operator restricted to a specific set must not be
+ * able to escalate to an all-scope token simply by asking for `*`. A client may
+ * only be granted `*` when its allow-list is empty (no restriction) or actually
+ * contains `*`.
  */
 export function validateScopes(client: OAuthClient, requested: string[]): void {
   if (requested.length === 0) return
@@ -319,7 +324,10 @@ export function validateScopes(client: OAuthClient, requested: string[]): void {
   const clientScopes = clientHelpers.getScopes(client)
   if (clientScopes.length > 0) {
     const allow = new Set(clientScopes)
-    const denied = requested.filter(s => s !== '*' && !allow.has(s))
+    // No `*` exemption here: `*` must be explicitly in the client's allow-list
+    // to be grantable. Otherwise a restricted client could bypass its own
+    // allow-list by requesting the wildcard.
+    const denied = requested.filter(s => !allow.has(s))
     if (denied.length > 0) {
       throw new OAuthError(
         'invalid_scope',
