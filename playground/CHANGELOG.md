@@ -1,5 +1,18 @@
 # rudderjs-playground
 
+## 0.0.149
+
+### Patch Changes
+
+- Updated dependencies [baab617]
+- Updated dependencies [baab617]
+- Updated dependencies [baab617]
+- Updated dependencies [baab617]
+  - @rudderjs/concurrency@1.1.1
+  - @rudderjs/image@1.2.1
+  - @rudderjs/pennant@1.1.1
+  - @rudderjs/process@1.2.0
+
 ## 0.0.148
 
 ### Patch Changes
