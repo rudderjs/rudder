@@ -3,6 +3,7 @@ export type { IssuedTokens } from './issue-tokens.js'
 
 export {
   validateAuthorizationRequest,
+  enforceAuthCodePolicy,
   issueAuthCode,
   exchangeAuthCode,
   validateScopes,

@@ -225,6 +225,10 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
         client_id:    'C-PUBLIC',
         redirect_uri: 'https://app.example.com/callback',
         scopes:       ['read', 'write'],
+        // Public client → PKCE is now enforced at issuance; this test targets
+        // the scope gate, so satisfy PKCE with a valid S256 challenge.
+        code_challenge:        'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
       },
     }
     await postHandler!(req, res)
@@ -263,11 +267,99 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
         client_id:    'C-PUBLIC',
         redirect_uri: 'https://app.example.com/callback',
         scopes:       ['read'],
+        code_challenge:        'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
       },
     }
     await postHandler!(req, res)
     assert.equal(status, 0, 'no error status set')
     assert.match(payload.redirect_uri, /[?&]code=/)
+    Passport.reset()
+  })
+
+  test('POST /oauth/authorize rejects a public client with no code_challenge (PKCE enforced at issuance)', async () => {
+    // The headline fix: the code-minting POST path must enforce PKCE, not just
+    // the advisory GET. Without it a public/native client gets a code with no
+    // verifier, fully defeating PKCE.
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+    Passport.useAuthCodeModel(fakeAuthCodeModel({}))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get: () => {}, post: (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h }, delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0; let payload: any
+    const res = { status(s: number) { status = s; return this }, json(p: any) { payload = p } }
+    await postHandler!({
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: { client_id: 'C-PUBLIC', redirect_uri: 'https://app.example.com/callback', scopes: [] },
+    }, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'invalid_request')
+    assert.match(payload.error_description, /PKCE|code_challenge required/)
+    Passport.reset()
+  })
+
+  test('POST /oauth/authorize rejects code_challenge_method=plain for a public client (S256 downgrade)', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+    Passport.useAuthCodeModel(fakeAuthCodeModel({}))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get: () => {}, post: (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h }, delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0; let payload: any
+    const res = { status(s: number) { status = s; return this }, json(p: any) { payload = p } }
+    await postHandler!({
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: {
+        client_id: 'C-PUBLIC', redirect_uri: 'https://app.example.com/callback', scopes: [],
+        code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'plain',
+      },
+    }, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'invalid_request')
+    assert.match(payload.error_description, /S256/)
+    Passport.reset()
+  })
+
+  test('POST /oauth/authorize rejects a client without the authorization_code grant', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-CC', name: 'machine', secret: 'x', confidential: true,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["client_credentials"]', scopes: '[]', revoked: false,
+    }))
+    Passport.useAuthCodeModel(fakeAuthCodeModel({}))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get: () => {}, post: (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h }, delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0; let payload: any
+    const res = { status(s: number) { status = s; return this }, json(p: any) { payload = p } }
+    await postHandler!({
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: { client_id: 'C-CC', redirect_uri: 'https://app.example.com/callback', scopes: [] },
+    }, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'unauthorized_client')
     Passport.reset()
   })
 

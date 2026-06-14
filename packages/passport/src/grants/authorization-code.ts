@@ -30,6 +30,42 @@ export interface ValidatedAuthRequest {
 }
 
 /**
+ * Enforce the client-policy invariants that must hold at BOTH the GET (advisory
+ * consent render) and POST (actual code issuance) stages of /oauth/authorize:
+ *
+ *   1. the client must hold the `authorization_code` grant, and
+ *   2. PKCE policy — a public client MUST use PKCE, and MUST use S256 (never
+ *      `plain`, which makes verifier == challenge so a stolen code alone mints
+ *      tokens — RFC 7636 §4.4.1 / OAuth 2.0 BCP).
+ *
+ * The POST body is attacker-controlled and the GET result is never load-bearing,
+ * so these have to be re-checked at issuance. Validating only on GET let a public
+ * client obtain a code with NO code_challenge (or method=plain) — fully defeating
+ * PKCE — and let a client lacking the grant mint codes anyway. (#1082 closed the
+ * same GET-validates/POST-issues gap for scopes; this closes it for PKCE + grant.)
+ */
+export function enforceAuthCodePolicy(
+  client: OAuthClient,
+  pkce: { codeChallenge?: string | undefined; codeChallengeMethod?: string | undefined },
+): void {
+  if (!clientHelpers.hasGrantType(client, 'authorization_code')) {
+    throw new OAuthError('unauthorized_client', 'Client is not authorized for authorization_code grant.')
+  }
+
+  if (pkce.codeChallenge) {
+    const method = pkce.codeChallengeMethod ?? 'S256'
+    if (method !== 'S256' && method !== 'plain') {
+      throw new OAuthError('invalid_request', 'Unsupported code_challenge_method. Use S256 or plain.')
+    }
+    if (method === 'plain' && clientHelpers.isPublic(client)) {
+      throw new OAuthError('invalid_request', 'Public clients must use code_challenge_method=S256.')
+    }
+  } else if (clientHelpers.isPublic(client)) {
+    throw new OAuthError('invalid_request', 'Public clients must use PKCE (code_challenge required).')
+  }
+}
+
+/**
  * Validate an authorization request (GET /oauth/authorize).
  * Returns the validated request or throws with an error message.
  */
@@ -44,32 +80,16 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('invalid_client', 'Client not found.')
   }
 
-  if (!clientHelpers.hasGrantType(client, 'authorization_code')) {
-    throw new OAuthError('unauthorized_client', 'Client is not authorized for authorization_code grant.')
-  }
-
   if (!clientHelpers.hasRedirectUri(client, params.redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
   }
 
-  // PKCE validation
-  if (params.codeChallenge) {
-    const method = params.codeChallengeMethod ?? 'S256'
-    if (method !== 'S256' && method !== 'plain') {
-      throw new OAuthError('invalid_request', 'Unsupported code_challenge_method. Use S256 or plain.')
-    }
-    // Public clients must use S256. RFC 7636 §4.4.1 + OAuth 2.0 BCP recommend
-    // S256 over `plain` because `plain` makes verifier == challenge — a stolen
-    // authorization code is already enough to mint tokens, defeating PKCE's
-    // entire purpose. Confidential clients keep the `plain` option for
-    // backward-compat with non-RFC-7636-compliant integrations.
-    if (method === 'plain' && clientHelpers.isPublic(client)) {
-      throw new OAuthError('invalid_request', 'Public clients must use code_challenge_method=S256.')
-    }
-  } else if (clientHelpers.isPublic(client)) {
-    // Public clients MUST use PKCE
-    throw new OAuthError('invalid_request', 'Public clients must use PKCE (code_challenge required).')
-  }
+  // Grant-type + PKCE policy — re-run on the issuance path too (see
+  // enforceAuthCodePolicy). The GET handler's result is advisory.
+  enforceAuthCodePolicy(client, {
+    codeChallenge:       params.codeChallenge,
+    codeChallengeMethod: params.codeChallengeMethod,
+  })
 
   const scopes = parseScopes(params.scope)
   validateScopes(client, scopes)
@@ -156,6 +176,13 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.', 401)
+  }
+
+  // Defense-in-depth: a code should only have been minted for an
+  // authorization_code-grant client (enforced at issuance), but re-check here
+  // so a client that lost the grant after a code was issued can't still redeem.
+  if (!clientHelpers.hasGrantType(client, 'authorization_code')) {
+    throw new OAuthError('unauthorized_client', 'Client is not authorized for authorization_code grant.')
   }
 
   await verifyConfidentialCredentials(client, params.clientSecret)

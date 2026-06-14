@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { Passport } from '../Passport.js'
-import { validateAuthorizationRequest, issueAuthCode, validateScopes } from '../grants/index.js'
+import { validateAuthorizationRequest, issueAuthCode, validateScopes, enforceAuthCodePolicy } from '../grants/index.js'
 import type { Router } from './types.js'
 import { authErrorResponse, requesterIdFrom, validateClientRedirect } from './helpers.js'
 
@@ -77,12 +77,16 @@ export function registerAuthorizeRoutes(router: Router, prefix: string, mw: Midd
 
       const client = await validateClientRedirect(body['client_id'], body['redirect_uri'])
 
-      // The POST body is attacker-controlled, so re-validate the requested
-      // scopes against the global registry and the client's allow-list — the
-      // GET handler's `validateAuthorizationRequest` check is only advisory
-      // (its result is echoed to the consent UI, never enforced here).
-      // Without this, a client could mint a code for scopes it isn't
-      // authorized for simply by POSTing them.
+      // The POST body is attacker-controlled and the GET validation is only
+      // advisory (echoed to the consent UI, never enforced here), so re-enforce
+      // the client policy on issuance: grant-type + PKCE (a public client MUST
+      // send a code_challenge and MUST use S256 — otherwise PKCE is defeated)
+      // and the requested scopes (global registry + per-client allow-list).
+      // #1082 closed the scope half; the PKCE/grant half was still open.
+      enforceAuthCodePolicy(client, {
+        codeChallenge:       body['code_challenge'],
+        codeChallengeMethod: body['code_challenge_method'],
+      })
       const requestedScopes: string[] = Array.isArray(body['scopes']) ? body['scopes'] : []
       validateScopes(client, requestedScopes)
 

@@ -743,6 +743,10 @@ describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
           redirect_uri: 'https://app.example.com/callback',
           scopes:       ['read'],
           state:        'state-on-server-error',
+          // Public client → satisfy the issuance-time PKCE gate so the flow
+          // reaches issueAuthCode (which throws the synthetic server_error).
+          code_challenge:        'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+          code_challenge_method: 'S256',
         },
       }, res)
       assert.equal(status, 500)
@@ -754,6 +758,76 @@ describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
       // Restore default reporter so trailing tests don't capture stray errors.
       setExceptionReporter((e) => { console.error('[RudderJS]', e) })
     }
+    Passport.reset()
+  })
+})
+
+describe('revoke endpoint — refresh-token cascade (RFC 7009)', () => {
+  // Builder-backed fake: where(col,[op,]val) chains, first/get/updateAll/query.
+  function fakeModel(rows: Record<string, Record<string, unknown>>) {
+    function builder(initial: (r: Record<string, unknown>) => boolean): any {
+      let pred = initial
+      const b: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op = hasOp ? opOrVal as string : '='
+          const val = hasOp ? maybeVal : opOrVal
+          const prev = pred
+          pred = (r) => {
+            if (!prev(r)) return false
+            const cell = r[col]
+            if (op === 'IN') return new Set(val as unknown[]).has(cell)
+            return cell === val
+          }
+          return b
+        },
+        first: async () => Object.values(rows).find(pred) ?? null,
+        get:   async () => Object.values(rows).filter(pred),
+        async updateAll(data: Record<string, unknown>) {
+          let n = 0
+          for (const r of Object.values(rows)) if (pred(r)) { Object.assign(r, data); n++ }
+          return n
+        },
+      }
+      return b
+    }
+    return class {
+      static where(col: string, val: unknown) { return builder((r) => r[col] === val) }
+      static query() { return builder(() => true) }
+    } as any
+  }
+
+  test('DELETE /oauth/tokens/:id revokes the paired refresh token AND its family', async () => {
+    Passport.reset()
+    const accessRows: Record<string, Record<string, unknown>> = {
+      'AT-1':   { id: 'AT-1',   userId: 'U-1', clientId: 'C-1', revoked: false },
+      'AT-OLD': { id: 'AT-OLD', userId: 'U-1', clientId: 'C-1', revoked: false }, // earlier rotation in same family
+    }
+    const refreshRows: Record<string, Record<string, unknown>> = {
+      'RT-1':   { id: 'RT-1',   accessTokenId: 'AT-1',   familyId: 'FAM-1', revoked: false },
+      'RT-OLD': { id: 'RT-OLD', accessTokenId: 'AT-OLD', familyId: 'FAM-1', revoked: false },
+    }
+    Passport.useTokenModel(fakeModel(accessRows))
+    Passport.useRefreshTokenModel(fakeModel(refreshRows))
+
+    let deleteHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get: () => {}, post: () => {},
+      delete: (p: string, h: any) => { if (p.endsWith('/tokens/:id')) deleteHandler = h },
+    }
+    registerPassportRoutes(fakeRouter as any)
+    assert.ok(deleteHandler, 'DELETE /oauth/tokens/:id must be registered')
+
+    let status = 0
+    const res = { status(s: number) { status = s; return this }, json() { return this }, send() {} }
+    // req.raw.__rjs_user simulates RequireBearer having already authenticated U-1.
+    await deleteHandler!({ params: { id: 'AT-1' }, raw: { __rjs_user: { id: 'U-1' } } }, res)
+
+    assert.equal(status, 204)
+    assert.equal(accessRows['AT-1']!.revoked,   true, 'target access token revoked')
+    assert.equal(refreshRows['RT-1']!.revoked,  true, 'paired refresh token revoked (RFC 7009 §2.1)')
+    assert.equal(refreshRows['RT-OLD']!.revoked, true, 'family sibling refresh token revoked')
+    assert.equal(accessRows['AT-OLD']!.revoked,  true, 'family sibling access token revoked')
     Passport.reset()
   })
 })
