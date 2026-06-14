@@ -437,6 +437,13 @@ interface OverridePlanRow {
   newValue: string        // operator prefix of the old value preserved
 }
 
+/** Read a file's text, or `null` if it doesn't exist / can't be read. Used
+ *  instead of an `existsSync` precheck + read so there's no check-then-use
+ *  file-system race (a `read` that fails is just `null`). */
+function readFileOrNull(p: string): string | null {
+  try { return readFileSync(p, 'utf8') } catch { return null }
+}
+
 /**
  * Find the directory whose override config governs `cwd`. Overrides only take
  * effect from the workspace root, so walk up for a `pnpm-workspace.yaml`, then
@@ -445,16 +452,16 @@ interface OverridePlanRow {
  */
 function findOverrideRoot(cwd: string): string {
   for (let dir = cwd; ; ) {
-    if (existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir
+    if (readFileOrNull(path.join(dir, 'pnpm-workspace.yaml')) !== null) return dir
     const parent = path.dirname(dir)
     if (parent === dir) break
     dir = parent
   }
   for (let dir = cwd; ; ) {
-    const pj = path.join(dir, 'package.json')
-    if (existsSync(pj)) {
+    const raw = readFileOrNull(path.join(dir, 'package.json'))
+    if (raw !== null) {
       try {
-        const j = JSON.parse(readFileSync(pj, 'utf8')) as Record<string, unknown>
+        const j = JSON.parse(raw) as Record<string, unknown>
         if (j['workspaces']) return dir
       } catch { /* unreadable — keep walking */ }
     }
@@ -720,7 +727,8 @@ export function upgradeCommand(program: Command): void {
     .action(async (opts: UpgradeOptions) => {
       const cwd = process.cwd()
       const pkgPath = path.join(cwd, 'package.json')
-      if (!existsSync(pkgPath)) {
+      const pkgRaw = readFileOrNull(pkgPath)
+      if (pkgRaw === null) {
         console.error(red('[rudder upgrade]') + ` no package.json in ${cwd}`)
         process.exit(1)
       }
@@ -729,7 +737,7 @@ export function upgradeCommand(program: Command): void {
       // than one is passed (most-restrictive wins, matches npm conventions).
       const mode: UpgradeMode = opts.patch ? 'patch' : opts.minor ? 'minor' : 'latest'
 
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+      const pkg = JSON.parse(pkgRaw) as Record<string, unknown>
       const deps = collectDeps(pkg)
 
       // Override pins (pnpm-workspace.yaml overrides / pnpm.overrides / resolutions)
@@ -737,12 +745,14 @@ export function upgradeCommand(program: Command): void {
       // overrides take effect even when upgrade runs inside a member package.
       const overrideRoot = findOverrideRoot(cwd)
       const rootPkgPath  = path.join(overrideRoot, 'package.json')
-      const rootPkg: Record<string, unknown> =
-        rootPkgPath === pkgPath ? pkg
-        : existsSync(rootPkgPath) ? (() => { try { return JSON.parse(readFileSync(rootPkgPath, 'utf8')) as Record<string, unknown> } catch { return {} } })()
-        : {}
+      const rootPkg: Record<string, unknown> = (() => {
+        if (rootPkgPath === pkgPath) return pkg
+        const raw = readFileOrNull(rootPkgPath)
+        if (raw === null) return {}
+        try { return JSON.parse(raw) as Record<string, unknown> } catch { return {} }
+      })()
       const wsYamlPath = path.join(overrideRoot, 'pnpm-workspace.yaml')
-      const wsYaml     = existsSync(wsYamlPath) ? readFileSync(wsYamlPath, 'utf8') : null
+      const wsYaml     = readFileOrNull(wsYamlPath)
       const overridePins = collectOverridePins(rootPkg, wsYaml)
 
       if (deps.length === 0 && overridePins.length === 0) {
@@ -935,13 +945,15 @@ export function upgradeCommand(program: Command): void {
       const unmatchedPins: string[] = []
       if (yamlOverrideRows.length) {
         const wsPath = path.join(overrideRoot, 'pnpm-workspace.yaml')
-        let text = readFileSync(wsPath, 'utf8')
-        for (const r of yamlOverrideRows) {
-          const res = replaceYamlOverride(text, r.name, fmt(r.target))
-          if (res.replaced) text = res.text
-          else unmatchedPins.push(`${r.name} (pnpm-workspace.yaml)`)
+        let text = readFileOrNull(wsPath)
+        if (text !== null) {
+          for (const r of yamlOverrideRows) {
+            const res = replaceYamlOverride(text, r.name, fmt(r.target))
+            if (res.replaced) text = res.text
+            else unmatchedPins.push(`${r.name} (pnpm-workspace.yaml)`)
+          }
+          writeFileSync(wsPath, text)
         }
-        writeFileSync(wsPath, text)
       }
       if (overrideRows.length) {
         const where = rootIsCwd ? '' : ` at ${path.relative(cwd, overrideRoot) || '.'}/`
