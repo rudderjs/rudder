@@ -1,5 +1,11 @@
 # @rudderjs/concurrency
 
+## 1.1.1
+
+### Patch Changes
+
+- baab617: Fix worker-pool lifecycle bugs that could wedge `Concurrency.run()` and leak workers/listeners. A worker that emitted an `error` (uncaught throw / unhandled rejection in the thread) was released back into the pool even though its thread was dead, so the next task dispatched to it never got a reply and `run()` (which uses `Promise.all`) hung forever; its `error` listener was also never removed, accumulating across tasks. The pool now discards a poisoned worker, spins up a replacement, and hands it to any waiter. A worker that exits before replying (a `process.exit()` in the task, a crash, or `terminate()` mid-task) is also handled now via an `exit` listener that rejects the pending task instead of hanging. `terminate()` additionally drains tasks parked in the acquire queue (rejecting them rather than leaving their promises unsettled), and `fake()` now terminates a previously auto-created worker driver before swapping in the sync driver so its pooled threads do not leak.
+
 ## 1.1.0
 
 ### Minor Changes
