@@ -158,7 +158,10 @@ export interface ColumnDefinition {
   unique:        boolean
   /** Emit a `CREATE INDEX` for this column. */
   index:         boolean
-  /** `unsigned()` — recorded for pg/mysql; a no-op on SQLite. */
+  /** `unsigned()` — recorded for portability but intentionally a no-op in the
+   *  emitted DDL on every dialect. The auto-increment PK is signed `bigint`, so
+   *  emitting `UNSIGNED` on `foreignId()`/`morphs()` FK columns would make MySQL
+   *  reject the foreign key (signedness must match the referenced column). */
   unsigned:      boolean
   /** True for `increments()` — the dialect emits the full auto-increment PK
    *  spec, so the compiler skips the other inline modifiers for this column. */
@@ -245,7 +248,9 @@ export class ColumnBuilder {
     return this
   }
 
-  /** Mark unsigned (pg/mysql); a no-op on SQLite, recorded for portability. */
+  /** Mark unsigned — recorded for portability, but intentionally a no-op in the
+   *  emitted DDL (see {@link ColumnDefinition.unsigned}): the signed `bigint` PK
+   *  means an `UNSIGNED` FK column would break MySQL foreign keys. */
   unsigned(): this {
     this.def.unsigned = true
     return this

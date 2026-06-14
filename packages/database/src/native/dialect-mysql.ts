@@ -142,6 +142,12 @@ export class MysqlDialect implements Dialect {
     return base
   }
 
+  // MySQL requires a LIMIT before OFFSET and rejects a negative one, so it uses
+  // the documented max-rows sentinel (2^64-1) for an offset without a limit.
+  offsetWithoutLimitClause(): string {
+    return 'LIMIT 18446744073709551615'
+  }
+
   // MySQL has no ON CONFLICT target — it keys off whatever unique index the row
   // collides with, so `uniqueBy` is ignored. `VALUES(col)` references the would-be
   // inserted value (deprecated in 8.0.20+ but still supported and the widely
@@ -162,6 +168,12 @@ export class MysqlDialect implements Dialect {
       // rejects an FK whose signedness differs from the referenced column.
       return 'bigint AUTO_INCREMENT PRIMARY KEY'
     }
+    // NOTE: `unsigned()` is intentionally NOT honored here. The auto-increment
+    // PK above is signed `bigint`, and `foreignId()`/`morphs()` set `unsigned`
+    // on their FK columns; emitting `UNSIGNED` on those would make MySQL reject
+    // the foreign key (`ER_FK_INCOMPATIBLE_COLUMNS` — signedness must match the
+    // referenced signed PK). Keeping the numeric types signed preserves FK
+    // compatibility. See `column.ts`'s `unsigned()` doc.
     switch (column.type) {
       // A non-auto `increments` column is defensive (Blueprint always sets
       // autoIncrement on increments) — fall back to a plain int.

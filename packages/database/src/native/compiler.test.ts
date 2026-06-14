@@ -1,8 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { WhereOperator } from '@rudderjs/contracts'
+import { raw } from '@rudderjs/contracts'
 import { compileSelect, compileCount, type NativeQueryState, type ConditionNode } from './compiler.js'
 import { SqliteDialect, validateIdentifier } from './dialect.js'
+import { PgDialect } from './dialect-pg.js'
+import { MysqlDialect } from './dialect-mysql.js'
 import { NativeIdentifierError } from './errors.js'
 
 const dialect = new SqliteDialect()
@@ -162,6 +165,32 @@ describe('native compiler — ordering, limit, offset', () => {
 
   it('rejects a non-integer limit', () => {
     assert.throws(() => compileSelect(baseState(), dialect, { limit: 1.5 }), /non-negative integer/)
+  })
+
+  it('offset without a limit is dialect-specific (sqlite/pg/mysql)', () => {
+    const state = baseState({ offsetN: 5 })
+    // SQLite requires a LIMIT before OFFSET; -1 means unbounded.
+    assert.strictEqual(compileSelect(state, new SqliteDialect()).sql, 'SELECT * FROM "users" LIMIT -1 OFFSET 5')
+    // Postgres accepts a bare OFFSET (a negative LIMIT would error).
+    assert.strictEqual(compileSelect(state, new PgDialect()).sql, 'SELECT * FROM "users" OFFSET 5')
+    // MySQL needs a LIMIT before OFFSET and rejects a negative one → max-rows sentinel.
+    assert.strictEqual(compileSelect(state, new MysqlDialect()).sql, 'SELECT * FROM `users` LIMIT 18446744073709551615 OFFSET 5')
+  })
+})
+
+describe('native compiler — IN with raw expressions', () => {
+  it('splices raw Expression elements verbatim instead of binding them', () => {
+    const state = baseState({ conditions: [clause('AND', 'id', 'IN', [raw('1'), raw('2')])] })
+    const { sql, bindings } = compileSelect(state, dialect)
+    assert.strictEqual(sql, 'SELECT * FROM "users" WHERE "id" IN (1, 2)')
+    assert.deepStrictEqual(bindings, [])
+  })
+
+  it('mixes raw expressions and bound values in one IN list', () => {
+    const state = baseState({ conditions: [clause('AND', 'id', 'IN', [raw('1'), 2, 3])] })
+    const { sql, bindings } = compileSelect(state, dialect)
+    assert.strictEqual(sql, 'SELECT * FROM "users" WHERE "id" IN (1, ?, ?)')
+    assert.deepStrictEqual(bindings, [2, 3])
   })
 })
 

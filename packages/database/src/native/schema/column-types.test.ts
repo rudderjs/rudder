@@ -109,4 +109,19 @@ describe('foreign-key column helpers', () => {
     const sql = col(sqlite, (t) => t.foreignIdFor('users', 'ownerId'))
     assert.match(sql, /"ownerId" INTEGER/)
   })
+
+  it('unsigned() is intentionally a no-op in the emitted DDL on every dialect', () => {
+    // The auto-increment PK is signed `bigint`; emitting UNSIGNED on a foreignId
+    // FK column would make MySQL reject the FK (ER_FK_INCOMPATIBLE_COLUMNS).
+    assert.match(col(mysql, (t) => t.integer('a').unsigned()), /`a` int(?! unsigned)/)
+    assert.doesNotMatch(col(mysql, (t) => t.bigInteger('a').unsigned()), /unsigned/i)
+    assert.doesNotMatch(col(pg, (t) => t.integer('a').unsigned()), /unsigned/i)
+    assert.doesNotMatch(col(sqlite, (t) => t.integer('a').unsigned()), /unsigned/i)
+  })
+
+  it('foreignId() stays a signed bigint so its FK matches the signed PK (MySQL)', () => {
+    assert.match(col(mysql, (t) => t.foreignId('userId')), /`userId` bigint(?! unsigned)/)
+    assert.match(col(mysql, () => {}), /`id` bigint AUTO_INCREMENT PRIMARY KEY/)
+    assert.doesNotMatch(col(mysql, () => {}), /unsigned/i)
+  })
 })
