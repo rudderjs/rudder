@@ -124,10 +124,10 @@ export function parseSignature(signature: string): ParsedSignature {
     //   {user : The user ID} → token=`user`, description=`The user ID`.
     // A bare ":" must NOT split, so colons inside a default value survive —
     // {--url=http://x}, {host=db:5432}, {at=08:30} keep their full default.
-    const raw0 = block ?? ''
-    const sepIdx = raw0.indexOf(' : ')
-    const trimmed   = (sepIdx === -1 ? raw0 : raw0.slice(0, sepIdx)).trim()
-    const description = sepIdx === -1 ? undefined : raw0.slice(sepIdx + 3).trim() || undefined
+    const rawBlock = block ?? ''
+    const sepIdx = rawBlock.indexOf(' : ')
+    const trimmed   = (sepIdx === -1 ? rawBlock : rawBlock.slice(0, sepIdx)).trim()
+    const description = sepIdx === -1 ? undefined : rawBlock.slice(sepIdx + 3).trim() || undefined
 
     if (trimmed.startsWith('--')) {
       // Option: {--force} {--name=} {--name=default} {--N|name=}

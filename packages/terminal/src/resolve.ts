@@ -69,7 +69,7 @@ export async function resolveComponent(
 
   throw new Error(
     `Terminal component "${id}" not found. ` +
-    `Expected file at: ${toPosix(path.join(appRoot, rel))}.{tsx,ts,js}`,
+    `Expected file at: ${toPosix(path.join(appRoot, rel))}.{${EXTENSIONS.map(e => e.slice(1)).join(',')}}`,
   )
 }
 

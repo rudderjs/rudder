@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { resolve, dirname, sep } from 'node:path'
+import { resolve, dirname, sep, relative, isAbsolute } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 import { featureStub, unitStub } from './test-stubs.js'
@@ -100,7 +100,8 @@ export function registerMake(program: Command, spec: MakeSpec): void {
       // (The companion test file is only written after the main file lands, so
       // blocking here covers it too.) Nested names like `Admin/User` stay valid.
       const baseDir = resolve(process.cwd(), spec.directory)
-      if (outPath !== baseDir && !outPath.startsWith(baseDir + sep)) {
+      const relFromBase = relative(baseDir, outPath)
+      if (relFromBase === '..' || relFromBase.startsWith(`..${sep}`) || isAbsolute(relFromBase)) {
         console.error(chalk.red(`  ✗ Invalid name "${name}": the resolved path escapes ${spec.directory}.`))
         return
       }

@@ -8,12 +8,13 @@ import { join, resolve } from 'node:path'
 import { Command } from 'commander'
 import { makeModel } from './model.js'
 
-async function runMake(cwd: string, register: (p: Command) => void, argv: string[]): Promise<void> {
+async function runMake(cwd: string, register: (p: Command) => void, argv: string[]): Promise<string[]> {
   const prevCwd = process.cwd()
   const prevLog = console.log
   const prevError = console.error
+  const errors: string[] = []
   console.log = () => {}
-  console.error = () => {}
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(' ')) }
   process.chdir(cwd)
   try {
     const program = new Command()
@@ -25,6 +26,7 @@ async function runMake(cwd: string, register: (p: Command) => void, argv: string
     console.log = prevLog
     console.error = prevError
   }
+  return errors
 }
 
 describe('make:* path-traversal guard', () => {
@@ -34,9 +36,10 @@ describe('make:* path-traversal guard', () => {
   afterEach(() => { rmSync(cwd, { recursive: true, force: true }) })
 
   it('rejects a name that escapes the target directory', async () => {
-    await runMake(cwd, makeModel, ['make:model', '../../../pwned'])
+    const errors = await runMake(cwd, makeModel, ['make:model', '../../../pwned'])
     assert.ok(!existsSync(resolve(cwd, '..', '..', '..', 'pwned.ts')), 'must not write outside the app root')
     assert.ok(!existsSync(join(cwd, 'app', 'Models', 'pwned.ts')))
+    assert.match(errors.join('\n'), /invalid|escapes|outside/i, 'must explain why the name was rejected')
   })
 
   it('still writes a normal model name', async () => {
