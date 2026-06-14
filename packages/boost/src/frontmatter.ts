@@ -4,13 +4,20 @@ export interface ParsedFrontmatter {
 }
 
 export function parseFrontmatter(source: string): ParsedFrontmatter {
-  if (!source.startsWith('---')) return { data: {}, body: source }
+  // Normalize CRLF so Windows-authored files parse identically (otherwise a
+  // stray \r clings to the last YAML value and the body's leading line).
+  const normalized = source.replace(/\r\n/g, '\n')
+  if (!normalized.startsWith('---')) return { data: {}, body: source }
 
-  const end = source.indexOf('\n---', 3)
-  if (end === -1) return { data: {}, body: source }
+  // The closing fence must be a line that is exactly `---` (optional trailing
+  // whitespace) — not any `\n---` run, so `----` or `--- x` don't false-match
+  // and corrupt the split.
+  const closing = normalized.slice(3).match(/\n---[ \t]*(?:\n|$)/)
+  if (!closing || closing.index === undefined) return { data: {}, body: source }
 
-  const yaml = source.slice(4, end).trim()
-  const body = source.slice(end + 4).replace(/^\n+/, '')
+  const fenceAt = 3 + closing.index
+  const yaml = normalized.slice(3, fenceAt).trim()
+  const body = normalized.slice(fenceAt + closing[0].length).replace(/^\n+/, '')
 
   return { data: parseSimpleYaml(yaml), body }
 }

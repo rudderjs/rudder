@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, cpSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { Boost } from '../Boost.js'
 import { parseFrontmatter } from '../frontmatter.js'
 import { generateClaudeMd, type PackageEntry, type SkillSummary } from '../generators/claude-md.js'
+import { copySkill } from '../agents/merge.js'
 import type { SkillEntry } from '../agents/types.js'
 
 interface BoostConfig {
@@ -133,7 +134,7 @@ function updateSkills(cwd: string, skills: SkillEntry[]): number {
   mkdirSync(dir, { recursive: true })
 
   for (const s of skills) {
-    cpSync(s.sourcePath, join(dir, s.skillName), { recursive: true })
+    copySkill(s.sourcePath, join(dir, s.skillName))
   }
   return skills.length
 }

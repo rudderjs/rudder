@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve, dirname, sep } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 import { featureStub, unitStub } from './test-stubs.js'
@@ -93,6 +93,17 @@ export function registerMake(program: Command, spec: MakeSpec): void {
         : name
       const relPath = `${spec.directory}/${className}.ts`
       const outPath = resolve(process.cwd(), relPath)
+
+      // Containment guard: a name like `../../../etc/foo` resolves outside the
+      // spec's target directory, and `mkdir({recursive})` + write would happily
+      // create it — an arbitrary-file-write vector when the name is untrusted.
+      // (The companion test file is only written after the main file lands, so
+      // blocking here covers it too.) Nested names like `Admin/User` stay valid.
+      const baseDir = resolve(process.cwd(), spec.directory)
+      if (outPath !== baseDir && !outPath.startsWith(baseDir + sep)) {
+        console.error(chalk.red(`  ✗ Invalid name "${name}": the resolved path escapes ${spec.directory}.`))
+        return
+      }
 
       await mkdir(dirname(outPath), { recursive: true })
       try {

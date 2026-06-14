@@ -1,5 +1,17 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs'
 import { dirname } from 'node:path'
+
+/**
+ * Copy a skill directory, replacing any prior copy. `cpSync` merges into an
+ * existing target — it never prunes — so without the up-front remove, a file
+ * deleted or renamed in a newer package version would linger and the installed
+ * skill would accumulate stale files across upgrades. Remove-then-copy keeps the
+ * destination an exact mirror of the source.
+ */
+export function copySkill(sourcePath: string, destPath: string): void {
+  rmSync(destPath, { recursive: true, force: true })
+  cpSync(sourcePath, destPath, { recursive: true })
+}
 
 const GUIDELINE_OPEN = '<rudderjs-boost-guidelines>'
 const GUIDELINE_CLOSE = '</rudderjs-boost-guidelines>'

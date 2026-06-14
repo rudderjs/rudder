@@ -16,7 +16,8 @@ import { parseFirstJsonObject } from './tools/_pm.js'
 import { createBoostServer, BoostProvider } from './index.js'
 import { parseFrontmatter } from './frontmatter.js'
 import { generateClaudeMd } from './generators/claude-md.js'
-import { writeGuidelineBlock, mergeMcpServer } from './agents/merge.js'
+import { writeGuidelineBlock, mergeMcpServer, copySkill } from './agents/merge.js'
+import { splitByHeadings } from './docs-index.js'
 
 // Boost's integration tests drive the playground end-to-end — spawning
 // `pnpm rudder` for command-list / route-list / run-command, parsing prisma
@@ -347,6 +348,20 @@ skip: 'use when Y'
     assert.strictEqual(r.data['trigger'], 'use when X happens')
     assert.strictEqual(r.data['skip'], 'use when Y')
   })
+
+  it('parses CRLF-authored frontmatter without stray carriage returns', () => {
+    const r = parseFrontmatter('---\r\nname: orm-models\r\nlicense: MIT\r\n---\r\n\r\n# Body\r\n')
+    assert.strictEqual(r.data['name'], 'orm-models')
+    assert.strictEqual(r.data['license'], 'MIT')
+    assert.ok(r.body.startsWith('# Body'))
+  })
+
+  it('does not false-match a "----" run as the closing fence', () => {
+    // A malformed `----` close is not a valid fence; the body must not be
+    // corrupted with a leading dash (the old indexOf('\n---') behaviour).
+    const r = parseFrontmatter('---\nname: x\n----\nBody\n')
+    assert.deepStrictEqual(r.data, {})
+  })
 })
 
 // ─── generateClaudeMd ────────────────────────────────────
@@ -502,5 +517,81 @@ describe('mergeMcpServer', () => {
     mergeMcpServer(file, 'servers', 'rudderjs-boost', cmd)
     const cfg = JSON.parse(fsForModelWalk.readFileSync(file, 'utf-8')) as Record<string, any>
     assert.deepEqual(cfg.servers['rudderjs-boost'], cmd)
+  })
+})
+
+describe('copySkill', () => {
+  let dir: string
+  before(() => { dir = fsForModelWalk.mkdtempSync(join(tmpdir(), 'rudder-boost-skill-')) })
+  after(() => { fsForModelWalk.rmSync(dir, { recursive: true, force: true }) })
+
+  it('mirrors the source, pruning files removed upstream (no stale accumulation)', () => {
+    const src = join(dir, 'src-skill')
+    const dest = join(dir, 'dest-skill')
+    fsForModelWalk.mkdirSync(src, { recursive: true })
+    fsForModelWalk.writeFileSync(join(src, 'SKILL.md'), 'v1', 'utf-8')
+    fsForModelWalk.writeFileSync(join(src, 'old.md'), 'stale', 'utf-8')
+    copySkill(src, dest)
+    assert.ok(fsForModelWalk.existsSync(join(dest, 'old.md')))
+
+    // Upstream drops old.md in the next version.
+    fsForModelWalk.rmSync(join(src, 'old.md'))
+    copySkill(src, dest)
+    assert.ok(fsForModelWalk.existsSync(join(dest, 'SKILL.md')))
+    assert.ok(!fsForModelWalk.existsSync(join(dest, 'old.md')), 'stale file must be pruned')
+  })
+})
+
+describe('config-get redaction', () => {
+  let cwd: string
+  before(() => {
+    cwd = fsForModelWalk.mkdtempSync(join(tmpdir(), 'rudder-boost-config-'))
+    fsForModelWalk.mkdirSync(join(cwd, 'config'), { recursive: true })
+    fsForModelWalk.writeFileSync(join(cwd, 'config', 'services.ts'),
+      [
+        "export default {",
+        "  appKey: env('APP_KEY', 'sk-live-supersecret'),",
+        "  name: env('APP_NAME', 'Rudder'),",
+        "  stripe: { secret: 'sk_test_abc123' },",
+        "  db: 'postgres://user:hunter2@db.example.com:5432/app',",
+        "  publicUrl: 'https://example.com',",
+        "}",
+      ].join('\n'), 'utf-8')
+  })
+  after(() => { fsForModelWalk.rmSync(cwd, { recursive: true, force: true }) })
+
+  it('masks env() defaults, secret literals, and URL credentials but keeps structure', () => {
+    const out = getConfigValue(cwd, 'services')
+    assert.equal(typeof out, 'string')
+    const src = out as string
+    // structure preserved
+    assert.ok(src.includes('appKey:'))
+    assert.ok(src.includes("env('APP_KEY'"))
+    assert.ok(src.includes('publicUrl'))
+    // secrets masked
+    assert.ok(!src.includes('sk-live-supersecret'))
+    assert.ok(!src.includes('sk_test_abc123'))
+    assert.ok(!src.includes('hunter2'))
+    // non-secret env default + non-credential url left intact
+    assert.ok(src.includes("'Rudder'"))
+    assert.ok(src.includes('https://example.com'))
+  })
+})
+
+describe('splitByHeadings', () => {
+  it('does not treat a "#" line inside a code fence as a heading', () => {
+    const md = [
+      '# Intro',
+      'text',
+      '```sh',
+      '# this is a shell comment, not a heading',
+      'echo hi',
+      '```',
+      '## Real Heading',
+      'more',
+    ].join('\n')
+    const sections = splitByHeadings(md)
+    const headings = sections.map(s => s.heading)
+    assert.deepEqual(headings, ['Intro', 'Real Heading'])
   })
 })
