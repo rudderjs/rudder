@@ -63,13 +63,23 @@ export async function executeMakeSpec(
 ): Promise<MakeResult> {
   // Lazy-load node: built-ins — top-level imports crash Vite's browser bundle
   const { writeFile, mkdir } = await import('node:fs/promises')
-  const { resolve, dirname } = await import('node:path')
+  const { resolve, dirname, sep } = await import('node:path')
 
   const className = spec.suffix && !name.endsWith(spec.suffix)
     ? `${name}${spec.suffix}`
     : name
   const relPath = `${spec.directory}/${className}.${spec.extension ?? 'ts'}`
   const outPath = resolve(process.cwd(), relPath)
+
+  // Containment guard: the user-supplied name must not escape the spec's target
+  // directory. Without this a name like `../../../etc/whatever` resolves outside
+  // the app root and `mkdir({recursive})` would happily create the path, turning
+  // a `make:*` invocation (e.g. from a codegen pipeline with an untrusted name)
+  // into an arbitrary file write. Nested names like `Admin/User` stay allowed.
+  const baseDir = resolve(process.cwd(), spec.directory)
+  if (outPath !== baseDir && !outPath.startsWith(baseDir + sep)) {
+    throw new Error(`Invalid name "${name}": the resolved path escapes ${spec.directory}.`)
+  }
 
   await mkdir(dirname(outPath), { recursive: true })
   try {

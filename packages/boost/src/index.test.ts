@@ -1,4 +1,4 @@
-import { describe, it, before } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -16,6 +16,7 @@ import { parseFirstJsonObject } from './tools/_pm.js'
 import { createBoostServer, BoostProvider } from './index.js'
 import { parseFrontmatter } from './frontmatter.js'
 import { generateClaudeMd } from './generators/claude-md.js'
+import { writeGuidelineBlock, mergeMcpServer } from './agents/merge.js'
 
 // Boost's integration tests drive the playground end-to-end — spawning
 // `pnpm rudder` for command-list / route-list / run-command, parsing prisma
@@ -277,6 +278,11 @@ describe('executeDbQuery', skipOnWindows, () => {
     assert.ok(result.startsWith('Error: Only SELECT'))
   })
 
+  it('rejects stacked statements hidden behind a leading SELECT', async () => {
+    const result = await executeDbQuery(PLAYGROUND, 'SELECT 1; DROP TABLE users')
+    assert.ok(result.startsWith('Error: Only a single SELECT'), result)
+  })
+
   it('runs a SELECT through rudder db:query on the native playground', { timeout: 60_000 }, async () => {
     const result = await executeDbQuery(PLAYGROUND, 'SELECT 1 AS one')
     assert.ok(!result.startsWith('Error'), result)
@@ -413,5 +419,88 @@ describe('generateClaudeMd', () => {
     const out = generateClaudeMd({ ...sampleInput, skills: [] })
     assert.ok(!out.includes('=== skills activation ==='))
     assert.ok(!out.includes('# Skills Activation'))
+  })
+})
+
+// ─── agent install merge helpers (no clobber) ─────────────
+
+describe('writeGuidelineBlock', () => {
+  let dir: string
+  before(() => { dir = fsForModelWalk.mkdtempSync(join(tmpdir(), 'rudder-boost-merge-')) })
+  after(() => { fsForModelWalk.rmSync(dir, { recursive: true, force: true }) })
+
+  const BLOCK = '<rudderjs-boost-guidelines>\nhello\n</rudderjs-boost-guidelines>\n'
+
+  it('writes the content verbatim to a new file', () => {
+    const file = join(dir, 'new.md')
+    writeGuidelineBlock(file, BLOCK)
+    assert.equal(fsForModelWalk.readFileSync(file, 'utf-8'), BLOCK)
+  })
+
+  it('replaces only the marked block, preserving surrounding user content', () => {
+    const file = join(dir, 'existing.md')
+    fsForModelWalk.writeFileSync(file,
+      '# My notes\n\n<rudderjs-boost-guidelines>\nOLD\n</rudderjs-boost-guidelines>\n\n## Keep me\n',
+      'utf-8')
+    writeGuidelineBlock(file, '<rudderjs-boost-guidelines>\nNEW\n</rudderjs-boost-guidelines>\n')
+    const out = fsForModelWalk.readFileSync(file, 'utf-8')
+    assert.ok(out.startsWith('# My notes'))
+    assert.ok(out.includes('## Keep me'))
+    assert.ok(out.includes('NEW'))
+    assert.ok(!out.includes('OLD'))
+  })
+
+  it('appends the block to a file that has no markers, keeping existing content', () => {
+    const file = join(dir, 'no-markers.md')
+    fsForModelWalk.writeFileSync(file, '# Hand-written\n', 'utf-8')
+    writeGuidelineBlock(file, BLOCK)
+    const out = fsForModelWalk.readFileSync(file, 'utf-8')
+    assert.ok(out.startsWith('# Hand-written'))
+    assert.ok(out.includes('<rudderjs-boost-guidelines>'))
+  })
+
+  it('is idempotent — a second write does not duplicate the block', () => {
+    const file = join(dir, 'idempotent.md')
+    writeGuidelineBlock(file, BLOCK)
+    writeGuidelineBlock(file, BLOCK)
+    const out = fsForModelWalk.readFileSync(file, 'utf-8')
+    const occurrences = out.split('<rudderjs-boost-guidelines>').length - 1
+    assert.equal(occurrences, 1)
+  })
+})
+
+describe('mergeMcpServer', () => {
+  let dir: string
+  before(() => { dir = fsForModelWalk.mkdtempSync(join(tmpdir(), 'rudder-boost-mcp-')) })
+  after(() => { fsForModelWalk.rmSync(dir, { recursive: true, force: true }) })
+
+  const cmd = { command: 'pnpm', args: ['exec', 'tsx', 'cli', 'boost:mcp'] }
+
+  it('creates a new config with the server entry', () => {
+    const file = join(dir, 'a', 'mcp.json')
+    mergeMcpServer(file, 'mcpServers', 'rudderjs-boost', cmd)
+    const cfg = JSON.parse(fsForModelWalk.readFileSync(file, 'utf-8')) as Record<string, any>
+    assert.deepEqual(cfg.mcpServers['rudderjs-boost'], cmd)
+  })
+
+  it('preserves sibling servers and unrelated top-level keys', () => {
+    const file = join(dir, 'settings.json')
+    fsForModelWalk.writeFileSync(file, JSON.stringify({
+      theme: 'dark',
+      mcpServers: { 'other-server': { command: 'node', args: ['x'] } },
+    }, null, 2), 'utf-8')
+    mergeMcpServer(file, 'mcpServers', 'rudderjs-boost', cmd)
+    const cfg = JSON.parse(fsForModelWalk.readFileSync(file, 'utf-8')) as Record<string, any>
+    assert.equal(cfg.theme, 'dark')
+    assert.deepEqual(cfg.mcpServers['other-server'], { command: 'node', args: ['x'] })
+    assert.deepEqual(cfg.mcpServers['rudderjs-boost'], cmd)
+  })
+
+  it('falls back to a fresh config when the existing file is not valid JSON', () => {
+    const file = join(dir, 'corrupt.json')
+    fsForModelWalk.writeFileSync(file, 'not json {{{', 'utf-8')
+    mergeMcpServer(file, 'servers', 'rudderjs-boost', cmd)
+    const cfg = JSON.parse(fsForModelWalk.readFileSync(file, 'utf-8')) as Record<string, any>
+    assert.deepEqual(cfg.servers['rudderjs-boost'], cmd)
   })
 })

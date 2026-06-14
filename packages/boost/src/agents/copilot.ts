@@ -1,6 +1,7 @@
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent } from './types.js'
+import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
 
 export class CopilotAgent implements BoostAgent {
   name = 'copilot'
@@ -14,21 +15,11 @@ export class CopilotAgent implements BoostAgent {
   }
 
   async installGuidelines(cwd: string, content: string): Promise<void> {
-    const dir = join(cwd, '.github')
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, 'copilot-instructions.md'), content, 'utf-8')
+    writeGuidelineBlock(join(cwd, '.github', 'copilot-instructions.md'), content)
   }
 
   async installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void> {
-    const dir = join(cwd, '.vscode')
-    mkdirSync(dir, { recursive: true })
-
-    const configPath = join(dir, 'mcp.json')
-    const config = {
-      servers: {
-        'rudderjs-boost': { command: mcpCommand.command, args: mcpCommand.args },
-      },
-    }
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    // VS Code uses the `servers` key (not `mcpServers`).
+    mergeMcpServer(join(cwd, '.vscode', 'mcp.json'), 'servers', 'rudderjs-boost', mcpCommand)
   }
 }

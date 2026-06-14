@@ -1,6 +1,7 @@
-import { existsSync, writeFileSync, mkdirSync, cpSync } from 'node:fs'
+import { existsSync, mkdirSync, cpSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent, SkillEntry } from './types.js'
+import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
 
 export class ClaudeCodeAgent implements BoostAgent {
   name = 'claude-code'
@@ -14,16 +15,11 @@ export class ClaudeCodeAgent implements BoostAgent {
   }
 
   async installGuidelines(cwd: string, content: string): Promise<void> {
-    writeFileSync(join(cwd, 'CLAUDE.md'), content, 'utf-8')
+    writeGuidelineBlock(join(cwd, 'CLAUDE.md'), content)
   }
 
   async installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void> {
-    const config = {
-      mcpServers: {
-        'rudderjs-boost': mcpCommand,
-      },
-    }
-    writeFileSync(join(cwd, '.mcp.json'), JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    mergeMcpServer(join(cwd, '.mcp.json'), 'mcpServers', 'rudderjs-boost', mcpCommand)
   }
 
   async installSkills(cwd: string, skills: SkillEntry[]): Promise<void> {
