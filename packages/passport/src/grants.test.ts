@@ -752,10 +752,22 @@ describe('scope validation (E6) — registry + per-client allow-list', () => {
     Passport.reset()
   })
 
-  test('per-client gate — wildcard "*" survives the client allow-list', () => {
+  test('per-client gate — wildcard "*" does NOT bypass a non-empty client allow-list', () => {
     Passport.reset()
     Passport.tokensCan({ read: 'Read' })
-    assert.doesNotThrow(() => validateScopes(clientWith(['read']), ['*']))
+    // A client restricted to ['read'] must not escalate to all-scopes by
+    // requesting '*' — it isn't in the allow-list, so it's rejected.
+    assert.throws(
+      () => validateScopes(clientWith(['read']), ['*']),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /not authorized for this client/.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('per-client gate — wildcard "*" is granted only when the client allow-list contains it', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read' })
+    assert.doesNotThrow(() => validateScopes(clientWith(['*']), ['*']))
     Passport.reset()
   })
 

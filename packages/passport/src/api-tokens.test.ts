@@ -713,7 +713,7 @@ describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
     Passport.useClientModel((() => {
       class FakeClient {
         static where(_col: string, _val: unknown) {
-          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false, grantTypes: ['authorization_code'] }) as any }
         }
       }
       return FakeClient as any
@@ -747,7 +747,7 @@ describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
     Passport.useClientModel((() => {
       class FakeClient {
         static where(_col: string, _val: unknown) {
-          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false, grantTypes: ['authorization_code'] }) as any }
         }
       }
       return FakeClient as any
@@ -818,7 +818,7 @@ describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
     Passport.useClientModel((() => {
       class FakeClient {
         static where(_col: string, _val: unknown) {
-          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false, grantTypes: ['authorization_code'] }) as any }
         }
       }
       return FakeClient as any
@@ -857,7 +857,7 @@ describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
     Passport.useClientModel((() => {
       class FakeClient {
         static where(_col: string, _val: unknown) {
-          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false, grantTypes: ['authorization_code'] }) as any }
         }
       }
       return FakeClient as any

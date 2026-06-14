@@ -1,3 +1,4 @@
+import { report } from '@rudderjs/core'
 import { Passport } from '../Passport.js'
 import type { OAuthClient }  from '../models/OAuthClient.js'
 import type { AccessToken }  from '../models/AccessToken.js'
@@ -119,12 +120,14 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
 
 /**
  * Revoke every access + refresh token in a rotation family. Called on
- * detected reuse of an already-revoked refresh token. Best-effort: ORM
- * errors are not propagated to the caller because the outer flow is
- * already going to throw `invalid_grant`. Failures here would only mask
- * the security signal that prompted the family lookup.
+ * detected reuse of an already-revoked refresh token (and from the revoke
+ * endpoint, to kill a whole session). Best-effort: ORM errors are not
+ * propagated to the caller because the outer flow is already going to throw
+ * `invalid_grant` / return 204. But the failure IS reported — family
+ * revocation is the security-critical anti-replay action, so a silent no-op
+ * (e.g. a transient DB error mid-attack) must not pass unnoticed.
  */
-async function revokeFamily(
+export async function revokeFamily(
   RefreshTokenCls: typeof RefreshToken,
   AccessTokenCls:  typeof AccessToken,
   familyId: string,
@@ -148,7 +151,10 @@ async function revokeFamily(
     // QueryBuilder returned by `query()`. Use that to express IN(...).
     await AccessTokenCls.query().where('id', 'IN', accessTokenIds)
       .updateAll({ revoked: true } as Record<string, unknown>)
-  } catch {
-    // Swallow — the outer handler always throws invalid_grant on reuse.
+  } catch (e) {
+    // Don't propagate (the outer handler already throws invalid_grant / 204),
+    // but DO report: a failed family revocation during a detected-reuse event
+    // is exactly the signal operators need to see.
+    report(e)
   }
 }
