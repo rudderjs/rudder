@@ -405,6 +405,189 @@ function collectDeps(pkg: Record<string, unknown>): DepEntry[] {
   return out
 }
 
+// ── Override pins ─────────────────────────────────────────────
+//
+// `rudder upgrade` rewrites the `@rudderjs/*` ranges in package.json, but in a
+// repo that pins the rudder train via package-manager OVERRIDES those pins win
+// at install time and silently hold packages back — a partial upgrade where
+// package.json ends up lying about what's installed (issue #1089). So the
+// upgrade has to reconcile every override source too. Three are honored:
+//
+// - `pnpm-workspace.yaml > overrides`  (pnpm 9+ workspace pins — the common one)
+// - `package.json > pnpm.overrides`    (pnpm, single package / root)
+// - `package.json > resolutions`       (yarn / npm)
+//
+// Overrides take effect from the workspace ROOT, so they're read from there
+// (walked up from cwd) even when `upgrade` runs inside a member package.
+
+type OverrideSource = 'pnpm-workspace.yaml' | 'pnpm.overrides' | 'resolutions'
+
+interface OverridePin {
+  name:   string
+  value:  string          // raw pinned range/version (`1.12.2`, `^1.12.2`, …)
+  source: OverrideSource
+}
+
+interface OverridePlanRow {
+  name:     string
+  source:   OverrideSource
+  current:  ParsedVersion
+  target:   ParsedVersion
+  oldValue: string
+  newValue: string        // operator prefix of the old value preserved
+}
+
+/**
+ * Find the directory whose override config governs `cwd`. Overrides only take
+ * effect from the workspace root, so walk up for a `pnpm-workspace.yaml`, then
+ * (for yarn/npm) for a `package.json` declaring `workspaces`. Falls back to
+ * `cwd` for a plain single-package repo.
+ */
+function findOverrideRoot(cwd: string): string {
+  for (let dir = cwd; ; ) {
+    if (existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  for (let dir = cwd; ; ) {
+    const pj = path.join(dir, 'package.json')
+    if (existsSync(pj)) {
+      try {
+        const j = JSON.parse(readFileSync(pj, 'utf8')) as Record<string, unknown>
+        if (j['workspaces']) return dir
+      } catch { /* unreadable — keep walking */ }
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return cwd
+}
+
+/** The leading range operator of a version string (`^`/`~`), or `''` for an
+ *  exact pin. Anything more exotic is treated as exact on rewrite. */
+function rangePrefix(value: string): string {
+  const m = /^\s*([\^~]?)/.exec(value)
+  return m?.[1] ?? ''
+}
+
+/**
+ * Parse the `@rudderjs/*` entries out of a `pnpm-workspace.yaml`'s top-level
+ * `overrides:` block. Deliberately text-scoped (not a full YAML parse) so the
+ * companion {@link replaceYamlOverride} can rewrite in place and preserve
+ * comments / formatting. Only simple `name: version` pins are read — pnpm's
+ * selector keys (`a>b`, `foo@1>bar`) never match a bare `@rudderjs/<name>`.
+ */
+export function parseYamlOverrides(yaml: string): Array<[string, string]> {
+  const out: Array<[string, string]> = []
+  let inBlock = false
+  for (const line of yaml.split('\n')) {
+    if (!inBlock) {
+      if (/^overrides:\s*$/.test(line)) inBlock = true
+      continue
+    }
+    if (line.trim() === '') continue
+    const indent = line.length - line.trimStart().length
+    if (indent === 0) { inBlock = false; continue }   // dedented out of the block
+    const m = /^\s*['"]?(@rudderjs\/[a-z0-9-]+)['"]?\s*:\s*['"]?([\^~]?[0-9][^'"#\s]*)['"]?/.exec(line)
+    if (m) out.push([m[1]!, m[2]!])
+  }
+  return out
+}
+
+/**
+ * Rewrite one `@rudderjs/<name>` pin in a `pnpm-workspace.yaml` overrides block
+ * to `version`, preserving the original quoting, operator prefix, and any inline
+ * comment. Returns the new text and whether a line was replaced.
+ */
+export function replaceYamlOverride(yaml: string, name: string, version: string): { text: string; replaced: boolean } {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const lines = yaml.split('\n')
+  let inBlock = false
+  let replaced = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (!inBlock) {
+      if (/^overrides:\s*$/.test(line)) inBlock = true
+      continue
+    }
+    if (line.trim() === '') continue
+    const indent = line.length - line.trimStart().length
+    if (indent === 0) { inBlock = false; continue }
+    // (prefix)(quote)(operator)(version)(quote)(trailing comment)
+    const re = new RegExp(`^(\\s*['"]?${esc}['"]?\\s*:\\s*)(['"]?)([\\^~]?)([0-9][^'"#\\s]*)(['"]?)(\\s*(?:#.*)?)$`)
+    const m = re.exec(line)
+    if (m) {
+      lines[i] = `${m[1]}${m[2]}${m[3]}${version}${m[5]}${m[6]}`
+      replaced = true
+    }
+  }
+  return { text: lines.join('\n'), replaced }
+}
+
+/**
+ * Collect every `@rudderjs/*` override pin governing the run, from the root
+ * package.json (`pnpm.overrides`, `resolutions`) and `pnpm-workspace.yaml`.
+ */
+export function collectOverridePins(rootPkg: Record<string, unknown>, workspaceYaml: string | null): OverridePin[] {
+  const out: OverridePin[] = []
+  const pnpm = rootPkg['pnpm']
+  const pnpmOverrides = pnpm && typeof pnpm === 'object' ? (pnpm as Record<string, unknown>)['overrides'] : undefined
+  for (const [field, source] of [[pnpmOverrides, 'pnpm.overrides'], [rootPkg['resolutions'], 'resolutions']] as const) {
+    if (!field || typeof field !== 'object') continue
+    for (const [name, value] of Object.entries(field as Record<string, unknown>)) {
+      if (name.startsWith('@rudderjs/') && typeof value === 'string') out.push({ name, value, source })
+    }
+  }
+  if (workspaceYaml) {
+    for (const [name, value] of parseYamlOverrides(workspaceYaml)) {
+      out.push({ name, value, source: 'pnpm-workspace.yaml' })
+    }
+  }
+  return out
+}
+
+type FetchLatestFn = (pkg: string) => Promise<string | null>
+
+/**
+ * Build the override-bump plan: for each pinned `@rudderjs/*` package fetch the
+ * latest version, cap it by `mode`, and (when it's an upgrade) produce a row
+ * with the rewritten pin value (original operator prefix preserved). Latest is
+ * fetched once per distinct package name even when pinned in several sources.
+ */
+export async function buildOverridePlan(
+  pins:  OverridePin[],
+  mode:  UpgradeMode,
+  fetch: FetchLatestFn,
+): Promise<{ rows: OverridePlanRow[]; skipped: string[] }> {
+  const rows: OverridePlanRow[] = []
+  const skipped: string[] = []
+  const names = [...new Set(pins.map(p => p.name))]
+  const latest = new Map<string, string | null>()
+  await Promise.all(names.map(async (n) => { latest.set(n, await fetch(n)) }))
+
+  for (const pin of pins) {
+    const l = latest.get(pin.name) ?? null
+    if (l === null)            { skipped.push(`${pin.name} (registry unreachable) [${pin.source}]`); continue }
+    const current = parseVersion(pin.value)
+    const latestParsed = parseVersion(l)
+    if (!current || !latestParsed) { skipped.push(`${pin.name} (couldn't parse "${pin.value}") [${pin.source}]`); continue }
+    if (compareVersions(latestParsed, current) <= 0) continue
+    const target = buildTarget(current, latestParsed, mode)
+    if (compareVersions(target, current) <= 0) continue
+    rows.push({
+      name:     pin.name,
+      source:   pin.source,
+      current,
+      target,
+      oldValue: pin.value,
+      newValue: `${rangePrefix(pin.value)}${fmt(target)}`,
+    })
+  }
+  return { rows, skipped }
+}
+
 // ── Output ────────────────────────────────────────────────────
 
 const isTTY = process.stdout.isTTY ?? false
@@ -476,6 +659,31 @@ function applyUpdates(pkgPath: string, pkg: Record<string, unknown>, rows: PlanR
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 }
 
+/** Mutate the in-memory root package.json with the JSON-sourced override bumps
+ *  (`pnpm.overrides`, `resolutions`). The caller writes the file. */
+function applyJsonOverrides(rootPkg: Record<string, unknown>, rows: OverridePlanRow[]): void {
+  for (const row of rows) {
+    if (row.source === 'pnpm.overrides') {
+      const pnpm = rootPkg['pnpm'] as Record<string, unknown> | undefined
+      const ov = pnpm?.['overrides'] as Record<string, string> | undefined
+      if (ov && row.name in ov) ov[row.name] = row.newValue
+    } else if (row.source === 'resolutions') {
+      const res = rootPkg['resolutions'] as Record<string, string> | undefined
+      if (res && row.name in res) res[row.name] = row.newValue
+    }
+  }
+}
+
+/** Render the override-pin bump plan — one row per pin, grouped value arrow. */
+function renderOverridePlan(rows: OverridePlanRow[]): void {
+  const nameWidth = Math.max(...rows.map(r => r.name.length))
+  for (const row of rows) {
+    const color = colorBump(row.current, row.target)
+    const left  = row.name.padEnd(nameWidth)
+    console.log(`  ${left}  ${dim(row.oldValue)} ${dim('→')} ${color(row.newValue)}  ${dim('(' + row.source + ')')}`)
+  }
+}
+
 function runInstall(pm: PackageManager, cwd: string): Promise<boolean> {
   return new Promise((resolve) => {
     const child = spawn(pm, pmInstall(pm), { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
@@ -523,12 +731,26 @@ export function upgradeCommand(program: Command): void {
 
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
       const deps = collectDeps(pkg)
-      if (deps.length === 0) {
+
+      // Override pins (pnpm-workspace.yaml overrides / pnpm.overrides / resolutions)
+      // governing this run — read from the workspace ROOT, since that's where
+      // overrides take effect even when upgrade runs inside a member package.
+      const overrideRoot = findOverrideRoot(cwd)
+      const rootPkgPath  = path.join(overrideRoot, 'package.json')
+      const rootPkg: Record<string, unknown> =
+        rootPkgPath === pkgPath ? pkg
+        : existsSync(rootPkgPath) ? (() => { try { return JSON.parse(readFileSync(rootPkgPath, 'utf8')) as Record<string, unknown> } catch { return {} } })()
+        : {}
+      const wsYamlPath = path.join(overrideRoot, 'pnpm-workspace.yaml')
+      const wsYaml     = existsSync(wsYamlPath) ? readFileSync(wsYamlPath, 'utf8') : null
+      const overridePins = collectOverridePins(rootPkg, wsYaml)
+
+      if (deps.length === 0 && overridePins.length === 0) {
         console.log(dim('  No @rudderjs/* dependencies in package.json — nothing to upgrade.'))
         return
       }
 
-      console.log(`\n  ${bold('Checking ' + deps.length + ' @rudderjs/* packages...')}`)
+      console.log(`\n  ${bold('Checking ' + deps.length + ' @rudderjs/* packages' + (overridePins.length ? ` (+${overridePins.length} override pin(s))` : '') + '...')}`)
 
       const registry = opts.registry ?? 'https://registry.npmjs.org'
       const fetched = await Promise.all(deps.map(async (d) => {
@@ -585,23 +807,39 @@ export function upgradeCommand(program: Command): void {
         for (const s of skipped) console.log(`    ${dim('•')} ${s}`)
       }
 
-      if (rows.length === 0) {
+      // ── Override-pin plan ─────────────────────────────────
+      //
+      // Issue #1089: when the rudder train is pinned via package-manager
+      // overrides, those pins win at install time. Bumping only the package.json
+      // ranges yields a silent partial upgrade. So plan a bump for every pinned
+      // @rudderjs/* package too — including transitive siblings that aren't
+      // direct deps — and keep the pins in lockstep with the ranges.
+      const { rows: overrideRows, skipped: overrideSkipped } = overridePins.length
+        ? await buildOverridePlan(overridePins, mode, (n) => fetchLatest(n, registry))
+        : { rows: [] as OverridePlanRow[], skipped: [] as string[] }
+      if (overrideSkipped.length) {
+        console.log(yel('\n  Could not check (override pins):'))
+        for (const s of overrideSkipped) console.log(`    ${dim('•')} ${s}`)
+      }
+
+      if (rows.length === 0 && overrideRows.length === 0) {
         const pinnedChecked = deps.length - skipped.length - floating.length
           - deps.filter(d => shapeOfRange(d.range) === 'workspace').length
-        if (pinnedChecked === 0 && floating.length === 0) {
+        if (deps.length === 0 && overridePins.length > 0) {
+          console.log(green('\n  ✓ All override-pinned @rudderjs/* packages are up to date.'))
+        } else if (pinnedChecked === 0 && floating.length === 0 && overridePins.length === 0) {
           // Every dep was workspace / unreachable — most commonly a
           // monorepo. Avoid the misleading "everything up to date" green tick.
           console.log(dim('\n  Nothing to do — no parseable @rudderjs/* version ranges to check.'))
-        } else if (pinnedChecked === 0) {
+        } else if (pinnedChecked === 0 && overridePins.length === 0) {
           // Only floating ranges — the info block above already covered it.
           // Don't repeat with a green tick that implies bump verification.
         } else {
-          console.log(green(`\n  ✓ All ${pinnedChecked} pinned @rudderjs/* dependency(ies) are up to date.`))
+          const n = pinnedChecked + new Set(overridePins.map(p => p.name)).size
+          console.log(green(`\n  ✓ All ${n} pinned @rudderjs/* dependency(ies) are up to date.`))
         }
         return
       }
-
-      console.log(`\n  ${bold('Updates available:')}`)
 
       // ── CHANGELOG snippets ────────────────────────────────
       //
@@ -613,72 +851,116 @@ export function upgradeCommand(program: Command): void {
       // `--no-changelog` skips the fetch entirely for users who want speed
       // or quieter output. CHANGELOG failures degrade gracefully — a row
       // with no entries simply renders without the indented detail block.
-      const changelogs = opts.changelog === false
-        ? new Map<string, ChangelogEntry[]>()
-        : await collectChangelogs(rows, (n) => fetchChangelog(n, opts.changelogBase ?? 'https://raw.githubusercontent.com/rudderjs/rudder/main'))
+      let peerMismatches: PeerMismatch[] = []
+      if (rows.length > 0) {
+        console.log(`\n  ${bold('Updates available:')}`)
+        const changelogs = opts.changelog === false
+          ? new Map<string, ChangelogEntry[]>()
+          : await collectChangelogs(rows, (n) => fetchChangelog(n, opts.changelogBase ?? 'https://raw.githubusercontent.com/rudderjs/rudder/main'))
 
-      renderPlanWithChangelogs(rows, changelogs)
+        renderPlanWithChangelogs(rows, changelogs)
 
-      // Legend — only show when there are colored bumps to explain.
-      const hasMajor = rows.some(r => r.target.major > r.current.major)
-      if (hasMajor) {
-        console.log(`\n  ${red('●')} major  ${cyan('●')} minor  ${green('●')} patch`)
-        console.log(dim('  Major bumps may contain breaking changes — review CHANGELOGs before applying.'))
+        // Legend — only show when there are colored bumps to explain.
+        const hasMajor = rows.some(r => r.target.major > r.current.major)
+        if (hasMajor) {
+          console.log(`\n  ${red('●')} major  ${cyan('●')} minor  ${green('●')} patch`)
+          console.log(dim('  Major bumps may contain breaking changes — review CHANGELOGs before applying.'))
+        }
+
+        // ── Peer-dep mismatch check ─────────────────────────────
+        //
+        // Closes the gap that bit rudderjs.com on 2026-05-29: `pnpm update --latest
+        // "@rudderjs/*"` happily bumped the framework packages, but didn't notice
+        // that `@rudderjs/vite@2.7.x` requires `vite ^8` while the consumer's
+        // package.json still declared `"vite": "^7.1.0"`. Apps stayed on the old
+        // peer, got a (silent or warned-but-tolerated) peer mismatch, and missed
+        // the framework upgrade.
+        const consumerPeers = readConsumerPeers(pkg)
+        peerMismatches = await collectPeerMismatches(
+          rows,
+          consumerPeers,
+          (n, v) => fetchManifest(n, v, registry),
+        )
+        if (peerMismatches.length) {
+          console.log(`\n  ${yel(bold('⚠ Peer-dependency mismatches:'))}`)
+          for (const m of peerMismatches) {
+            console.log(`    ${bold(m.peer)}  ${dim('— required by')} ${m.causedBy}`)
+            console.log(`      ${dim('your package.json:')} ${m.consumerSection ? `${m.consumerSection}.` : ''}${m.peer} = ${red(`"${m.consumerRange}"`)}`)
+            console.log(`      ${dim('framework needs:    ')} ${green(`"${m.requiredRange}"`)}`)
+            console.log(`      ${dim('reason:             ')} ${m.reason}`)
+          }
+          console.log(dim('\n  Update these peer ranges in your package.json (then re-run upgrade).'))
+        }
       }
 
-      // ── Peer-dep mismatch check ─────────────────────────────
-      //
-      // Closes the gap that bit rudderjs.com on 2026-05-29: `pnpm update --latest
-      // "@rudderjs/*"` happily bumped the framework packages, but didn't notice
-      // that `@rudderjs/vite@2.7.x` requires `vite ^8` while the consumer's
-      // package.json still declared `"vite": "^7.1.0"`. Apps stayed on the old
-      // peer, got a (silent or warned-but-tolerated) peer mismatch, and missed
-      // the framework upgrade.
-      //
-      // Strategy: for every package we're bumping, fetch its manifest at the
-      // TARGET version and look up its peerDependencies. Each peer is
-      // intersected against the consumer's declared range in package.json. No
-      // overlap = mismatch. Mismatches are shown loudly and (in --check mode)
-      // promote the exit code.
-      const consumerPeers = readConsumerPeers(pkg)
-      const peerMismatches = await collectPeerMismatches(
-        rows,
-        consumerPeers,
-        (n, v) => fetchManifest(n, v, registry),
-      )
-      if (peerMismatches.length) {
-        console.log(`\n  ${yel(bold('⚠ Peer-dependency mismatches:'))}`)
-        for (const m of peerMismatches) {
-          console.log(`    ${bold(m.peer)}  ${dim('— required by')} ${m.causedBy}`)
-          console.log(`      ${dim('your package.json:')} ${m.consumerSection ? `${m.consumerSection}.` : ''}${m.peer} = ${red(`"${m.consumerRange}"`)}`)
-          console.log(`      ${dim('framework needs:    ')} ${green(`"${m.requiredRange}"`)}`)
-          console.log(`      ${dim('reason:             ')} ${m.reason}`)
-        }
-        console.log(dim('\n  Update these peer ranges in your package.json (then re-run upgrade).'))
+      if (overrideRows.length > 0) {
+        console.log(`\n  ${bold('Override pins to update:')}`)
+        console.log(dim('  These overrides are the effective installed versions — bumped to keep the pin honest.'))
+        renderOverridePlan(overrideRows)
       }
 
       if (opts.check) {
+        const total = rows.length + overrideRows.length
         const peerSuffix = peerMismatches.length ? `, ${peerMismatches.length} peer mismatch(es)` : ''
-        console.log(dim(`\n  --check mode: ${rows.length} update(s) available${peerSuffix} (exit 1).`))
+        console.log(dim(`\n  --check mode: ${total} update(s) available${peerSuffix} (exit 1).`))
         process.exit(1)
       }
 
       if (opts.dryRun) {
-        console.log(dim('\n  --dry-run: package.json not modified.'))
+        console.log(dim('\n  --dry-run: no files modified.'))
         return
       }
 
-      applyUpdates(pkgPath, pkg, rows)
-      console.log(dim('\n  Updated package.json.'))
+      // ── Apply ──────────────────────────────────────────────
+      const rootIsCwd        = rootPkgPath === pkgPath
+      const yamlOverrideRows = overrideRows.filter(r => r.source === 'pnpm-workspace.yaml')
+      const jsonOverrideRows = overrideRows.filter(r => r.source !== 'pnpm-workspace.yaml')
+
+      // cwd package.json: dep bumps + (when the override root is this same file)
+      // the JSON override bumps, folded into a single write.
+      for (const row of rows) (pkg[row.section] as Record<string, string>)[row.name] = row.newRange
+      if (rootIsCwd && jsonOverrideRows.length) applyJsonOverrides(pkg, jsonOverrideRows)
+      if (rows.length || (rootIsCwd && jsonOverrideRows.length)) {
+        writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+        console.log(dim('\n  Updated package.json.'))
+      }
+
+      // Separate root package.json (member-package run): JSON override bumps.
+      if (!rootIsCwd && jsonOverrideRows.length) {
+        applyJsonOverrides(rootPkg, jsonOverrideRows)
+        writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + '\n')
+      }
+
+      // pnpm-workspace.yaml: surgical line rewrite (preserves comments/formatting).
+      const unmatchedPins: string[] = []
+      if (yamlOverrideRows.length) {
+        const wsPath = path.join(overrideRoot, 'pnpm-workspace.yaml')
+        let text = readFileSync(wsPath, 'utf8')
+        for (const r of yamlOverrideRows) {
+          const res = replaceYamlOverride(text, r.name, fmt(r.target))
+          if (res.replaced) text = res.text
+          else unmatchedPins.push(`${r.name} (pnpm-workspace.yaml)`)
+        }
+        writeFileSync(wsPath, text)
+      }
+      if (overrideRows.length) {
+        const where = rootIsCwd ? '' : ` at ${path.relative(cwd, overrideRoot) || '.'}/`
+        console.log(dim(`  Updated ${overrideRows.length} override pin(s)${where}.`))
+      }
+      if (unmatchedPins.length) {
+        console.log(yel('\n  ⚠ Could not locate these pins to rewrite — update them by hand:'))
+        for (const u of unmatchedPins) console.log(`    ${dim('•')} ${u}`)
+      }
 
       const pm = detectPackageManager(cwd)
       console.log(`\n  Running ${cyan(pm + ' install')}...\n`)
       const ok = await runInstall(pm, cwd)
       if (!ok) {
-        console.error(red('\n  Install failed.') + dim(' package.json was updated; you may need to install manually or revert.'))
+        console.error(red('\n  Install failed.') + dim(' files were updated; you may need to install manually or revert.'))
         process.exit(1)
       }
-      console.log(green(`\n  ✓ Upgraded ${rows.length} package(s).`))
+      const totalApplied = rows.length + overrideRows.length
+      console.log(green(`\n  ✓ Upgraded ${totalApplied} package(s)/pin(s).`))
     })
 }
 
@@ -696,4 +978,7 @@ export const _internal = {
   diffPeerRange,
   readConsumerPeers,
   extractHeadline,
+  findOverrideRoot,
+  rangePrefix,
+  applyJsonOverrides,
 }
