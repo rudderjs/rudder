@@ -1,5 +1,17 @@
 # @rudderjs/passport
 
+## 2.0.2
+
+### Patch Changes
+
+- c7816ef: Make the device-flow polling rate-limit (RFC 8628 §3.5 `slow_down`) atomic. The interval check read `lastPolledAt` into a snapshot and then wrote it back in a separate statement, so two concurrent polls could both read a stale value and both slip past the gate, and a throttled poll's back-off clock didn't anchor to the last allowed poll. The check and the `lastPolledAt` advance are now a single conditional UPDATE: exactly one of N concurrent polls matches and proceeds, the rest are told to `slow_down`, and the window always measures from the last poll that was actually allowed. The first poll (no prior `lastPolledAt`) is still never throttled.
+- 0bb5088: Security hardening of the OAuth 2 server (deep audit follow-up).
+
+  - **PKCE is now enforced where codes are actually minted (`POST /oauth/authorize`), not just on the advisory `GET`.** Previously only the consent-render `GET` validated PKCE; the `POST` that issues the authorization code re-validated scopes (a prior fix) but not PKCE — so a public/native client could obtain a code with **no `code_challenge`**, or downgrade to `code_challenge_method=plain`, fully defeating PKCE. The grant-type and PKCE policy are now re-enforced on the issuance path (shared `enforceAuthCodePolicy`), and the `authorization_code` grant is also re-checked at the token exchange as defense-in-depth. **Behavior change:** a public client that was (incorrectly) skipping PKCE on the authorize POST must now send a valid S256 `code_challenge`, as the OAuth 2 BCP requires.
+  - **Revoking an access token now also revokes its refresh token (RFC 7009 §2.1).** `DELETE /oauth/tokens/:id` previously flipped only the access token's `revoked` flag, leaving the paired refresh token live — so the holder of the refresh token could immediately mint a fresh pair and the revocation was moot. The endpoint now revokes the directly-paired refresh token and, when it belongs to a rotation family, the whole family (access + refresh).
+  - **A `*` scope request no longer bypasses a client's per-client allow-list.** `validateScopes` exempted `*` from the per-client gate, so a client an operator explicitly restricted to e.g. `['read']` could request `scope=*` and receive an all-scope token — defeating the restriction. `*` is now constrained by a non-empty allow-list: a client is granted `*` only when its allow-list is empty (no restriction) or actually contains `*`. The global-registry exemption for `*` (it's a meta-scope, never a `tokensCan` entry) is unchanged.
+  - **Family revocation failures are now reported, not silently swallowed.** `revokeFamily` (the anti-replay action on detected refresh-token reuse) caught and discarded all errors; a transient DB failure during an attack would silently no-op. It now `report()`s the error while staying best-effort.
+
 ## 2.0.1
 
 ### Patch Changes

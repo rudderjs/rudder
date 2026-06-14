@@ -1,5 +1,13 @@
 # rudderjs-playground
 
+## 0.0.153
+
+### Patch Changes
+
+- Updated dependencies [c7816ef]
+- Updated dependencies [0bb5088]
+  - @rudderjs/passport@2.0.2
+
 ## 0.0.152
 
 ### Patch Changes
