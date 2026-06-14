@@ -83,7 +83,18 @@ export class PasswordBroker {
     sendLink: (user: Authenticatable, token: string) => Promise<void>,
   ): Promise<PasswordResetStatus> {
     const user = await this.users.retrieveByCredentials({ email: credentials.email })
-    if (!user) return 'INVALID_USER'
+    if (!user) {
+      // Anti-enumeration: don't return faster than the registered-user path.
+      // Run the same early token-store round-trip and token-hash work before
+      // returning, so an attacker can't tell "no account" from "throttled /
+      // sent" by latency on the otherwise-constant `{ status: 'sent' }`
+      // response. The mail send itself can't be faked for a non-existent
+      // address — queue it (so the response doesn't block on delivery) to fully
+      // flatten the remaining gap.
+      await this.tokens.find(credentials.email)
+      this.hashToken(randomBytes(32).toString('hex'))
+      return 'INVALID_USER'
+    }
 
     // Throttle check
     const existing = await this.tokens.find(credentials.email)

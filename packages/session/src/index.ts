@@ -305,8 +305,14 @@ function verify(signed: string, secret: string): string | null {
 
 // ─── Cookie Driver ─────────────────────────────────────────
 
-function signPayload(payload: SessionPayload, secret: string): string {
-  return sign(Buffer.from(JSON.stringify(payload)).toString('base64url'), secret)
+/** Sign a cookie-driver payload with an embedded absolute expiry. The cookie
+ *  driver has no server-side store, so the signed `exp` (epoch ms) is the only
+ *  thing that bounds a captured cookie's lifetime — without it a valid HMAC
+ *  replays forever (the browser's `Max-Age` is only a client-side hint an
+ *  attacker bypasses by setting the header directly). */
+function signCookiePayload(payload: SessionPayload, secret: string, ttlSeconds: number): string {
+  const envelope = { ...payload, exp: Date.now() + ttlSeconds * 1000 }
+  return sign(Buffer.from(JSON.stringify(envelope)).toString('base64url'), secret)
 }
 
 /** Parse a JSON-encoded payload with minimal shape narrowing. Returns null
@@ -321,10 +327,18 @@ function parsePayload(raw: string): SessionPayload | null {
   return typeof r['id'] === 'string' ? (r as unknown as SessionPayload) : null
 }
 
-function verifyPayload(cookieValue: string, secret: string): SessionPayload | null {
+function verifyCookiePayload(cookieValue: string, secret: string): SessionPayload | null {
   const b64 = verify(cookieValue, secret)
   if (b64 === null) return null
-  return parsePayload(Buffer.from(b64, 'base64url').toString('utf8'))
+  const parsed = parsePayload(Buffer.from(b64, 'base64url').toString('utf8'))
+  if (parsed === null) return null
+  // Reject an expired cookie server-side. Cookies minted before `exp` existed
+  // carry none and are accepted during the migration window (they pick up an
+  // expiry the next time they're re-persisted) — same compat posture as the
+  // redis driver's TTL and the cookie driver's prior behavior.
+  const exp = (parsed as unknown as Record<string, unknown>)['exp']
+  if (typeof exp === 'number' && Date.now() > exp) return null
+  return parsed
 }
 
 class CookieDriver implements InternalDriver {
@@ -332,11 +346,11 @@ class CookieDriver implements InternalDriver {
 
   async load(cookieValue: string | undefined): Promise<SessionPayload> {
     if (!cookieValue) return this.empty()
-    return verifyPayload(cookieValue, this.secret) ?? this.empty()
+    return verifyCookiePayload(cookieValue, this.secret) ?? this.empty()
   }
 
-  async persist(payload: SessionPayload, _ttl: number): Promise<string> {
-    return signPayload(payload, this.secret)
+  async persist(payload: SessionPayload, ttl: number): Promise<string> {
+    return signCookiePayload(payload, this.secret, ttl)
   }
 
   async destroy(_id: string): Promise<void> {
@@ -469,7 +483,10 @@ function buildCookieHeader(name: string, value: string, config: SessionConfig): 
     `SameSite=${config.cookie.sameSite}`,
   ]
   if (config.cookie.httpOnly) parts.push('HttpOnly')
-  if (config.cookie.secure)   parts.push('Secure')
+  // `SameSite=None` requires `Secure` — every modern browser silently drops a
+  // None cookie without it, which presents as "the session never persists"
+  // with no error. Force Secure in that case regardless of `cookie.secure`.
+  if (config.cookie.secure || config.cookie.sameSite === 'none') parts.push('Secure')
   return parts.join('; ')
 }
 
@@ -535,8 +552,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
 
     // Persist regardless of whether next() throws — flash messages on error
     // redirects, new sessions on error responses, and regenerate() must
-    // survive a thrown handler. Save errors only surface when next() did not
-    // already throw, so the original exception isn't masked by a redis blip.
+    // survive a thrown handler.
     let nextErrored = false
     let nextErr: unknown
     try {
@@ -548,9 +564,17 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
     try {
       await session.save(res)
     } catch (saveErr) {
+      // A save failure (e.g. a transient redis blip in persist) must not turn
+      // an otherwise-successful response into a 500: the handler already
+      // produced its result and only the cookie refresh failed. Log it and
+      // preserve the response. When next() itself threw, that original error
+      // is the one that matters, so the save error is swallowed here and the
+      // handler exception is re-thrown below — never masked by a redis blip.
       if (!nextErrored) {
-        nextErrored = true
-        nextErr = saveErr
+        console.error(
+          '[RudderJS] session.save() failed; the response is preserved without a refreshed session cookie.',
+          saveErr,
+        )
       }
     }
     if (nextErrored) throw nextErr

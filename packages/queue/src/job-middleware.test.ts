@@ -112,13 +112,18 @@ describe('RateLimited', () => {
   beforeEach(() => { fake = FakeCacheAdapter.fake() })
   afterEach(()  => fake.restore())
 
-  it('runs next() and increments the counter on each call', async () => {
+  it('runs next() and atomically increments the counter on each call', async () => {
     const mw = new RateLimited('api-calls', 5)
     let ran = false
     await mw.handle(new StubJob(), async () => { ran = true })
 
     assert.strictEqual(ran, true)
-    fake.assertSet('rudderjs:job-rate:api-calls', v => v === 1)
+    assert.strictEqual(await fake.get('rudderjs:job-rate:api-calls'), 1)
+
+    // A second call increments the same window (preserving its TTL) rather
+    // than overwriting it via get → set.
+    await mw.handle(new StubJob(), async () => {})
+    assert.strictEqual(await fake.get('rudderjs:job-rate:api-calls'), 2)
   })
 
   it('throws "rate limit exceeded" when the counter reaches the max', async () => {

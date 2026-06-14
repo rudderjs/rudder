@@ -5,7 +5,30 @@ import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, Auth, runWithAuth, runWithTestUser, type AuthConfig } from './auth-manager.js'
 import type { Authenticatable } from './contracts.js'
 import type { AuthUser } from './contracts.js'
-import type { SessionStore } from './session-guard.js'
+import type { SessionGuard, SessionStore } from './session-guard.js'
+import {
+  runWithRemember,
+  takeRememberDirective,
+  rememberCookieAttrs,
+  resolveRememberSecret,
+  encodeRememberCookie,
+  decodeRememberCookie,
+  buildRememberCookie,
+  parseCookie,
+} from './remember.js'
+
+interface HonoContextLike {
+  header(k: string, v: string): void
+  res?: Response
+}
+
+/** Append a `Set-Cookie` on the response, preserving any cookies earlier
+ *  middleware wrote (same multi-cookie-safe pattern as @rudderjs/session). */
+function writeResponseCookie(res: { raw: unknown }, cookieStr: string): void {
+  const c = res.raw as HonoContextLike
+  if (c.res) c.res.headers.append('Set-Cookie', cookieStr)
+  else c.header('Set-Cookie', cookieStr)
+}
 
 // ─── Module Augmentation ───────────────────────────────────
 
@@ -29,6 +52,13 @@ export { Gate, Policy, AuthorizationError } from './gate.js'
 export { PasswordBroker, MemoryTokenRepository } from './password-reset.js'
 export { EnsureEmailIsVerified, verificationUrl, handleEmailVerification, mustVerifyEmail } from './verification.js'
 export { RequireGuest } from './require-guest.js'
+export {
+  newRememberToken,
+  encodeRememberCookie,
+  decodeRememberCookie,
+  rememberCookieAttrs,
+} from './remember.js'
+export type { RememberCookieAttrs, RememberDirective } from './remember.js'
 export { BaseAuthController, DEFAULT_AUTH_RATE_LIMITS } from './base-auth-controller.js'
 export type { AuthUserModelLike, AuthHashLike, AuthRateLimits } from './base-auth-controller.js'
 
@@ -138,9 +168,44 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
       }
     }
 
-    await runWithAuth(manager, async () => {
+    // Flush a queued remember directive (set on login(…, true) / logout) to the
+    // response cookie. Runs inside the remember ALS scope established below.
+    const attrs = rememberCookieAttrs()
+    const flushRemember = () => {
+      const directive = takeRememberDirective()
+      if (!directive) return
+      if (directive.action === 'set') {
+        // resolveRememberSecret throws in production without AUTH_SECRET — the
+        // app explicitly opted into remember-me, so surface that.
+        const value = encodeRememberCookie(directive.userId, directive.token, resolveRememberSecret())
+        writeResponseCookie(res, buildRememberCookie(value, attrs))
+      } else {
+        writeResponseCookie(res, buildRememberCookie(null, attrs))
+      }
+    }
+
+    await runWithRemember(() => runWithAuth(manager, async () => {
+      // No active session — try to resume one from a remember cookie before the
+      // handler runs, so `req.user` / `Auth.user()` resolve as usual.
+      let initialUid = session?.get('auth_user_id') as string | undefined
+      if (!initialUid) {
+        const rememberRaw = parseCookie(req.headers['cookie'] ?? '', attrs.cookie)
+        if (rememberRaw) {
+          // Resolve the signing secret; if it's unavailable (prod without
+          // AUTH_SECRET) we can't verify the cookie, so fail closed.
+          let secret: string | null
+          try { secret = resolveRememberSecret() } catch { secret = null }
+          const decoded = secret ? decodeRememberCookie(rememberRaw, secret) : null
+          if (decoded) {
+            const guard = Auth.guard(resolvedGuard) as unknown as SessionGuard
+            try { await guard.loginViaRememberCookie?.(decoded.userId, decoded.token) }
+            catch { /* a DB hiccup during auto-login must not 500 the request */ }
+            initialUid = session?.get('auth_user_id') as string | undefined
+          }
+        }
+      }
+
       // Initial sync so the handler sees req.user (fetches only if session has auth_user_id).
-      const initialUid = session?.get('auth_user_id') as string | undefined
       if (initialUid) await syncUser()
 
       // try/finally so a handler that signs the user in (or out) and then
@@ -171,8 +236,13 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
         }
       }
 
+      // Write any queued remember cookie (login/logout during the handler) to
+      // the response, even when the handler threw — same posture as session
+      // save. A flush error is only surfaced when the handler itself succeeded.
+      try { flushRemember() } catch (flushErr) { if (!handlerThrew) throw flushErr }
+
       if (handlerThrew) throw handlerError
-    })
+    }))
   }
 
   // Tag as a request-scoped-context middleware. The framework's WS-upgrade
@@ -242,11 +312,13 @@ export class AuthProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg = config<AuthConfig>('auth')
 
-    // Resolve Hash.check from DI
+    // Resolve Hash.check + Hash.make from DI
     let hashCheck: (plain: string, hashed: string) => Promise<boolean>
+    let hashMake:  (plain: string) => Promise<string>
     try {
-      const hashDriver = this.app.make<{ check(v: string, h: string): Promise<boolean> }>('hash')
+      const hashDriver = this.app.make<{ check(v: string, h: string): Promise<boolean>; make(v: string): Promise<string> }>('hash')
       hashCheck = (plain, hashed) => hashDriver.check(plain, hashed)
+      hashMake  = (plain) => hashDriver.make(plain)
     } catch {
       throw new Error(
         '[RudderJS Auth] No hash driver found. Register HashProvider before AuthProvider.',
@@ -258,7 +330,7 @@ export class AuthProvider extends ServiceProvider {
       return this.app.make<SessionStore>('session.facade')
     }
 
-    const manager = new AuthManager(cfg, hashCheck, getSession)
+    const manager = new AuthManager(cfg, hashCheck, getSession, hashMake)
     this.app.instance('auth.manager', manager)
     this.app.instance('auth', Auth)
 

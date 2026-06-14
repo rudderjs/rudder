@@ -1,5 +1,6 @@
 import type { Authenticatable, Guard, UserProvider } from './contracts.js'
 import { currentTestUser } from './auth-manager.js'
+import { newRememberToken, setRememberDirective } from './remember.js'
 
 // ─── Session Guard ────────────────────────────────────────
 // Cookie-based auth via @rudderjs/session.
@@ -76,24 +77,67 @@ export class SessionGuard implements Guard {
     return (await this.user()) === null
   }
 
-  async attempt(credentials: Record<string, unknown>, _remember?: boolean): Promise<boolean> {
+  async attempt(credentials: Record<string, unknown>, remember?: boolean): Promise<boolean> {
     const user = await this.provider.retrieveByCredentials(credentials)
-    if (!user) return false
+    if (!user) {
+      // Equalize timing with the wrong-password path so an attacker can't
+      // enumerate accounts by latency (no user = instant; wrong password =
+      // slow bcrypt/argon verify).
+      await this.provider.fakeValidateCredentials?.(credentials)
+      return false
+    }
 
     const valid = await this.provider.validateCredentials(user, credentials)
     if (!valid) return false
 
-    await this.login(user)
+    await this.login(user, remember)
     return true
   }
 
-  async login(user: Authenticatable, _remember?: boolean): Promise<void> {
+  /**
+   * Log a user in. When `remember` is true (and the provider supports
+   * persistent tokens), mint a fresh remember token, persist it on the user,
+   * and queue a long-lived remember cookie — `AuthMiddleware` writes it to the
+   * response. The directive is a no-op outside an HTTP request scope.
+   */
+  async login(user: Authenticatable, remember?: boolean): Promise<void> {
     await this.session.regenerate()
     this.session.put('auth_user_id', user.getAuthIdentifier())
     this._user = user
+
+    if (remember && this.provider.updateRememberToken) {
+      const token = newRememberToken()
+      await this.provider.updateRememberToken(user.getAuthIdentifier(), token)
+      setRememberDirective({ action: 'set', userId: user.getAuthIdentifier(), token })
+    }
+  }
+
+  /**
+   * Resolve a user from a remember cookie's `userId`/`token` and, on a valid
+   * constant-time token match, re-establish the session WITHOUT minting a new
+   * token (the existing cookie stays valid — the token rotates only on a fresh
+   * remember-login or logout). Returns whether auto-login succeeded. Used by
+   * AuthMiddleware when there's no active session.
+   */
+  async loginViaRememberCookie(userId: string, token: string): Promise<boolean> {
+    if (!this.provider.retrieveByToken) return false
+    const user = await this.provider.retrieveByToken(userId, token)
+    if (!user) return false
+    await this.session.regenerate()
+    this.session.put('auth_user_id', user.getAuthIdentifier())
+    this._user = user
+    return true
   }
 
   async logout(): Promise<void> {
+    // Cycle the remember token so every outstanding remember cookie for this
+    // user stops working, then queue the cookie's deletion.
+    const user = this._user ?? await this.user().catch(() => null)
+    if (user && this.provider.updateRememberToken) {
+      await this.provider.updateRememberToken(user.getAuthIdentifier(), newRememberToken())
+    }
+    setRememberDirective({ action: 'clear' })
+
     this.session.forget('auth_user_id')
     await this.session.regenerate()
     this._user = null

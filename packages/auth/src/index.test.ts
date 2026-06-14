@@ -259,6 +259,23 @@ describe('SessionGuard', () => {
     assert.strictEqual(result, false)
   })
 
+  it('attempt() with an unknown user still runs a dummy password verify (anti-enumeration)', async () => {
+    // The no-user branch must incur the same hash-verify cost as the
+    // wrong-password branch, else login latency leaks which accounts exist.
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const checks: Array<{ plain: string; hashed: string }> = []
+    const spyCheck = async (plain: string, hashed: string) => { checks.push({ plain, hashed }); return false }
+    const provider = new EloquentUserProvider(model, spyCheck)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.attempt({ email: 'ghost@x.com', password: 'guessme' })
+    assert.strictEqual(result, false)
+    assert.strictEqual(checks.length, 1, 'a dummy verify must run even when no user matched')
+    assert.strictEqual(checks[0]!.plain, 'guessme')
+    assert.match(checks[0]!.hashed, /^\$2[aby]?\$/, 'verified against a well-formed bcrypt dummy hash')
+  })
+
   it('login() sets session and caches user', async () => {
     const sess = fakeSession()
     const model = fakeModel([])
@@ -798,6 +815,19 @@ describe('PasswordBroker', () => {
       async () => {},
     )
     assert.strictEqual(status, 'INVALID_USER')
+  })
+
+  it('sendResetLink still hits the token store for an unknown email (anti-enumeration)', async () => {
+    // The no-user branch must do the same early store round-trip a real user
+    // triggers, so an attacker can't tell "no account" from "sent" by timing.
+    const { broker, tokens } = makePasswordBroker([])
+    const finds: string[] = []
+    const origFind = tokens.find.bind(tokens)
+    tokens.find = async (email: string) => { finds.push(email); return origFind(email) }
+
+    const status = await broker.sendResetLink({ email: 'ghost@x.com' }, async () => {})
+    assert.strictEqual(status, 'INVALID_USER')
+    assert.deepStrictEqual(finds, ['ghost@x.com'], 'unknown-email path must still query the token store')
   })
 
   it('sendResetLink sends token and returns RESET_LINK_SENT', async () => {

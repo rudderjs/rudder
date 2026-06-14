@@ -30,6 +30,7 @@ export class AuthManager {
     public readonly config: AuthConfig,
     private readonly hashCheck: (plain: string, hashed: string) => Promise<boolean>,
     private readonly getSession: () => SessionStore,
+    private readonly hashMake?: (plain: string) => Promise<string>,
   ) {}
 
   /**
@@ -108,6 +109,7 @@ export class AuthManager {
       return new EloquentUserProvider(
         providerConfig.model as Parameters<typeof EloquentUserProvider['prototype']['retrieveById']> extends never[] ? never : ConstructorParameters<typeof EloquentUserProvider>[0],
         this.hashCheck,
+        this.hashMake,
       )
     }
 
