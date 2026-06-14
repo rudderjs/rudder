@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ type OutputCallback = (type: 'stdout' | 'stderr', data: string) => void
 // ─── PendingProcess ───────────────────────────────────────
 
 export class PendingProcess {
-  private _command:   string
+  private _command:   string | string[]
   private _cwd?:      string
   private _timeout?:  number
   private _env?:      Record<string, string>
@@ -81,7 +82,7 @@ export class PendingProcess {
   private _tty       = false
   private _onOutput?: OutputCallback
 
-  constructor(command: string) {
+  constructor(command: string | string[]) {
     this._command = command
   }
 
@@ -93,36 +94,81 @@ export class PendingProcess {
   tty(): this { this._tty = true; return this }
   onOutput(fn: OutputCallback): this { this._onOutput = fn; return this }
 
-  private buildOptions(): SpawnOptions & { shell: true } {
+  private buildOptions(): SpawnOptions {
     return {
-      shell:   true,
       cwd:     this._cwd,
       env:     this._env ? { ...process.env, ...this._env } : process.env,
       stdio:   this._tty ? 'inherit' : 'pipe',
+      // Make the child a process-group leader (POSIX) ONLY when a timeout is
+      // set, so the timeout can signal the whole group (shell + the commands it
+      // spawned). Windows has no process groups, so this is POSIX-only.
+      ...(this._timeout !== undefined && process.platform !== 'win32' ? { detached: true } : {}),
+    }
+  }
+
+  /**
+   * Spawn the child. A string command runs through a shell (convenient, but
+   * shell-interpreted — never pass untrusted input this way). An argv array
+   * runs WITHOUT a shell, so arguments are passed verbatim and metacharacters
+   * (`;`, `|`, `>`, backticks) are not interpreted — the safe form for
+   * user-controlled arguments.
+   */
+  private spawnChild(opts: SpawnOptions): ChildProcess {
+    if (Array.isArray(this._command)) {
+      const [cmd = '', ...args] = this._command
+      return spawn(cmd, args, { ...opts, shell: false })
+    }
+    return spawn(this._command, [], { ...opts, shell: true })
+  }
+
+  /** String form of the command for fake matching/recording. */
+  private commandString(): string {
+    return Array.isArray(this._command) ? this._command.join(' ') : this._command
+  }
+
+  /** Kill the child and, on POSIX timeout runs, its whole process group. */
+  private killTree(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
+    if (child.pid === undefined) return
+    try {
+      if (process.platform === 'win32') {
+        child.kill(signal)
+      } else {
+        // Negative pid signals the process group (the child is its leader via
+        // detached), so a backgrounded grandchild is killed too, not orphaned.
+        process.kill(-child.pid, signal)
+      }
+    } catch {
+      // Already exited / group gone — nothing to kill.
     }
   }
 
   async run(): Promise<ProcessResult> {
     // Check fake first
-    if (_fake) return _fake._run(this._command, this._input)
+    if (_fake) return _fake._run(this.commandString(), this._input)
 
     const opts = this.buildOptions()
-    const ac = this._timeout ? new AbortController() : undefined
-    if (ac) (opts as unknown as Record<string, unknown>)['signal'] = ac.signal
-
-    const timer = ac && this._timeout
-      ? setTimeout(() => ac.abort(), this._timeout)
-      : undefined
 
     return new Promise<ProcessResult>((resolve, reject) => {
-      const child = spawn(this._command, [], opts)
+      const child = this.spawnChild(opts)
 
       let stdout = ''
       let stderr = ''
+      // Decode per stream, not per chunk: a multi-byte UTF-8 character split
+      // across two ~64KB pipe chunks would otherwise decode to replacement
+      // chars on each side of the boundary. StringDecoder holds incomplete
+      // trailing bytes until the next chunk.
+      const outDecoder = new StringDecoder('utf8')
+      const errDecoder = new StringDecoder('utf8')
+      let timedOut = false
+
+      const timer = this._timeout
+        ? setTimeout(() => { timedOut = true; this.killTree(child) }, this._timeout)
+        : undefined
 
       if (child.stdout) {
         child.stdout.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
+          const text = outDecoder.write(chunk)
+          if (!text) return
           stdout += text
           if (!this._quiet && this._onOutput) this._onOutput('stdout', text)
         })
@@ -130,7 +176,8 @@ export class PendingProcess {
 
       if (child.stderr) {
         child.stderr.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
+          const text = errDecoder.write(chunk)
+          if (!text) return
           stderr += text
           if (!this._quiet && this._onOutput) this._onOutput('stderr', text)
         })
@@ -143,35 +190,40 @@ export class PendingProcess {
 
       child.on('error', (err) => {
         if (timer) clearTimeout(timer)
-        if ((err as NodeJS.ErrnoException).code === 'ABORT_ERR') {
-          resolve(makeResult(124, stdout, stderr + '\nProcess timed out'))
-        } else {
-          reject(err)
-        }
+        reject(err)
       })
 
       child.on('close', (code) => {
         if (timer) clearTimeout(timer)
-        resolve(makeResult(code ?? 1, stdout, stderr))
+        stdout += outDecoder.end()
+        stderr += errDecoder.end()
+        if (timedOut) {
+          resolve(makeResult(124, stdout, stderr + '\nProcess timed out'))
+        } else {
+          resolve(makeResult(code ?? 1, stdout, stderr))
+        }
       })
     })
   }
 
   async start(): Promise<RunningProcess> {
-    if (_fake) return _fake._start(this._command)
+    if (_fake) return _fake._start(this.commandString())
 
     const opts = this.buildOptions()
-    const child = spawn(this._command, [], opts)
+    const child = this.spawnChild(opts)
 
     let stdout = ''
     let stderr = ''
     let exited = false
     let exitCode = 0
+    const outDecoder = new StringDecoder('utf8')
+    const errDecoder = new StringDecoder('utf8')
 
     const waitPromise = new Promise<ProcessResult>((resolve, reject) => {
       if (child.stdout) {
         child.stdout.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
+          const text = outDecoder.write(chunk)
+          if (!text) return
           stdout += text
           if (!this._quiet && this._onOutput) this._onOutput('stdout', text)
         })
@@ -179,7 +231,8 @@ export class PendingProcess {
 
       if (child.stderr) {
         child.stderr.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
+          const text = errDecoder.write(chunk)
+          if (!text) return
           stderr += text
           if (!this._quiet && this._onOutput) this._onOutput('stderr', text)
         })
@@ -192,11 +245,18 @@ export class PendingProcess {
 
       child.on('error', reject)
       child.on('close', (code) => {
+        stdout += outDecoder.end()
+        stderr += errDecoder.end()
         exited = true
         exitCode = code ?? 1
         resolve(makeResult(exitCode, stdout, stderr))
       })
     })
+    // wait() may never be called (a fire-and-forget background process). Without
+    // a handler, a spawn error (bad cwd, ENOENT) would surface as an unhandled
+    // rejection and can crash the process. This no-op keeps the rejection
+    // observed; a real wait() consumer still receives the error.
+    waitPromise.catch(() => { /* observed lazily via wait() */ })
 
     return {
       pid: child.pid ?? 0,
@@ -326,21 +386,26 @@ let _fake: FakeProcess | null = null
 // ─── Process facade ───────────────────────────────────────
 
 export class Process {
-  static run(command: string): Promise<ProcessResult> {
+  static run(command: string | string[]): Promise<ProcessResult> {
     return new PendingProcess(command).run()
   }
 
-  static command(command: string): PendingProcess {
+  static command(command: string | string[]): PendingProcess {
     return new PendingProcess(command)
   }
 
-  static start(command: string): Promise<RunningProcess> {
+  static start(command: string | string[]): Promise<RunningProcess> {
     return new PendingProcess(command).start()
   }
 
-  static async pool(commands: string[]): Promise<ProcessPoolResult> {
+  static async pool(commands: Array<string | string[]>): Promise<ProcessPoolResult> {
     const results = await Promise.all(
-      commands.map(cmd => new PendingProcess(cmd).run())
+      commands.map(cmd =>
+        // A spawn error in one command (ENOENT / bad cwd) must not reject the
+        // whole pool and discard the siblings' results; surface it as a failed
+        // result, mirroring how a non-zero exit is reported.
+        new PendingProcess(cmd).run().catch((err: Error) => makeResult(1, '', err.message)),
+      ),
     )
     return {
       results,

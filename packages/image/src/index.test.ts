@@ -202,6 +202,25 @@ describe('@rudderjs/image', () => {
       await image(buf).format('webp').quality(0).toBuffer()
       await image(buf).format('webp').quality(200).toBuffer()
     })
+
+    it('default PNG uses max compression (level 9), same as quality(100)', async () => {
+      // A smooth gradient compresses very differently at zlib level 1 vs 9, so
+      // a default that wrongly mapped to level 1 produces a larger file than
+      // the explicit quality(100) (level 9). Equal sizes prove the default
+      // resolves to the same max-compression level.
+      const W = 256, H = 256
+      const raw = Buffer.alloc(W * H * 3)
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 3
+        raw[o] = x; raw[o + 1] = x; raw[o + 2] = x
+      }
+      const grad = await sharp(raw, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer()
+
+      const def  = await image(grad).format('png').toBuffer()
+      const q100 = await image(grad).format('png').quality(100).toBuffer()
+      assert.strictEqual(def.length, q100.length,
+        `default PNG (${def.length}) should match quality(100) (${q100.length}) at max compression`)
+    })
   })
 
   // ─── Lossless ─────────────────────────────────────────────
@@ -218,10 +237,34 @@ describe('@rudderjs/image', () => {
   // ─── Strip metadata ───────────────────────────────────────
 
   describe('stripMetadata()', () => {
+    // A JPEG carrying real EXIF so we can assert it is actually removed.
+    async function createJpegWithExif(): Promise<Buffer> {
+      return sharp({ create: { width: 50, height: 50, channels: 3, background: { r: 0, g: 128, b: 255 } } })
+        .withExif({ IFD0: { Copyright: 'RudderJS' } })
+        .jpeg()
+        .toBuffer()
+    }
+
     it('runs without error', async () => {
       const buf = await createTestJpeg(50, 50)
       const result = await image(buf).stripMetadata().toBuffer()
       assert.ok(Buffer.isBuffer(result))
+    })
+
+    it('actually removes EXIF metadata', async () => {
+      const buf = await createJpegWithExif()
+      assert.ok((await sharp(buf).metadata()).exif, 'fixture must carry EXIF to start')
+
+      const stripped = await image(buf).stripMetadata().toBuffer()
+      assert.strictEqual((await sharp(stripped).metadata()).exif, undefined,
+        'stripMetadata() must drop EXIF')
+    })
+
+    it('preserves metadata by default (no strip requested)', async () => {
+      const buf = await createJpegWithExif()
+      const kept = await image(buf).toBuffer()
+      assert.ok((await sharp(kept).metadata()).exif,
+        'default pipeline must preserve EXIF when stripMetadata() was not called')
     })
   })
 

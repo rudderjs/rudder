@@ -90,6 +90,19 @@ describe('Concurrency.run() — worker driver', () => {
       /worker-error/,
     )
   })
+
+  it('rejects (does not hang) and recovers the pool when a worker exits mid-task', async () => {
+    // process.exit() inside the task kills the worker thread before it replies.
+    // Without the exit handler the task promise never settles and run() hangs
+    // forever; without worker replacement the dead worker poisons the next task.
+    await assert.rejects(
+      () => Concurrency.run([() => { (process as { exit(code: number): never }).exit(0) }]),
+      /exited|terminated/i,
+    )
+    // The pool must still be usable after the dead worker is replaced.
+    const after = await Concurrency.run([() => 7])
+    assert.deepStrictEqual(after, [7])
+  })
 })
 
 // ─── Concurrency.fake() / restore ─────────────────────────

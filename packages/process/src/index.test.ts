@@ -25,6 +25,25 @@ describe('Process.run()', () => {
     const result = await Process.run('echo test')
     assert.strictEqual(result.output(), result.stdout)
   })
+
+  it('does not corrupt multi-byte UTF-8 split across stream chunks', async () => {
+    // 100k euro signs (3 bytes each) span many ~64KB pipe chunks, so a per-chunk
+    // toString() would split a character across a boundary and emit U+FFFD.
+    const big = '€'.repeat(100_000)
+    const result = await Process.run([process.execPath, '-e', `process.stdout.write('€'.repeat(100000))`])
+    assert.ok(result.successful())
+    assert.strictEqual(result.stdout.length, big.length)
+    assert.strictEqual(result.stdout, big)
+    assert.ok(!result.stdout.includes('�'), 'output must not contain replacement characters')
+  })
+
+  it('runs an argv array without a shell (no metacharacter interpretation)', async () => {
+    // Passed verbatim — `;`, `>` etc. are NOT interpreted by a shell.
+    const payload = 'a; b > c | d `e`'
+    const result = await Process.run([process.execPath, '-e', `process.stdout.write(process.argv[1])`, payload])
+    assert.ok(result.successful())
+    assert.strictEqual(result.stdout, payload)
+  })
 })
 
 // ─── ProcessResult.throw() ────────────────────────────────
@@ -73,6 +92,25 @@ describe('PendingProcess', () => {
     assert.ok(result.failed())
   })
 
+  it('kills backgrounded grandchildren on timeout (process group)', posixOnly, async () => {
+    const { tmpdir } = await import('node:os')
+    const { join }   = await import('node:path')
+    const { existsSync, rmSync } = await import('node:fs')
+    const marker = join(tmpdir(), `rudderjs-proc-grandchild-${Date.now()}.marker`)
+    rmSync(marker, { force: true })
+
+    // The shell backgrounds a subshell that writes the marker after 0.4s, then
+    // waits. On timeout, SIGTERM to the shell alone leaves the subshell alive
+    // (it writes the marker); a process-group kill takes the subshell with it.
+    const result = await Process.command(`(sleep 0.4 && touch ${marker}) & wait`).timeout(0.15).run()
+    assert.ok(result.failed())
+
+    await new Promise((r) => setTimeout(r, 600)) // past the grandchild's write time
+    const survived = existsSync(marker)
+    rmSync(marker, { force: true })
+    assert.ok(!survived, 'a backgrounded grandchild survived the timeout and wrote the marker')
+  })
+
   it('supports onOutput callback', async () => {
     const chunks: string[] = []
     const result = await Process.command('echo line1 && echo line2')
@@ -101,6 +139,22 @@ describe('Process.start()', () => {
     running.kill()
     await running.wait()
     assert.ok(!running.running())
+  })
+
+  it('does not emit an unhandled rejection on a spawn error when wait() is never called', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (e: unknown) => unhandled.push(e)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      // Bad cwd → ENOENT spawn error fires on the internal wait promise. We
+      // intentionally never call wait(); pre-fix this leaked an unhandled
+      // rejection that can terminate the process.
+      await Process.command('echo hi').path('/no/such/dir/rudderjs-xyz').start()
+      await new Promise((r) => setTimeout(r, 100))
+      assert.deepStrictEqual(unhandled, [], 'start() must not leak an unhandled rejection')
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 })
 

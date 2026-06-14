@@ -24,7 +24,7 @@ const DEFAULT_QUALITY: Record<string, number> = {
   jpeg: 85,
   webp: 82,
   avif: 65,
-  png:  9, // compression level for PNG (0-9)
+  png:  100, // mapped to a 0-9 compressionLevel via the quality formula below (100 -> 9)
   tiff: 80,
   gif:  80,
 }
@@ -267,9 +267,14 @@ export class ImageProcessor {
       pipeline = pipeline.blur(this._blur)
     }
 
-    // Strip metadata
-    if (this._stripMeta) {
-      pipeline = pipeline.withMetadata(false) // sharp: false strips metadata
+    // Metadata: sharp strips ALL metadata by default; withMetadata() preserves
+    // it. So preserve only when the caller did NOT ask to strip. Note that
+    // withMetadata(false) does NOT strip — sharp runs keepMetadata() before it
+    // inspects the argument, so passing false still keeps metadata. The prior
+    // `withMetadata(false)` therefore made stripMetadata()/optimize() a no-op
+    // (EXIF/GPS retained on uploads) while the default silently stripped.
+    if (!this._stripMeta) {
+      pipeline = pipeline.withMetadata()
     }
 
     // Format + quality

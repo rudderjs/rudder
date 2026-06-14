@@ -114,6 +114,30 @@ describe('Feature.for(scope)', () => {
     await Feature.for({ id: 2 }).active('scoped-count')
     assert.strictEqual(calls, 2) // resolved once per scope
   })
+
+  it('treats a numeric scope and the equivalent string scope as distinct', async () => {
+    const seen: unknown[] = []
+    Feature.define('per-scope', (scope) => { seen.push(scope); return scope })
+
+    await Feature.for(1).value('per-scope')
+    await Feature.for('1').value('per-scope')
+    // Without type-prefixed keys both collapsed to "1" and the second call hit
+    // the first's cached value, so the resolver ran once and saw only 1.
+    assert.strictEqual(seen.length, 2, 'number 1 and string "1" must not share a scope key')
+    assert.deepStrictEqual(seen, [1, '1'])
+  })
+})
+
+describe('Feature.value() — resolver returning undefined', () => {
+  it('memoizes an undefined resolution instead of re-running every call', async () => {
+    let calls = 0
+    Feature.define('maybe', () => { calls++; return undefined })
+
+    await Feature.value('maybe')
+    await Feature.value('maybe')
+    await Feature.value('maybe')
+    assert.strictEqual(calls, 1, 'a resolver returning undefined must be cached, not re-run')
+  })
 })
 
 // ─── Feature.values() bulk ────────────────────────────────
@@ -158,6 +182,20 @@ describe('Lottery', () => {
     const second = await Feature.value('lottery-test')
     assert.strictEqual(first, second) // same cached value
     assert.strictEqual(typeof first, 'boolean')
+  })
+
+  it('picks a Lottery from a second copy of the package (cross-realm brand)', async () => {
+    // Simulate the double-bundle-load: a resolver returns a Lottery built by a
+    // DIFFERENT copy of @rudderjs/pennant. instanceof would fail (nominal),
+    // leaving the object stored raw so active() returns Boolean(object) = true.
+    // The registered-symbol brand makes the check hold across copies.
+    const foreignLottery = {
+      [Symbol.for('rudderjs.pennant.lottery')]: true,
+      pick: () => false, // 0% — must resolve to inactive
+    }
+    Feature.define('cross-copy-lottery', () => foreignLottery as unknown as Lottery)
+    assert.strictEqual(await Feature.active('cross-copy-lottery'), false,
+      'a foreign-copy Lottery must be pick()-ed, not stored raw as a truthy object')
   })
 })
 
