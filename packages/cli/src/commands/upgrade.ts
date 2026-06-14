@@ -658,14 +658,6 @@ export async function collectChangelogs(
 
 // ── Apply ─────────────────────────────────────────────────────
 
-function applyUpdates(pkgPath: string, pkg: Record<string, unknown>, rows: PlanRow[]): void {
-  for (const row of rows) {
-    const section = pkg[row.section] as Record<string, string>
-    section[row.name] = row.newRange
-  }
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
-}
-
 /** Mutate the in-memory root package.json with the JSON-sourced override bumps
  *  (`pnpm.overrides`, `resolutions`). The caller writes the file. */
 function applyJsonOverrides(rootPkg: Record<string, unknown>, rows: OverridePlanRow[]): void {

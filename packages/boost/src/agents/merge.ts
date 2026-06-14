@@ -1,5 +1,19 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs'
 import { dirname } from 'node:path'
+
+/**
+ * Read a file, returning null if it doesn't exist. Reading-then-catching ENOENT
+ * avoids a check-then-use race (an existsSync gate that could go stale before
+ * the read) and is a single syscall.
+ */
+function readFileOrNull(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, 'utf-8')
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw e
+  }
+}
 
 /**
  * Copy a skill directory, replacing any prior copy. `cpSync` merges into an
@@ -33,12 +47,12 @@ const GUIDELINE_CLOSE = '</rudderjs-boost-guidelines>'
 export function writeGuidelineBlock(filePath: string, content: string): void {
   mkdirSync(dirname(filePath), { recursive: true })
 
-  if (!existsSync(filePath)) {
+  const existing = readFileOrNull(filePath)
+  if (existing === null) {
     writeFileSync(filePath, content, 'utf-8')
     return
   }
 
-  const existing = readFileSync(filePath, 'utf-8')
   const start = existing.indexOf(GUIDELINE_OPEN)
   const end = existing.indexOf(GUIDELINE_CLOSE)
 
@@ -71,9 +85,10 @@ export function mergeMcpServer(
   mkdirSync(dirname(filePath), { recursive: true })
 
   let config: Record<string, unknown> = {}
-  if (existsSync(filePath)) {
+  const raw = readFileOrNull(filePath)
+  if (raw !== null) {
     try {
-      const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown
+      const parsed = JSON.parse(raw) as unknown
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         config = parsed as Record<string, unknown>
       }

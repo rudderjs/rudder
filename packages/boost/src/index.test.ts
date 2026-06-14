@@ -574,7 +574,7 @@ describe('config-get redaction', () => {
     assert.ok(!src.includes('hunter2'))
     // non-secret env default + non-credential url left intact
     assert.ok(src.includes("'Rudder'"))
-    assert.ok(src.includes('https://example.com'))
+    assert.match(src, /publicUrl: 'https:\/\/example\.com'/)
   })
 })
 
