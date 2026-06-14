@@ -15,6 +15,7 @@ import {
   resolveClientGrantTypes,
   exchangeAuthCode,
   OAuthError,
+  createToken,
   registerPassportRoutes,
   registerPassportApiRoutes,
 } from './index.js'
@@ -73,6 +74,44 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
     assert.equal(res.statusValue, 401)
     assert.deepEqual(res.bodyValue, { error: 'unauthenticated', message: 'Bearer token required.' })
 
+    Passport.reset()
+  })
+
+  test('bearer enforces scopes from the live DB row, not the JWT claim', async () => {
+    Passport.reset()
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+    Passport.setKeys(privateKey, publicKey)
+
+    // The JWT claims BOTH scopes...
+    const jwt = await createToken({
+      tokenId: 'AT-S', userId: 'U-1', clientId: 'C-1',
+      scopes: ['read', 'write'],
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    // ...but the live DB row has been narrowed to ['read'] (operator action).
+    class FakeAccessToken {
+      static query() {
+        return {
+          where() { return this },
+          first: async () => ({ id: 'AT-S', revoked: false, scopes: '["read"]', userId: 'U-1' }) as any,
+        }
+      }
+    }
+    Passport.useTokenModel(FakeAccessToken as any)
+
+    const req = fakeReq(`Bearer ${jwt}`)
+    let nextCalled = 0
+    await RequireBearer()(req as any, fakeRes() as any, async () => { nextCalled++ })
+
+    assert.equal(nextCalled, 1, 'a valid, unrevoked token authenticates')
+    assert.deepEqual((req.raw as any).__passport_scopes, ['read'],
+      'stamped scopes must come from the DB row (narrowed to read), not the JWT claim (read+write)')
     Passport.reset()
   })
 
