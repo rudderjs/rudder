@@ -92,6 +92,52 @@ export interface PassportConfig {
    * device flows where misbehaving clients warrant aggressive back-off.
    */
   deviceMaxInterval?: number
+  /**
+   * Refuse to boot when no OAuth signing keypair is reachable (no env vars and
+   * nothing on disk under `keyPath`). Default `false` — a missing keypair only
+   * warns, since passport may be installed but not actively serving OAuth. Set
+   * `true` for deployments that depend on OAuth so a missing keypair fails the
+   * deploy fast instead of 500-ing every `/oauth/*` request at runtime.
+   */
+  requireKeys?: boolean
+}
+
+/**
+ * Boot-time guard for the OAuth signing keypair.
+ *
+ * When keys are reachable → `null` (nothing to do). When they're missing:
+ *
+ *  - `requireKeys: true` → THROW, failing the boot. An OAuth server that
+ *    actually serves tokens should refuse to start without keys rather than
+ *    "boot" and then 500 every `/oauth/*` request with a generic ENOENT deep
+ *    in `Passport.keys()`. Opt in once your deployment depends on OAuth.
+ *  - `requireKeys: false` (default) → return a warning string for the caller to
+ *    surface via `bootNotice`, and keep booting. Deliberately the default:
+ *    passport may be INSTALLED but not actively used (it ships with the
+ *    framework demo), and `APP_ENV` defaults to `production`, so keying the throw
+ *    off production-detection alone would break every app that pulls passport in
+ *    without configuring OAuth.
+ *
+ * @returns a warning message when keys are missing and not required, else `null`.
+ * @throws when keys are missing and `requireKeys` is set.
+ */
+export function checkOAuthKeysAtBoot(opts: {
+  keysAvailable: boolean
+  requireKeys:   boolean
+  keyPath:       string
+}): string | null {
+  if (opts.keysAvailable) return null
+  const base =
+    `no RSA keypair found at "${opts.keyPath}/oauth-{private,public}.key" ` +
+    `and no PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY env vars set. ` +
+    `Run \`rudder passport:keys\` to generate one`
+  if (opts.requireKeys) {
+    throw new Error(
+      `[RudderJS] @rudderjs/passport: ${base}. ` +
+      `config('passport').requireKeys is set, so the app refuses to boot without OAuth signing keys.`,
+    )
+  }
+  return `${base} — token issuance and verification will fail until keys are present.`
 }
 
 // ─── Service Provider ─────────────────────────────────────
@@ -111,18 +157,18 @@ export class PassportProvider extends ServiceProvider {
       Passport.loadKeysFrom(cfg.keyPath)
     }
 
-    // Surface a startup warning when no keys are reachable — env vars
-    // unset AND no keypair on disk under the configured path. Without this,
-    // the first `/oauth/*` request fails deep inside `Passport.keys()` with
-    // a generic ENOENT that doesn't point at the missing-bootstrap-step.
-    if (!(await Passport.keysAvailable())) {
-      bootNotice(
-        'passport',
-        `no RSA keypair found at "${Passport.keyPath()}/oauth-{private,public}.key" ` +
-        `and no PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY env vars set. ` +
-        `Run \`rudder passport:keys\` to generate one — token issuance and verification will fail until keys are present.`
-      )
-    }
+    // No reachable keypair (env vars unset AND nothing on disk under the
+    // configured path): fail-fast in production, warn-and-continue in dev.
+    // In prod, a boot that "succeeds" then fails every `/oauth/*` request with
+    // a generic ENOENT deep in `Passport.keys()` is a far worse failure mode
+    // than a deploy that refuses to come up; in dev, a fresh checkout must boot
+    // before `rudder passport:keys` has been run.
+    const keyWarning = checkOAuthKeysAtBoot({
+      keysAvailable: await Passport.keysAvailable(),
+      requireKeys:   cfg.requireKeys === true,
+      keyPath:       Passport.keyPath(),
+    })
+    if (keyWarning) bootNotice('passport', keyWarning)
 
     // Configure lifetimes
     if (cfg.tokensExpireIn) Passport.tokensExpireIn(cfg.tokensExpireIn)

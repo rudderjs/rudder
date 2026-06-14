@@ -36,8 +36,30 @@ import {
   registerPassportRoutes,
   registerPassportWebRoutes,
   registerPassportApiRoutes,
+  checkOAuthKeysAtBoot,
 } from './index.js'
 import { safeCompare } from './grants/safe-compare.js'
+
+describe('checkOAuthKeysAtBoot — opt-in keypair fail-fast', () => {
+  test('returns null when keys are available (nothing to warn about)', () => {
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, requireKeys: true, keyPath: 'storage' }), null)
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, requireKeys: false, keyPath: 'storage' }), null)
+  })
+
+  test('warns (does NOT throw) when keys are missing and not required — the default', () => {
+    const msg = checkOAuthKeysAtBoot({ keysAvailable: false, requireKeys: false, keyPath: 'storage' })
+    assert.ok(typeof msg === 'string')
+    assert.match(msg!, /passport:keys/)
+    assert.match(msg!, /storage\/oauth-\{private,public\}\.key/)
+  })
+
+  test('throws when keys are missing and requireKeys is set (fail-fast deploy)', () => {
+    assert.throws(
+      () => checkOAuthKeysAtBoot({ keysAvailable: false, requireKeys: true, keyPath: 'storage' }),
+      (e: unknown) => e instanceof Error && /requireKeys is set/.test(e.message),
+    )
+  })
+})
 
 describe('@rudderjs/passport exports', () => {
   test('Passport singleton is exported', () => {
