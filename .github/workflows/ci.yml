@@ -16,6 +16,14 @@
 #
 # Adding a new required check: add the job + an `if:` referencing
 # `needs.changes.outputs.code`. Don't introduce a second workflow file.
+#
+# Windows coverage: the `build-test` matrix is ubuntu-only on PRs/pushes and
+# gains the windows-latest leg ONLY on the nightly `schedule`. The Windows
+# runner's flakes are environmental (DLL-init crashes, native-addon teardown
+# races) and share exit code 1 with real failures, so they can't be reliably
+# auto-classified — keeping Windows off the PR matrix means a flake never reds a
+# PR, while the nightly run still surfaces genuine Windows regressions on main.
+# The `os` matrix is computed in the `changes` job from `github.event_name`.
 
 name: CI
 
@@ -24,6 +32,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Nightly run on main — the ONLY time the Windows leg of build-test runs.
+  # Keeping Windows off the per-PR / per-push matrix means its environmental
+  # flake (native DLL-init crash, libsql/native teardown races) can never red a
+  # PR; real Windows regressions surface here once a day instead, in one place.
+  schedule:
+    - cron: '0 7 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +49,13 @@ concurrency:
 permissions:
   contents: read
 
+# Turbo's first-run telemetry notice can make `turbo run` exit non-zero on a
+# fresh runner even when every task succeeded (one of the Windows build-flake
+# sources). Opt out everywhere so that class never appears.
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+
 jobs:
   changes:
     name: Detect changes
@@ -42,9 +63,23 @@ jobs:
     timeout-minutes: 1
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      # OS matrix for build-test: ubuntu-only on PR/push (Windows can't red a
+      # PR), ubuntu + windows on the nightly schedule.
+      os: ${{ steps.osmatrix.outputs.os }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - id: osmatrix
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo 'os=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
       - id: filter
+        # paths-filter needs a diff base; a `schedule` event has none. Skip it
+        # there — the nightly always runs build-test (gated on event_name below).
+        if: github.event_name != 'schedule'
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
           # `code` is true when ANY changed file is NOT in the docs/meta
@@ -89,7 +124,10 @@ jobs:
   build-test:
     name: Build & Test (${{ matrix.os }}, Node ${{ matrix.node-version }})
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Runs on a code PR/push (ubuntu legs — the required gate) and on the nightly
+    # schedule (ubuntu + windows legs). The Windows leg therefore never appears
+    # on a PR, so its environmental flake can't block a merge.
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'schedule'
     runs-on: ${{ matrix.os }}
     # Healthy runs are ~6-8m; the Windows wrapper's worst case (1 × 6m attempt
     # + kill + log flush) concludes well under 10m. 15m is the backstop for
@@ -99,7 +137,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # ubuntu-only on PR/push; ubuntu + windows on the nightly schedule
+        # (computed in the `changes` job).
+        os: ${{ fromJSON(needs.changes.outputs.os) }}
         # Active LTS lines only — Node 20 ("Iron") reached EOL April 2026.
         # Odd-numbered lines (21/23/25) are never LTS and are intentionally skipped.
         node-version: ['22', '24']
