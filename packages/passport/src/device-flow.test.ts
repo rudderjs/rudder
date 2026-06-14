@@ -27,19 +27,56 @@ describe('oauth_device_codes hashing + interval escalation (P9 + M4)', () => {
    *     test (lastPolledAt / interval / hash columns).
    */
   function makeFake(stored: Record<string, unknown> | null) {
-    const calls: Array<{ kind: 'where' | 'update' | 'create'; args: unknown[] }> = []
+    const calls: Array<{ kind: 'where' | 'update' | 'create' | 'updateAll'; args: unknown[] }> = []
+    type Pred = { col: string; op: string; val: unknown }
+    function matches(preds: Pred[]): boolean {
+      if (!stored) return false
+      return preds.every(({ col, op, val }) => {
+        const cell = stored[col]
+        if (op === '<=') return cell != null && new Date(cell as any).getTime() <= new Date(val as any).getTime()
+        if (op === 'IN') return new Set(val as unknown[]).has(cell)
+        return cell === val
+      })
+    }
+    function builder(): any {
+      const preds: Pred[] = []
+      const b: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op = hasOp ? opOrVal as string : '='
+          const val = hasOp ? maybeVal : opOrVal
+          preds.push({ col, op, val })
+          calls.push({ kind: 'where', args: hasOp ? [col, op, val] : [col, val] })
+          return b
+        },
+        first: async () => stored as any,
+        async updateAll(data: Record<string, unknown>) {
+          if (!matches(preds)) return 0
+          Object.assign(stored as object, data)
+          calls.push({ kind: 'updateAll', args: [data] })
+          return 1
+        },
+        async deleteAll() {
+          if (!matches(preds)) return 0
+          calls.push({ kind: 'update', args: [(stored as any).id, { __deleted: true }] })
+          return 1
+        },
+      }
+      return b
+    }
     class FakeDeviceCode {
       static get __calls() { return calls }
-      static where(col: string, val: unknown) {
-        calls.push({ kind: 'where', args: [col, val] })
-        return { first: async () => stored as any }
+      static where(col: string, opOrVal?: unknown, maybeVal?: unknown) {
+        return arguments.length === 3 ? builder().where(col, opOrVal, maybeVal) : builder().where(col, opOrVal)
       }
+      static query() { return builder() }
       static async create(data: Record<string, unknown>) {
         calls.push({ kind: 'create', args: [data] })
         return { id: 'D-NEW', ...data }
       }
       static async update(id: string, data: Record<string, unknown>) {
         calls.push({ kind: 'update', args: [id, data] })
+        if (stored) Object.assign(stored, data)
       }
       static async delete(id: string) {
         calls.push({ kind: 'update', args: [id, { __deleted: true }] })
@@ -333,11 +370,34 @@ describe('Passport.deviceMaxInterval — configurable cap on slow_down escalatio
 
   function makeFake(row: Record<string, unknown>): any {
     const calls: Array<{ kind: 'update'; data: Record<string, unknown> }> = []
+    type Pred = { col: string; op: string; val: unknown }
+    function matches(preds: Pred[]): boolean {
+      return preds.every(({ col, op, val }) => {
+        const cell = row[col]
+        if (op === '<=') return cell != null && new Date(cell as any).getTime() <= new Date(val as any).getTime()
+        return cell === val
+      })
+    }
+    function builder(): any {
+      const preds: Pred[] = []
+      const b: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          preds.push({ col, op: hasOp ? opOrVal as string : '=', val: hasOp ? maybeVal : opOrVal })
+          return b
+        },
+        first: async () => row as any,
+        async updateAll(data: Record<string, unknown>) { if (!matches(preds)) return 0; Object.assign(row, data); return 1 },
+        async deleteAll() { return matches(preds) ? 1 : 0 },
+      }
+      return b
+    }
     class Fake {
       static __calls = calls
-      static where(_col: string, _val: unknown) {
-        return { first: async () => row as any }
+      static where(col: string, opOrVal?: unknown, maybeVal?: unknown) {
+        return arguments.length === 3 ? builder().where(col, opOrVal, maybeVal) : builder().where(col, opOrVal)
       }
+      static query() { return builder() }
       static async update(_id: string, data: Record<string, unknown>) {
         calls.push({ kind: 'update', data })
       }
@@ -590,6 +650,74 @@ describe('pollDeviceCode — concurrent polling race', () => {
     assert.equal(refreshTokensCreated, 1, 'exactly one refresh token minted')
     assert.equal(row['__deleted'], true, 'device code row is consumed')
 
+    Passport.reset()
+  })
+
+  // Rate-limit race: two concurrent polls of a PENDING code that have both
+  // waited past the interval. The atomic conditional update on `lastPolledAt`
+  // must let exactly ONE advance the clock and proceed; the other matches 0
+  // rows and is told to slow_down. (Pre-fix, the rate check read a snapshot and
+  // wrote `lastPolledAt` unconditionally, so both concurrent polls passed.)
+  function makeRaceableRateDevice(row: Record<string, unknown>) {
+    function makeBuilder(initial: (r: Record<string, unknown>) => boolean): any {
+      let predicate = initial
+      const b: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op = hasOp ? opOrVal as string : '='
+          const val = hasOp ? maybeVal : opOrVal
+          const prev = predicate
+          predicate = (r) => {
+            if (!prev(r)) return false
+            const cell = r[col]
+            if (op === '<=') return cell != null && new Date(cell as any).getTime() <= new Date(val as any).getTime()
+            return cell === val
+          }
+          return b
+        },
+        first: async () => ({ ...row }), // clone — each concurrent poll gets its own snapshot
+        async updateAll(data: Record<string, unknown>) {
+          if (!predicate(row)) return 0
+          Object.assign(row, data) // atomically advance lastPolledAt — second caller now misses
+          return 1
+        },
+      }
+      return b
+    }
+    class FakeDeviceCode {
+      static where(col: string, opOrVal?: unknown, maybeVal?: unknown) {
+        return arguments.length === 3
+          ? makeBuilder(() => true).where(col, opOrVal, maybeVal)
+          : makeBuilder(() => true).where(col, opOrVal)
+      }
+      static query() { return makeBuilder(() => true) }
+      static async update(_id: string, data: Record<string, unknown>) { Object.assign(row, data) }
+    }
+    return FakeDeviceCode as unknown as Parameters<typeof Passport.useDeviceCodeModel>[0]
+  }
+
+  test('concurrent polls past the interval — only one proceeds, the other slow_downs', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientForDevice())
+    const row = {
+      id: 'D-RATE', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash: 'usrhash',
+      scopes: '[]', userId: null, approved: null, // pending → no token issuance
+      interval: 5,
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(Date.now() - 10_000), // 10s ago → both snapshots are "past the interval"
+    } as Record<string, unknown>
+    Passport.useDeviceCodeModel(makeRaceableRateDevice(row))
+
+    const results = await Promise.all([
+      pollDeviceCode({ grantType: 'urn:ietf:params:oauth:grant-type:device_code', deviceCode: 'plain-device', clientId: 'C-1' }),
+      pollDeviceCode({ grantType: 'urn:ietf:params:oauth:grant-type:device_code', deviceCode: 'plain-device', clientId: 'C-1' }),
+    ])
+
+    const statuses = results.map(r => r.status).sort()
+    assert.deepEqual(statuses, ['authorization_pending', 'slow_down'],
+      'the atomic rate gate must let exactly one poll through and throttle the other')
     Passport.reset()
   })
 })

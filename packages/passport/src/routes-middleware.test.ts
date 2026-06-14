@@ -166,24 +166,46 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
     // Stub Passport.deviceCodeModel so pollDeviceCode finds a row that
     // forces a slow_down response (lastPolledAt very recent → throttled).
     // The stored row carries `*Hash` columns + an `interval` (M4 + P9).
-    class FakeDeviceCode {
-      static where(_col: string, _val: unknown) {
-        return {
-          first: async () => ({
-            id:             'DC-1',
-            clientId:       'C-1',
-            userCodeHash:   'ucode-hash',
-            deviceCodeHash: 'dcode-hash',
-            scopes:         '[]',
-            userId:         null,
-            approved:       null,
-            interval:       5,
-            expiresAt:      new Date(Date.now() + 60_000),
-            lastPolledAt:   new Date(), // now → forces slow_down
-            createdAt:      new Date(),
-          }) as any,
-        }
+    const row: Record<string, unknown> = {
+      id:             'DC-1',
+      clientId:       'C-1',
+      userCodeHash:   'ucode-hash',
+      deviceCodeHash: 'dcode-hash',
+      scopes:         '[]',
+      userId:         null,
+      approved:       null,
+      interval:       5,
+      expiresAt:      new Date(Date.now() + 60_000),
+      lastPolledAt:   new Date(), // now → atomic rate gate matches 0 rows → slow_down
+      createdAt:      new Date(),
+    }
+    function devBuilder(): any {
+      const preds: Array<{ col: string; op: string; val: unknown }> = []
+      const b: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          preds.push({ col, op: hasOp ? opOrVal as string : '=', val: hasOp ? maybeVal : opOrVal })
+          return b
+        },
+        first: async () => row,
+        async updateAll(data: Record<string, unknown>) {
+          const ok = preds.every(({ col, op, val }) => {
+            const cell = row[col]
+            if (op === '<=') return cell != null && new Date(cell as any).getTime() <= new Date(val as any).getTime()
+            return cell === val
+          })
+          if (!ok) return 0
+          Object.assign(row, data)
+          return 1
+        },
       }
+      return b
+    }
+    class FakeDeviceCode {
+      static where(col: string, opOrVal?: unknown, maybeVal?: unknown) {
+        return arguments.length === 3 ? devBuilder().where(col, opOrVal, maybeVal) : devBuilder().where(col, opOrVal)
+      }
+      static query() { return devBuilder() }
       static async update(_id: string, _data: Record<string, unknown>) {}
     }
     Passport.useDeviceCodeModel(FakeDeviceCode as any)
