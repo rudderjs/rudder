@@ -63,7 +63,7 @@ export async function executeMakeSpec(
 ): Promise<MakeResult> {
   // Lazy-load node: built-ins — top-level imports crash Vite's browser bundle
   const { writeFile, mkdir } = await import('node:fs/promises')
-  const { resolve, dirname, sep } = await import('node:path')
+  const { resolve, dirname, sep, relative, isAbsolute } = await import('node:path')
 
   const className = spec.suffix && !name.endsWith(spec.suffix)
     ? `${name}${spec.suffix}`
@@ -77,7 +77,8 @@ export async function executeMakeSpec(
   // a `make:*` invocation (e.g. from a codegen pipeline with an untrusted name)
   // into an arbitrary file write. Nested names like `Admin/User` stay allowed.
   const baseDir = resolve(process.cwd(), spec.directory)
-  if (outPath !== baseDir && !outPath.startsWith(baseDir + sep)) {
+  const relFromBase = relative(baseDir, outPath)
+  if (relFromBase === '..' || relFromBase.startsWith(`..${sep}`) || isAbsolute(relFromBase)) {
     throw new Error(`Invalid name "${name}": the resolved path escapes ${spec.directory}.`)
   }
 
