@@ -1,5 +1,27 @@
 # @rudderjs/auth
 
+## 6.6.0
+
+### Minor Changes
+
+- 866a5dc: Implement "remember me" persistent login. The `remember` flag on `Auth.attempt(creds, true)` / `Auth.login(user, true)` was previously accepted but ignored — login never outlived the session cookie. It now works end to end:
+
+  - On `login(user, true)` the guard mints a 256-bit token, persists it on the user's `rememberToken` column, and (inside an HTTP request) queues a long-lived, HMAC-signed `rudderjs_remember` cookie that `AuthMiddleware` writes to the response.
+  - On a later request with no active session but a valid remember cookie, `AuthMiddleware` resolves the user by id, constant-time-compares the cookie token against the stored one, and re-establishes the session before the handler runs. The token is not rotated per request (it changes only on a fresh remember-login or logout), so multiple devices share it.
+  - `Auth.logout()` cycles the stored token — invalidating every outstanding remember cookie for that user — and deletes the cookie.
+  - `BaseAuthController.signIn` now reads a truthy `remember` field from the request body and threads it through.
+
+  The cookie is signed with `AUTH_SECRET` (required in production; a dev fallback with a one-time notice otherwise, matching `PasswordBroker`). The user model must expose a `rememberToken` column for persistence; apps without one keep working (remember-me is simply a no-op when the provider can't persist the token). New exports: `newRememberToken`, `encodeRememberCookie`, `decodeRememberCookie`, `rememberCookieAttrs`, and the `UserProvider.retrieveByToken` / `updateRememberToken` optional methods.
+
+### Patch Changes
+
+- ad9721d: Close login/password-reset user-enumeration timing oracles.
+
+  `SessionGuard.attempt()` returned immediately when no user matched the credentials, while a wrong password ran the deliberately-expensive bcrypt/argon verify — so an attacker could distinguish registered from unregistered identifiers by response latency. The no-user branch now runs a constant-cost dummy verify (`EloquentUserProvider.fakeValidateCredentials`) against a throwaway hash computed with the app's own hasher, equalizing the timing. `PasswordBroker.sendResetLink()` similarly performs the same early token-store round-trip and token-hash work on the unknown-email branch before returning, flattening the obvious early-return gap behind the already-constant `{ status: 'sent' }` response. (Queue the reset mail so the response doesn't block on delivery to fully close the remaining mail-send gap.)
+
+- Updated dependencies [ad9721d]
+  - @rudderjs/session@2.4.1
+
 ## 6.5.0
 
 ### Minor Changes

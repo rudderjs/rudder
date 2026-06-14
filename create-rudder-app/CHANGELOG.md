@@ -1,5 +1,11 @@
 # create-rudder-app
 
+## 1.10.1
+
+### Patch Changes
+
+- create-rudder@1.10.1
+
 ## 1.10.0
 
 ### Patch Changes
