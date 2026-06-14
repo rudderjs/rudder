@@ -233,6 +233,20 @@ describe('parseSignature', () => {
       assert.strictEqual(args[0]!.defaultValue, 'local')
       assert.strictEqual(args[0]!.description, 'Target environment')
     })
+
+    it('keeps the variadic flag and a clean name when a variadic carries a default', () => {
+      const { args } = parseSignature('cmd {files*=a,b}')
+      assert.deepStrictEqual(args, [
+        { name: 'files', required: false, variadic: true, defaultValue: 'a,b' },
+      ])
+    })
+
+    it('preserves a bare colon inside an argument default value', () => {
+      const { args } = parseSignature('cmd {host=db:5432}')
+      assert.strictEqual(args[0]!.name, 'host')
+      assert.strictEqual(args[0]!.defaultValue, 'db:5432')
+      assert.strictEqual(args[0]!.description, undefined)
+    })
   })
 
   describe('options', () => {
@@ -269,6 +283,14 @@ describe('parseSignature', () => {
       assert.strictEqual(opts[0]!.hasValue, true)
       assert.strictEqual(opts[0]!.defaultValue, 'default')
       assert.strictEqual(opts[0]!.description, 'Queue to dispatch on')
+    })
+
+    it('preserves a URL (with colons) in an option default value', () => {
+      const { opts } = parseSignature('serve {--url=http://localhost:3000}')
+      assert.strictEqual(opts[0]!.name, 'url')
+      assert.strictEqual(opts[0]!.hasValue, true)
+      assert.strictEqual(opts[0]!.defaultValue, 'http://localhost:3000')
+      assert.strictEqual(opts[0]!.description, undefined)
     })
 
     it('parses a mix of args and options', () => {
@@ -431,6 +453,17 @@ describe('Command', () => {
         console.log = originalLog
       }
     })
+
+    it('newLine(0) does not throw a RangeError', () => {
+      const cmd = new TestCommand()
+      const originalLog = console.log
+      console.log = () => {}
+      try {
+        assert.doesNotThrow(() => cmd.newLine(0))
+      } finally {
+        console.log = originalLog
+      }
+    })
   })
 
   describe('table()', () => {
@@ -536,5 +569,27 @@ describe('executeMakeSpec — file extension', () => {
     const res = await executeMakeSpec(spec, 'Widget', {})
     assert.equal(res.relPath, 'app/Things/Widget.tsx')
     assert.ok(fs.existsSync(path.join(root, 'app/Things/Widget.tsx')))
+  })
+
+  it('rejects a name that escapes the target directory', async () => {
+    const spec: MakeSpec = {
+      command: 'make:thing', description: '', label: 'Thing',
+      directory: 'app/Things', stub: (n) => `export class ${n} {}\n`,
+    }
+    await assert.rejects(
+      executeMakeSpec(spec, '../../../pwned', { force: true }),
+      /escapes/,
+    )
+    assert.ok(!fs.existsSync(path.resolve(root, '..', '..', '..', 'pwned.ts')))
+  })
+
+  it('allows a nested name that stays within the target directory', async () => {
+    const spec: MakeSpec = {
+      command: 'make:thing', description: '', label: 'Thing',
+      directory: 'app/Things', stub: () => `export class X {}\n`,
+    }
+    const res = await executeMakeSpec(spec, 'Admin/Widget', {})
+    assert.equal(res.relPath, 'app/Things/Admin/Widget.ts')
+    assert.ok(fs.existsSync(path.join(root, 'app/Things/Admin/Widget.ts')))
   })
 })

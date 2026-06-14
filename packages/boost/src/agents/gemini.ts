@@ -1,6 +1,7 @@
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent } from './types.js'
+import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
 
 export class GeminiAgent implements BoostAgent {
   name = 'gemini'
@@ -14,19 +15,12 @@ export class GeminiAgent implements BoostAgent {
   }
 
   async installGuidelines(cwd: string, content: string): Promise<void> {
-    writeFileSync(join(cwd, 'GEMINI.md'), content, 'utf-8')
+    writeGuidelineBlock(join(cwd, 'GEMINI.md'), content)
   }
 
   async installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void> {
-    const dir = join(cwd, '.gemini')
-    mkdirSync(dir, { recursive: true })
-
-    const configPath = join(dir, 'settings.json')
-    const config = {
-      mcpServers: {
-        'rudderjs-boost': { command: mcpCommand.command, args: mcpCommand.args },
-      },
-    }
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    // .gemini/settings.json is Gemini's primary settings file (theme, auth,
+    // model, …) — merge so only the mcpServers entry is touched.
+    mergeMcpServer(join(cwd, '.gemini', 'settings.json'), 'mcpServers', 'rudderjs-boost', mcpCommand)
   }
 }

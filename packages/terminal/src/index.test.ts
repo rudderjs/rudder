@@ -122,6 +122,19 @@ describe('resolveComponent()', () => {
     const c = await resolveComponent('admin.users', appRoot)
     assert.equal((c as () => unknown)(), 'nested')
   })
+
+  it('propagates an ENOENT thrown by the component\'s own module code (not masked as "not found")', async () => {
+    // The file exists, but its module-level code throws an ENOENT-coded error.
+    // That real failure must surface — not be swallowed and misreported as a
+    // missing component (which would hide the user's actual bug).
+    writeFixture('Boom.js',
+      "const e = new Error('ENOENT: no such file, open /missing/data.json'); e.code = 'ENOENT'; throw e\n",
+    )
+    await assert.rejects(
+      () => resolveComponent('boom', appRoot),
+      (e: Error) => /no such file/.test(e.message) && !/not found/.test(e.message),
+    )
+  })
 })
 
 describe('make:terminal spec', () => {

@@ -27,6 +27,15 @@ export async function executeDbQuery(cwd: string, query: string): Promise<string
     return 'Error: Only SELECT queries are allowed. The query must start with SELECT.'
   }
 
+  // Reject stacked statements. The primary `rudder db:query` path is
+  // statement-safe (better-sqlite3 compiles only the first statement, mysql2
+  // disables multipleStatements), but the prisma `db execute --stdin` fallback
+  // below runs the WHOLE script — so `SELECT 1; DROP TABLE users` would slip
+  // past the SELECT-prefix check and execute the write. A trailing `;` is fine.
+  if (trimmed.replace(/;\s*$/, '').includes(';')) {
+    return 'Error: Only a single SELECT statement is allowed (multiple statements are not permitted).'
+  }
+
   // `rudder db:query` prints `{ "rows": [...] }` on stdout (after any
   // dev-mode boot-log lines — hence the tolerant first-{...} scan).
   const result = await runCommand(cwd, 'db:query', [trimmed], 30_000)

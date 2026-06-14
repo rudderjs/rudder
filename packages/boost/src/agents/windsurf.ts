@@ -1,6 +1,7 @@
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent } from './types.js'
+import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
 
 export class WindsurfAgent implements BoostAgent {
   name = 'windsurf'
@@ -14,19 +15,10 @@ export class WindsurfAgent implements BoostAgent {
   }
 
   async installGuidelines(cwd: string, content: string): Promise<void> {
-    writeFileSync(join(cwd, '.windsurfrules'), content, 'utf-8')
+    writeGuidelineBlock(join(cwd, '.windsurfrules'), content)
   }
 
   async installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void> {
-    const dir = join(cwd, '.windsurf')
-    mkdirSync(dir, { recursive: true })
-
-    const configPath = join(dir, 'mcp.json')
-    const config = {
-      mcpServers: {
-        'rudderjs-boost': { command: mcpCommand.command, args: mcpCommand.args },
-      },
-    }
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    mergeMcpServer(join(cwd, '.windsurf', 'mcp.json'), 'mcpServers', 'rudderjs-boost', mcpCommand)
   }
 }

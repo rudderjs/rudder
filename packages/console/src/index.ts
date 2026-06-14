@@ -118,10 +118,14 @@ export function parseSignature(signature: string): ParsedSignature {
   const opts: CommandOptDef[] = []
 
   for (const [, block] of signature.matchAll(/\{([^}]+)\}/g)) {
-    // Split inline description: {user : The user ID} → token=`user`, description=`The user ID`
-    const colonIdx  = (block ?? '').indexOf(':')
-    const trimmed   = (colonIdx === -1 ? (block ?? '') : (block ?? '').slice(0, colonIdx)).trim()
-    const description = colonIdx === -1 ? undefined : (block ?? '').slice(colonIdx + 1).trim() || undefined
+    // Inline description uses a spaced ` : ` delimiter (Laravel convention):
+    //   {user : The user ID} → token=`user`, description=`The user ID`.
+    // A bare ":" must NOT split, so colons inside a default value survive —
+    // {--url=http://x}, {host=db:5432}, {at=08:30} keep their full default.
+    const raw0 = block ?? ''
+    const sepIdx = raw0.indexOf(' : ')
+    const trimmed   = (sepIdx === -1 ? raw0 : raw0.slice(0, sepIdx)).trim()
+    const description = sepIdx === -1 ? undefined : raw0.slice(sepIdx + 3).trim() || undefined
 
     if (trimmed.startsWith('--')) {
       // Option: {--force} {--name=} {--name=default} {--N|name=}
@@ -139,14 +143,17 @@ export function parseSignature(signature: string): ParsedSignature {
       if (description)  optDef.description  = description
       opts.push(optDef)
     } else {
-      // Argument: {user} {user?} {user=default} {user*}
-      const variadic = trimmed.endsWith('*')
-      const optional = trimmed.endsWith('?')
-      const raw      = trimmed.replace(/[?*]$/, '')
-      const eqIdx    = raw.indexOf('=')
+      // Argument: {user} {user?} {user=default} {user*} {files*=a,b}
+      // Strip the =default segment BEFORE testing the trailing ?/* marker, so a
+      // variadic/optional carrying a default keeps both its flag and a clean
+      // name ({files*=a,b} → variadic `files`, default `a,b` — not name `files*`).
+      const eqIdx    = trimmed.indexOf('=')
       const hasDefault = eqIdx !== -1
-      const argName    = hasDefault ? raw.slice(0, eqIdx) : raw
-      const defaultValue = hasDefault ? raw.slice(eqIdx + 1) || undefined : undefined
+      const head       = hasDefault ? trimmed.slice(0, eqIdx) : trimmed
+      const defaultValue = hasDefault ? trimmed.slice(eqIdx + 1) || undefined : undefined
+      const variadic = head.endsWith('*')
+      const optional = head.endsWith('?')
+      const argName  = head.replace(/[?*]$/, '')
       const argDef: CommandArgDef = { name: argName, required: !optional && !hasDefault && !variadic, variadic }
       if (defaultValue) argDef.defaultValue = defaultValue
       if (description)  argDef.description  = description
@@ -217,7 +224,7 @@ export abstract class Command {
   warn(message: string):    void { console.warn(ANSI.yellow(message)) }
   line(message = ''):       void { console.log(message)               }
   comment(message: string): void { console.log(ANSI.dim(message))     }
-  newLine(count = 1):       void { console.log('\n'.repeat(count - 1)) }
+  newLine(count = 1):       void { console.log('\n'.repeat(Math.max(0, count - 1))) }
 
   table(headers: string[], rows: string[][]): void {
     // Normalise ragged rows so every row has the same column count as headers

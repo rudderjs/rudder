@@ -43,21 +43,28 @@ export async function resolveComponent(
     const fullPath = path.join(appRoot, rel + ext)
     try {
       await fs.access(fullPath)
-      // Node's ESM loader requires file:// URLs for absolute paths on Windows.
-      const mod = await import(/* @vite-ignore */ pathToFileURL(fullPath).href) as {
-        default?: ComponentType<Record<string, unknown>>
-      }
-      if (!mod.default) {
-        throw new Error(
-          `Terminal component "${id}" (${toPosix(fullPath)}) has no default export. ` +
-          `Export a React component as the default export.`,
-        )
-      }
-      return mod.default
     } catch (e) {
+      // Only "no file for this extension" should advance to the next candidate.
+      // Any other access error (EACCES, etc.) is real — surface it.
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue
       throw e
     }
+
+    // The file exists. From here, errors must propagate unchanged — including
+    // an ENOENT thrown by the component's OWN module-level code (e.g. a missing
+    // file it reads at import time). Catching it here would misreport a real
+    // failure as "component not found", hiding the user's actual bug.
+    // Node's ESM loader requires file:// URLs for absolute paths on Windows.
+    const mod = await import(/* @vite-ignore */ pathToFileURL(fullPath).href) as {
+      default?: ComponentType<Record<string, unknown>>
+    }
+    if (!mod.default) {
+      throw new Error(
+        `Terminal component "${id}" (${toPosix(fullPath)}) has no default export. ` +
+        `Export a React component as the default export.`,
+      )
+    }
+    return mod.default
   }
 
   throw new Error(

@@ -1,6 +1,7 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BoostAgent } from './types.js'
+import { writeGuidelineBlock, mergeMcpServer } from './merge.js'
 
 export class CodexAgent implements BoostAgent {
   name = 'codex'
@@ -14,16 +15,12 @@ export class CodexAgent implements BoostAgent {
   }
 
   async installGuidelines(cwd: string, content: string): Promise<void> {
-    writeFileSync(join(cwd, 'AGENTS.md'), content, 'utf-8')
+    writeGuidelineBlock(join(cwd, 'AGENTS.md'), content)
   }
 
   async installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void> {
-    // Codex uses the same .mcp.json format
-    const config = {
-      mcpServers: {
-        'rudderjs-boost': mcpCommand,
-      },
-    }
-    writeFileSync(join(cwd, '.mcp.json'), JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    // Codex shares the .mcp.json format (and file) with Claude Code — merging
+    // keeps both servers when a project enables both agents.
+    mergeMcpServer(join(cwd, '.mcp.json'), 'mcpServers', 'rudderjs-boost', mcpCommand)
   }
 }
