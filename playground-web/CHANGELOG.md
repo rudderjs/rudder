@@ -1,5 +1,18 @@
 # rudderjs-playground-web
 
+## 0.0.114
+
+### Patch Changes
+
+- Updated dependencies [b043a12]
+- Updated dependencies [b043a12]
+- Updated dependencies [b043a12]
+- Updated dependencies [b043a12]
+  - @rudderjs/horizon@6.2.2
+  - @rudderjs/core@1.13.0
+  - @rudderjs/pulse@6.3.2
+  - @rudderjs/telescope@15.2.2
+
 ## 0.0.113
 
 ### Patch Changes
