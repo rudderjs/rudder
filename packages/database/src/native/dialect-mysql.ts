@@ -142,6 +142,12 @@ export class MysqlDialect implements Dialect {
     return base
   }
 
+  // MySQL requires a LIMIT before OFFSET and rejects a negative one, so it uses
+  // the documented max-rows sentinel (2^64-1) for an offset without a limit.
+  offsetWithoutLimitClause(): string {
+    return 'LIMIT 18446744073709551615'
+  }
+
   // MySQL has no ON CONFLICT target — it keys off whatever unique index the row
   // collides with, so `uniqueBy` is ignored. `VALUES(col)` references the would-be
   // inserted value (deprecated in 8.0.20+ but still supported and the widely
@@ -162,16 +168,20 @@ export class MysqlDialect implements Dialect {
       // rejects an FK whose signedness differs from the referenced column.
       return 'bigint AUTO_INCREMENT PRIMARY KEY'
     }
+    // MySQL supports an UNSIGNED modifier on the numeric types (it follows the
+    // type, after any precision). `unsigned()` / `foreignId()` / `morphs()` set
+    // the flag; the signed auto-increment PK above is excluded on purpose.
+    const u = column.unsigned ? ' unsigned' : ''
     switch (column.type) {
       // A non-auto `increments` column is defensive (Blueprint always sets
       // autoIncrement on increments) — fall back to a plain int.
-      case 'increments': return 'int'
-      case 'integer':    return 'int'
-      case 'bigInteger': return 'bigint'
+      case 'increments': return `int${u}`
+      case 'integer':    return `int${u}`
+      case 'bigInteger': return `bigint${u}`
       // MySQL has the full small-integer family natively.
-      case 'tinyInteger':   return 'tinyint'
-      case 'smallInteger':  return 'smallint'
-      case 'mediumInteger': return 'mediumint'
+      case 'tinyInteger':   return `tinyint${u}`
+      case 'smallInteger':  return `smallint${u}`
+      case 'mediumInteger': return `mediumint${u}`
       // `string` carries a length (Blueprint defaults it to 255); MySQL honours it.
       case 'string':     return `varchar(${column.length ?? 255})`
       case 'char':       return `char(${column.length ?? 255})`
@@ -193,9 +203,9 @@ export class MysqlDialect implements Dialect {
       // MySQL has no native UUID/ULID type — store as fixed-width char.
       case 'uuid':       return 'char(36)'
       case 'ulid':       return 'char(26)'
-      case 'decimal':    return `decimal(${column.precision ?? 8}, ${column.scale ?? 2})`
-      case 'float':      return 'double'
-      case 'double':     return 'double'
+      case 'decimal':    return `decimal(${column.precision ?? 8}, ${column.scale ?? 2})${u}`
+      case 'float':      return `double${u}`
+      case 'double':     return `double${u}`
       case 'binary':     return 'blob'
       // MySQL has both enum and set natively.
       case 'enum':       return `enum(${quoteValueList(column.enumValues ?? [])})`

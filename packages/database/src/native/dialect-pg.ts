@@ -145,6 +145,11 @@ export class PgDialect implements Dialect {
     return base
   }
 
+  // Postgres accepts a bare `OFFSET n` with no LIMIT (and rejects a negative one).
+  offsetWithoutLimitClause(): string {
+    return ''
+  }
+
   // Postgres shares SQLite's `ON CONFLICT (target) DO UPDATE`/`DO NOTHING` form,
   // referencing the rejected row via the `excluded` pseudo-table.
   upsertClause(uniqueBy: readonly string[], update: readonly string[]): string {

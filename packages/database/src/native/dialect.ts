@@ -226,6 +226,19 @@ export interface Dialect {
    * unconditionally.
    */
   lockSql(mode: 'update' | 'shared', opts?: LockOptions): string
+
+  /**
+   * The LIMIT clause to emit when a query has an OFFSET but no LIMIT, returned
+   * WITHOUT a leading space (`''` when none is needed). Dialects disagree:
+   *
+   * - SQLite: `'LIMIT -1'` — SQLite requires a LIMIT before OFFSET, and `-1`
+   *   means unbounded.
+   * - Postgres: `''` — a bare `OFFSET n` is valid; a negative LIMIT is an error.
+   * - MySQL: `'LIMIT 18446744073709551615'` — MySQL also requires a LIMIT before
+   *   OFFSET and rejects a negative one, so it uses the documented max-rows
+   *   sentinel (2^64-1).
+   */
+  offsetWithoutLimitClause(): string
 }
 
 // Strict identifier allowlist. Anything outside it is rejected rather than
@@ -414,6 +427,11 @@ export class SqliteDialect implements Dialect {
   // there is never a locked row to skip or fail on.
   lockSql(_mode: 'update' | 'shared', _opts?: LockOptions): string {
     return ''
+  }
+
+  // SQLite requires a LIMIT before OFFSET; -1 means unbounded.
+  offsetWithoutLimitClause(): string {
+    return 'LIMIT -1'
   }
 
   // SQLite + Postgres share the ON CONFLICT (target) DO UPDATE / DO NOTHING form,

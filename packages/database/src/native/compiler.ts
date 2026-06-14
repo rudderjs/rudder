@@ -332,7 +332,11 @@ function compileComparison(lhs: string, operator: WhereOperator, value: unknown,
       // `x IN ()` is a syntax error in SQLite; emit the equivalent constant.
       return operator === 'IN' ? '1 = 0' : '1 = 1'
     }
-    const list = arr.map(v => b.add(v)).join(', ')
+    // Splice raw Expression elements verbatim (mirrors the scalar branch above);
+    // everything else binds positionally. JSON-boolean comparisons on MySQL feed
+    // `raw('true')`/`raw('false')` through here, and `whereIn(col, [raw(...)])` is
+    // a public-API form that must not bind the Expression object as a parameter.
+    const list = arr.map(v => v instanceof Expression ? v.getValue() : b.add(v)).join(', ')
     return `${lhs} ${operator} (${list})`
   }
 
@@ -622,9 +626,13 @@ export function compileSelect(
   if (limit !== null && limit !== undefined) sql += ` LIMIT ${asInt(limit)}`
 
   if (state.offsetN !== null) {
-    // SQLite requires a LIMIT before OFFSET; supply -1 (unbounded) when the
-    // caller set an offset without a limit.
-    if (limit === null || limit === undefined) sql += ` LIMIT -1`
+    // An OFFSET without a LIMIT needs a dialect-specific LIMIT clause: SQLite
+    // and MySQL require a LIMIT before OFFSET (and reject `LIMIT -1` / negative
+    // limits respectively), Postgres accepts a bare OFFSET.
+    if (limit === null || limit === undefined) {
+      const noLimit = dialect.offsetWithoutLimitClause()
+      if (noLimit) sql += ` ${noLimit}`
+    }
     sql += ` OFFSET ${asInt(state.offsetN)}`
   }
 
@@ -1108,7 +1116,8 @@ function compileClauseOn(table: string, clause: WhereClause, dialect: Dialect, b
   if (operator === 'IN' || operator === 'NOT IN') {
     const arr = Array.isArray(value) ? value : [value]
     if (arr.length === 0) return operator === 'IN' ? '1 = 0' : '1 = 1'
-    const list = arr.map(v => b.add(v)).join(', ')
+    // Splice raw Expression elements verbatim; everything else binds positionally.
+    const list = arr.map(v => v instanceof Expression ? v.getValue() : b.add(v)).join(', ')
     return `${col} ${operator} (${list})`
   }
   if (value === null && (operator === '=' || operator === '!=')) {
