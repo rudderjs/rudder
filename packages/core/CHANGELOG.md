@@ -1,5 +1,11 @@
 # @rudderjs/core
 
+## 1.13.0
+
+### Minor Changes
+
+- b043a12: `setExceptionReporter()` now returns the previously installed reporter. This lets a wrapper chain to the prior reporter correctly. Capturing `report` instead forwards to whatever the current reporter is (the wrapper itself), which re-enters infinitely. Existing callers that ignore the return value are unaffected.
+
 ## 1.12.4
 
 ### Patch Changes
