@@ -1,6 +1,7 @@
 import type { MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
 import { verifyToken } from '../token.js'
 import { Passport } from '../Passport.js'
+import { accessTokenHelpers } from '../models/helpers.js'
 import type { AccessToken } from '../models/AccessToken.js'
 
 /**
@@ -66,7 +67,12 @@ async function authenticateBearer(req: AppRequest): Promise<BearerAuthOutcome> {
 
   const raw = req.raw as RawAuthBag
   raw.__passport_token = token
-  raw.__passport_scopes = payload.scopes
+  // Enforce scopes from the LIVE DB row, not the JWT claim. The row is the same
+  // mutable authority `revoked` lives on, so narrowing a token's scopes there
+  // (operator action) takes effect on the next request instead of being inert
+  // until the JWT naturally expires. For a normally-issued token the two are
+  // identical (issue-tokens writes the same scopes to both).
+  raw.__passport_scopes = accessTokenHelpers.getScopes(token)
   raw.__passport_user_id = payload.sub
 
   if (payload.sub) {
