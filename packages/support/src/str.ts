@@ -290,6 +290,11 @@ export class Str {
       wolf: 'wolves', half: 'halves', self: 'selves', elf: 'elves',
       shelf: 'shelves', loaf: 'loaves', potato: 'potatoes', tomato: 'tomatoes',
       echo: 'echoes', hero: 'heroes', veto: 'vetoes',
+      // -f / -fe words that take -ves. English has no rule that separates these
+      // from -f/-fe words that take a plain -s (chef, roof, belief, chief,
+      // proof, safe, giraffe, cliff), so they must be enumerated.
+      calf: 'calves', thief: 'thieves', wife: 'wives', scarf: 'scarves',
+      hoof: 'hooves', dwarf: 'dwarves',
     }
     if (lower in irregulars) {
       const p = irregulars[lower]!
@@ -306,8 +311,8 @@ export class Str {
     // -oes words (potato, tomato, echo, hero, veto) are in irregulars above.
     // Loanwords and modern -o words (piano, photo, radio, solo) pluralise with -s.
     // Removed broad /[^aeiou]o/ → +es rule to prevent piano → pianoes.
-    if (/(?:f)$/i.test(value)) return value.slice(0, -1) + 'ves'
-    if (/(?:fe)$/i.test(value)) return value.slice(0, -2) + 'ves'
+    // -f/-fe → -ves is NOT a rule: the genuine -ves words are enumerated in
+    // irregulars above; everything else (chef, roof, belief, chief, safe) is -s.
     return value + 's'
   }
 
@@ -326,6 +331,11 @@ export class Str {
       wolves: 'wolf', halves: 'half', selves: 'self', elves: 'elf',
       shelves: 'shelf', loaves: 'loaf', potatoes: 'potato', tomatoes: 'tomato',
       echoes: 'echo', heroes: 'hero', vetoes: 'veto',
+      // -ves reverses whose stem ends in a vowel before "ves" (thieves, wives,
+      // hooves) are NOT caught by the /([^aeiou])ves$/ rule below, so list them
+      // explicitly alongside their consonant-stem siblings for symmetry.
+      calves: 'calf', thieves: 'thief', wives: 'wife', scarves: 'scarf',
+      hooves: 'hoof', dwarves: 'dwarf',
     }
     if (lower in irregulars) return irregulars[lower]!
 
@@ -336,7 +346,8 @@ export class Str {
     if (/ies$/i.test(value)) return value.slice(0, -3) + 'y'
     if (/([^aeiou])ves$/i.test(value)) return value.slice(0, -3) + 'f'
     if (/(?:s|x|z|ch|sh)es$/i.test(value)) return value.slice(0, -2)
-    if (/oes$/i.test(value)) return value.slice(0, -2)
+    // No broad /oes$/ → -2 rule: the real -oes words (potatoes, heroes, echoes)
+    // are in irregulars; a bare rule wrongly turned shoes → sho, toes → to.
     if (/s$/i.test(value) && !/ss$/i.test(value)) return value.slice(0, -1)
     return value
   }

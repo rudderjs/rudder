@@ -5,7 +5,6 @@ import type { CacheAdapter, Lock } from '@rudderjs/cache'
 // ─── Scheduled Task ────────────────────────────────────────
 
 export class ScheduledTask {
-  private readonly _id = Math.random().toString(36).slice(2, 10)
   private _cron        = '* * * * *'
   private _description = ''
   private _timezone?:  string
@@ -17,7 +16,6 @@ export class ScheduledTask {
   private _onFailureFn?: (error: unknown) => void | Promise<void>
   private _withoutOverlapping   = false
   private _overlapExpiresAt     = 1440 // minutes (24h default)
-  private _overlapKey?:         string
   private _evenInMaintenance    = false
   private _oneServer            = false
 
@@ -111,7 +109,6 @@ export class ScheduledTask {
   withoutOverlapping(expiresAt = 1440): this {
     this._withoutOverlapping = true
     this._overlapExpiresAt   = expiresAt
-    this._overlapKey         = `rudderjs:schedule:overlap:${this._description || `${this._cron}:${this._id}`}`
     return this
   }
 
@@ -135,7 +132,11 @@ export class ScheduledTask {
   getOnFailureFn(): ((error: unknown) => void | Promise<void>) | undefined { return this._onFailureFn }
   isWithoutOverlapping(): boolean { return this._withoutOverlapping }
   getOverlapExpiresAt(): number   { return this._overlapExpiresAt }
-  getOverlapKey(): string         { return this._overlapKey ?? `rudderjs:schedule:overlap:${this._cron}` }
+  // Computed lazily (not snapshotted in `withoutOverlapping()`) so the key is
+  // stable regardless of builder-call order and never embeds a per-process
+  // random id — a random id would give each server a different lock key and
+  // silently defeat cross-server overlap/onOneServer mutual exclusion.
+  getOverlapKey(): string         { return `rudderjs:schedule:overlap:${this._description || this._cron}` }
   isEvenInMaintenanceMode(): boolean { return this._evenInMaintenance }
   isOnOneServer(): boolean        { return this._oneServer }
 
@@ -245,12 +246,15 @@ export async function _executeTask(task: ScheduledTask): Promise<void> {
     }
   }
 
-  // ── before hook ────────────────────────────────────
-  if (task.getBeforeFn()) await task.getBeforeFn()!()
-
-  process.stdout.write(`[Schedule] Running "${label}" ... `)
-
   try {
+    // The before hook runs INSIDE the try so a throw here still reaches the
+    // finally that releases the overlap lock. Otherwise a failing before hook
+    // leaks the lock for its full TTL (24h default) and every subsequent run
+    // is skipped as "already running". A failed before hook also skips the
+    // callback (jumps to catch) — a failed precondition should not run the task.
+    if (task.getBeforeFn()) await task.getBeforeFn()!()
+
+    process.stdout.write(`[Schedule] Running "${label}" ... `)
     await task.getCallback()()
     console.log('✔')
 
@@ -301,8 +305,15 @@ export class ScheduleProvider extends ServiceProvider {
         for (const task of tasks) {
           if (!task.isDue()) continue
           if (down && !task.isEvenInMaintenanceMode()) continue
-          await _executeTask(task)
-          ran++
+          // Guard each task so a throw escaping _executeTask (e.g. a failing
+          // after-hook or lock release) cannot abort the whole batch and skip
+          // every remaining due task that minute.
+          try {
+            await _executeTask(task)
+            ran++
+          } catch (err) {
+            console.error(`[Schedule] Task "${task.getDescription() || task.getCron()}" failed:`, err)
+          }
         }
 
         if (ran === 0) console.log('[Schedule] No tasks due.')

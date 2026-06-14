@@ -1200,6 +1200,41 @@ describe('Str.plural()', () => {
     assert.strictEqual(Str.plural('echo'), 'echoes')
     assert.strictEqual(Str.plural('hero'), 'heroes')
   })
+  it('does not -ves regular -f / -fe words', () => {
+    assert.strictEqual(Str.plural('chef'), 'chefs')
+    assert.strictEqual(Str.plural('roof'), 'roofs')
+    assert.strictEqual(Str.plural('belief'), 'beliefs')
+    assert.strictEqual(Str.plural('chief'), 'chiefs')
+    assert.strictEqual(Str.plural('proof'), 'proofs')
+    assert.strictEqual(Str.plural('safe'), 'safes')
+    assert.strictEqual(Str.plural('giraffe'), 'giraffes')
+  })
+  it('pluralises the genuine -ves exceptions via irregulars', () => {
+    assert.strictEqual(Str.plural('calf'), 'calves')
+    assert.strictEqual(Str.plural('thief'), 'thieves')
+    assert.strictEqual(Str.plural('wife'), 'wives')
+    assert.strictEqual(Str.plural('scarf'), 'scarves')
+    assert.strictEqual(Str.plural('hoof'), 'hooves')
+    assert.strictEqual(Str.plural('leaf'), 'leaves')
+  })
+})
+
+describe('Str.plural() / Str.singular() round-trips', () => {
+  it('does not truncate -oe words on singularise (shoes/toes/foes)', () => {
+    assert.strictEqual(Str.singular('shoes'), 'shoe')
+    assert.strictEqual(Str.singular('toes'), 'toe')
+    assert.strictEqual(Str.singular('foes'), 'foe')
+  })
+  it('round-trips the -ves exceptions whose stem ends in a vowel', () => {
+    assert.strictEqual(Str.singular('thieves'), 'thief')
+    assert.strictEqual(Str.singular('wives'), 'wife')
+    assert.strictEqual(Str.singular('hooves'), 'hoof')
+  })
+  it('round-trips regular -f / -fe words', () => {
+    for (const w of ['chef', 'roof', 'belief', 'chief', 'proof']) {
+      assert.strictEqual(Str.singular(Str.plural(w)), w, `${w} should round-trip`)
+    }
+  })
 })
 
 // ─── Num ───────────────────────────────────────────────────

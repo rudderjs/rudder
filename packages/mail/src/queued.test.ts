@@ -1,8 +1,9 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { QueueRegistry, type QueueAdapter, type DispatchOptions } from '@rudderjs/queue'
-import { MailRegistry, type MailAdapter, type SendOptions } from './index.js'
+import { Mail, MailRegistry, type MailAdapter, type SendOptions } from './index.js'
 import { Mailable } from './mailable.js'
+import { FakeMailAdapter } from './fake.js'
 import { dispatchMailJob } from './queued.js'
 
 class TestMail extends Mailable {
@@ -101,5 +102,32 @@ describe('dispatchMailJob()', () => {
       () => dispatchMailJob(new TestMail(), opts),
       /No queue adapter registered/,
     )
+  })
+
+  it('records to the active mail fake instead of dispatching a real job', async () => {
+    const fake = FakeMailAdapter.fake() // installs itself on MailRegistry
+    try {
+      // No queue adapter is registered for this test — the fake path must not
+      // touch QueueRegistry at all.
+      QueueRegistry.reset()
+      await dispatchMailJob(new TestMail(), opts)
+      assert.equal(queue.dispatches.length, 0, 'must NOT dispatch a real queue job under a fake')
+      fake.assertQueued(TestMail)
+      assert.equal(fake.queued().length, 1)
+    } finally {
+      fake.restore()
+    }
+  })
+
+  it('Mail.to(...).queue() is visible to fake.assertQueued() end-to-end', async () => {
+    const fake = FakeMailAdapter.fake()
+    try {
+      QueueRegistry.reset() // queue package not required when faked
+      await Mail.to('x@example.com').queue(new TestMail())
+      fake.assertQueued(TestMail)
+      fake.assertNothingSent()
+    } finally {
+      fake.restore()
+    }
   })
 })

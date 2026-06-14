@@ -392,6 +392,20 @@ async function onMessage(
           })
           return
         }
+        // Presence auth MUST return member info (an object). A truthy
+        // non-object (e.g. `true`, valid for a *private* channel) would pass
+        // the `!result` gate above but never register a member — the socket
+        // would receive broadcasts yet stay invisible in the presence roster
+        // (no presence.joined/left, absent from presence.members). Fail closed.
+        if (isPresence && (typeof result !== 'object' || result === null)) {
+          send(ws, { type: 'error', channel, message: 'Unauthorized' })
+          broadcastObservers.emit({
+            kind: 'subscribe', connectionId: id, channel, channelType,
+            allowed: false, authMs,
+            reason: 'Presence auth must return member info (an object)',
+          })
+          return
+        }
         if (isPresence && typeof result === 'object') {
           if (!state.presence.has(channel)) state.presence.set(channel, new Map())
           state.presence.get(channel)?.set(id, result)
