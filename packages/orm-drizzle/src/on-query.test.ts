@@ -104,7 +104,9 @@ describe('Drizzle onQuery — transaction-scoped queries report', () => {
   const client: Client = createClient({ url: 'file::memory:?cache=shared' })
   const db = drizzleLibsql(client)
 
-  after(() => { client.close() })
+  // Best-effort: libsql's native close() can throw intermittently on Windows (a
+  // handle race), which would fail the whole file even though every test passed.
+  after(() => { try { client.close() } catch { /* best effort */ } })
 
   it('a top-level listener sees queries run inside transaction()', async () => {
     await db.run(sql`DROP TABLE IF EXISTS users`)

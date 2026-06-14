@@ -50,7 +50,11 @@ class Ledger extends Model {
 const client: Client = createClient({ url: 'file::memory:?cache=shared' })
 const db = drizzle(client)
 
-after(() => { client.close() })
+// Best-effort: libsql's native close() can throw intermittently on Windows (a
+// handle race on the shared in-memory DB). A throw in this `after` hook would
+// mark the whole FILE failed (node:test reports it at line 1:1) even though
+// every test passed — the runner is exiting anyway, so closing is best-effort.
+after(() => { try { client.close() } catch { /* best effort */ } })
 
 beforeEach(async () => {
   await db.run(sql`DROP TABLE IF EXISTS accounts`)
