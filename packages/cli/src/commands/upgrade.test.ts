@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { _internal, collectPeerMismatches, collectChangelogs, parseChangelog } from './upgrade.js'
+import {
+  _internal, collectPeerMismatches, collectChangelogs, parseChangelog,
+  parseYamlOverrides, replaceYamlOverride, collectOverridePins, buildOverridePlan,
+} from './upgrade.js'
 
 const {
   parseVersion,
@@ -16,6 +19,9 @@ const {
   diffPeerRange,
   readConsumerPeers,
   extractHeadline,
+  findOverrideRoot,
+  rangePrefix,
+  applyJsonOverrides,
 } = _internal
 
 // ── shapeOfRange ──────────────────────────────────────────────
@@ -549,6 +555,190 @@ describe('upgrade — collectChangelogs', () => {
     ]
     const map = await collectChangelogs(rows, fetcher)
     assert.equal(map.size, 0)
+  })
+})
+
+// ── Override pins (issue #1089) ───────────────────────────────
+
+describe('upgrade — parseYamlOverrides', () => {
+  const yaml = [
+    'packages:',
+    "  - 'packages/*'",
+    '',
+    'overrides:',
+    "  '@rudderjs/core': 1.12.2",
+    "  '@rudderjs/orm': ^1.20.0   # pinned train",
+    '  "@rudderjs/contracts": "1.17.0"',
+    '  lodash: 4.17.21',
+    '',
+    'catalog:',
+    "  '@rudderjs/core': 9.9.9",   // outside overrides — must be ignored
+  ].join('\n')
+
+  it('extracts @rudderjs/* pins from the overrides block only', () => {
+    const pins = new Map(parseYamlOverrides(yaml))
+    assert.equal(pins.get('@rudderjs/core'), '1.12.2')
+    assert.equal(pins.get('@rudderjs/orm'), '^1.20.0')
+    assert.equal(pins.get('@rudderjs/contracts'), '1.17.0')
+  })
+
+  it('ignores non-rudder pins and entries outside the overrides block', () => {
+    const pins = new Map(parseYamlOverrides(yaml))
+    assert.ok(!pins.has('lodash'))
+    // The catalog block also lists @rudderjs/core, but at a different version —
+    // confirm we read the overrides value, not the catalog one.
+    assert.equal(pins.get('@rudderjs/core'), '1.12.2')
+    assert.equal(pins.size, 3)
+  })
+
+  it('returns nothing when there is no overrides block', () => {
+    assert.equal(parseYamlOverrides('packages:\n  - "packages/*"\n').length, 0)
+  })
+})
+
+describe('upgrade — replaceYamlOverride', () => {
+  const yaml = [
+    'overrides:',
+    "  '@rudderjs/core': 1.12.2   # keep me",
+    "  '@rudderjs/orm': ^1.20.0",
+  ].join('\n')
+
+  it('rewrites the version, preserving quotes, operator and trailing comment', () => {
+    const r1 = replaceYamlOverride(yaml, '@rudderjs/core', '1.12.4')
+    assert.ok(r1.replaced)
+    assert.match(r1.text, /'@rudderjs\/core': 1\.12\.4 {3}# keep me/)
+
+    const r2 = replaceYamlOverride(r1.text, '@rudderjs/orm', '1.21.2')
+    assert.ok(r2.replaced)
+    assert.match(r2.text, /'@rudderjs\/orm': \^1\.21\.2/)   // caret preserved
+  })
+
+  it('reports replaced=false when the pin is not present', () => {
+    const r = replaceYamlOverride(yaml, '@rudderjs/missing', '1.0.0')
+    assert.equal(r.replaced, false)
+    assert.equal(r.text, yaml)
+  })
+
+  it('does not touch an @rudderjs entry outside the overrides block', () => {
+    const withCatalog = `${yaml}\n\ncatalog:\n  '@rudderjs/core': 1.12.2\n`
+    const r = replaceYamlOverride(withCatalog, '@rudderjs/core', '1.12.4')
+    assert.ok(r.replaced)
+    assert.match(r.text, /catalog:\n {2}'@rudderjs\/core': 1\.12\.2/)   // catalog untouched
+  })
+})
+
+describe('upgrade — collectOverridePins', () => {
+  it('reads pnpm.overrides, resolutions, and the workspace yaml', () => {
+    const pkg = {
+      pnpm: { overrides: { '@rudderjs/core': '1.12.2', 'lodash': '4' } },
+      resolutions: { '@rudderjs/orm': '1.20.0' },
+    }
+    const yaml = "overrides:\n  '@rudderjs/router': 1.9.0\n"
+    const pins = collectOverridePins(pkg, yaml)
+    const byName = new Map(pins.map(p => [p.name, p]))
+    assert.equal(byName.get('@rudderjs/core')?.source, 'pnpm.overrides')
+    assert.equal(byName.get('@rudderjs/orm')?.source, 'resolutions')
+    assert.equal(byName.get('@rudderjs/router')?.source, 'pnpm-workspace.yaml')
+    assert.ok(!byName.has('lodash'))
+  })
+
+  it('handles missing override sources', () => {
+    assert.deepEqual(collectOverridePins({}, null), [])
+  })
+})
+
+describe('upgrade — buildOverridePlan', () => {
+  const latest: Record<string, string> = {
+    '@rudderjs/core': '1.12.4',
+    '@rudderjs/orm': '1.21.2',
+    '@rudderjs/contracts': '1.17.0',   // already current
+  }
+  const fetch = async (n: string) => latest[n] ?? null
+
+  it('plans bumps and preserves the operator prefix of each pin', async () => {
+    const pins = [
+      { name: '@rudderjs/core', value: '1.12.2', source: 'pnpm-workspace.yaml' as const },
+      { name: '@rudderjs/orm', value: '^1.20.0', source: 'pnpm-workspace.yaml' as const },
+    ]
+    const { rows } = await buildOverridePlan(pins, 'latest', fetch)
+    const byName = new Map(rows.map(r => [r.name, r]))
+    assert.equal(byName.get('@rudderjs/core')?.newValue, '1.12.4')    // exact stays exact
+    assert.equal(byName.get('@rudderjs/orm')?.newValue, '^1.21.2')    // caret preserved
+  })
+
+  it('skips pins already at latest', async () => {
+    const { rows } = await buildOverridePlan(
+      [{ name: '@rudderjs/contracts', value: '1.17.0', source: 'resolutions' as const }],
+      'latest', fetch,
+    )
+    assert.equal(rows.length, 0)
+  })
+
+  it('caps by mode (patch stays within the minor)', async () => {
+    const { rows } = await buildOverridePlan(
+      [{ name: '@rudderjs/orm', value: '1.20.0', source: 'resolutions' as const }],
+      'patch', fetch,
+    )
+    // latest 1.21.2 is a different minor → patch mode yields no bump
+    assert.equal(rows.length, 0)
+  })
+
+  it('records a skip when the registry is unreachable', async () => {
+    const { rows, skipped } = await buildOverridePlan(
+      [{ name: '@rudderjs/ghost', value: '1.0.0', source: 'resolutions' as const }],
+      'latest', async () => null,
+    )
+    assert.equal(rows.length, 0)
+    assert.equal(skipped.length, 1)
+    assert.match(skipped[0]!, /@rudderjs\/ghost/)
+  })
+})
+
+describe('upgrade — rangePrefix', () => {
+  it('extracts the operator or empty for an exact pin', () => {
+    assert.equal(rangePrefix('1.2.3'), '')
+    assert.equal(rangePrefix('^1.2.3'), '^')
+    assert.equal(rangePrefix('~1.2.3'), '~')
+  })
+})
+
+describe('upgrade — applyJsonOverrides', () => {
+  it('mutates pnpm.overrides and resolutions in place, only existing keys', () => {
+    const pkg: Record<string, unknown> = {
+      pnpm: { overrides: { '@rudderjs/core': '1.12.2' } },
+      resolutions: { '@rudderjs/orm': '1.20.0' },
+    }
+    applyJsonOverrides(pkg, [
+      { name: '@rudderjs/core', source: 'pnpm.overrides', current: { major: 1, minor: 12, patch: 2 }, target: { major: 1, minor: 12, patch: 4 }, oldValue: '1.12.2', newValue: '1.12.4' },
+      { name: '@rudderjs/orm', source: 'resolutions', current: { major: 1, minor: 20, patch: 0 }, target: { major: 1, minor: 21, patch: 2 }, oldValue: '1.20.0', newValue: '1.21.2' },
+    ])
+    assert.equal((pkg.pnpm as { overrides: Record<string, string> }).overrides['@rudderjs/core'], '1.12.4')
+    assert.equal((pkg.resolutions as Record<string, string>)['@rudderjs/orm'], '1.21.2')
+  })
+})
+
+describe('upgrade — findOverrideRoot', () => {
+  let tmp: string
+  beforeEach(async () => { tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rudder-ovr-')) })
+  afterEach(async () => { await fs.rm(tmp, { recursive: true, force: true }) })
+
+  it('walks up to the directory holding pnpm-workspace.yaml', async () => {
+    const member = path.join(tmp, 'packages', 'app')
+    await fs.mkdir(member, { recursive: true })
+    await fs.writeFile(path.join(tmp, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n')
+    assert.equal(findOverrideRoot(member), tmp)
+  })
+
+  it('falls back to a package.json declaring workspaces', async () => {
+    const member = path.join(tmp, 'apps', 'web')
+    await fs.mkdir(member, { recursive: true })
+    await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }))
+    assert.equal(findOverrideRoot(member), tmp)
+  })
+
+  it('returns cwd for a plain single-package repo', async () => {
+    await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ name: 'solo' }))
+    assert.equal(findOverrideRoot(tmp), tmp)
   })
 })
 
