@@ -1,26 +1,23 @@
 // ─── Entry Types ───────────────────────────────────────────
 
-export type EntryType =
-  | 'request'
-  | 'query'
-  | 'job'
-  | 'exception'
-  | 'log'
-  | 'mail'
-  | 'notification'
-  | 'event'
-  | 'cache'
-  | 'schedule'
-  | 'model'
-  | 'command'
-  | 'broadcast'
-  | 'sync'
-  | 'http'
-  | 'gate'
-  | 'dump'
-  | 'ai'
-  | 'mcp'
-  | 'view'
+/**
+ * The canonical, exhaustive list of entry types — the single source of truth.
+ * `EntryType` is derived from it, and both `routes.ts` and `api/routes.ts`
+ * import this array rather than inlining their own copy.
+ *
+ * Never inline a partial copy: a truncated list silently prunes the entire
+ * store (the `prune` handler falls through to prune-all for any omitted type)
+ * and hides the dashboard overview tiles for the missing types. Deriving the
+ * type from the array means a new entry type can only be added in one place.
+ */
+export const ALL_ENTRY_TYPES = [
+  'request', 'query', 'job', 'exception', 'log',
+  'mail', 'notification', 'event', 'cache', 'schedule',
+  'model', 'command', 'broadcast', 'sync', 'http',
+  'gate', 'dump', 'ai', 'mcp', 'view',
+] as const
+
+export type EntryType = (typeof ALL_ENTRY_TYPES)[number]
 
 /**
  * Map an `EntryType` to the URL slug used by the dashboard list API.

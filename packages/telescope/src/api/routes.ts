@@ -1,10 +1,8 @@
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import type { TelescopeStorage, TelescopeConfig, EntryType } from '../types.js'
+import { ALL_ENTRY_TYPES } from '../types.js'
 
-const ENTRY_TYPES: EntryType[] = [
-  'request', 'query', 'job', 'exception', 'log',
-  'mail', 'notification', 'event', 'cache', 'schedule', 'model', 'command', 'broadcast', 'sync',
-]
+const ENTRY_TYPES: readonly EntryType[] = ALL_ENTRY_TYPES
 
 // ─── Handlers ──────────────────────────────────────────────
 //

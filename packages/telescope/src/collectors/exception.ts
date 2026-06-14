@@ -13,6 +13,12 @@ import { batchOpts } from '../batch-context.js'
  * `_recording` re-entry guard plus the try/catch around `record()` and
  * `previousReport()` collectively break the cycle.
  *
+ * `previousReport` MUST be the reporter installed before us — the return
+ * value of `setExceptionReporter`. Capturing `report` instead forwards to
+ * whatever the current reporter is (this wrapper), so the chain to the real
+ * previous reporter (e.g. the log channel) is never reached and exceptions
+ * are silently swallowed instead of forwarded.
+ *
  * If you refactor this class, preserve all three: the re-entry guard, the
  * record-call try/catch, and the previous-reporter try/catch. None of
  * them are defensive coding for hypothetical bugs — each blocks a real
@@ -27,17 +33,16 @@ export class ExceptionCollector implements Collector {
 
   async register(): Promise<void> {
     try {
-      const { setExceptionReporter, report } = await import('@rudderjs/core') as {
-        setExceptionReporter: (fn: (err: unknown) => void) => void
-        report: (err: unknown) => void
+      const { setExceptionReporter } = await import('@rudderjs/core') as {
+        setExceptionReporter: (fn: (err: unknown) => void) => (err: unknown) => void
       }
 
       // Chain: record the exception, then forward to the previous reporter.
-      // The _recording guard stays ON through both record() and previousReport()
-      // to prevent re-entry — the framework's error handler may call report()
-      // again which re-enters this wrapper.
-      const previousReport = report
-      setExceptionReporter((err: unknown) => {
+      // `previousReport` is the reporter installed before us (the return value
+      // of setExceptionReporter), so forwarding reaches the real prior reporter
+      // instead of re-entering this wrapper. The _recording guard stays ON
+      // through both record() and previousReport() as a defensive backstop.
+      const previousReport = setExceptionReporter((err: unknown) => {
         if (this._recording) return
         this._recording = true
         try {

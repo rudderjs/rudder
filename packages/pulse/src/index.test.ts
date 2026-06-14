@@ -1,7 +1,8 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryStorage, PulseRegistry, Pulse } from './index.js'
-import type { PulseAggregate, PulseEntry } from './types.js'
+import { MemoryStorage, PulseRegistry, Pulse, ExceptionRecorder } from './index.js'
+import { setExceptionReporter, report } from '@rudderjs/core'
+import type { PulseAggregate, PulseEntry, PulseStorage } from './types.js'
 
 // ─── MemoryStorage ────────────────────────────────────────
 
@@ -205,5 +206,40 @@ describe('Pulse facade', () => {
 
     const overview = Pulse.overview(new Date(0)) as PulseAggregate[]
     assert.equal(overview.length, 2)
+  })
+})
+
+// ─── ExceptionRecorder ────────────────────────────────────
+
+describe('ExceptionRecorder', () => {
+  afterEach(() => {
+    setExceptionReporter(() => {})
+  })
+
+  it('records an exception and forwards to the previous reporter without recursing', async () => {
+    const recorded: Array<[string, number]> = []
+    const stored: Array<Record<string, unknown>> = []
+    const storage = {
+      record:     (metric: string, value: number) => { recorded.push([metric, value]) },
+      storeEntry: (_type: string, data: Record<string, unknown>) => { stored.push(data) },
+    } as unknown as PulseStorage
+
+    // A prior reporter the recorder must chain to (e.g. the log channel).
+    const forwarded: unknown[] = []
+    setExceptionReporter((err) => { forwarded.push(err) })
+
+    await new ExceptionRecorder(storage).register()
+
+    // Before the fix this re-entered the recorder's own reporter and overflowed
+    // the stack. It must now return normally.
+    const err = new TypeError('boom')
+    report(err)
+
+    assert.deepEqual(recorded, [['exceptions', 1]])
+    assert.equal(stored.length, 1)
+    assert.equal(stored[0]!['class'], 'TypeError')
+    assert.equal(stored[0]!['message'], 'boom')
+    // Chained to the reporter installed before us, exactly once.
+    assert.deepEqual(forwarded, [err])
   })
 })

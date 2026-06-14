@@ -19,10 +19,10 @@ describe('JobCollector', () => {
     queueObservers.reset()
   })
 
-  it('records a job.dispatched event', () => {
+  it('records a job.dispatched event', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     queueObservers.emit({ kind: 'job.dispatched', ...baseEvent })
 
@@ -39,10 +39,10 @@ describe('JobCollector', () => {
     assert.ok(entry.tags.includes('status:dispatched'))
   })
 
-  it('records a job.completed event with duration and attempts', () => {
+  it('records a job.completed event with duration and attempts', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     queueObservers.emit({
       kind:        'job.completed',
@@ -63,10 +63,10 @@ describe('JobCollector', () => {
     assert.ok(entries[0]!.tags.includes('status:completed'))
   })
 
-  it('records a job.failed event with error and skips duration if absent', () => {
+  it('records a job.failed event with error and skips duration if absent', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     queueObservers.emit({
       kind:        'job.failed',
@@ -88,10 +88,10 @@ describe('JobCollector', () => {
     assert.ok(entries[0]!.tags.includes('status:failed'))
   })
 
-  it('does NOT record job.active events (deliberate — would double row count)', () => {
+  it('does NOT record job.active events (deliberate — would double row count)', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     queueObservers.emit({
       kind:      'job.active',
@@ -102,20 +102,20 @@ describe('JobCollector', () => {
     assert.equal(storage.count('job'), 0)
   })
 
-  it('observer errors do not propagate (queue layer must not crash on telescope failure)', () => {
+  it('observer errors do not propagate (queue layer must not crash on telescope failure)', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     // Replace storage.store with a thrower; emit must not propagate.
     storage.store = () => { throw new Error('storage offline') }
     assert.doesNotThrow(() => queueObservers.emit({ kind: 'job.dispatched', ...baseEvent }))
   })
 
-  it('unregister() stops further recording', () => {
+  it('unregister() stops further recording', async () => {
     const storage   = new MemoryStorage()
     const collector = new JobCollector(storage)
-    collector.register()
+    await collector.register()
 
     queueObservers.emit({ kind: 'job.dispatched', ...baseEvent })
     assert.equal(storage.count('job'), 1)
