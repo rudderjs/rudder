@@ -17,6 +17,17 @@ export async function dispatchMailJob(
   options: SendOptions,
   queueOptions?: { queue?: string; delay?: number },
 ): Promise<void> {
+  // When a mail fake is active, record the queued mailable instead of
+  // dispatching a real job. Duck-typed on `recordQueued` to avoid importing
+  // FakeMailAdapter into this hot path. This is what makes `Mail.to(...).queue()`
+  // / `.later()` visible to `fake.assertQueued()` — and it must run before
+  // resolving @rudderjs/queue so faked tests never need the queue package.
+  const active = MailRegistry.get() as { recordQueued?: (m: Mailable, o: SendOptions) => void } | null
+  if (active && typeof active.recordQueued === 'function') {
+    active.recordQueued(mailable, options)
+    return
+  }
+
   let QueueRegistry: QueueLike
 
   try {

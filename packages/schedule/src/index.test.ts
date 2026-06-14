@@ -396,4 +396,64 @@ describe('_executeTask — onOneServer / withoutOverlapping locks', () => {
       'server lock must remain held — releasing it would invite a peer to re-attempt the colliding task',
     )
   })
+
+  it('releases the overlap lock when the before hook throws (no 24h leak)', async () => {
+    const task = new ScheduledTask(() => {})
+      .description('before-throws')
+      .withoutOverlapping()
+      .before(() => { throw new Error('precondition failed') })
+
+    // Must not reject out of _executeTask, and must release the lock it took.
+    await _executeTask(task)
+
+    fake.assertLockAcquired('rudderjs:schedule:overlap:before-throws')
+    fake.assertLockReleased('rudderjs:schedule:overlap:before-throws')
+  })
+})
+
+describe('ScheduledTask — overlap key is order-independent', () => {
+  it('produces the same key whether description() comes before or after withoutOverlapping()', () => {
+    const before = new ScheduledTask(() => {}).description('cleanup').withoutOverlapping()
+    const after  = new ScheduledTask(() => {}).withoutOverlapping().description('cleanup')
+    assert.strictEqual(before.getOverlapKey(), 'rudderjs:schedule:overlap:cleanup')
+    assert.strictEqual(after.getOverlapKey(), 'rudderjs:schedule:overlap:cleanup')
+  })
+
+  it('two instances of the same described task share one key (deterministic, no random id)', () => {
+    const a = new ScheduledTask(() => {}).withoutOverlapping().description('cleanup')
+    const b = new ScheduledTask(() => {}).withoutOverlapping().description('cleanup')
+    assert.strictEqual(a.getOverlapKey(), b.getOverlapKey())
+  })
+})
+
+describe('schedule:run — one failing task does not abort the batch', () => {
+  beforeEach(() => {
+    rudder.reset()
+    schedule.reset()
+  })
+
+  it('continues to later due tasks after an earlier one throws out of _executeTask', async () => {
+    let laterRan = false
+    // The after-hook throw escapes _executeTask (it runs in the finally), unlike
+    // a callback throw which is caught internally — this is the path the
+    // per-task guard in the schedule:run loop protects against.
+    schedule.call(() => {}).everySecond().description('explodes')
+      .after(() => { throw new Error('boom') })
+    schedule.call(() => { laterRan = true }).everySecond().description('runs-after')
+    new ScheduleProvider({} as never).boot?.()
+    const cmd = rudder.getCommands().find(c => c.name === 'schedule:run')!
+
+    const orig = console.log
+    const origErr = console.error
+    console.log = () => {}
+    console.error = () => {}
+    try {
+      await cmd.handler([], {})
+    } finally {
+      console.log = orig
+      console.error = origErr
+    }
+
+    assert.strictEqual(laterRan, true, 'a later due task must still run after an earlier task throws')
+  })
 })

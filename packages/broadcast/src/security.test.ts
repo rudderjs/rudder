@@ -290,6 +290,37 @@ describe('Phase 5c — Per-socket message serialization', () => {
     })
   )
 
+  it('presence subscribe is denied when auth returns a truthy non-object', () =>
+    withServer({}, async (port) => {
+      const { events, unsubscribe } = captureObserver()
+      try {
+        // A presence auth callback that returns `true` (valid for a *private*
+        // channel, an easy copy/paste mistake) must be DENIED — otherwise the
+        // socket would receive broadcasts yet stay invisible in the roster.
+        registerAuth('presence-room.*', async () => true as unknown as Record<string, unknown>)
+
+        const { ws } = await openSocket(port, { origin: 'https://app.com' })
+        const messages: Record<string, unknown>[] = []
+        ws.on('message', (raw) => { messages.push(JSON.parse(String(raw)) as Record<string, unknown>) })
+        await new Promise((r) => setTimeout(r, 30))
+        ws.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.1' }))
+        await new Promise((r) => setTimeout(r, 80))
+
+        const errored = messages.find(m => m['type'] === 'error' && m['channel'] === 'presence-room.1')
+        assert.ok(errored, 'presence subscribe with non-object auth must return an error frame')
+        const subscribed = messages.find(m => m['type'] === 'subscribed' && m['channel'] === 'presence-room.1')
+        assert.equal(subscribed, undefined, 'must NOT confirm the subscription')
+        const rejected = events.find(
+          e => e.kind === 'subscribe' && e.allowed === false && e.channel === 'presence-room.1'
+        )
+        assert.ok(rejected, 'expected a presence subscribe rejection event')
+        ws.terminate()
+      } finally {
+        unsubscribe()
+      }
+    })
+  )
+
   it('subscribe emits observer event with error field when auth callback throws', () =>
     withServer({}, async (port) => {
       const { events, unsubscribe } = captureObserver()
