@@ -50,7 +50,12 @@ describe('html`` tagged template', () => {
   })
 
   it('renders null / undefined / false as empty strings', () => {
-    assert.equal(html`a${null}b${undefined}c${false}d`.value, 'abcd')
+    // Route the empties through `unknown`-typed bindings: `html` is a tagged
+    // template (values reach the tag function un-stringified), but a bare
+    // `${null}`/`${undefined}` literal in the source reads as a plain-template
+    // string coercion to static analysis.
+    const [n, u, f]: unknown[] = [null, undefined, false]
+    assert.equal(html`a${n}b${u}c${f}d`.value, 'abcd')
   })
 
   it('passes SafeString values through without re-escaping', () => {
