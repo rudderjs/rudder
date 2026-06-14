@@ -158,11 +158,26 @@ export async function pollDeviceCode(params: {
   }
 
   // Rate limiting (RFC 8628 §3.5). Enforce against the per-row `interval`
-  // (defaults to 5s, escalates by 5s per slow_down, capped at 60s). Persist
-  // the new interval so subsequent polls see the escalated value.
-  if (device.lastPolledAt) {
-    const elapsed = Date.now() - new Date(device.lastPolledAt).getTime()
-    if (elapsed < device.interval * 1000) {
+  // (defaults to 5s, escalates by 5s per slow_down, capped at 60s).
+  //
+  // The check + the `lastPolledAt` bump are a SINGLE conditional UPDATE so that:
+  //   (a) two concurrent polls can't both read a stale `lastPolledAt` and both
+  //       slip past the gate — exactly one matches (count 1) and proceeds, the
+  //       rest match 0 and are told to slow down; and
+  //   (b) the back-off clock anchors to the last ALLOWED poll — a throttled poll
+  //       does NOT advance `lastPolledAt` (the row didn't match), so a client
+  //       hammering the endpoint can't keep pushing the window forward.
+  // The first poll (lastPolledAt null) is never throttled, per RFC 8628.
+  const now = new Date()
+  if (device.lastPolledAt === null || device.lastPolledAt === undefined) {
+    await DeviceCodeCls.update(device.id, { lastPolledAt: now } as Record<string, unknown>)
+  } else {
+    const threshold = new Date(now.getTime() - device.interval * 1000)
+    const allowed = await DeviceCodeCls.query()
+      .where('id', device.id)
+      .where('lastPolledAt', '<=', threshold)
+      .updateAll({ lastPolledAt: now } as Record<string, unknown>)
+    if (allowed === 0) {
       const nextInterval = Math.min(device.interval + 5, Passport.deviceMaxIntervalSeconds())
       if (nextInterval !== device.interval) {
         await DeviceCodeCls.update(device.id, { interval: nextInterval } as Record<string, unknown>)
@@ -170,11 +185,6 @@ export async function pollDeviceCode(params: {
       return { status: 'slow_down', interval: nextInterval }
     }
   }
-
-  // Update last polled time
-  await DeviceCodeCls.update(device.id, {
-    lastPolledAt: new Date(),
-  } as Record<string, unknown>)
 
   if (deviceCodeHelpers.isPending(device)) {
     return { status: 'authorization_pending' }
