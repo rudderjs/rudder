@@ -77,9 +77,18 @@ let _reporter: ReporterFn = (err: unknown): void => {
  * Called by `@rudderjs/log`'s service provider automatically when the log
  * package is installed, routing all unhandled exceptions through the log
  * channel. Can also be called in bootstrap/app.ts via `e.reportUsing(fn)`.
+ *
+ * Returns the *previous* reporter so a wrapper can chain to it. This is the
+ * only correct way to decorate the reporter — capturing `report` instead and
+ * calling it forwards to whatever the current reporter is (i.e. the wrapper
+ * itself), which re-enters infinitely. Observability collectors
+ * (`@rudderjs/telescope`, `@rudderjs/pulse`) rely on this to record an
+ * exception and then hand off to the reporter that was installed before them.
  */
-export function setExceptionReporter(fn: ReporterFn): void {
+export function setExceptionReporter(fn: ReporterFn): ReporterFn {
+  const previous = _reporter
   _reporter = fn
+  return previous
 }
 
 /** Report an exception to the configured reporter (default: console.error). */

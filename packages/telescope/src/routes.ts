@@ -1,16 +1,12 @@
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import type { TelescopeStorage, TelescopeConfig, EntryType } from './types.js'
-import { toApiSlug } from './types.js'
+import { toApiSlug, ALL_ENTRY_TYPES } from './types.js'
 import { Dashboard, EntryList, pages } from './views/vanilla/index.js'
 import { DetailLayout, detailViews, NotFoundPage, BatchPage } from './views/vanilla/details/index.js'
 import { listEntries, showEntry, overview, prune, listBatch, getRecording, toggleRecording, authMiddleware } from './api/routes.js'
 import { createStreamResponse } from './stream.js'
 
-const ENTRY_TYPES: EntryType[] = [
-  'request', 'query', 'job', 'exception', 'log',
-  'mail', 'notification', 'event', 'cache', 'schedule', 'model', 'command', 'broadcast', 'sync',
-  'http', 'gate', 'dump', 'ai', 'mcp', 'view',
-]
+const ENTRY_TYPES: readonly EntryType[] = ALL_ENTRY_TYPES
 
 export interface RegisterTelescopeRoutesOptions {
   /** Path prefix for all telescope routes — default `/telescope` */

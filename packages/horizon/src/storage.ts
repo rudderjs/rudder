@@ -514,7 +514,11 @@ export class RedisStorage implements HorizonStorage {
     if (updates.status === 'failed') {
       const job = await this.findJob(queue, id)
       if (job) await r.zadd(this.k.failed(), job.dispatchedAt.getTime(), m)
-    } else if (updates.status === 'completed') {
+    } else if (updates.status !== undefined) {
+      // Any non-failed transition (completed / pending / processing) clears the
+      // failed set. A retry sets status back to 'pending'; without this the
+      // member lingers in the failed ZSet and jobCount('failed') over-counts
+      // forever (the listing re-filters by status, so the badge and list diverge).
       await r.zrem(this.k.failed(), m)
     }
   }

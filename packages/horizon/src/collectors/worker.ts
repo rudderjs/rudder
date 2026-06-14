@@ -8,6 +8,7 @@ import type { HorizonStorage, WorkerInfo } from '../types.js'
 export class WorkerCollector {
   readonly name = 'Worker Collector'
   private readonly workerId: string
+  private readonly startedAt = new Date()
   private jobsRun = 0
   private lastJobAt: Date | null = null
 
@@ -47,7 +48,7 @@ export class WorkerCollector {
       status,
       jobsRun:   this.jobsRun,
       memoryMb:  Math.round((memUsage.heapUsed / 1024 / 1024) * 100) / 100,
-      startedAt: new Date(),
+      startedAt: this.startedAt,
       lastJobAt: this.lastJobAt,
     }
     this.storage.recordWorker(info)

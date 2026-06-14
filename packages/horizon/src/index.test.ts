@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryStorage, HorizonRegistry, Horizon } from './index.js'
-import type { HorizonJob, QueueMetric, WorkerInfo } from './types.js'
+import { MemoryStorage, RedisStorage, HorizonRegistry, Horizon, WorkerCollector } from './index.js'
+import type { HorizonJob, QueueMetric, WorkerInfo, HorizonStorage } from './types.js'
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -290,5 +290,89 @@ describe('Horizon facade', () => {
     HorizonRegistry.set(storage)
 
     assert.equal(Horizon.jobCount() as number, 2)
+  })
+})
+
+// ─── RedisStorage failed-set bookkeeping ──────────────────
+
+/** Minimal in-memory fake of the ioredis surface RedisStorage uses. */
+function makeFakeRedis() {
+  const hashes = new Map<string, Map<string, string>>()
+  const zsets  = new Map<string, Map<string, number>>()
+  const hash = (k: string) => hashes.get(k) ?? hashes.set(k, new Map()).get(k)!
+  const zset = (k: string) => zsets.get(k) ?? zsets.set(k, new Map()).get(k)!
+  return {
+    hashes, zsets,
+    async hset(key: string, fields: Record<string, string | number>) {
+      const h = hash(key)
+      for (const [f, v] of Object.entries(fields)) h.set(f, String(v))
+      return Object.keys(fields).length
+    },
+    async hsetnx(key: string, field: string, value: string | number) {
+      const h = hash(key)
+      if (h.has(field)) return 0
+      h.set(field, String(value)); return 1
+    },
+    async hgetall(key: string) {
+      return Object.fromEntries(hash(key))
+    },
+    async zadd(key: string, score: number, member: string) {
+      zset(key).set(member, score); return 1
+    },
+    async zrem(key: string, member: string) {
+      return zset(key).delete(member) ? 1 : 0
+    },
+    async zcard(key: string) {
+      return zset(key).size
+    },
+    async zremrangebyrank() { return 0 },
+  }
+}
+
+describe('RedisStorage failed set', () => {
+  it('removes a job from the failed set when it is retried (status -> pending)', async () => {
+    const storage = new RedisStorage()
+    const fake = makeFakeRedis()
+    ;(storage as unknown as { client: unknown }).client = fake
+
+    await storage.recordJob(makeJob({ queue: 'default', id: 'j1', status: 'failed' }))
+    assert.equal(await storage.jobCount('failed'), 1)
+
+    // Retry: the dashboard sets the job back to pending. Before the fix only a
+    // 'completed' transition cleared the failed set, so the count stuck at 1.
+    await storage.updateJob('default', 'j1', { status: 'pending', exception: null })
+    assert.equal(await storage.jobCount('failed'), 0)
+  })
+
+  it('still clears the failed set on completion', async () => {
+    const storage = new RedisStorage()
+    ;(storage as unknown as { client: unknown }).client = makeFakeRedis()
+
+    await storage.recordJob(makeJob({ queue: 'default', id: 'j2', status: 'failed' }))
+    await storage.updateJob('default', 'j2', { status: 'completed' })
+    assert.equal(await storage.jobCount('failed'), 0)
+  })
+})
+
+// ─── WorkerCollector stable startedAt ─────────────────────
+
+describe('WorkerCollector', () => {
+  it('reports a stable startedAt across reports (not reset each tick)', () => {
+    const workers: WorkerInfo[] = []
+    const storage = {
+      recordWorker(w: WorkerInfo) { workers.push(w) },
+    } as unknown as HorizonStorage
+
+    const collector = new WorkerCollector(storage, 'default')
+    const report = (collector as unknown as { report: (s: WorkerInfo['status']) => void }).report.bind(collector)
+
+    report('active')
+    report('active')
+
+    assert.equal(workers.length, 2)
+    // Same Date *instance* on every report. Reference identity rather than
+    // getTime() equality, because two back-to-back `new Date()` calls (the bug)
+    // usually land in the same millisecond and would pass a timestamp compare.
+    assert.equal(workers[0]!.startedAt, workers[1]!.startedAt)
   })
 })

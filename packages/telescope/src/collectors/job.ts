@@ -1,7 +1,22 @@
-import { queueObservers } from '@rudderjs/queue/observers'
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
 import { batchOpts } from '../batch-context.js'
+
+/**
+ * Minimal local shape of `@rudderjs/queue`'s `QueueEvent`. Defined inline (the
+ * load-bearing peer-bridge pattern) so telescope stays downstream of queue —
+ * importing the peer's full types would invert the dependency graph.
+ */
+interface QueueObserverEvent {
+  kind:      'job.dispatched' | 'job.active' | 'job.completed' | 'job.failed'
+  jobId:     string
+  name:      string
+  queue:     string
+  payload:   Record<string, unknown>
+  attempts:  number
+  duration?: number
+  error?:    string
+}
 
 /**
  * Subscribes to `@rudderjs/queue/observers` and records one entry per
@@ -16,7 +31,20 @@ export class JobCollector implements Collector {
 
   constructor(private readonly storage: TelescopeStorage) {}
 
-  register(): void {
+  async register(): Promise<void> {
+    // `@rudderjs/queue` is an optional peer — lazy-import it inside register()
+    // (like every other collector) so importing telescope in an app that
+    // doesn't install the queue package doesn't crash at module load. A static
+    // top-level import would throw ERR_MODULE_NOT_FOUND before any config check.
+    let queueObservers: { subscribe(cb: (event: QueueObserverEvent) => void): () => void }
+    try {
+      ({ queueObservers } = await import('@rudderjs/queue/observers') as {
+        queueObservers: { subscribe(cb: (event: QueueObserverEvent) => void): () => void }
+      })
+    } catch {
+      return // queue package not installed — graceful degradation
+    }
+
     this.unsubscribe = queueObservers.subscribe((event) => {
       try {
         switch (event.kind) {
