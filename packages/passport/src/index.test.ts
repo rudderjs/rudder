@@ -40,23 +40,23 @@ import {
 } from './index.js'
 import { safeCompare } from './grants/safe-compare.js'
 
-describe('checkOAuthKeysAtBoot — keypair fail-fast in production', () => {
+describe('checkOAuthKeysAtBoot — opt-in keypair fail-fast', () => {
   test('returns null when keys are available (nothing to warn about)', () => {
-    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, isProduction: true, keyPath: 'storage' }), null)
-    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, isProduction: false, keyPath: 'storage' }), null)
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, requireKeys: true, keyPath: 'storage' }), null)
+    assert.equal(checkOAuthKeysAtBoot({ keysAvailable: true, requireKeys: false, keyPath: 'storage' }), null)
   })
 
-  test('warns (does NOT throw) when keys are missing outside production', () => {
-    const msg = checkOAuthKeysAtBoot({ keysAvailable: false, isProduction: false, keyPath: 'storage' })
+  test('warns (does NOT throw) when keys are missing and not required — the default', () => {
+    const msg = checkOAuthKeysAtBoot({ keysAvailable: false, requireKeys: false, keyPath: 'storage' })
     assert.ok(typeof msg === 'string')
     assert.match(msg!, /passport:keys/)
     assert.match(msg!, /storage\/oauth-\{private,public\}\.key/)
   })
 
-  test('throws in production when keys are missing (fail-fast deploy)', () => {
+  test('throws when keys are missing and requireKeys is set (fail-fast deploy)', () => {
     assert.throws(
-      () => checkOAuthKeysAtBoot({ keysAvailable: false, isProduction: true, keyPath: 'storage' }),
-      (e: unknown) => e instanceof Error && /Refusing to boot in production/.test(e.message),
+      () => checkOAuthKeysAtBoot({ keysAvailable: false, requireKeys: true, keyPath: 'storage' }),
+      (e: unknown) => e instanceof Error && /requireKeys is set/.test(e.message),
     )
   })
 })
