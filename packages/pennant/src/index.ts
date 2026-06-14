@@ -25,7 +25,18 @@ export interface PennantConfig {
 
 // ─── Lottery ──────────────────────────────────────────────
 
+// Registered (cross-realm) brand. `@rudderjs/pennant` is intentionally loaded
+// twice in a Vite-bundled server — a resolver in the inlined bundle copy builds
+// a Lottery from THAT copy's class, while the manager runs in the node_modules
+// copy. `instanceof` is nominal and fails across copies, so a gradual-rollout
+// Lottery would slip through unmatched and `Boolean(lotteryObject)` would make
+// the flag always-on. Symbol.for resolves to the same symbol in every copy, so
+// the brand check holds across the bundle boundary.
+const LOTTERY_BRAND = Symbol.for('rudderjs.pennant.lottery')
+
 export class Lottery {
+  readonly [LOTTERY_BRAND] = true
+
   private constructor(
     private readonly _winners: number,
     private readonly _total: number,
@@ -38,6 +49,12 @@ export class Lottery {
   pick(): boolean {
     return Math.random() * this._total < this._winners
   }
+}
+
+/** Cross-realm-safe Lottery check (see {@link LOTTERY_BRAND}). */
+function isLottery(value: unknown): value is Lottery {
+  return typeof value === 'object' && value !== null
+    && (value as Record<symbol, unknown>)[LOTTERY_BRAND] === true
 }
 
 // ─── Memory Driver ────────────────────────────────────────
@@ -71,8 +88,13 @@ export class MemoryDriver implements PennantDriver {
 
 function normalizeScope(scope: FeatureScope): string {
   if (scope === null || scope === undefined) return '__null__'
-  if (typeof scope === 'string' || typeof scope === 'number') return String(scope)
-  return `${scope.constructor?.name ?? 'obj'}:${scope.id}`
+  // Type-prefix so distinct scopes never share a key: without this, the number
+  // scope `1` and the string scope `"1"` both stringified to "1" and collided,
+  // so an app passing `user.id` sometimes as a number and sometimes as a string
+  // would silently share one flag value across what it treats as two scopes.
+  if (typeof scope === 'string') return `s:${scope}`
+  if (typeof scope === 'number') return `n:${scope}`
+  return `o:${scope.constructor?.name ?? 'obj'}:${scope.id}`
 }
 
 class PennantManager {
@@ -116,7 +138,12 @@ class PennantManager {
 
     const resolution = (async () => {
       let result = await resolver(scope)
-      if (result instanceof Lottery) result = result.pick()
+      if (isLottery(result)) result = result.pick()
+      // Normalize a resolved `undefined` to `null` before storing: drivers key
+      // absence on `undefined` (Map.get can't tell a stored undefined from a
+      // missing key), so storing undefined would re-run the resolver on every
+      // call — defeating the per-scope memoization (and re-rolling a Lottery).
+      if (result === undefined) result = null
       await this.driver.set(name, scopeKey, result)
       return result
     })()

@@ -19,7 +19,7 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 class WorkerDriver implements ConcurrencyDriver {
   private pool:       Worker[] = []
   private available:  Worker[] = []
-  private waiting:    Array<(worker: Worker) => void> = []
+  private waiting:    Array<{ resolve: (w: Worker) => void; reject: (e: Error) => void }> = []
   private nextId = 0
 
   constructor(private maxWorkers: number) {}
@@ -41,16 +41,31 @@ class WorkerDriver implements ConcurrencyDriver {
     this.ensurePool()
     const w = this.available.pop()
     if (w) return Promise.resolve(w)
-    return new Promise(resolve => { this.waiting.push(resolve) })
+    return new Promise((resolve, reject) => { this.waiting.push({ resolve, reject }) })
   }
 
   private release(worker: Worker): void {
     const next = this.waiting.shift()
     if (next) {
-      next(worker)
+      next.resolve(worker)
     } else {
       this.available.push(worker)
     }
+  }
+
+  /**
+   * A worker that emitted `error`/`exit` mid-task is dead — its thread is gone,
+   * so returning it to the pool would wedge the next task (and `run()` with it).
+   * Drop it, spin up a replacement, and hand that to a waiter so the pool stays
+   * at size and nobody blocks forever.
+   */
+  private replaceWorker(dead: Worker): void {
+    const i = this.pool.indexOf(dead)
+    if (i !== -1) this.pool.splice(i, 1)
+    void dead.terminate()
+    const fresh = new Worker(this.getWorkerScript())
+    this.pool.push(fresh)
+    this.release(fresh)
   }
 
   async run<T extends unknown[]>(tasks: { [K in keyof T]: Task<T[K]> }): Promise<T> {
@@ -58,29 +73,49 @@ class WorkerDriver implements ConcurrencyDriver {
       (tasks as Task[]).map(async (task) => {
         const worker = await this.acquire()
         const id = this.nextId++
+        let poisoned = false
 
         try {
           return await new Promise<unknown>((resolve, reject) => {
-            const handler = (msg: { id: number; result?: unknown; error?: string }) => {
-              if (msg.id !== id) return
+            const cleanup = () => {
               worker.off('message', handler)
               worker.off('error', errorHandler)
+              worker.off('exit', exitHandler)
+            }
+            const handler = (msg: { id: number; result?: unknown; error?: string }) => {
+              if (msg.id !== id) return
+              cleanup()
               if (msg.error !== undefined) {
                 reject(new Error(msg.error))
               } else {
                 resolve(msg.result)
               }
             }
+            // A worker-level `error` (uncaught throw / unhandled rejection in
+            // the thread) kills the thread. Reject AND mark it poisoned so it
+            // is discarded, not recycled — and remove the error listener too,
+            // or it would leak across every subsequent task on this worker.
             const errorHandler = (err: Error) => {
-              worker.off('message', handler)
+              cleanup()
+              poisoned = true
               reject(err)
+            }
+            // The worker exited before replying (process.exit() in the task, a
+            // crash, or terminate() mid-task). Without this the task promise
+            // would never settle and `run()` would hang forever.
+            const exitHandler = (code: number) => {
+              cleanup()
+              poisoned = true
+              reject(new Error(`[RudderJS Concurrency] Worker exited (code ${code}) before the task completed`))
             }
             worker.on('message', handler)
             worker.on('error', errorHandler)
+            worker.on('exit', exitHandler)
             worker.postMessage({ id, fnSource: task.toString() })
           })
         } finally {
-          this.release(worker)
+          if (poisoned) this.replaceWorker(worker)
+          else this.release(worker)
         }
       })
     )
@@ -95,6 +130,12 @@ class WorkerDriver implements ConcurrencyDriver {
   }
 
   async terminate(): Promise<void> {
+    // Reject anyone still parked in acquire() so their promise doesn't hang
+    // forever once the pool is gone.
+    const waiters = this.waiting.splice(0)
+    for (const w of waiters) {
+      w.reject(new Error('[RudderJS Concurrency] Driver terminated while waiting for a worker'))
+    }
     await Promise.all(this.pool.map(w => w.terminate()))
     this.pool = []
     this.available = []
@@ -158,6 +199,10 @@ export class Concurrency {
    * All tasks run sequentially in the main thread.
    */
   static fake(): void {
+    // Terminate an auto-created worker driver before replacing it, otherwise
+    // its pooled threads leak (restore() later sees only the SyncDriver and
+    // would terminate nothing).
+    if (_driver instanceof WorkerDriver) void _driver.terminate()
     _driver = new SyncDriver()
     _faked = true
   }
