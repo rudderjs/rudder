@@ -3,6 +3,7 @@ import type {
   StorageAdapter,
   TemporaryUrlOptions,
   TemporaryUploadUrl,
+  TemporaryUploadUrlOptions,
   Visibility,
 } from './contracts.js'
 import { StorageNotSupportedError } from './errors.js'
@@ -63,7 +64,7 @@ export abstract class BaseAdapter implements StorageAdapter {
     throw new StorageNotSupportedError(this.driverName, 'temporaryUrl')
   }
 
-  async temporaryUploadUrl(_filePath: string, _expiresAt: Date): Promise<TemporaryUploadUrl> {
+  async temporaryUploadUrl(_filePath: string, _expiresAt: Date, _opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl> {
     throw new StorageNotSupportedError(this.driverName, 'temporaryUploadUrl')
   }
 }

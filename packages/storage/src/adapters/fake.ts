@@ -2,7 +2,7 @@ import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { BaseAdapter } from '../base.js'
 import { StorageNotSupportedError } from '../errors.js'
-import type { TemporaryUploadUrl, Visibility } from '../contracts.js'
+import type { TemporaryUploadUrl, TemporaryUploadUrlOptions, Visibility } from '../contracts.js'
 
 /**
  * In-memory storage adapter used by `Storage.fake()`. Implements the full
@@ -51,10 +51,10 @@ export class FakeAdapter extends BaseAdapter {
   override async temporaryUrl(p: string, expiresAt: Date): Promise<string> {
     return `/fake/${p}?expires=${Math.floor(expiresAt.getTime() / 1000)}`
   }
-  override async temporaryUploadUrl(p: string, expiresAt: Date): Promise<TemporaryUploadUrl> {
+  override async temporaryUploadUrl(p: string, expiresAt: Date, opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl> {
     return {
       url:     `/fake/upload/${p}?expires=${Math.floor(expiresAt.getTime() / 1000)}`,
-      headers: {},
+      headers: opts?.contentType ? { 'Content-Type': opts.contentType } : {},
     }
   }
 

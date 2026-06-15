@@ -15,6 +15,15 @@ export interface TemporaryUrlOptions {
   responseHeaders?: Record<string, string>
 }
 
+export interface TemporaryUploadUrlOptions {
+  /**
+   * Bind the upload's `Content-Type` into the signature. The client MUST send a
+   * matching `Content-Type` header (returned in `headers`), so the stored object
+   * can't be given an arbitrary type the app later serves as executable content.
+   */
+  contentType?: string
+}
+
 export interface TemporaryUploadUrl {
   url: string
   /** Headers the client MUST include on the upload request (e.g. `x-amz-acl`). */
@@ -54,7 +63,7 @@ export interface StorageAdapter {
   temporaryUrl(filePath: string, expiresAt: Date, opts?: TemporaryUrlOptions): Promise<string>
 
   /** Issue a short-lived signed URL the browser can `PUT` directly to. */
-  temporaryUploadUrl(filePath: string, expiresAt: Date): Promise<TemporaryUploadUrl>
+  temporaryUploadUrl(filePath: string, expiresAt: Date, opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl>
 
   /** Set per-file visibility ('public' or 'private'). */
   setVisibility(filePath: string, visibility: Visibility): Promise<void>
