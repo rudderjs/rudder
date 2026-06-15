@@ -715,11 +715,18 @@ const syncUpdate         = 2
 //   awareness: [msgType(varint), dataLen(varint), ...data]
 // There is NO extra outer length field — WebSocket frames provide their own framing.
 
+// NOTE: these use arithmetic (`* 2 ** shift` / `% 128` / `/ 128`), NOT bitwise
+// `<<` / `>>>` / `&`. JS bitwise operators coerce to 32-bit SIGNED ints, so a
+// value with bit 28+ set overflows. Yjs client ids are random uint32
+// (`random.uint32()`), so a bitwise reader corrupts most client ids, which
+// silently broke awareness-removal on disconnect (the re-encoded clientID
+// never matched, leaving ghost users in peer presence lists). Arithmetic is
+// correct up to 2**53; every value here (client ids, clocks, lengths) fits.
 function readVarUint(buf: Uint8Array, pos: number): [number, number] {
   let result = 0, shift = 0
   while (true) {
     const byte = buf[pos++] ?? 0
-    result |= (byte & 0x7f) << shift
+    result += (byte & 0x7f) * 2 ** shift
     shift  += 7
     if ((byte & 0x80) === 0) break
   }
@@ -728,7 +735,10 @@ function readVarUint(buf: Uint8Array, pos: number): [number, number] {
 
 function writeVarUint(val: number): Uint8Array {
   const buf: number[] = []
-  while (val > 0x7f) { buf.push((val & 0x7f) | 0x80); val >>>= 7 }
+  while (val > 0x7f) {
+    buf.push((val % 128) | 0x80)
+    val = Math.floor(val / 128)
+  }
   buf.push(val)
   return new Uint8Array(buf)
 }
