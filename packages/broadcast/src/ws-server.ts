@@ -60,6 +60,37 @@ export interface WsServerOptions {
    * {@link BroadcastDriver} impl) to fan messages across instances.
    */
   driver?: BroadcastDriver
+  /**
+   * Whether to trust `X-Forwarded-For` / `X-Real-IP` proxy headers when
+   * resolving the client IP for the per-IP cap and observer events.
+   *
+   * - `false` (default): the direct socket address is the client. Proxy
+   *   headers are NEVER read — a client can't forge `req.ip`.
+   * - `true`: trust ONE proxy hop → the **rightmost** `X-Forwarded-For`
+   *   entry (the address the immediately-trusted proxy appended).
+   * - `number N`: trust N chained proxy hops → the Nth entry from the right
+   *   (`parts[len - N]`).
+   *
+   * NEVER the leftmost entry — that's whatever the client sent and is
+   * forgeable whenever the proxy appends rather than replaces the header
+   * (the nginx `proxy_add_x_forwarded_for` default). Mirrors `req.ip`
+   * resolution in `@rudderjs/server-hono`.
+   */
+  trustProxy?: boolean | number
+  /**
+   * Maximum size in bytes of a single inbound WebSocket frame. Frames over
+   * this size are rejected at the protocol layer (close code 1009) BEFORE
+   * being buffered or `JSON.parse`'d. Default: 65536 (64 KiB). Set higher
+   * only if your client-event payloads are legitimately large.
+   */
+  maxPayload?: number
+  /**
+   * Maximum number of channels a single connection may subscribe to. Once
+   * reached, further `subscribe` frames are rejected with an error frame.
+   * Bounds per-connection memory growth (a socket flooding public-channel
+   * subscribes). `undefined` uses the default 100; `0` disables the cap.
+   */
+  maxChannelsPerSocket?: number
 }
 
 // ─── Internal message types ─────────────────────────────────
@@ -78,6 +109,11 @@ const AUTH_KEY     = '__rudderjs_ws_auth__'
 const CONN_AUTH_KEY = '__rudderjs_ws_conn_auth__'
 
 const DEFAULT_HEARTBEAT = { interval: 30_000, timeout: 60_000 } as const
+
+/** Max inbound WS frame size (bytes) — frames over this are rejected at the protocol layer (1009). */
+const DEFAULT_MAX_PAYLOAD = 64 * 1024
+/** Max channels a single connection may subscribe to (bounds per-socket memory growth). */
+const DEFAULT_MAX_CHANNELS_PER_SOCKET = 100
 
 /** Internal runtime state held on globalThis so it survives HMR reloads. */
 interface WsState {
@@ -100,6 +136,10 @@ interface WsState {
   // Options (see WsServerOptions) — captured at init time
   allowedOrigins?:     Set<string>
   maxConnectionsPerIp?: number
+  /** Trusted proxy hops for client-IP resolution (false = socket only). */
+  trustProxy:          boolean | number
+  /** Per-connection channel-subscription cap (0 = disabled). */
+  maxChannelsPerSocket: number
   heartbeat:           { interval: number; timeout: number } | false
   /** Set to true once we've warned that allowedOrigins is empty. */
   warnedOpenOrigin:    boolean
@@ -114,7 +154,10 @@ interface WsState {
 export function initWsServer(options: WsServerOptions = {}): void {
   if (g[KEY]) return   // already running (HMR / hot-reload)
 
-  const wss = new WebSocketServer({ noServer: true })
+  const maxPayload = options.maxPayload && options.maxPayload > 0
+    ? options.maxPayload
+    : DEFAULT_MAX_PAYLOAD
+  const wss = new WebSocketServer({ noServer: true, maxPayload })
   const heartbeat = options.heartbeat === false
     ? false as const
     : { ...DEFAULT_HEARTBEAT, ...(options.heartbeat ?? {}) }
@@ -135,6 +178,10 @@ export function initWsServer(options: WsServerOptions = {}): void {
     ...(options.maxConnectionsPerIp && options.maxConnectionsPerIp > 0
       ? { maxConnectionsPerIp: options.maxConnectionsPerIp }
       : {}),
+    trustProxy: options.trustProxy ?? false,
+    maxChannelsPerSocket: options.maxChannelsPerSocket === undefined
+      ? DEFAULT_MAX_CHANNELS_PER_SOCKET
+      : Math.max(0, Math.floor(options.maxChannelsPerSocket)),
     heartbeat,
     warnedOpenOrigin: false,
     driver,
@@ -257,7 +304,7 @@ const socketQueues = new WeakMap<WsSocket, Promise<void>>()
 
 async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage): Promise<void> {
   const id = nextId(state)
-  const ip = extractIp(req)
+  const ip = extractIp(req, state.trustProxy)
   state.sockets.set(id, ws)
   state.subscriptions.set(id, new Set())
   state.upgradeReqs.set(id, req)
@@ -325,6 +372,15 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
     socketQueues.set(ws, next)
   })
 
+  // A socket-level error (e.g. an oversized frame rejected by `maxPayload`,
+  // a protocol violation, or a transport reset) emits 'error' on the ws. With
+  // no listener, Node treats it as an uncaught exception and crashes the whole
+  // broadcast process — turning a single hostile frame into a server kill.
+  // Surface it to observers and let the paired 'close' do the cleanup.
+  ws.on('error', (err: unknown) => {
+    broadcastObservers.emit({ kind: 'message.error', connectionId: id, error: err })
+  })
+
   ws.on('close', () => {
     if (heartbeatTimer) clearInterval(heartbeatTimer)
     if (pongDeadline)   clearTimeout(pongDeadline)
@@ -332,11 +388,54 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
   })
 }
 
-function extractIp(req: IncomingMessage): string | undefined {
-  const fwd = req.headers['x-forwarded-for']
-  if (typeof fwd === 'string') return fwd.split(',')[0]?.trim()
-  if (Array.isArray(fwd))      return fwd[0]?.split(',')[0]?.trim()
-  return req.socket.remoteAddress ?? undefined
+/** Number of trusted proxy hops from a `trustProxy` config value. */
+function trustedHops(trustProxy: boolean | number): number {
+  if (trustProxy === true) return 1
+  if (typeof trustProxy === 'number' && trustProxy > 0) return Math.floor(trustProxy)
+  return 0
+}
+
+/** Normalize a resolved IP so observer/cap keys match the rest of the framework. */
+function normalizeIp(ip: string): string {
+  const v = ip.trim()
+  if (v === '::1') return '127.0.0.1'
+  return v.startsWith('::ffff:') ? v.slice(7) : v
+}
+
+/**
+ * Resolve the client IP for the per-IP cap and observer events.
+ *
+ * With `trustProxy` enabled, proxy headers win: `x-forwarded-for` then
+ * `x-real-ip`. The `x-forwarded-for` entry chosen is the one the trusted proxy
+ * chain appended — the **rightmost** entry, or the Nth-from-right when N hops
+ * are trusted — NEVER the leftmost (the leftmost is whatever the client sent
+ * and is forgeable when the proxy appends rather than replaces the header).
+ * With `trustProxy` off (the default) the direct socket address is the client
+ * and proxy headers are ignored entirely. Mirrors `@rudderjs/server-hono`.
+ */
+function extractIp(req: IncomingMessage, trustProxy: boolean | number): string | undefined {
+  const hops = trustedHops(trustProxy)
+  if (hops > 0) {
+    const fwd = req.headers['x-forwarded-for']
+    const raw = Array.isArray(fwd) ? fwd.join(',') : fwd
+    if (typeof raw === 'string') {
+      const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+      if (parts.length > 0) {
+        // The real client is the entry the trusted proxy chain appended. With one
+        // trusted proxy that's the rightmost entry; with N proxies it's N from the
+        // right. Clamp so a short (or spoofed-short) chain falls back to leftmost.
+        const idx = Math.max(0, parts.length - hops)
+        return normalizeIp(parts[idx]!)
+      }
+    }
+    const xri = req.headers['x-real-ip']
+    const xriVal = Array.isArray(xri) ? xri[0] : xri
+    if (typeof xriVal === 'string' && xriVal.trim()) return normalizeIp(xriVal)
+    // Trusted proxy configured but no header on this hit (direct request) —
+    // fall through: the socket address is the client.
+  }
+  const sock = req.socket.remoteAddress
+  return sock ? normalizeIp(sock) : undefined
 }
 
 async function onMessage(
@@ -361,13 +460,33 @@ async function onMessage(
       // broadcast to peers. Without this guard a client could loop subscribe
       // frames to spam `presence.joined`, leaving append-only client rosters with
       // ghost duplicates of itself (only one `presence.left` fires on disconnect).
-      // Matches Pusher's already-subscribed semantics.
-      if (state.subscriptions.get(id)?.has(channel)) {
+      // Matches Pusher's already-subscribed semantics. Checked before the cap so a
+      // re-subscribe is never rejected by it.
+      const subs = state.subscriptions.get(id)
+      if (subs?.has(channel)) {
         send(ws, { type: 'subscribed', channel })
         if (channel.startsWith('presence-')) {
           const members = [...(state.presence.get(channel)?.values() ?? [])]
           send(ws, { type: 'presence.members', channel, members })
         }
+        return
+      }
+
+      // Per-connection subscription cap — bounds memory growth from a socket
+      // flooding (unauthenticated) public-channel subscribes. Checked before any
+      // auth work; the idempotency guard above already excluded re-subscribes, so
+      // this only ever counts a genuinely new channel.
+      if (
+        state.maxChannelsPerSocket > 0 &&
+        (subs?.size ?? 0) >= state.maxChannelsPerSocket
+      ) {
+        send(ws, { type: 'error', channel, message: 'Subscription limit reached' })
+        broadcastObservers.emit({
+          kind: 'subscribe', connectionId: id, channel,
+          channelType: channel.startsWith('presence-') ? 'presence'
+            : channel.startsWith('private-') ? 'private' : 'public',
+          allowed: false, reason: 'Per-connection channel limit reached',
+        })
         return
       }
 
@@ -618,7 +737,7 @@ export function getUpgradeHandler(
     }
 
     // 5b — Per-IP cap (cheap check, before async connection-auth)
-    const ip = extractIp(req)
+    const ip = extractIp(req, state.trustProxy)
     if (state.maxConnectionsPerIp && ip) {
       const current = state.ipCounts.get(ip) ?? 0
       if (current >= state.maxConnectionsPerIp) {
