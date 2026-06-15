@@ -605,7 +605,7 @@ await agent
   })
 ```
 
-The same hook fires on the auto-persist path (`conversational()`) and on the streaming variant. For custom policy, the lower-level `validateContinuation(persisted, incoming, opts?)` returns a `{ ok, code, reason, index }` verdict you can branch on instead of throwing. Stateless calls (no persistence) never invoke it.
+The same hook fires on the auto-persist path (`conversational()`) and on the streaming variant. For custom policy, the lower-level `validateContinuation(persisted, incoming, opts?)` returns a `{ ok, code, reason, index }` verdict you can branch on instead of throwing. Stateless calls (no persistence) never invoke it. The prefix comparison is order-insensitive for nested objects, so a tool-call `arguments` map that came back from storage with its keys reordered (Postgres `jsonb` does this) is not mistaken for a forgery.
 
 ## User memory
 
