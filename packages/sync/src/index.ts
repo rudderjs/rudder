@@ -67,6 +67,18 @@ export interface SyncPersistence {
 /** Client-side Y.js providers. */
 export type SyncClientProvider = 'websocket' | 'indexeddb'
 
+/**
+ * The upgrade-request shape handed to {@link SyncConfig.onAuth}. Carries the
+ * request headers, the raw connection URL, and (when present) a `token` parsed
+ * from the query string — enough for an `onAuth` handler to resolve the
+ * authenticated user without re-parsing the socket request.
+ */
+export interface SyncAuthRequest {
+  headers: Record<string, string | string[] | undefined>
+  url: string
+  token?: string
+}
+
 export interface SyncConfig {
   /**
    * URL path prefix for the Sync WebSocket endpoint. Default: `/ws-sync`.
@@ -111,8 +123,12 @@ export interface SyncConfig {
    * closed: a rejected promise or a thrown error denies the connection (the
    * socket is closed with WS code 4401). When omitted, every connection is
    * allowed — set this on any multi-tenant deployment to scope rooms per user.
+   *
+   * For record-backed collaboration, prefer the pre-built
+   * `createCollabRoomAuth` builder from `@rudderjs/sync/collab` rather than
+   * hand-rolling the parse → resolve → policy → fail-closed chain.
    */
-  onAuth?: (req: { headers: Record<string, string | string[] | undefined>; url: string; token?: string }, docName: string) => boolean | Promise<boolean>
+  onAuth?: (req: SyncAuthRequest, docName: string) => boolean | Promise<boolean>
   /**
    * Called (debounced) whenever a document is updated.
    * Useful for indexing, webhooks, or audit logs.
