@@ -96,7 +96,9 @@ const config: BroadcastConfig = {
 export default config
 ```
 
-That's it. Channel auth, presence, telescope, the rudder commands — all unchanged. Run `pnpm rudder doctor --deep` to verify `REDIS_URL` is set and reachable.
+That's it. Channel auth, server-originated `broadcast()` events, telescope, the rudder commands all fan across the cluster. Run `pnpm rudder doctor --deep` to verify `REDIS_URL` is set and reachable.
+
+> **Presence channels are per-instance.** Presence rosters and `presence.joined` / `presence.left` events are tracked in each instance's memory and are NOT fanned across the driver, so a member connected to instance A is absent from the roster computed on instance B. Regular `broadcast()` and `client-event` traffic IS cluster-wide. If you need a single cluster-wide roster, pin presence-channel clients to one instance (sticky sessions) or aggregate roster state yourself. The provider logs a one-time notice at boot when a cross-instance driver is configured.
 
 ## The browser client
 

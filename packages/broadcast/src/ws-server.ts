@@ -454,14 +454,30 @@ async function onMessage(
     case 'subscribe': {
       const { channel, token } = msg
 
-      // Per-connection subscription cap — bounds memory growth from a socket
-      // flooding (unauthenticated) public-channel subscribes. Checked before
-      // any auth work, and only for a genuinely new channel (a repeat subscribe
-      // to an already-joined channel doesn't grow the set).
+      // Idempotent re-subscribe. A socket already in this channel gets a fresh
+      // `subscribed` confirmation (and, for presence, the current roster) — but
+      // NO re-run of the auth callback and, crucially, NO second `presence.joined`
+      // broadcast to peers. Without this guard a client could loop subscribe
+      // frames to spam `presence.joined`, leaving append-only client rosters with
+      // ghost duplicates of itself (only one `presence.left` fires on disconnect).
+      // Matches Pusher's already-subscribed semantics. Checked before the cap so a
+      // re-subscribe is never rejected by it.
       const subs = state.subscriptions.get(id)
+      if (subs?.has(channel)) {
+        send(ws, { type: 'subscribed', channel })
+        if (channel.startsWith('presence-')) {
+          const members = [...(state.presence.get(channel)?.values() ?? [])]
+          send(ws, { type: 'presence.members', channel, members })
+        }
+        return
+      }
+
+      // Per-connection subscription cap — bounds memory growth from a socket
+      // flooding (unauthenticated) public-channel subscribes. Checked before any
+      // auth work; the idempotency guard above already excluded re-subscribes, so
+      // this only ever counts a genuinely new channel.
       if (
         state.maxChannelsPerSocket > 0 &&
-        !subs?.has(channel) &&
         (subs?.size ?? 0) >= state.maxChannelsPerSocket
       ) {
         send(ws, { type: 'error', channel, message: 'Subscription limit reached' })
