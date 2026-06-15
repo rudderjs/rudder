@@ -11,7 +11,10 @@ const defaultDriver = isWebContainer()
 export default {
   driver:   defaultDriver,
   lifetime: 120,
-  secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
+  // Leave empty to sign with APP_KEY (the framework falls back automatically);
+  // set SESSION_SECRET only to use a dedicated session key. Never ship the old
+  // \`change-me-in-production\` placeholder — it is a public, forgeable key.
+  secret:   Env.get('SESSION_SECRET', ''),
   cookie: {
     name:     'rudderjs_session',
     secure:   Env.getBool('SESSION_SECURE', false),

@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
+import { ServiceProvider, app, config, appendToGroup, bootNotice } from '@rudderjs/core'
 import { reusableConnection } from '@rudderjs/support'
 import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
@@ -105,7 +105,10 @@ export class SessionInstance {
   }
 
   get<T>(key: string, fallback?: T): T | undefined {
-    return (key in this._data ? this._data[key] : fallback) as T | undefined
+    // `Object.hasOwn`, not `key in`: `in` walks the prototype chain, so
+    // `get('toString')` would otherwise return `Object.prototype.toString`
+    // instead of the fallback (and `has('constructor')` would be true).
+    return (Object.hasOwn(this._data, key) ? this._data[key] : fallback) as T | undefined
   }
 
   put(key: string, value: unknown): void {
@@ -131,7 +134,7 @@ export class SessionInstance {
 
   /** Read a flash value set by the *previous* request. */
   getFlash<T>(key: string, fallback?: T): T | undefined {
-    return (key in this._flash ? this._flash[key] : fallback) as T | undefined
+    return (Object.hasOwn(this._flash, key) ? this._flash[key] : fallback) as T | undefined
   }
 
   /**
@@ -143,7 +146,7 @@ export class SessionInstance {
   }
 
   has(key: string): boolean {
-    return key in this._data
+    return Object.hasOwn(this._data, key)
   }
 
   all(): Record<string, unknown> {
@@ -495,6 +498,47 @@ function makeDriver(config: SessionConfig): InternalDriver {
   return new CookieDriver(config.secret)
 }
 
+// ─── Secret resolution ─────────────────────────────────────
+
+// The shipped config templates default `secret` to this literal when neither
+// SESSION_SECRET nor (historically) any fallback is set. Treat it — and an
+// empty string — as "no secret configured" so it can never become a real,
+// world-known signing key.
+const SESSION_SECRET_PLACEHOLDER = 'change-me-in-production'
+
+/**
+ * Resolve the effective HMAC signing secret for the session driver.
+ *
+ * The secret is the ONLY thing that makes a session cookie unforgeable, so a
+ * misconfigured one is a critical hole: with the placeholder (or empty) secret,
+ * anyone who reads the open-source default can mint a valid signed cookie for
+ * any user. The scaffolder emits an `APP_KEY` but no `SESSION_SECRET`, so the
+ * config default would otherwise resolve to the public literal.
+ *
+ * Resolution: a real `SESSION_SECRET` wins; otherwise fall back to `APP_KEY`
+ * (the documented behavior, now actually wired) with its `base64:` prefix
+ * stripped; otherwise warn loudly and keep the placeholder. We do NOT throw —
+ * `@rudderjs/session` boots transitively in apps that never serve sessions, and
+ * `APP_ENV` defaults to `production`, so a boot-throw would break unrelated
+ * boots (the passport keypair fail-fast lesson). The doctor surfaces it instead.
+ */
+/** @internal Exported for tests; not part of the public API. */
+export function resolveSessionSecret(configured: string | undefined): string {
+  const candidate = (configured ?? '').trim()
+  if (candidate && candidate !== SESSION_SECRET_PLACEHOLDER) return candidate
+
+  const appKey = (process.env['APP_KEY'] ?? '').replace(/^base64:/, '').trim()
+  if (appKey) return appKey
+
+  bootNotice(
+    'session',
+    'no SESSION_SECRET or APP_KEY set — session cookies are signed with a PUBLIC default ' +
+    'and are forgeable by anyone. Run `rudder key:generate` (sets APP_KEY) or set SESSION_SECRET ' +
+    'before deploying.',
+  )
+  return SESSION_SECRET_PLACEHOLDER
+}
+
 // ─── Session Middleware ────────────────────────────────────
 
 // Constructed via the global symbol registry rather than imported from
@@ -505,7 +549,11 @@ const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
 let _duplicateInstallWarned = false
 
 export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
-  const driver = makeDriver(config)
+  // Resolve the effective signing secret once (boot time): a placeholder/empty
+  // SESSION_SECRET falls back to APP_KEY rather than signing with a public
+  // constant. See resolveSessionSecret().
+  const resolvedSecret = resolveSessionSecret(config.secret)
+  const driver = makeDriver(resolvedSecret === config.secret ? config : { ...config, secret: resolvedSecret })
 
   const fn = async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
     // An outer sessionMiddleware already ran on this request — the canonical
