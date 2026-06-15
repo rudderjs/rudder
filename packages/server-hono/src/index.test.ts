@@ -1,9 +1,23 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { createRequire } from 'node:module'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { MalformedBodyError, PayloadTooLargeError } from '@rudderjs/contracts'
 import { hono, compileControllerViewRegex, devErrorPageEnabled } from './index.js'
-import { renderErrorPage, buildErrorMarkdown, resolveErrorLine, applyDevStackFix } from './error-page.js'
+import { renderErrorPage, buildErrorMarkdown, resolveErrorLine, applyDevStackFix, resolveRudderVersion } from './error-page.js'
+
+/** Walk up from the test cwd to the pnpm workspace root. */
+function repoRoot(): string {
+  let dir = process.cwd()
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir
+    dir = path.dirname(dir)
+  }
+  throw new Error('workspace root (pnpm-workspace.yaml) not found')
+}
 
 // ─── hono() factory ─────────────────────────────────────────
 
@@ -534,6 +548,42 @@ describe('renderErrorPage()', () => {
     // The markdown payload is embedded via JSON.stringify so the error name
     // ('Error') and message ('copyable') survive into the script literal.
     assert.ok(html.includes('# Error: copyable'), 'embedded markdown must include the heading')
+  })
+
+  it('never renders the legacy version placeholder badge', () => {
+    const html = renderErrorPage(new Error('boom'), req)
+    // The badge now shows a resolved @rudderjs/core version or is omitted — the
+    // hard-coded sentinel must never reach the page. Match the rendered badge
+    // fragment (with `">`), not the bare text: the source-context section
+    // HTML-escapes the test file's own source (where this assertion lives), so
+    // a bare `RUDDERJS 1.x` would false-positive while the escaped `&quot;&gt;`
+    // form never does.
+    assert.ok(!html.includes('badge-gray">RUDDERJS 1.x'), 'the 1.x placeholder badge must be gone')
+  })
+})
+
+// ─── resolveRudderVersion() ────────────────────────────────
+
+describe('resolveRudderVersion()', () => {
+  it('resolves the app-installed @rudderjs/core version (not the adapter, not a placeholder)', () => {
+    // The playground app declares @rudderjs/core, so resolving from its dir
+    // yields core's real version — proving we read core, not server-hono's own
+    // package.json (the previous, mislabeled behavior).
+    const appDir   = path.join(repoRoot(), 'playground')
+    const expected = (createRequire(path.join(appDir, 'package.json'))('@rudderjs/core/package.json') as { version: string }).version
+    const got      = resolveRudderVersion(appDir)
+    assert.equal(got, expected)
+    assert.match(got!, /^\d+\.\d+\.\d+/)
+    assert.notEqual(got, '1.x')
+  })
+
+  it('returns null when no @rudderjs package resolves (graceful fallback, never "1.x")', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rjs-ver-'))
+    try {
+      assert.equal(resolveRudderVersion(tmp), null)
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
   })
 })
 

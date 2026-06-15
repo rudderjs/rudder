@@ -1,5 +1,36 @@
 import fs from 'node:fs'
+import path from 'node:path'
+import { createRequire } from 'node:module'
 import { buildEditorUrl, resolveEditor } from './editor-launch.js'
+
+/**
+ * Resolve the framework version to show on the error page's `RUDDERJS` badge —
+ * the app's installed `@rudderjs/core` (the canonical number `rudder about` and
+ * the dev banner report), resolved from the app's `node_modules` via a
+ * `createRequire` rooted at the cwd. Falls back to this adapter's own version,
+ * then `null` (badge omitted). Best-effort; never throws.
+ *
+ * Mirrors `@rudderjs/vite`'s `resolveRudderVersion()`. Reading this adapter's
+ * OWN `package.json` (the previous approach) reported the *adapter* version
+ * mislabeled as "RudderJS", and leaked a hard-coded `1.x` placeholder whenever
+ * the on-disk read failed (bundled/serverless deploys). `@internal` — exposed
+ * for tests; `fromDir` overrides the resolution root.
+ */
+export function resolveRudderVersion(fromDir: string = process.cwd()): string | null {
+  let req: NodeJS.Require
+  try {
+    req = createRequire(path.join(fromDir, 'package.json'))
+  } catch {
+    return null
+  }
+  for (const name of ['@rudderjs/core', '@rudderjs/server-hono']) {
+    try {
+      const meta = req(`${name}/package.json`) as { version?: string }
+      if (typeof meta.version === 'string') return meta.version
+    } catch { /* try next */ }
+  }
+  return null
+}
 
 /**
  * @internal — exposed for tests.
@@ -217,11 +248,9 @@ export function renderErrorPage(
   const vendorCount = frames.filter(f => f.isVendor).length
 
   const nodeVersion = process.version
-  let rudderjsVersion = '1.x'
-  try {
-    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')) as { version?: string }
-    rudderjsVersion = pkg.version ?? '1.x'
-  } catch { /* ok */ }
+  // The app's installed @rudderjs/core version, or null when it can't be
+  // resolved (badge + markdown then omit it rather than show a placeholder).
+  const rudderjsVersion = resolveRudderVersion()
 
   // Pre-render the Markdown copy so the client-side button just reads a
   // server-rendered string — no DOM-parsing or formatting in the browser.
@@ -237,7 +266,7 @@ export function renderErrorPage(
     ...(topFrame ? { topFrame } : {}),
     source,
     nodeVersion,
-    rudderjsVersion,
+    rudderjsVersion: rudderjsVersion ?? 'unknown',
   })).replace(/[<>&\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
 
   // Editor-launch on stack frames — wraps the file:line label in an anchor
@@ -340,7 +369,7 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
 
   <div class="badges">
     <span class="badge badge-gray">NODE ${esc(nodeVersion)}</span>
-    <span class="badge badge-gray">RUDDERJS ${esc(rudderjsVersion)}</span>
+    ${rudderjsVersion ? `<span class="badge badge-gray">RUDDERJS ${esc(rudderjsVersion)}</span>` : ''}
     <span class="badge badge-red">UNHANDLED</span>
   </div>
 
