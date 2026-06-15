@@ -556,10 +556,10 @@ describe('spliceRudderVersion', () => {
 
   const strip = (s: string): string => s.replace(new RegExp(`${'\x1b'}\\[[0-9;]*m`, 'g'), '')
 
-  it('inserts "Rudder vX" before the "ready in" segment', () => {
+  it('prepends "Rudder vX" before the "Vike" segment', () => {
     const out = spliceRudderVersion(banner, '1.5.1')
     assert.ok(out !== null, 'banner should match')
-    assert.match(strip(out!), /Vike v0\.4\.257 · Vite v8\.0\.14 · Rudder v1\.5\.1 · ready in 400 ms/)
+    assert.match(strip(out!), /Rudder v1\.5\.1 · Vike v0\.4\.257 · Vite v8\.0\.14 · ready in 400 ms/)
   })
 
   it('keeps Vike and Vite versions intact', () => {
@@ -606,7 +606,7 @@ describe('installBannerSplice fallback timing', () => {
       httpServer.emit('listening')
       console.log(banner)
       assert.equal(lines.length, 1)
-      assert.match(strip(lines[0]!), /Vike v0\.4\.257 · Vite v8\.0\.14 · Rudder v1\.7\.0 · ready in 3366 ms/)
+      assert.match(strip(lines[0]!), /Rudder v1\.7\.0 · Vike v0\.4\.257 · Vite v8\.0\.14 · ready in 3366 ms/)
       assert.equal(console.log, recorder, 'wrapper restored after splice')
       // The (now-armed) fallback window elapsing later must stay silent.
       mock.timers.tick(2_000)
