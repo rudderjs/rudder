@@ -59,6 +59,16 @@ export class Pipeline {
 
 // ─── Built-in Middleware ───────────────────────────────────
 
+/**
+ * Safe (non-state-changing) HTTP methods. The asset/Vite skip heuristics below
+ * (a path whose last segment contains a dot) must ONLY apply to these — gating
+ * an unsafe request on a dotted path silently disables throttling/validation for
+ * routes like `POST /users/john.doe` or `POST /auth/forgot/a@b.com`.
+ */
+function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+}
+
 /** CORS middleware */
 export class CorsMiddleware extends Middleware {
   constructor(
@@ -140,8 +150,11 @@ export class ThrottleMiddleware extends Middleware {
   }
 
   handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
-    // Never throttle static assets — would break Vite HMR and page loads in dev
-    if (this.isAsset(req.path)) return next()
+    // Never throttle static assets — would break Vite HMR and page loads in dev.
+    // Gated on safe methods so an unsafe request to a dotted path (e.g.
+    // `POST /auth/login.json`) can't slip past throttling — the dotted-segment
+    // heuristic only ever describes GETs. Mirrors the CSRF asset-gate fix.
+    if (isSafeMethod(req.method) && this.isAsset(req.path)) return next()
 
     // Key by client IP. Uses the shared clientIp() so a missing req.ip warns
     // once (otherwise every client silently collapses into one 'unknown' bucket
@@ -373,7 +386,12 @@ function nextRateLimitId(): string {
 
 function makeRateLimitHandler(opts: RateLimitOptions, instanceId: string): MiddlewareHandler {
   return async function RateLimit(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
-    if (isRateLimitAsset(req.path)) return next()
+    // Asset skip is gated on safe methods: ungated, the dotted-last-segment
+    // heuristic disables rate limiting for ANY state-changing request whose path
+    // ends in a dot (`POST /users/john.doe`, `POST /auth/forgot/a@b.com`),
+    // silently voiding brute-force protection. The /@ and /node_modules Vite
+    // prefixes are GET-only, so they stay covered. Mirrors the CSRF asset-gate.
+    if (isSafeMethod(req.method) && isRateLimitAsset(req.path)) return next()
     if (opts.skipIf?.(req))         return next()
 
     const cache = CacheRegistry.get()

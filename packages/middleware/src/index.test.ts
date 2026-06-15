@@ -327,6 +327,20 @@ describe('ThrottleMiddleware', () => {
     assert.ok(passed)
   })
 
+  it('does NOT skip throttling for an unsafe request to an asset-like path', async () => {
+    // Regression: the asset skip must never bypass throttling for unsafe methods.
+    // A POST to a dotted-segment path (e.g. /auth/login.json) previously slipped
+    // through unthrottled because isAsset() matched regardless of method.
+    const throttle = new ThrottleMiddleware(1, 10_000)
+    const req = makeReq({ method: 'POST', path: '/auth/login.json', ip: '9.9.9.9' })
+    let nextCount = 0
+    await throttle.handle(req, makeRes().res, async () => { nextCount++ })
+    const blocked = makeRes()
+    await throttle.handle(req, blocked.res, async () => { nextCount++ })
+    assert.strictEqual(nextCount, 1)
+    assert.strictEqual(blocked.getStatus(), 429)
+  })
+
   it('uses x-forwarded-for header for client key', async () => {
     const throttle = new ThrottleMiddleware(1, 10_000)
     const req = makeReq({ headers: { 'x-forwarded-for': '10.0.0.1, 192.168.1.1' } })
@@ -565,6 +579,19 @@ describe('RateLimit', () => {
     let passed = false
     await handler(makeReq({ path: '/assets/app.js' }), makeRes().res, async () => { passed = true })
     assert.ok(passed)
+  })
+
+  it('does NOT skip rate limiting for an unsafe request to an asset-like path', async () => {
+    // Regression: the asset skip must never bypass rate limiting for unsafe
+    // methods. A POST to a dotted-segment path (e.g. /auth/forgot/a@b.com)
+    // previously slipped through with no throttling because isRateLimitAsset()
+    // matched regardless of method.
+    const handler = RateLimit.perMinute(1)
+    const req = makeReq({ method: 'POST', path: '/auth/forgot/a@b.com', ip: '8.8.8.8' })
+    await handler(req, makeRes().res, async () => {})
+    const bag = makeRes()
+    await handler(req, bag.res, async () => {})
+    assert.strictEqual(bag.getStatus(), 429)
   })
 
   it('.message() overrides the 429 body', async () => {
