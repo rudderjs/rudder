@@ -197,6 +197,20 @@ describe('Pipeline', () => {
       /fail/
     )
   })
+
+  it('throws if a middleware calls next() more than once', async () => {
+    // Guards against silent double-execution of downstream middleware and the
+    // destination (DB write / mail / payment) when a middleware forgets to
+    // return after next() or calls it in both a try and a catch.
+    let destRuns = 0
+    await assert.rejects(
+      async () => new Pipeline([
+        async (_req, _res, next) => { await next(); await next() },
+      ]).run(makeReq(), makeRes().res, async () => { destRuns++ }),
+      /next\(\) called multiple times/
+    )
+    assert.strictEqual(destRuns, 1)
+  })
 })
 
 // ─── CorsMiddleware ────────────────────────────────────────
@@ -325,6 +339,19 @@ describe('ThrottleMiddleware', () => {
     let passed = false
     await throttle.handle(makeReq({ path: '/assets/app.js' }), makeRes().res, async () => { passed = true })
     assert.ok(passed)
+  })
+
+  it('prunes expired records so the hits map does not grow unbounded', async () => {
+    // Regression: a one-shot key (IP churn / spoofed XFF) must not leak forever.
+    const throttle = new ThrottleMiddleware(5, 20)
+    const hits = (throttle as unknown as { hits: Map<string, unknown> }).hits
+    await throttle.handle(makeReq({ ip: '1.1.1.1' }), makeRes().res, async () => {})
+    assert.strictEqual(hits.size, 1)
+    await new Promise(resolve => setTimeout(resolve, 60)) // let the 20ms window expire
+    await throttle.handle(makeReq({ ip: '2.2.2.2' }), makeRes().res, async () => {})
+    assert.strictEqual(hits.size, 1)
+    assert.ok(hits.has('2.2.2.2'))
+    assert.ok(!hits.has('1.1.1.1'))
   })
 
   it('does NOT skip throttling for an unsafe request to an asset-like path', async () => {
