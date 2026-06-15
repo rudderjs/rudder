@@ -29,10 +29,25 @@ function runCheck(): DoctorResult {
 }
 
 describe('session:secret doctor check', () => {
-  it('warns when SESSION_SECRET and APP_KEY are both unset (no signing secret)', () => {
+  it('errors when SESSION_SECRET and APP_KEY are both unset (forgeable placeholder)', () => {
+    const result = runCheck()
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.message, /APP_KEY is also unset/)
+  })
+
+  it('errors when SESSION_SECRET is the public placeholder and APP_KEY is unset', () => {
+    process.env['SESSION_SECRET'] = 'change-me-in-production'
+    const result = runCheck()
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.message, /placeholder/)
+  })
+
+  it('warns when SESSION_SECRET is the public placeholder but APP_KEY provides a real key', () => {
+    process.env['SESSION_SECRET'] = 'change-me-in-production'
+    process.env['APP_KEY'] = 'b'.repeat(44)
     const result = runCheck()
     assert.strictEqual(result.status, 'warn')
-    assert.match(result.message, /APP_KEY is also unset/)
+    assert.match(result.message, /placeholder/)
   })
 
   it('is ok when SESSION_SECRET is unset but APP_KEY provides the fallback', () => {
