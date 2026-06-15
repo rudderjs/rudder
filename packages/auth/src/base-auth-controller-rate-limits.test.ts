@@ -183,6 +183,32 @@ describe('BaseAuthController — default rate-limits', () => {
     assert.notEqual(resB.statusCode, 429, 'unrelated email should not inherit A\'s bucket')
   })
 
+  it('password-reset limit normalizes the email key (case/whitespace variants share one bucket)', async () => {
+    class AuthCtrlNorm extends BaseAuthController {
+      protected userModel = NOOP_USER_MODEL
+      protected hash      = NOOP_HASH
+    }
+
+    const router = new Router()
+    router.registerController(AuthCtrlNorm)
+    const route = findRoute(router, '/auth/request-password-reset')
+
+    // Three different surface forms of the SAME address from the same IP, then a
+    // fourth. Without key normalization each variant is its own bucket and none
+    // would 429; with normalization all four map to `victim@x.com` and the 4th
+    // is blocked — closing the trivial per-account throttle bypass.
+    const variants = ['victim@x.com', 'Victim@x.com', ' VICTIM@x.com ', 'victim@x.com']
+    const statuses: number[] = []
+    for (const email of variants) {
+      const req = fakeReq({ path: '/auth/request-password-reset', ip: '10.0.0.9', body: { email } })
+      const res = fakeRes()
+      await runMiddlewareOnly(route, req, res)
+      statuses.push(res.statusCode)
+    }
+    assert.equal(statuses.filter(s => s === 429).length, 1, `expected the 4th variant to be throttled, got ${statuses.join(',')}`)
+    assert.equal(statuses[3], 429, `case/whitespace variants must share the victim's bucket: ${statuses.join(',')}`)
+  })
+
   it('subclass override `static rateLimits = {}` disables limits entirely', async () => {
     class UnprotectedAuthCtrl extends BaseAuthController {
       protected userModel = NOOP_USER_MODEL

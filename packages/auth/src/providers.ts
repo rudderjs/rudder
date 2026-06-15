@@ -57,7 +57,19 @@ export class EloquentUserProvider implements UserProvider {
   async validateCredentials(user: Authenticatable, credentials: Record<string, unknown>): Promise<boolean> {
     const plain = credentials['password']
     if (typeof plain !== 'string') return false
-    return this.hashCheck(plain, user.getAuthPassword())
+    const hashed = user.getAuthPassword()
+    // A row with no usable password hash (OAuth-only / SSO / invited-not-yet-set
+    // accounts, where `password` is null/empty) must never authenticate by
+    // password. Feeding an empty hash to the verifier is at best a no-op
+    // (bcrypt returns false) and at worst a throw (argon2 can't parse it) or a
+    // bypass (a lax custom hasher). Reject explicitly — but still run a dummy
+    // verify so "account exists but has no password" can't be told apart from
+    // "wrong password" by response latency.
+    if (!hashed) {
+      await this.fakeValidateCredentials(credentials)
+      return false
+    }
+    return this.hashCheck(plain, hashed)
   }
 
   /**

@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { bootNotice } from '@rudderjs/core'
 import type { Authenticatable, UserProvider } from './contracts.js'
+import { newRememberToken } from './remember.js'
 
 // ─── Token Repository Contract ────────────────────────────
 
@@ -146,6 +147,21 @@ export class PasswordBroker {
     // Reset
     await callback(user, credentials.password)
     await this.tokens.delete(credentials.email)
+
+    // Cycle the "remember me" token (Laravel parity). A password reset is a
+    // security event — typically because the account is suspected compromised —
+    // so any persistent-login cookie captured before the reset must stop
+    // working. Rotating the stored token invalidates every outstanding remember
+    // cookie (the cookie auths only if its token still matches the row). Best
+    // effort: optional on the provider, and a no-op when the user model has no
+    // remember-token column.
+    if (this.users.updateRememberToken) {
+      try {
+        await this.users.updateRememberToken(user.getAuthIdentifier(), newRememberToken())
+      } catch {
+        // Don't fail an otherwise-successful reset if token cycling can't persist.
+      }
+    }
 
     return 'PASSWORD_RESET'
   }
