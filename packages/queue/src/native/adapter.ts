@@ -262,13 +262,33 @@ export class DatabaseQueueAdapter implements QueueAdapter {
     let processed = 0
     try {
       while (!this._stop) {
-        const reserved = await this._reserveNext(names)
+        let reserved: ReservedJob | null
+        try {
+          reserved = await this._reserveNext(names)
+        } catch (err) {
+          // A transient reservation error (e.g. SQLITE_BUSY when multiple worker
+          // processes contend on one SQLite file, or a brief connection blip)
+          // must not kill the worker. Log, back off, retry — the row is untouched.
+          console.error('[RudderJS Queue:database] reservation failed, backing off:', err)
+          if (options.stopWhenEmpty) break
+          await sleep(sleepMs)
+          continue
+        }
         if (!reserved) {
           if (options.stopWhenEmpty) break
           await sleep(sleepMs)
           continue
         }
-        await this._process(reserved, options)
+        try {
+          await this._process(reserved, options)
+        } catch (err) {
+          // `_process` dead-letters poison rows and handles job failure/retry
+          // internally, so a throw here is an unexpected infra error (e.g. the DB
+          // write that records the failure itself failed). Keep the worker alive —
+          // the row stays reserved and `retry_after` reclaims it — rather than
+          // crashing the loop and stalling the whole queue.
+          console.error(`[RudderJS Queue:database] unexpected error processing job ${String(reserved.row['id'])}:`, err)
+        }
         processed++
         if (options.once) break
         if (options.maxJobs && processed >= options.maxJobs) break
@@ -336,11 +356,27 @@ export class DatabaseQueueAdapter implements QueueAdapter {
     const dispatchedAt = new Date(Number(row['created_at']) * 1000)
     const startedAt = new Date()
 
-    const parsed = JSON.parse(String(row['payload'])) as {
+    // Parse + decode up front, fail-closed. A row whose payload can't be parsed
+    // or decoded (DB corruption, a hostile row written straight into the table,
+    // or a payload nested past the serializer's depth guard) can never run — it's
+    // a poison pill. Dead-letter it here instead of letting the synchronous throw
+    // escape `_process`, kill the worker loop (which has no catch), and then
+    // re-crash every worker that reclaims the still-reserved row after retry_after.
+    let parsed: {
       job: string
       data: Record<string, unknown>
       maxTries?: number
       __context?: Record<string, unknown> | null
+    }
+    let decoded: unknown
+    try {
+      parsed  = JSON.parse(String(row['payload'])) as typeof parsed
+      decoded = decodePayload(parsed.data)
+    } catch (err) {
+      await this._moveToFailed(row, queue, err)
+      await adapter.query(this.table).where('id', row['id']).deleteAll()
+      this._emitFailed(jobId, 'unknown', queue, {}, attempts, dispatchedAt, startedAt, err)
+      return
     }
     const maxTries = options.tries ?? parsed.maxTries ?? 3
     const JobClass = this.jobRegistry.get(parsed.job)
@@ -361,7 +397,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
       return
     }
 
-    const instance = Object.assign(new JobClass(), decodePayload(parsed.data))
+    const instance = Object.assign(new JobClass(), decoded)
 
     try {
       await withTimeout(
@@ -388,11 +424,17 @@ export class DatabaseQueueAdapter implements QueueAdapter {
           console.error(`[RudderJS Queue:database] failed() hook threw for "${parsed.job}":`, hookErr)
         }
       } else {
-        // Release for retry after the backoff delay.
+        // Release for retry. On a SOFT timeout the original handler is STILL
+        // running (JS can't preempt it), so releasing the row immediately would
+        // let another worker reserve and run the same job concurrently. Hold it
+        // back by at least `retry_after` — the same window the crashed-worker
+        // safety net uses — so the in-flight handler has a chance to finish
+        // before a re-run. A normal failure releases after the configured backoff.
         const backoff = options.backoff ?? 0
+        const releaseDelay = err instanceof JobTimeoutError ? Math.max(backoff, this.retryAfter) : backoff
         await adapter.query(this.table)
           .where('id', row['id'])
-          .updateAll({ reserved_at: null, available_at: nowSec() + backoff })
+          .updateAll({ reserved_at: null, available_at: nowSec() + releaseDelay })
       }
       this._emitFailed(jobId, parsed.job, queue, parsed.data, attempts, dispatchedAt, startedAt, err)
     }
@@ -510,6 +552,11 @@ export class DatabaseQueueAdapter implements QueueAdapter {
   }
 }
 
+/** Marker error so `_process` can tell a soft timeout apart from a handler
+ *  failure and hold the released row back by `retry_after` (the in-flight
+ *  handler is still running and must not be re-run concurrently). */
+class JobTimeoutError extends Error {}
+
 /**
  * Soft timeout guard. JS can't preempt a running handler (no `pcntl`), so this
  * only rejects the *await* after `timeoutSec` — the in-flight handler keeps
@@ -520,7 +567,7 @@ function withTimeout<T>(p: Promise<T>, timeoutSec?: number): Promise<T> {
   if (!timeoutSec || timeoutSec <= 0) return p
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`[RudderJS Queue:database] job timed out after ${timeoutSec}s`)),
+      () => reject(new JobTimeoutError(`[RudderJS Queue:database] job timed out after ${timeoutSec}s`)),
       timeoutSec * 1000,
     )
     p.then(

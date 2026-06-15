@@ -73,4 +73,28 @@ describe('encodePayload / decodePayload', () => {
     assert.equal(decoded.name, 'alice')
     assert.ok(decoded.when instanceof Date)
   })
+
+  // ── depth guard (DoS): a job payload frequently carries user-controlled input,
+  // and unbounded recursion would stack-overflow encode (on dispatch) / decode (on
+  // the worker). 1000 levels is below the native stack limit (so without the guard
+  // these would NOT throw — the green-vs-red gate) but above the 256-level guard.
+  describe('payload depth guard', () => {
+    const deep = (depth: number): unknown => {
+      let o: unknown = { leaf: true }
+      for (let i = 0; i < depth; i++) o = { nested: o }
+      return o
+    }
+
+    it('encodePayload rejects a pathologically deep payload', () => {
+      assert.throws(() => encodePayload(deep(1000)), /nesting exceeds/)
+    })
+
+    it('decodePayload rejects a pathologically deep payload', () => {
+      assert.throws(() => decodePayload(deep(1000)), /nesting exceeds/)
+    })
+
+    it('still round-trips a reasonably nested payload', () => {
+      assert.doesNotThrow(() => decodePayload(wire(deep(50))))
+    })
+  })
 })

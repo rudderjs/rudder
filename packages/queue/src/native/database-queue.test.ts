@@ -30,6 +30,11 @@ class BoomJob extends Job {
   override failed(err: unknown): void { failedWith.push(err) }
 }
 
+class HangJob extends Job {
+  static override retries = 2
+  handle(): Promise<void> { ran.push('hang'); return new Promise((r) => setTimeout(r, 1500)) }
+}
+
 // ── setup: fresh in-memory native engine + queue tables ──
 // Loosely typed — the native adapter satisfies the driver's structural needs at
 // runtime; the test asserts behavior, not types.
@@ -217,6 +222,58 @@ test('dedicated engine connection auto-creates its own tables', { skip: !availab
     rmSync(`${file}-shm`, { force: true })
     rmSync(`${file}-wal`, { force: true })
   }
+})
+
+test('malformed-payload row is dead-lettered instead of crashing the worker (poison pill)', { skip: !available }, async () => {
+  reset()
+  const adapter = await setup()
+  const q = database({ adapter, jobs: [OkJob] }).create()
+
+  // Simulate a row written straight into the table (DB corruption, a shared DB,
+  // or SQL injection elsewhere) whose payload is not valid JSON. Before the fix,
+  // JSON.parse threw OUTSIDE _process's try/catch, the throw escaped work()'s
+  // catch-less loop, and the worker died — leaving the still-reserved row to
+  // re-crash every worker that reclaimed it after retry_after.
+  const now = Math.floor(Date.now() / 1000)
+  await adapter.query('jobs').create({
+    queue: 'default',
+    payload: 'this is not valid json{',
+    attempts: 0,
+    reserved_at: null,
+    available_at: now,
+    created_at: now,
+  })
+
+  // Must resolve (not reject) — the worker survives the poison row.
+  await q.work!('default', { stopWhenEmpty: true })
+
+  assert.equal(await adapter.query('jobs').where('queue', 'default').count(), 0, 'poison row removed from the queue')
+  assert.equal(await adapter.query('failed_jobs').where('queue', 'default').count(), 1, 'poison row moved to failed_jobs')
+  await adapter.disconnect?.()
+})
+
+test('a soft-timed-out job is held back by retry_after before it can re-run', { skip: !available }, async () => {
+  reset()
+  const adapter = await setup()
+  const q = database({ adapter, jobs: [HangJob], retryAfter: 30 }).create()
+
+  await q.dispatch(new HangJob(), { queue: 'default' })
+  const before = Math.floor(Date.now() / 1000)
+
+  // timeout 1s < handler 1.5s → soft timeout fires; attempts(1) < retries(2) →
+  // released. The in-flight handler is still running, so the row must NOT become
+  // immediately reclaimable (the pre-fix `available_at = now + backoff(0)` did);
+  // it should be held back by ~retry_after instead.
+  await q.work!('default', { once: true, timeout: 1, backoff: 0 })
+
+  const rows = await adapter.query('jobs').where('queue', 'default').get()
+  assert.equal(rows.length, 1, 'job released back to the queue, not deleted')
+  const availableAt = Number(rows[0]!['available_at'])
+  assert.ok(
+    availableAt >= before + 25,
+    `timed-out job must be held ~retry_after (30s); got available_at ${availableAt - before}s from now`,
+  )
+  await adapter.disconnect?.()
 })
 
 test('reservation locks with { skipLocked: true } (concurrent workers never queue on one row)', async () => {
