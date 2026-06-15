@@ -75,7 +75,7 @@ registerDoctorCheck({
     const declared = [
       ...Object.keys(pkg.dependencies    ?? {}),
       ...Object.keys(pkg.devDependencies ?? {}),
-    ].filter(name => name.startsWith('@rudderjs/') || name === 'create-rudder' || name === 'create-rudder-app')
+    ].filter(name => name.startsWith('@rudderjs/') || name === 'create-rudder')
 
     const missing = declared.filter(name => !isResolvable(name))
     if (missing.length > 0) {

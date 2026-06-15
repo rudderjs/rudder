@@ -31,7 +31,7 @@ Docs-only changes skip the heavy jobs (a leading `changes` job detects whether a
 
 The strongest signal that the framework works is that a freshly scaffolded app works. The Scaffolder E2E matrix doesn't test internal units — it runs the exact path a new user takes:
 
-1. Scaffold a project with `create-rudder-app` (every recipe: `minimal`, `web-app`, `saas`, `api-service`, `realtime`).
+1. Scaffold a project with `create-rudder` (every recipe: `minimal`, `web-app`, `saas`, `api-service`, `realtime`).
 2. Install dependencies and run a production build.
 3. Boot the built server.
 4. Drive a real browser (Playwright) against it and assert the pages render.

@@ -93,7 +93,6 @@ rudderjs/
 │   ├── terminal/       # terminal('id', props) — Ink/React 19 components rendered in rudder commands (app/Terminal/**)
 │   └── cli/            # make:*, module:*, module:publish, providers:discover, rudder user commands
 ├── create-rudder/       # Interactive scaffolder CLI — see claude-notes/create-app.md
-├── create-rudder-app/   # Legacy alias stub for create-rudder
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference (NATIVE engine; playground-prisma/ = same app on Prisma)
 ```

@@ -16,7 +16,7 @@ pnpm create rudder my-app
 # or: bunx create-rudder my-app
 ```
 
-> The legacy `create-rudder-app` invocation still works — it now prints a one-line nudge to switch to `create-rudder` and otherwise scaffolds identically.
+> The legacy `create-rudder-app` invocation is **deprecated** — the published alias still resolves and scaffolds identically (printing a one-line nudge), but use `create-rudder` directly.
 
 The scaffolder asks a short recipe-driven sequence, then generates only the code for the choices you made. Selected packages get added to `package.json`, registered via auto-discovery, and have their config files generated. Unselected packages are excluded entirely — no dead code, no orphan config.
 

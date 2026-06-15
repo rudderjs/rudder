@@ -226,11 +226,11 @@ jobs:
       # Linux/macOS: plain steps, no retry — the flake never reproduces here.
       - name: Build
         if: matrix.os != 'windows-latest'
-        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder'
 
       - name: Test
         if: matrix.os != 'windows-latest'
-        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'
+        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder'
 
       # Windows: serialise + stream + retry up to 2x, with a PER-ATTEMPT TIMEOUT.
       # Each attempt runs the turbo command in a child pwsh we wait on with a
@@ -278,7 +278,7 @@ jobs:
               -RedirectStandardOutput $out -RedirectStandardError $errf `
               -ArgumentList @(
                 '-NoProfile','-Command',
-                "pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+                "pnpm turbo run build --filter='./packages/*' --filter='./create-rudder'; exit `$LASTEXITCODE"
               )
             $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {
@@ -345,7 +345,7 @@ jobs:
               -RedirectStandardOutput $out -RedirectStandardError $errf `
               -ArgumentList @(
                 '-NoProfile','-Command',
-                "pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'; exit `$LASTEXITCODE"
+                "pnpm turbo run test --filter='./packages/*' --filter='./create-rudder'; exit `$LASTEXITCODE"
               )
             $null = $p.Handle   # cache the handle so $p.ExitCode is readable after exit (pwsh Start-Process gotcha)
             if ($p.WaitForExit($attemptTimeoutSec * 1000)) {

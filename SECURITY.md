@@ -31,7 +31,7 @@ Critical vulnerabilities trigger an immediate patch release and a security advis
 
 In scope:
 - `@rudderjs/*` packages published to npm
-- The `create-rudder` / `create-rudder-app` scaffolder
+- The `create-rudder` scaffolder
 - The `rudderjs/rudder` GitHub repository
 
 Out of scope:

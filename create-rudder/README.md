@@ -25,7 +25,7 @@ bunx create-rudder [name]
 
 Skip `[name]` to be prompted for one.
 
-> The legacy `create-rudder-app` invocation (`pnpm create rudder-app …`) still works — it now prints a one-line nudge to switch to `create-rudder` and otherwise scaffolds identically.
+> The legacy `create-rudder-app` invocation (`pnpm create rudder-app …`) is **deprecated**. The published alias still resolves and scaffolds identically (printing a one-line nudge), but `create-rudder` is the canonical command — use it directly.
 
 ---
 
@@ -41,7 +41,7 @@ The detailed scaffolder docs — recipe table, prompt-by-prompt walkthrough, gen
 
 ## Contributing to the scaffolder
 
-The scaffolder source lives at `create-rudder/` in the framework monorepo (the `create-rudder-app` package is a thin stub that re-spawns this one):
+The scaffolder source lives at `create-rudder/` in the framework monorepo:
 
 ```bash
 git clone https://github.com/rudderjs/rudder.git
