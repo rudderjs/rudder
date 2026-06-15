@@ -1,6 +1,6 @@
 {
   "name": "rudderjs-playground-prisma",
-  "version": "0.0.157",
+  "version": "0.0.158",
   "private": true,
   "type": "module",
   "scripts": {

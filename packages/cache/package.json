@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/cache",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "rudderjs": {
     "provider": "CacheProvider",
     "stage": "infrastructure",

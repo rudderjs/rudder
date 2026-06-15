@@ -1,5 +1,79 @@
 # @rudderjs/ai
 
+## 1.12.0
+
+### Minor Changes
+
+- 4a9eeb9: Add `@rudderjs/ai/chat-mentions` for `@slug` agent routing in chat UIs.
+
+  A chat UX where the user types `@<agent-slug>` to explicitly invoke an agent (overriding the orchestrator's routing) is generic across chat panels, bots, and CLIs, but every consumer had to hand-roll the parsing and the system-prompt rule. This subpath ships both:
+
+  - `parseMentions(message, knownSlugs)` extracts and validates `@<slug>` tokens (unknown mentions stay as plain text, `email@host` is not a mention), dedupes in first-seen order, lower-cases, and returns the matched slugs plus the message with the tokens stripped.
+  - `buildMentionRoutingRule(slugs, opts?)` renders a system-prompt rule forcing the orchestrator to dispatch the mentioned agents in order. The dispatch tool name and argument key are parameterized (`toolName` / `argKey`, default `run_agent` / `agentSlug`).
+
+  `MENTION_REGEX` is exported too; `parseMentions` clones it internally so the global's `lastIndex` never leaks across calls.
+
+  ```ts
+  import {
+    parseMentions,
+    buildMentionRoutingRule,
+  } from "@rudderjs/ai/chat-mentions";
+
+  const { slugs, cleaned } = parseMentions("@seo audit this", knownSlugs);
+  const rule = buildMentionRoutingRule(slugs);
+  ```
+
+- 3b2bacf: Add a continuation-validation hook for the conversation-persistence path.
+
+  `runWithPersistence` (the `conversational()` auto-persist path, plus the explicit `forUser()`/`continue()` form and their streaming variants) previously trusted the caller's incoming history verbatim. A continuation after a client-tool or approval round-trip carries the prior messages back from the client, so a malicious caller could rewrite history to continue another user's thread (IDOR), forge a `tool` result for a tool the server never ran, or claim an approval that was never pending.
+
+  New `validate?: ContinuationValidator` option on `AgentPromptOptions`: when set, it runs against the server-persisted history just before the agent loop, and throwing rejects the request. Shipped helpers (all from the main entry):
+
+  - `defaultContinuationValidator()` - ready-made hook with the built-in gate (prefix equality + tool-result-forgery + approval-forgery).
+  - `validateContinuation(persisted, incoming, opts?)` - pure function returning a `{ ok, code, reason, index }` verdict for custom policy.
+  - `assertValidContinuation(...)` - throwing variant; rejects with `ContinuationValidationError`.
+
+  Fully backward compatible: with no `validate` option the path behaves exactly as before. Stateless calls (no persistence) never invoke the hook.
+
+- 68c9e0f: Add a first-party ORM-backed `ConversationStore` at `@rudderjs/ai/conversation-orm`.
+
+  `@rudderjs/ai` previously shipped only `MemoryConversationStore`, which is in-process and loses every thread on restart, so any production consumer had to hand-roll persistence against the `ConversationStore` interface. `OrmConversationStore` persists conversation threads and their messages through the registered `@rudderjs/orm` adapter (native, Prisma, or Drizzle), so threads survive restarts and are shared across web processes and queue workers. It mirrors the existing `@rudderjs/ai/memory-orm` and `@rudderjs/ai/budget-orm` pattern.
+
+  ```ts
+  import { setConversationStore } from "@rudderjs/ai";
+  import { OrmConversationStore } from "@rudderjs/ai/conversation-orm";
+
+  setConversationStore(new OrmConversationStore());
+  ```
+
+  Exports `OrmConversationStore`, the `ormConversationStore()` factory, the `AiConversationRecord` / `AiConversationMessageRecord` Models (for admin queries), and the `conversationOrmPrismaSchema` reference to copy into your schema. Messages carry a monotonic per-thread position so `load()` returns them in append order; `content` and `toolCalls` are JSON-encoded into portable text columns.
+
+- 98cffb7: Add `Agent.resumeManyAsTool` for batch sub-agent resume.
+
+  When an orchestrator dispatches several sub-agents in one parent turn and more than one pauses on a client tool or approval gate, the host previously had to loop over the singular `Agent.resumeAsTool` and stitch the pending tool-call sets back together by hand. `resumeManyAsTool(requests, { runStore })` does that: it resumes each `(subRunId, agent)` snapshot and returns a combined result set.
+
+  ```ts
+  const batch = await Agent.resumeManyAsTool(
+    paused.map((p) => ({
+      subRunId: p.subRunId,
+      agent: rebuild(p),
+      clientToolResults: results[p.subRunId],
+      key: p.subRunId,
+    })),
+    { runStore }
+  );
+  // batch.completed / batch.paused / batch.errors partition the outcomes;
+  // batch.pendingToolCallIds is the aggregated single round-trip; loop until batch.allCompleted.
+  ```
+
+  Each request carries its own `agent` (the sub-agents may be different classes) plus optional `key` echoed back for correlation. Options: `onError: 'capture'` (default, a failed item becomes a `{ kind: 'error' }` outcome and the rest still resume) or `'throw'`; `concurrency: 'parallel'` (default) or `'serial'`. New exported types: `SubAgentResumeRequest`, `SubAgentResumeOutcome`, `SubAgentResumeManyOptions`, `SubAgentResumeManyResult`.
+
+### Patch Changes
+
+- a15d4b9: Fix `validateContinuation` falsely rejecting legitimate continuations whose tool-call arguments were reordered.
+
+  The prefix check compared messages with a key-order-sensitive `JSON.stringify`, so a tool-call `arguments` object (or structured `content`) whose keys came back in a different order, for example reloaded from a Postgres `jsonb` column, which does not preserve key order, or rebuilt client-side before re-sending, was read as a forged history and rejected with `not-a-prefix`. Comparison is now order-insensitive (recursive key sort), so semantically equal messages match while genuinely different ones are still rejected. Rejection reasons now name the diverging field (`content`, `toolCallId`, `toolCalls[i].arguments`, ...).
+
 ## 1.11.2
 
 ### Patch Changes
