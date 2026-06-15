@@ -8,6 +8,7 @@ declare module '@rudderjs/support' {
     'APP_ENV': string
     'APP_DEBUG': string
     'APP_URL': string
+    'APP_KEY': string
     'PORT': string
     'DATABASE_URL': string
     'AUTH_SECRET': string

@@ -43,7 +43,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/database-persistence.test.js dist-test/persistence-errors.test.js dist-test/room-id.test.js dist-test/lexical/index.test.js dist-test/ssr-hydration.test.js dist-test/react/CollabRoomManager.test.js dist-test/react/useCollabSeed.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/database-persistence.test.js dist-test/persistence-errors.test.js dist-test/room-id.test.js dist-test/awareness-removal.test.js dist-test/lexical/index.test.js dist-test/ssr-hydration.test.js dist-test/react/CollabRoomManager.test.js dist-test/react/useCollabSeed.test.js"
   },
   "dependencies": {
     "@rudderjs/core": "workspace:^",
