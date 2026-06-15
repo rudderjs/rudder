@@ -1,5 +1,33 @@
 # rudderjs-playground
 
+## 0.0.157
+
+### Patch Changes
+
+- Updated dependencies [20c5b05]
+- Updated dependencies [4f26206]
+- Updated dependencies [71a8237]
+- Updated dependencies [7f7ad28]
+- Updated dependencies [a6e17f3]
+- Updated dependencies [a34e499]
+- Updated dependencies [103d377]
+- Updated dependencies [4fa94c3]
+- Updated dependencies [de6859a]
+- Updated dependencies [6e8e4b4]
+- Updated dependencies [a51306f]
+- Updated dependencies [c03a395]
+  - @rudderjs/broadcast@1.4.0
+  - @rudderjs/cache@1.5.1
+  - @rudderjs/middleware@1.2.3
+  - @rudderjs/queue@4.4.3
+  - @rudderjs/server-hono@1.6.0
+  - @rudderjs/contracts@1.17.2
+  - @rudderjs/storage@1.2.1
+  - @rudderjs/view@1.4.0
+  - @rudderjs/vite@2.11.1
+  - @rudderjs/notification@1.1.2
+  - @rudderjs/mail@1.4.1
+
 ## 0.0.156
 
 ### Patch Changes

@@ -1,5 +1,30 @@
 # @rudderjs/middleware
 
+## 1.2.3
+
+### Patch Changes
+
+- 7f7ad28: Harden the CSRF double-submit cookie.
+
+  - **Add a `secure` option to `CsrfMiddleware`** and emit `Secure` by default in production (`NODE_ENV === 'production'`). Previously the token cookie was always written without `Secure`, so on any plaintext HTTP request a network attacker could read the token (and forge the matching header) or pin a known value. Mirrors `@rudderjs/session`'s cookie policy.
+  - **Support `__Host-`/`__Secure-` cookie name prefixes.** Setting `cookieName: '__Host-csrf_token'` now forces `Secure` automatically (browsers reject those names otherwise) and, via the prefix's ban on a `Domain` attribute, blocks sibling-subdomain cookie injection.
+  - **Reject duplicate token cookies.** An unsafe request carrying more than one cookie with the configured name now fails closed with `419 CSRF_DUPLICATE_COOKIE` instead of silently trusting the last occurrence (which a shadowing cookie could control).
+  - **Escape regex metacharacters in `getCsrfToken`.** A custom `cookieName` such as `csrf.token` is now matched literally, matching the server's exact-key lookup, instead of letting `.` act as a wildcard that could read an unrelated cookie.
+
+- a6e17f3: Gate the RateLimit and ThrottleMiddleware asset-skip on safe HTTP methods.
+
+  Both limiters skip requests whose last path segment contains a dot (the static-asset/Vite heuristic), but the skip ran for every method. An unsafe request to a dotted-segment path (`POST /users/john.doe`, `POST /auth/forgot/a@b.com`, `POST /auth/login.json`) therefore bypassed rate limiting and throttling entirely, silently voiding brute-force protection on those routes. The skip now only applies to safe methods (GET/HEAD/OPTIONS), matching the CSRF middleware's existing asset-gate. The `/@` and `/node_modules` Vite prefixes are GET-only in practice, so dev HMR and static assets stay uncovered as before.
+
+- a34e499: Robustness fixes for `ThrottleMiddleware` and `Pipeline`.
+
+  - **`ThrottleMiddleware` no longer leaks memory.** Its in-memory `hits` map only ever overwrote a record when the _same_ key returned, so a one-shot key (IP churn, NAT pools, or a spoofed `X-Forwarded-For` under `trustProxy`) lingered for the life of the process — unbounded growth toward memory exhaustion. It now opportunistically prunes expired records (at most once per window, or immediately past a `maxKeys` ceiling). The cache-backed `RateLimit` was never affected (the cache driver TTL-evicts).
+  - **`Pipeline.run` now throws on a double `next()`.** A middleware that called `next()` more than once (a forgotten `return`, or `next()` in both a `try` and a `catch`) silently advanced the chain again and re-ran downstream middleware and the destination — a side-effecting destination (DB write, mail, payment) would fire twice. It now throws `next() called multiple times`, matching Koa/Express.
+
+- Updated dependencies [71a8237]
+- Updated dependencies [4fa94c3]
+  - @rudderjs/cache@1.5.1
+  - @rudderjs/contracts@1.17.2
+
 ## 1.2.2
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # rudderjs-playground-rsc
 
+## 0.0.34
+
+### Patch Changes
+
+- Updated dependencies [4fa94c3]
+- Updated dependencies [a51306f]
+  - @rudderjs/server-hono@1.6.0
+  - @rudderjs/contracts@1.17.2
+  - @rudderjs/view@1.4.0
+
 ## 0.0.33
 
 ### Patch Changes
