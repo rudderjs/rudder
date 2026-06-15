@@ -55,6 +55,11 @@ describe('Crypt.encrypt / decrypt', () => {
     assert.strictEqual(Crypt.decrypt(Crypt.encrypt(false)), false)
   })
 
+  it('throws a clear error for a value that serializes to undefined', () => {
+    assert.throws(() => Crypt.encrypt(undefined), /serializes to undefined/)
+    assert.throws(() => Crypt.encrypt(() => {}), /serializes to undefined/)
+  })
+
   it('produces different ciphertext for the same input (random IV)', () => {
     const a = Crypt.encrypt('same')
     const b = Crypt.encrypt('same')
@@ -251,6 +256,14 @@ describe('CryptProvider', () => {
     await assert.rejects(
       () => new CryptProvider(fakeApp).boot?.() as Promise<void>,
       /must be 32 bytes/,
+    )
+  })
+
+  it('throws at boot when a previous key is the wrong length', async () => {
+    restore = withCryptConfig({ key: TEST_KEY, previousKeys: [TEST_KEY_2, 'too-short'] })
+    await assert.rejects(
+      () => new CryptProvider(fakeApp).boot?.() as Promise<void>,
+      /previousKeys\[1\] must be 32 bytes/,
     )
   })
 
