@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -559,6 +559,50 @@ describe('renderErrorPage()', () => {
     // a bare `RUDDERJS 1.x` would false-positive while the escaped `&quot;&gt;`
     // form never does.
     assert.ok(!html.includes('badge-gray">RUDDERJS 1.x'), 'the 1.x placeholder badge must be gone')
+  })
+
+  describe('Open-in-editor action', () => {
+    // The distinctive rendered-button anchor. Keying off this (not the bare
+    // `open-editor-btn` class) avoids false positives from the CSS `<style>`
+    // block and from the test file's own source echoed in the source-context
+    // section (which is HTML-escaped, so the raw `<a ...` never matches).
+    const BTN = '<a class="action-btn open-editor-btn" href="'
+    const prev = process.env['APP_EDITOR']
+    afterEach(() => {
+      if (prev === undefined) delete process.env['APP_EDITOR']
+      else process.env['APP_EDITOR'] = prev
+    })
+
+    it('renders a prominent "Open in editor" action opening the top frame in the resolved editor', () => {
+      process.env['APP_EDITOR'] = 'vscode'
+      const html = renderErrorPage(new Error('boom'), req)
+      assert.ok(html.includes(BTN), 'primary action button must be present')
+      assert.ok(html.includes('<span>Open in editor</span>'), 'button label must be present')
+      // The button targets the top app frame via the resolved editor's scheme.
+      assert.match(html, /class="action-btn open-editor-btn" href="vscode:\/\/file[^"]+:\d+"/)
+    })
+
+    it('honors APP_EDITOR for the action scheme (cursor)', () => {
+      process.env['APP_EDITOR'] = 'cursor'
+      const html = renderErrorPage(new Error('boom'), req)
+      assert.match(html, /class="action-btn open-editor-btn" href="cursor:\/\/file[^"]+:\d+"/)
+    })
+
+    it('is hidden when APP_EDITOR=none (no editor URL available)', () => {
+      process.env['APP_EDITOR'] = 'none'
+      const html = renderErrorPage(new Error('boom'), req)
+      assert.ok(!html.includes(BTN), 'button must be omitted when APP_EDITOR=none')
+      // The Copy-as-Markdown button is unaffected by the opt-out.
+      assert.ok(html.includes('Copy as Markdown'), 'copy button must still render')
+    })
+
+    it('is hidden when the error has no stack (no top frame to open)', () => {
+      process.env['APP_EDITOR'] = 'vscode'
+      const err = new Error('no stack')
+      delete err.stack
+      const html = renderErrorPage(err, req)
+      assert.ok(!html.includes(BTN), 'no editor button without a top frame')
+    })
   })
 })
 
