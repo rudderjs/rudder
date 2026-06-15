@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import { Readable } from 'node:stream'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
+import { buildS3ClientConfig } from './adapters/s3.js'
 import {
   LocalAdapter,
   S3Adapter,
@@ -564,6 +565,12 @@ describe('FakeAdapter + Storage.fake()', () => {
     assert.deepStrictEqual(result, { url: '/fake/upload/a.txt?expires=1234567890', headers: {} })
   })
 
+  it('FakeAdapter temporaryUploadUrl threads a contentType option into required headers', async () => {
+    const fake = Storage.fake()
+    const result = await fake.temporaryUploadUrl('a.txt', new Date(1234567890_000), { contentType: 'image/png' })
+    assert.deepStrictEqual(result.headers, { 'Content-Type': 'image/png' })
+  })
+
   it('FakeAdapter url() returns /fake/<path>', () => {
     const fake = Storage.fake()
     assert.strictEqual(fake.url('a/b.txt'), '/fake/a/b.txt')
@@ -828,6 +835,25 @@ describe('S3Adapter (with mocked SDK client)', () => {
     assert.strictEqual(v, 'public')
   })
 
+  it('getVisibility treats AuthenticatedUsers READ and AllUsers FULL_CONTROL as public', async () => {
+    const withAcl = (grants: Array<{ Grantee?: { URI?: string }; Permission?: string }>) => {
+      const a = new S3Adapter({ driver: 's3', bucket: 'b', region: 'us-east-1' })
+      ;(a as unknown as { client: unknown; _cmds: unknown }).client = {
+        send: async () => ({ Grants: grants }),
+      }
+      ;(a as unknown as { client: unknown; _cmds: unknown })._cmds = {
+        GetObjectAclCommand: class { constructor(public input: unknown) {} },
+      }
+      return a
+    }
+    const authUsers = withAcl([{ Grantee: { URI: 'http://acs.amazonaws.com/groups/global/AuthenticatedUsers' }, Permission: 'READ' }])
+    const fullCtrl  = withAcl([{ Grantee: { URI: 'http://acs.amazonaws.com/groups/global/AllUsers' }, Permission: 'FULL_CONTROL' }])
+    const writeOnly = withAcl([{ Grantee: { URI: 'http://acs.amazonaws.com/groups/global/AllUsers' }, Permission: 'WRITE' }])
+    assert.strictEqual(await authUsers.getVisibility('k.txt'), 'public')
+    assert.strictEqual(await fullCtrl.getVisibility('k.txt'), 'public')
+    assert.strictEqual(await writeOnly.getVisibility('k.txt'), 'private')
+  })
+
   it('readStream returns the Body', async () => {
     const stream = await s3.readStream('k.txt')
     const out = await readAll(stream)
@@ -858,6 +884,16 @@ describe('S3Adapter (with mocked SDK client)', () => {
       () => s3.temporaryUploadUrl('k.txt', new Date(Date.now() - 1000)),
       /must be in the future/,
     )
+  })
+
+  it('buildS3ClientConfig omits credentials unless BOTH key parts are present', () => {
+    // accessKeyId without a secret must fall through to the AWS default chain,
+    // not build a client that signs with an empty secret.
+    assert.ok(!('credentials' in buildS3ClientConfig({ driver: 's3', bucket: 'b', accessKeyId: 'AKIA' })))
+    assert.ok(!('credentials' in buildS3ClientConfig({ driver: 's3', bucket: 'b', accessKeyId: 'AKIA', secretAccessKey: '' })))
+    assert.ok(!('credentials' in buildS3ClientConfig({ driver: 's3', bucket: 'b' })))
+    const both = buildS3ClientConfig({ driver: 's3', bucket: 'b', accessKeyId: 'AKIA', secretAccessKey: 'shh' })
+    assert.deepStrictEqual(both['credentials'], { accessKeyId: 'AKIA', secretAccessKey: 'shh' })
   })
 })
 

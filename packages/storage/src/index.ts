@@ -11,6 +11,7 @@ import type {
   StorageAdapter,
   TemporaryUrlOptions,
   TemporaryUploadUrl,
+  TemporaryUploadUrlOptions,
   Visibility,
 } from './contracts.js'
 
@@ -28,6 +29,7 @@ export type {
   StorageAdapterProvider,
   TemporaryUrlOptions,
   TemporaryUploadUrl,
+  TemporaryUploadUrlOptions,
   Visibility,
 } from './contracts.js'
 
@@ -54,8 +56,8 @@ export class Storage {
   static temporaryUrl(filePath: string, expiresAt: Date, opts?: TemporaryUrlOptions): Promise<string> {
     return StorageRegistry.get().temporaryUrl(filePath, expiresAt, opts)
   }
-  static temporaryUploadUrl(filePath: string, expiresAt: Date): Promise<TemporaryUploadUrl> {
-    return StorageRegistry.get().temporaryUploadUrl(filePath, expiresAt)
+  static temporaryUploadUrl(filePath: string, expiresAt: Date, opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl> {
+    return StorageRegistry.get().temporaryUploadUrl(filePath, expiresAt, opts)
   }
   static setVisibility(filePath: string, visibility: Visibility): Promise<void> {
     return StorageRegistry.get().setVisibility(filePath, visibility)

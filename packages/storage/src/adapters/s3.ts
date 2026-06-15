@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream'
 import { BaseAdapter } from '../base.js'
-import type { TemporaryUrlOptions, TemporaryUploadUrl, Visibility } from '../contracts.js'
+import type { TemporaryUrlOptions, TemporaryUploadUrl, TemporaryUploadUrlOptions, Visibility } from '../contracts.js'
 
 export interface S3DiskConfig {
   driver:           's3'
@@ -40,6 +40,25 @@ interface S3GetAclResult {
 }
 
 const ALL_USERS_URI = 'http://acs.amazonaws.com/groups/global/AllUsers'
+const AUTHENTICATED_USERS_URI = 'http://acs.amazonaws.com/groups/global/AuthenticatedUsers'
+
+/**
+ * Build the S3Client config from a disk config. Explicit `credentials` are
+ * attached ONLY when both accessKeyId AND secretAccessKey are non-empty —
+ * otherwise the key is omitted so the AWS default credential chain (env vars,
+ * instance role, SSO) applies. Pure + exported for testing.
+ * @internal
+ */
+export function buildS3ClientConfig(config: S3DiskConfig): Record<string, unknown> {
+  return {
+    region: config.region ?? 'us-east-1',
+    ...(config.endpoint       && { endpoint:       config.endpoint }),
+    ...(config.forcePathStyle && { forcePathStyle: config.forcePathStyle }),
+    ...(config.accessKeyId && config.secretAccessKey && {
+      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    }),
+  }
+}
 
 export class S3Adapter extends BaseAdapter {
   private client:  unknown
@@ -60,14 +79,7 @@ export class S3Adapter extends BaseAdapter {
         S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand,
         ListObjectsV2Command, CopyObjectCommand, PutObjectAclCommand, GetObjectAclCommand,
       } = await import('@aws-sdk/client-s3') as typeof import('@aws-sdk/client-s3')
-      this.client = new S3Client({
-        region: this.config.region ?? 'us-east-1',
-        ...(this.config.endpoint       && { endpoint:       this.config.endpoint }),
-        ...(this.config.forcePathStyle && { forcePathStyle: this.config.forcePathStyle }),
-        ...(this.config.accessKeyId    && {
-          credentials: { accessKeyId: this.config.accessKeyId, secretAccessKey: this.config.secretAccessKey ?? '' },
-        }),
-      })
+      this.client = new S3Client(buildS3ClientConfig(this.config))
       ;(this as unknown as { _cmds: S3Commands })._cmds = {
         GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand,
         ListObjectsV2Command, CopyObjectCommand, PutObjectAclCommand, GetObjectAclCommand,
@@ -145,8 +157,13 @@ export class S3Adapter extends BaseAdapter {
     const res = await client.send(new (this.cmds().GetObjectAclCommand)({
       Bucket: this.bucket, Key: filePath,
     })) as S3GetAclResult
+    // A grant is "public exposure" when it targets AllUsers OR AuthenticatedUsers
+    // (any authenticated AWS principal in any account — AWS itself treats this as
+    // public) with READ or FULL_CONTROL (FULL_CONTROL implies READ). Matching
+    // only AllUsers/READ under-reported broadly-readable objects as 'private'.
     const isPublic = (res.Grants ?? []).some(g =>
-      g.Grantee?.URI === ALL_USERS_URI && g.Permission === 'READ',
+      (g.Grantee?.URI === ALL_USERS_URI || g.Grantee?.URI === AUTHENTICATED_USERS_URI) &&
+      (g.Permission === 'READ' || g.Permission === 'FULL_CONTROL'),
     )
     return isPublic ? 'public' : 'private'
   }
@@ -201,7 +218,7 @@ export class S3Adapter extends BaseAdapter {
     return getSignedUrl(client as never, cmd as never, { expiresIn })
   }
 
-  override async temporaryUploadUrl(filePath: string, expiresAt: Date): Promise<TemporaryUploadUrl> {
+  override async temporaryUploadUrl(filePath: string, expiresAt: Date, opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl> {
     if (expiresAt.getTime() <= Date.now()) {
       throw new Error('[RudderJS Storage] temporaryUploadUrl: expiresAt must be in the future.')
     }
@@ -209,9 +226,18 @@ export class S3Adapter extends BaseAdapter {
     const { PutObjectCommand } = this.cmds()
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner') as typeof import('@aws-sdk/s3-request-presigner')
 
-    const cmd = new PutObjectCommand({ Bucket: this.bucket, Key: filePath })
+    // Binding ContentType into the command makes it a SIGNED header: the upload
+    // only validates if the client sends a matching Content-Type, so a holder of
+    // the URL can't store arbitrary executable content under a type the app
+    // later serves inline. The required header is returned so the client knows
+    // what to send.
+    const cmd = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key:    filePath,
+      ...(opts?.contentType && { ContentType: opts.contentType }),
+    })
     const expiresIn = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
     const url = await getSignedUrl(client as never, cmd as never, { expiresIn })
-    return { url, headers: {} }
+    return { url, headers: opts?.contentType ? { 'Content-Type': opts.contentType } : {} }
   }
 }
