@@ -435,6 +435,23 @@ Other options: `name`, `version`, `instructions` (defaults to `agent.instruction
 
 Approval gates (`needsApproval: true`) are dropped on the MCP side — there's no MCP-protocol way to forward "this tool needs human approval" to a remote client. The gate fires only inside the wrapping agent, not for external MCP callers.
 
+## Chat mentions (`@slug` agent routing)
+
+In a chat UI where one orchestrator routes to several agents, let users `@<slug>` an agent to invoke it explicitly, overriding the orchestrator's own judgment. `@rudderjs/ai/chat-mentions` ships the two reusable pieces:
+
+```ts
+import { parseMentions, buildMentionRoutingRule } from '@rudderjs/ai/chat-mentions'
+
+const { slugs, cleaned } = parseMentions(userMessage, knownAgentSlugs)
+// '@seo audit this' → { slugs: ['seo'], cleaned: 'audit this' }
+
+const rule = buildMentionRoutingRule(slugs)   // null when no mentions
+if (rule) systemPrompt += `\n\n${rule}`
+// then run the orchestrator with `cleaned` as the user input
+```
+
+`parseMentions` validates tokens against your known slugs (unknown `@mentions` stay as plain text), dedupes in first-seen order, and strips the matched tokens so the model sees only the cleaned intent. It does not treat `email@host` as a mention. `buildMentionRoutingRule` renders a system-prompt rule forcing the orchestrator to dispatch the mentioned agents in order; pass `{ toolName, argKey }` if your dispatch tool is not the default `run_agent({ agentSlug })`.
+
 ## Queued prompts
 
 Push the agent run onto the queue for background execution. Returns a builder so you can configure the queue, attach success/failure callbacks, and (optionally) stream progress to a broadcast channel as it runs.
