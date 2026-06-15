@@ -1,7 +1,7 @@
 import { describe, it, mock, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { escapeHtml, html, SafeString, view, isViewResponse, ViewResponse, _resetVikeServerCacheForTests } from './index.js'
+import { escapeHtml, html, SafeString, safeUrl, serializeViewProps, view, isViewResponse, ViewResponse, _resetVikeServerCacheForTests } from './index.js'
 
 describe('escapeHtml()', () => {
   it('escapes the five HTML-sensitive characters', () => {
@@ -94,6 +94,59 @@ describe('html`` tagged template', () => {
 
   it('handles an empty template', () => {
     assert.equal(html``.value, '')
+  })
+})
+
+describe('SafeString brand (anti-laundering)', () => {
+  it('does NOT pass a prototype-spoofed fake SafeString through unescaped', () => {
+    // An attacker-shaped object with SafeString's prototype but no real brand.
+    const fake = Object.create(SafeString.prototype) as { value: string }
+    fake.value = '<script>alert(1)</script>'
+    const out = html`<div>${fake}</div>`.value
+    // The fake must be escaped (treated as untrusted), not emitted raw.
+    assert.doesNotMatch(out, /<script>/)
+    assert.match(out, /&lt;script&gt;/)
+  })
+
+  it('SafeString.isSafe is true for genuine instances, false for impostors', () => {
+    assert.equal(SafeString.isSafe(new SafeString('<b>x</b>')), true)
+    assert.equal(SafeString.isSafe(html`<b>x</b>`), true)
+    assert.equal(SafeString.isSafe(Object.create(SafeString.prototype)), false)
+    assert.equal(SafeString.isSafe({ value: '<x>' }), false)
+    assert.equal(SafeString.isSafe('<x>'), false)
+    assert.equal(SafeString.isSafe(null), false)
+  })
+})
+
+describe('safeUrl()', () => {
+  it('neutralizes javascript:/data:/vbscript: schemes to "#"', () => {
+    assert.equal(safeUrl('javascript:alert(1)'), '#')
+    assert.equal(safeUrl('JavaScript:alert(1)'), '#')
+    assert.equal(safeUrl('  javascript:alert(1)'), '#')
+    assert.equal(safeUrl('java\tscript:alert(1)'), '#')
+    assert.equal(safeUrl('data:text/html,<script>'), '#')
+    assert.equal(safeUrl('vbscript:msgbox'), '#')
+  })
+
+  it('passes safe http/https/mailto/relative URLs through unchanged', () => {
+    assert.equal(safeUrl('https://example.com/x?y=1'), 'https://example.com/x?y=1')
+    assert.equal(safeUrl('/dashboard'), '/dashboard')
+    assert.equal(safeUrl('mailto:a@b.com'), 'mailto:a@b.com')
+    assert.equal(safeUrl(null), '')
+  })
+})
+
+describe('serializeViewProps()', () => {
+  it('honors toJSON() on nested values and leaves plain data intact', () => {
+    const model = { a: 1, secret: 'x', toJSON() { return { a: this.a } } }
+    const out = serializeViewProps({ model, list: [model], n: 5, s: 'hi' })
+    assert.deepEqual(out, { model: { a: 1 }, list: [{ a: 1 }], n: 5, s: 'hi' })
+  })
+
+  it('does not infinite-loop on a circular prop graph', () => {
+    const a: Record<string, unknown> = { name: 'a' }
+    a['self'] = a
+    assert.doesNotThrow(() => serializeViewProps({ a }))
   })
 })
 
@@ -370,5 +423,48 @@ describe('ViewResponse.toResponse()', () => {
     })
     await r.toResponse({ url: '/home' })
     assert.deepEqual(calls[0]!.viewHeaders, { 'cache-control': 'public' })
+  })
+
+  it('scrubs ORM-model props through toJSON() so hidden columns never reach the client', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+    // A Model-like object whose toJSON() honors `static hidden` (drops password).
+    const user = {
+      id: 1,
+      email: 'alice@example.com',
+      password: '$2b$HASH',
+      rememberToken: 'SECRET',
+      toJSON() { return { id: this.id, email: this.email } },
+    }
+    await view('dashboard', { user, posts: [user] }).toResponse({ url: '/dashboard' })
+
+    assert.deepEqual(calls[0]!.viewProps, {
+      user:  { id: 1, email: 'alice@example.com' },
+      posts: [{ id: 1, email: 'alice@example.com' }],
+    })
+    const serialized = JSON.stringify(calls[0]!.viewProps)
+    assert.doesNotMatch(serialized, /\$2b\$HASH/, 'password hash must not be forwarded')
+    assert.doesNotMatch(serialized, /SECRET/,     'remember token must not be forwarded')
+  })
+
+  it('preserves Date props as real Dates (Vike round-trips them) instead of scrubbing', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+    const when = new Date('2026-06-15T00:00:00.000Z')
+    await view('home', { when }).toResponse({ url: '/home' })
+    assert.ok((calls[0]!.viewProps as { when: unknown }).when instanceof Date)
+  })
+
+  it('drops a header whose value carries CRLF instead of throwing a 500', async () => {
+    const { calls } = installVikeMock({
+      httpResponse: { statusCode: 200, contentType: 'text/html', headers: [], body: '' },
+    })
+    const r = view('home', {}, {
+      headers: { 'x-ok': 'fine', 'x-bad': 'a\r\nset-cookie: evil=1' },
+    })
+    await r.toResponse({ url: '/home' })
+    assert.deepEqual(calls[0]!.viewHeaders, { 'x-ok': 'fine' })
   })
 })
