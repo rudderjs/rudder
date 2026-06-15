@@ -41,19 +41,27 @@ export class Pipeline {
     res: AppResponse,
     destination: () => Promise<void>
   ): Promise<void> {
-    let idx = 0
     const stack = [...this.middleware]
+    let lastIndex = -1
 
-    const next = async (): Promise<void> => {
-      const fn = stack[idx++]
+    // Per-frame dispatch with a called-twice guard. A middleware that calls
+    // next() more than once (a forgotten `return`, or next() in both a try and a
+    // catch) would otherwise silently advance the chain again and re-run every
+    // downstream middleware AND the destination — a side-effecting destination
+    // (DB write, mail, payment) would fire twice. Throw loudly instead, matching
+    // Koa/Express's `next() called multiple times`.
+    const dispatch = async (i: number): Promise<void> => {
+      if (i <= lastIndex) throw new Error('next() called multiple times')
+      lastIndex = i
+      const fn = stack[i]
       if (fn) {
-        await fn(req, res, next)
+        await fn(req, res, () => dispatch(i + 1))
       } else {
         await destination()
       }
     }
 
-    await next()
+    await dispatch(0)
   }
 }
 
@@ -123,10 +131,13 @@ export class LoggerMiddleware extends Middleware {
 /** Simple rate limiter middleware (in-memory, skips static assets & Vite internals) */
 export class ThrottleMiddleware extends Middleware {
   private hits = new Map<string, { count: number; reset: number }>()
+  private lastSweep = 0
 
   constructor(
     private max: number = 60,
-    private windowMs: number = 60_000
+    private windowMs: number = 60_000,
+    /** Hard ceiling on tracked keys before an expiry sweep is forced. */
+    private maxKeys: number = 100_000
   ) {
     super()
   }
@@ -139,6 +150,19 @@ export class ThrottleMiddleware extends Middleware {
     return segment.includes('.')                  // any file extension → static asset
   }
 
+  /**
+   * Drop expired records. Without this the Map grows without bound: a key seen
+   * once (IP churn, NAT pools, or spoofed X-Forwarded-For under trustProxy) is
+   * only ever overwritten if that SAME key returns, so one-shot keys leak for
+   * the life of the process → memory-exhaustion DoS. Cache-backed RateLimit
+   * doesn't have this problem (the cache driver TTL-evicts).
+   */
+  private prune(now: number): void {
+    for (const [k, rec] of this.hits) {
+      if (now > rec.reset) this.hits.delete(k)
+    }
+  }
+
   handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
     // Never throttle static assets — would break Vite HMR and page loads in dev
     if (this.isAsset(req.path)) return next()
@@ -148,6 +172,14 @@ export class ThrottleMiddleware extends Middleware {
     // — the whole site shares a single quota).
     const key = clientIp(req)
     const now = Date.now()
+
+    // Reclaim expired records at most once per window, or immediately if the Map
+    // has blown past its ceiling (within-window flooding). Amortized O(1)/request.
+    if (now - this.lastSweep > this.windowMs || this.hits.size > this.maxKeys) {
+      this.prune(now)
+      this.lastSweep = now
+    }
+
     const rec = this.hits.get(key)
 
     if (!rec || now > rec.reset) {
