@@ -310,8 +310,8 @@ h1{font-size:28px;font-weight:700;color:#f4f4f5;margin:0}
 .actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .location{font-size:13px;color:#71717a;margin-bottom:12px;font-family:ui-monospace,monospace}
 .message{font-size:17px;color:#a1a1aa;margin-bottom:24px}
-.badges{display:flex;gap:8px;margin-bottom:32px;flex-wrap:wrap}
-.badge{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:.04em}
+.badges{display:flex;align-items:center;gap:8px;margin-bottom:32px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;line-height:1;padding:5px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:.04em}
 .badge-gray{background:#27272a;color:#a1a1aa}
 .badge-red{background:#450a0a;color:#f87171}
 .request-bar{display:flex;align-items:center;gap:10px;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:12px 16px;margin-bottom:36px}
@@ -345,7 +345,7 @@ table tr{border-bottom:1px solid #27272a}
 table tr:last-child{border-bottom:none}
 table th{text-align:left;padding:8px 16px;color:#52525b;font-weight:500;width:200px;font-size:12px;font-family:ui-monospace,monospace}
 table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;color:#a1a1aa;word-break:break-all}
-.copy-btn,.action-btn{display:inline-flex;align-items:center;gap:6px;background:#27272a;color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;padding:6px 12px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;text-decoration:none;transition:background .12s,border-color .12s}
+.copy-btn,.action-btn{display:inline-flex;align-items:center;line-height:1;gap:6px;background:#27272a;color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;padding:7px 12px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;text-decoration:none;transition:background .12s,border-color .12s}
 .open-editor-btn{background:#0c2a4a;border-color:#1d4ed8;color:#bfdbfe}
 .open-editor-btn:hover{background:#10366b;border-color:#3b82f6}
 .copy-btn:hover{background:#3f3f46;border-color:#52525b}
