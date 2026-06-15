@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
-import { MalformedBodyError } from '@rudderjs/contracts'
-import { hono, compileControllerViewRegex } from './index.js'
+import { MalformedBodyError, PayloadTooLargeError } from '@rudderjs/contracts'
+import { hono, compileControllerViewRegex, devErrorPageEnabled } from './index.js'
 import { renderErrorPage, buildErrorMarkdown, resolveErrorLine, applyDevStackFix } from './error-page.js'
 
 // ─── hono() factory ─────────────────────────────────────────
@@ -310,6 +310,59 @@ describe('HonoAdapter — body parsing', () => {
     // The original parse error survives as `cause` for diagnostics.
     assert.ok((errCaught as Error & { cause?: unknown }).cause instanceof SyntaxError,
       'cause should be the underlying JSON SyntaxError')
+  })
+
+  it('rejects an oversized JSON body with PayloadTooLargeError (413)', async () => {
+    const adapter = hono({ bodyLimit: 1024 }).create()  // 1 KB cap
+    let handlerRan = false
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/echo',
+      handler: async (_req, res) => { handlerRan = true; return res.json({ ok: true }) },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as {
+      fetch:   (req: Request) => Promise<Response>
+      onError: (fn: (err: unknown) => Response) => void
+    }
+    let errCaught: unknown
+    app.onError((err) => { errCaught = err; return new Response('intercepted', { status: 500 }) })
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify({ data: 'a'.repeat(5000) }), // > 1 KB
+    }))
+    assert.strictEqual(res.status, 500, 'Hono default for uncaught — 413 via the framework pipeline')
+    assert.strictEqual(handlerRan, false, 'handler must not run when the body exceeds the limit')
+    assert.ok(errCaught instanceof PayloadTooLargeError,
+      `expected PayloadTooLargeError, got ${(errCaught as Error)?.constructor?.name}`)
+    assert.strictEqual((errCaught as PayloadTooLargeError).httpStatus, 413)
+    assert.strictEqual((errCaught as PayloadTooLargeError).limit, 1024)
+  })
+
+  it('rejects an oversized form-urlencoded body with PayloadTooLargeError (413)', async () => {
+    const adapter = hono({ bodyLimit: 1024 }).create()
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/echo',
+      handler: async (req, res) => res.json({ body: req.body }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as {
+      fetch:   (req: Request) => Promise<Response>
+      onError: (fn: (err: unknown) => Response) => void
+    }
+    let errCaught: unknown
+    app.onError((err) => { errCaught = err; return new Response('intercepted', { status: 500 }) })
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body:    'data=' + 'a'.repeat(5000),
+    }))
+    assert.strictEqual(res.status, 500)
+    assert.ok(errCaught instanceof PayloadTooLargeError,
+      `expected PayloadTooLargeError, got ${(errCaught as Error)?.constructor?.name}`)
+    assert.strictEqual((errCaught as PayloadTooLargeError).httpStatus, 413)
   })
 
   it('leaves req.body at the default when JSON body is empty (no parse, no throw)', async () => {
@@ -1234,7 +1287,7 @@ describe('HonoAdapter — test-mode side channel', () => {
 // bug: with trustProxy=false every req.ip was undefined, so all clients
 // keyed into ONE rate-limit bucket in every default deployment.
 describe('HonoAdapter — client IP resolution', () => {
-  function setupEcho(trustProxy: boolean) {
+  function setupEcho(trustProxy: boolean | number) {
     const adapter = hono({ trustProxy }).create()
     adapter.registerRoute({
       method:  'GET',
@@ -1272,13 +1325,39 @@ describe('HonoAdapter — client IP resolution', () => {
     assert.deepStrictEqual(await res.json(), { ip: '203.0.113.9' })
   })
 
-  it('trustProxy=true: x-forwarded-for first hop wins over the socket', async () => {
+  it('trustProxy=true: takes the RIGHTMOST x-forwarded-for entry (the trusted proxy appended it)', async () => {
     const app = setupEcho(true)
     const res = await app.fetch(srvxStyle('http://localhost/ip', {
       ip: '10.0.0.1',
       headers: { 'x-forwarded-for': '198.51.100.7, 10.0.0.1' },
     }))
+    // One trusted proxy → the rightmost entry is the address the proxy observed.
+    assert.deepStrictEqual(await res.json(), { ip: '10.0.0.1' })
+  })
+
+  it('trustProxy=true: a client-SPOOFED leftmost x-forwarded-for entry is ignored', async () => {
+    // Attacker sends `X-Forwarded-For: 1.2.3.4`; the trusted proxy appends the
+    // real client (198.51.100.7), so the header arrives as "1.2.3.4, 198.51.100.7".
+    // req.ip must be the rightmost (real) hop, NOT the attacker-chosen leftmost —
+    // otherwise ip-keyed rate limits / allowlists are trivially bypassed. (The
+    // pre-fix leftmost behavior returned 1.2.3.4.)
+    const app = setupEcho(true)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', {
+      ip: '198.51.100.7',
+      headers: { 'x-forwarded-for': '1.2.3.4, 198.51.100.7' },
+    }))
     assert.deepStrictEqual(await res.json(), { ip: '198.51.100.7' })
+  })
+
+  it('trustProxy=N: takes the Nth entry from the right (multi-proxy chain)', async () => {
+    // Two trusted proxies in front: client → proxyA → proxyB → app. The chain is
+    // "client, proxyA"; with 2 trusted hops the real client is 2 from the right.
+    const app = setupEcho(2)
+    const res = await app.fetch(srvxStyle('http://localhost/ip', {
+      ip: '10.0.0.2',
+      headers: { 'x-forwarded-for': '203.0.113.5, 10.0.0.1' },
+    }))
+    assert.deepStrictEqual(await res.json(), { ip: '203.0.113.5' })
   })
 
   it('trustProxy=true with NO proxy header: falls back to the socket (direct hit)', async () => {
@@ -1333,5 +1412,56 @@ describe('HonoAdapter — client IP resolution', () => {
       if (prev === undefined) delete process.env['NODE_ENV']
       else process.env['NODE_ENV'] = prev
     }
+  })
+})
+
+// ─── Internal SPA-nav URL is not client-forgeable ──────────
+// The original URL handed to Vike's renderPage() must come from the framework's
+// own .pageContext.json rewrite (a per-request ALS), never from a client header
+// (the old `x-rudder-original-url`), which a direct request could forge to inject
+// an arbitrary URL into Vike's routing.
+describe('HonoAdapter — internal SPA-nav URL is not client-forgeable', () => {
+  class FakeView {
+    static __rudder_view__ = true
+    id = 'fake'
+    props = {}
+    async toResponse(ctx: { url: string }): Promise<Response> {
+      return new Response(ctx.url, { status: 200 })
+    }
+  }
+
+  it('ignores a forged x-rudder-original-url header — toResponse gets the real request URL', async () => {
+    const adapter = hono().create()
+    adapter.registerRoute({
+      method:     'GET',
+      path:       '/dash',
+      handler:    (async () => new FakeView()) as unknown as RouteDefinition['handler'],
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const res = await app.fetch(new Request('http://localhost/dash', {
+      headers: { 'x-rudder-original-url': 'http://evil.example/inject.pageContext.json' },
+    }))
+    assert.strictEqual(await res.text(), 'http://localhost/dash')
+  })
+})
+
+// ─── Dev error-page gate (secure-by-default) ───────────────
+describe('devErrorPageEnabled — secure-by-default error-page gate', () => {
+  it('treats unset env as production (no dev page) — the secure default', () => {
+    assert.strictEqual(devErrorPageEnabled({}), false)
+  })
+
+  it('renders the dev page only for explicit dev/local envs', () => {
+    assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'local' }), true)
+    assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'development' }), true)
+    assert.strictEqual(devErrorPageEnabled({ NODE_ENV: 'development' }), true)
+  })
+
+  it('treats production / staging / unknown as production', () => {
+    assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'production' }), false)
+    assert.strictEqual(devErrorPageEnabled({ NODE_ENV: 'production' }), false)
+    assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'staging' }), false)
+    assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'production', NODE_ENV: 'development' }), false)
   })
 })

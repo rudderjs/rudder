@@ -797,6 +797,26 @@ export class MalformedBodyError extends Error {
 }
 
 /**
+ * Thrown by a server adapter when a request body exceeds the configured size
+ * limit. Lives in contracts so adapters can throw it without a `@rudderjs/core`
+ * dependency; the framework's exception pipeline renders it as HTTP 413 via the
+ * duck-typed `httpStatus` path. The limit is enforced before the body is fully
+ * buffered, so an oversized or unbounded (chunked, no Content-Length) body
+ * can't exhaust memory.
+ */
+export class PayloadTooLargeError extends Error {
+  readonly httpStatus = 413
+  readonly contentType: string
+  readonly limit: number
+  constructor(contentType: string, limit: number) {
+    super(`Request body exceeds the ${limit}-byte limit (Content-Type: ${contentType})`)
+    this.name = 'PayloadTooLargeError'
+    this.contentType = contentType
+    this.limit = limit
+  }
+}
+
+/**
  * Thrown by validation pipelines (FormRequest, router `.query(schema)`, etc.)
  * when input fails schema validation. Lives in contracts so packages outside
  * `@rudderjs/core` can throw it without taking a core dependency. The
