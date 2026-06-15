@@ -518,7 +518,16 @@ const second = await new AssistantAgent().continue(first.conversationId!).prompt
 // second.text → 'Your name is Alice.'
 ```
 
-`MemoryConversationStore` is fine for tests. For production, implement `ConversationStore` against your database — Prisma and Redis adapters are the typical choices.
+`MemoryConversationStore` is fine for tests, but it is in-process and loses every thread on restart. For production use the first-party ORM-backed store, which persists threads through the registered `@rudderjs/orm` adapter (native, Prisma, or Drizzle) so they survive restarts and are shared across web processes and queue workers:
+
+```ts
+import { setConversationStore } from '@rudderjs/ai'
+import { OrmConversationStore } from '@rudderjs/ai/conversation-orm'
+
+setConversationStore(new OrmConversationStore())
+```
+
+It stores two tables (`AiConversation` + `AiConversationMessage`). Copy the schema from the exported `conversationOrmPrismaSchema` into your Prisma schema, add an equivalent native migration, or define + register the matching Drizzle tables. (Need a different backend, like Redis or an external service? Implement the `ConversationStore` interface directly; it is five methods.)
 
 ### Auto-persist (`conversational()`)
 
