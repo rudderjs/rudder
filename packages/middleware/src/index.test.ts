@@ -441,6 +441,47 @@ describe('CsrfMiddleware()', () => {
     assert.ok(cookie?.startsWith('csrf_token='))
   })
 
+  it('omits Secure by default outside production', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware()(makeReq({ method: 'GET', headers: {} }), bag.res, async () => {})
+    assert.ok(!/;\s*Secure/i.test(bag.headers.get('set-cookie') ?? ''))
+  })
+
+  it('appends Secure when secure: true is set', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware({ secure: true })(makeReq({ method: 'GET', headers: {} }), bag.res, async () => {})
+    assert.match(bag.headers.get('set-cookie') ?? '', /;\s*Secure/i)
+  })
+
+  it('forces Secure when the cookieName uses a __Host- prefix', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware({ cookieName: '__Host-csrf_token' })(
+      makeReq({ method: 'GET', headers: {} }),
+      bag.res,
+      async () => {},
+    )
+    const cookie = bag.headers.get('set-cookie') ?? ''
+    assert.ok(cookie.startsWith('__Host-csrf_token='))
+    assert.match(cookie, /;\s*Secure/i)
+  })
+
+  it('rejects an unsafe request carrying a duplicate token cookie — 419', async () => {
+    // A shadowing cookie (sibling-subdomain injection / MITM) could override the
+    // legitimate value; parseCookies keeps the last, so we must fail closed.
+    const token = 'a'.repeat(64)
+    const bag = makeRes()
+    await CsrfMiddleware()(
+      makeReq({
+        method: 'POST',
+        headers: { cookie: `csrf_token=${token}; csrf_token=${token}`, 'x-csrf-token': token },
+      }),
+      bag.res,
+      async () => {},
+    )
+    assert.strictEqual(bag.getStatus(), 419)
+    assert.strictEqual((bag.getJson() as { error?: string })?.error, 'CSRF_DUPLICATE_COOKIE')
+  })
+
   it('skips excluded paths', async () => {
     let reached = false
     await CsrfMiddleware({ exclude: ['/api/*'] })(
@@ -494,6 +535,18 @@ describe('CsrfMiddleware()', () => {
 describe('getCsrfToken()', () => {
   it('returns empty string in non-browser environment (no document)', () => {
     assert.strictEqual(getCsrfToken(), '')
+  })
+
+  it('matches a cookieName with regex metacharacters literally', () => {
+    // Regression: an unescaped `.` in the name treated `csrf.token` as a wildcard
+    // and could read an unrelated `csrfXtoken` cookie instead of the real one.
+    const g = globalThis as Record<string, unknown>
+    g['document'] = { cookie: 'csrfXtoken=DECOY; csrf.token=REAL' }
+    try {
+      assert.strictEqual(getCsrfToken('csrf.token'), 'REAL')
+    } finally {
+      delete g['document']
+    }
   })
 })
 
