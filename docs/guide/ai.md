@@ -557,6 +557,25 @@ Per-call override and explicit-form precedence (high → low):
 
 `MemoryConversationStore` works out of the box; Prisma / Redis stores plug in by implementing `ConversationStore`. Stores that surface the `agent` meta in `list()` results get the per-class thread separation; stores that ignore it fall back to "always create a new thread", which is the conservative behavior.
 
+### Validating continuations (`validate`)
+
+A continuation after a client-tool or approval round-trip carries the prior messages back from the browser, so the server is trusting client-supplied history. Without a guard a caller can rewrite that history (continue another user's thread, an IDOR), forge a `tool` result for a tool the server never ran, or claim an approval that was never pending.
+
+Pass a `validate` hook through the prompt options. It runs against the server-persisted history just before the agent loop, and throwing rejects the request. `defaultContinuationValidator()` is the built-in gate (prefix equality + tool-result-forgery + approval-forgery):
+
+```ts
+import { defaultContinuationValidator } from '@rudderjs/ai'
+
+await agent
+  .continue(conversationId)
+  .prompt(input, {
+    messages,                                  // client-supplied continuation
+    validate: defaultContinuationValidator(),  // throws ContinuationValidationError on forgery
+  })
+```
+
+The same hook fires on the auto-persist path (`conversational()`) and on the streaming variant. For custom policy, the lower-level `validateContinuation(persisted, incoming, opts?)` returns a `{ ok, code, reason, index }` verdict you can branch on instead of throwing. Stateless calls (no persistence) never invoke it.
+
 ## User memory
 
 Conversation persistence remembers messages. **User memory** persists *facts* — things about a user that should travel across conversations, separate from any single thread. Useful when the agent needs to remember "Alice's project is named Foo" in a brand-new session without replaying the prior history.

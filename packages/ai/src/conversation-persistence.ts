@@ -50,10 +50,16 @@ export async function resolveAutoPersistSpec(
 interface PersistenceContext {
   spec:    ConversationalSpec
   store:   ConversationStore
-  /** Stable thread id — set after lookup/create. */
+  /** Stable thread id, set after lookup/create. */
   convId:  string
   /** Loaded history merged with the caller's `options.history`. */
   history: AiMessage[]
+  /**
+   * Full server-persisted history as loaded from the store, BEFORE the
+   * `historyLimit` slice and BEFORE merging caller history. This is the
+   * trusted baseline handed to the `validate` continuation hook.
+   */
+  persisted: AiMessage[]
 }
 
 /**
@@ -97,12 +103,36 @@ async function preparePersistence(
     throw new Error('[RudderJS AI] ConversationalSpec must include either `user` or `id`.')
   }
 
+  // Snapshot the trusted baseline before any limit slice — the validation
+  // hook compares the caller's incoming messages against the FULL persisted
+  // thread, not the windowed view fed to the model.
+  const persisted = loaded
+
+  let windowed = loaded
   if (spec.historyLimit !== undefined && spec.historyLimit > 0) {
-    loaded = loaded.slice(-spec.historyLimit)
+    windowed = loaded.slice(-spec.historyLimit)
   }
 
-  const history = [...loaded, ...(callerHistory ?? [])]
-  return { spec, store, convId, history }
+  const history = [...windowed, ...(callerHistory ?? [])]
+  return { spec, store, convId, history, persisted }
+}
+
+/**
+ * Run the caller-supplied `validate` continuation hook, if present. The
+ * "incoming" view is the caller's claimed prior conversation — their
+ * `options.messages` (full continuation list) when set, else
+ * `options.history`. Throws (propagating the rejection) when the hook does.
+ */
+async function runValidation(
+  ctx:     PersistenceContext,
+  options: AgentPromptOptions | undefined,
+): Promise<void> {
+  if (!options?.validate) return
+  const incoming = options.messages ?? options.history ?? []
+  const opts: { approvedToolCallIds?: readonly string[]; rejectedToolCallIds?: readonly string[] } = {}
+  if (options.approvedToolCallIds) opts.approvedToolCallIds = options.approvedToolCallIds
+  if (options.rejectedToolCallIds) opts.rejectedToolCallIds = options.rejectedToolCallIds
+  await options.validate(ctx.persisted, incoming, opts)
 }
 
 /**
@@ -142,6 +172,7 @@ export async function runWithPersistence(
   if (!store) throw new Error('[RudderJS AI] No ConversationStore registered. Bind one via `setConversationStore()` or the `ai.conversations` DI key.')
 
   const ctx = await preparePersistence(spec, agentClassName, store, options?.history)
+  await runValidation(ctx, options)
   const effOptions: AgentPromptOptions = { ...options, history: ctx.history }
   const response = await inner(effOptions)
 
@@ -178,6 +209,7 @@ export function runWithPersistenceStreaming(
     let ctx: PersistenceContext
     try {
       ctx = await preparePersistence(spec, agentClassName, store, options?.history)
+      await runValidation(ctx, options)
     } catch (err) {
       rejectResponse!(err)
       throw err

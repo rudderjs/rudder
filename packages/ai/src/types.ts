@@ -873,7 +873,44 @@ export interface AgentPromptOptions {
    * read a consistent spec.
    */
   memory?: RemembersOverride
+  /**
+   * Continuation-validation hook for the auto-persist / continuation path.
+   *
+   * When set and the call runs through conversation persistence
+   * (`Agent.conversational()`, `forUser()`, or `continue()`), the hook is
+   * invoked with the server-persisted history and the caller's incoming
+   * messages just before the agent loop runs. Throw to reject the request
+   * (forged tool result, rewritten history, cross-user continuation); the
+   * rejection propagates out of `prompt()` / the stream. Stateless calls
+   * (no persistence) never invoke it.
+   *
+   * Use {@link ContinuationValidator} directly, or
+   * `defaultContinuationValidator()` from `@rudderjs/ai` for the built-in
+   * prefix + tool-result-forgery + approval-forgery gate.
+   */
+  validate?: ContinuationValidator
 }
+
+/** Options forwarded to a {@link ContinuationValidator}. */
+export interface ValidateContinuationOptions {
+  /** Tool-call ids the caller claims the user approved this turn. */
+  approvedToolCallIds?: readonly string[]
+  /** Tool-call ids the caller claims the user rejected this turn. */
+  rejectedToolCallIds?: readonly string[]
+}
+
+/**
+ * Hook shape consumed by {@link AgentPromptOptions.validate}. Called by
+ * `runWithPersistence` (and the streaming variant) with the server-persisted
+ * history and the caller's incoming messages. Throw to reject the
+ * continuation. See `@rudderjs/ai`'s `validateContinuation` /
+ * `defaultContinuationValidator` for the reference implementation.
+ */
+export type ContinuationValidator = (
+  persisted: readonly AiMessage[],
+  incoming: readonly AiMessage[],
+  opts: ValidateContinuationOptions,
+) => void | Promise<void>
 
 /** An attachment (file or image) to include with a prompt */
 export interface Attachment {

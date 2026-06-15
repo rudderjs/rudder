@@ -125,6 +125,18 @@ export { Output, type OutputWrapper } from './output.js'
 
 // Conversation
 export { MemoryConversationStore } from './conversation.js'
+export {
+  validateContinuation,
+  assertValidContinuation,
+  defaultContinuationValidator,
+  ContinuationValidationError,
+} from './continuation-validation.js'
+export type {
+  ContinuationValidationResult,
+  ContinuationRejectionCode,
+  ContinuationValidator,
+  ValidateContinuationOptions,
+} from './continuation-validation.js'
 
 // User Memory (#A4)
 export { MemoryUserMemory, resolveRemembersSpec } from './memory.js'
