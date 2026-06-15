@@ -230,6 +230,37 @@ interface MemoryEntry {
 }
 
 /**
+ * Validate the `by` argument shared by every adapter's `increment`. Redis
+ * `INCRBY` rejects a non-integer outright (the `eval` promise rejects), so an
+ * unvalidated float/`NaN`/`Infinity` makes the in-memory drivers DIVERGE from
+ * Redis (they would silently corrupt the counter — `+ NaN` poisons it to a
+ * permanent `NaN`, which then compares `false` against any limit and silently
+ * disables a rate limiter). Reject up front so every driver behaves the same.
+ * Negative integers are allowed — that is the decrement use.
+ */
+const DEFAULT_MAX_ENTRIES = 100_000
+
+function assertIncrementBy(by: number): void {
+  if (!Number.isInteger(by)) {
+    throw new TypeError(
+      `[RudderJS Cache] increment(by) must be an integer, got ${by}.`,
+    )
+  }
+}
+
+export interface MemoryAdapterOptions {
+  /**
+   * Hard cap on the number of live entries. The in-process Map evicts (expired
+   * entries first, then oldest-inserted) once this is reached, so a flood of
+   * write-once keys — IP-keyed rate-limit counters under a rotating-source
+   * attack is the canonical case — can't grow the heap without bound. Default
+   * 100,000. Set higher for large in-memory working sets, or move to the redis
+   * driver.
+   */
+  maxEntries?: number
+}
+
+/**
  * In-process cache driver — the default if no other driver is configured.
  *
  * Resets on restart. Single-process only: locks built via `lock()` coordinate
@@ -239,9 +270,39 @@ interface MemoryEntry {
  */
 export class MemoryAdapter implements CacheAdapter {
   private readonly store = new Map<string, MemoryEntry>()
+  private readonly maxEntries: number
+
+  constructor(options: MemoryAdapterOptions = {}) {
+    const max = options.maxEntries ?? DEFAULT_MAX_ENTRIES
+    this.maxEntries = Number.isInteger(max) && max > 0 ? max : DEFAULT_MAX_ENTRIES
+  }
 
   private expired(entry: MemoryEntry): boolean {
     return entry.expiresAt !== null && Date.now() > entry.expiresAt
+  }
+
+  /**
+   * Bound the Map before inserting a NEW key. Expired entries are only swept
+   * lazily on read, so a write-only flood of distinct keys (the rotating-IP
+   * rate-limit case) would otherwise grow the heap until OOM. When at the cap,
+   * evict one victim: prefer an expired entry near the front (oldest-inserted,
+   * most likely to be stale — bounded scan keeps this O(1) amortized), else
+   * drop the oldest-inserted live entry (FIFO). Memory is hard-bounded at
+   * `maxEntries`.
+   */
+  private evictIfFull(): void {
+    if (this.store.size < this.maxEntries) return
+    const now = Date.now()
+    let scanned = 0
+    for (const [k, entry] of this.store) {
+      if (entry.expiresAt !== null && now > entry.expiresAt) {
+        this.store.delete(k)
+        return
+      }
+      if (++scanned >= 64) break
+    }
+    const oldest = this.store.keys().next().value
+    if (oldest !== undefined) this.store.delete(oldest)
   }
 
   async get<T = unknown>(key: string): Promise<T | null> {
@@ -252,17 +313,20 @@ export class MemoryAdapter implements CacheAdapter {
   }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    if (!this.store.has(key)) this.evictIfFull()
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this.store.set(key, { value, expiresAt })
   }
 
   async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    assertIncrementBy(by)
     const existing = this.store.get(key)
     if (existing && !this.expired(existing) && typeof existing.value === 'number') {
       const next = existing.value + by
       this.store.set(key, { value: next, expiresAt: existing.expiresAt })
       return next
     }
+    if (!this.store.has(key)) this.evictIfFull()
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this.store.set(key, { value: by, expiresAt })
     return by
@@ -271,6 +335,7 @@ export class MemoryAdapter implements CacheAdapter {
   async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const existing = this.store.get(key)
     if (existing && !this.expired(existing)) return false
+    if (!this.store.has(key)) this.evictIfFull()
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this.store.set(key, { value, expiresAt })
     return true
@@ -376,6 +441,7 @@ class RedisAdapter implements CacheAdapter {
   }
 
   async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    assertIncrementBy(by)
     const client = await this.getClient()
     // Atomic INCRBY + EXPIRE-only-on-create via Lua. Setting EXPIRE only when
     // the existing TTL is -1 (no TTL set) preserves the window's original
@@ -495,13 +561,28 @@ export class CacheProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg         = config<CacheConfig>('cache')
     const storeName   = cfg.default
-    const storeConfig = cfg.stores[storeName] ?? { driver: 'memory' }
+    const definedStore = cfg.stores[storeName]
+    const storeConfig = definedStore ?? { driver: 'memory' }
     const driver      = storeConfig['driver'] as string
+
+    // A default store name that isn't defined falls back to an in-process
+    // memory driver. That is a real isolation downgrade in production (locks
+    // and rate-limit counters become per-process, so each cluster worker /
+    // container gets its own bucket and an attacker gets N× the allowance), so
+    // surface it loudly instead of degrading silently on a config typo.
+    if (!definedStore) {
+      console.warn(
+        `[RudderJS Cache] Default store "${storeName}" is not defined in config.cache.stores — ` +
+        `falling back to the in-process "memory" driver. Locks and rate-limit counters will ` +
+        `NOT be shared across processes. Define the store or fix config.cache.default.`,
+      )
+    }
 
     let adapter: CacheAdapter
 
     if (driver === 'memory') {
-      adapter = new MemoryAdapter()
+      const maxEntries = storeConfig['maxEntries']
+      adapter = new MemoryAdapter(typeof maxEntries === 'number' ? { maxEntries } : {})
     } else if (driver === 'redis') {
       adapter = new RedisAdapter(storeConfig as RedisCacheConfig)
     } else {

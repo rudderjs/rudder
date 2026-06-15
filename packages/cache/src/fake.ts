@@ -62,6 +62,14 @@ export class FakeCacheAdapter implements CacheAdapter {
   }
 
   async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    // Mirror the real drivers: reject a non-integer `by` so the fake catches
+    // counter-poisoning bugs (NaN/Infinity/float) in tests instead of letting
+    // them slip through to a prod Redis that would reject the same input.
+    if (!Number.isInteger(by)) {
+      throw new TypeError(
+        `[RudderJS Cache] increment(by) must be an integer, got ${by}.`,
+      )
+    }
     this._operations.push({ type: 'increment', key, value: by, ttl: ttlSeconds })
     const existing = this._store.get(key)
     const now = Date.now()
