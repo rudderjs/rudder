@@ -109,6 +109,37 @@ export function hasToolCall(toolName: string): StopCondition {
   }
 }
 
+// ─── Singular sub-agent resume (resumeAsTool) ────────────
+
+/** Options for {@link Agent.resumeAsTool}. */
+export interface SubAgentResumeOptions {
+  /** Shared run store the snapshot lives in. */
+  runStore:             SubAgentRunStore
+  /** The sub-agent instance to resume. */
+  agent:                Agent
+  /** Approved ids for an `approval` pause. */
+  approvedToolCallIds?: string[]
+  /** Rejected ids for an `approval` pause. */
+  rejectedToolCallIds?: string[]
+  /**
+   * Opt-in live progress during the resume. When set, the resumed inner loop
+   * runs via `stream()` instead of `prompt()` and each chunk is projected into
+   * a {@link SubAgentUpdate} forwarded to {@link onUpdate}. `true` uses
+   * {@link defaultSubAgentProjector} (emits `tool_call` / `agent_pending_approval`);
+   * a function is your own projector. Mirrors {@link Agent.asTool}'s `streaming`
+   * on the initial-dispatch path. Unset → the legacy non-streaming `prompt()`
+   * resume (no behavior change). The pause/completion partition is identical
+   * either way — this only adds a progress channel.
+   */
+  streaming?:           AsToolStreamingOption
+  /**
+   * Sink for projected updates. Only fires when {@link streaming} is set, once
+   * per non-null projection, in stream order. Awaited, so a slow sink applies
+   * backpressure to the resume.
+   */
+  onUpdate?:            (update: SubAgentUpdate) => void | Promise<void>
+}
+
 // ─── Batch sub-agent resume (resumeManyAsTool) ───────────
 
 /**
@@ -169,6 +200,20 @@ export interface SubAgentResumeManyOptions {
    *   side-effect ordering when sub-agents touch shared state.
    */
   concurrency?: 'parallel' | 'serial'
+  /**
+   * Shared live-progress projector applied to every resumed item — same option
+   * as {@link SubAgentResumeOptions.streaming}. Unset → every item resumes
+   * non-streaming (legacy behavior). Set → each item streams and its projected
+   * updates flow to {@link onUpdate} tagged with the originating request.
+   */
+  streaming?:   AsToolStreamingOption
+  /**
+   * Sink for projected updates across the whole batch. Only fires when
+   * {@link streaming} is set. Each call carries the originating item's `key`
+   * (when supplied) and `originalSubRunId`, so a host can correlate a chunk
+   * back to its request and fan it out (e.g. to a per-sub-agent SSE channel).
+   */
+  onUpdate?:    (update: SubAgentUpdate, ctx: { key?: string; originalSubRunId: string }) => void | Promise<void>
 }
 
 /** Aggregated result of a {@link Agent.resumeManyAsTool} batch. */
@@ -554,12 +599,7 @@ export abstract class Agent {
   static async resumeAsTool(
     subRunId:          string,
     clientToolResults: ReadonlyArray<{ toolCallId: string; result: unknown }>,
-    options: {
-      runStore:             SubAgentRunStore
-      agent:                Agent
-      approvedToolCallIds?: string[]
-      rejectedToolCallIds?: string[]
-    },
+    options:           SubAgentResumeOptions,
   ): Promise<
     | { kind: 'completed'; response: AgentResponse }
     | {
@@ -633,7 +673,23 @@ export abstract class Agent {
 
     promptOpts.messages = messages
 
-    const result = await options.agent.prompt('', promptOpts)
+    // Default path: non-streaming resume — one prompt() call, one response.
+    // Opt-in streaming path: run the inner loop via stream() and forward each
+    // projected chunk to onUpdate, so a host can keep a resumed sub-agent's
+    // progress live across the round-trip. Either way `result` is the same
+    // AgentResponse and the pause/completion partition below is unchanged.
+    let result: AgentResponse
+    if (options.streaming) {
+      const project: ChunkProjector = options.streaming === true ? defaultSubAgentProjector : options.streaming
+      const { stream, response } = options.agent.stream('', promptOpts)
+      for await (const chunk of stream) {
+        const update = project(chunk)
+        if (update && options.onUpdate) await options.onUpdate(update)
+      }
+      result = await response
+    } else {
+      result = await options.agent.prompt('', promptOpts)
+    }
 
     if (
       result.finishReason === 'client_tool_calls' &&
@@ -719,14 +775,15 @@ export abstract class Agent {
     const runOne = async (req: SubAgentResumeRequest): Promise<SubAgentResumeOutcome> => {
       const base = { originalSubRunId: req.subRunId, ...(req.key !== undefined ? { key: req.key } : {}) }
       try {
-        const opts: {
-          runStore:             SubAgentRunStore
-          agent:                Agent
-          approvedToolCallIds?: string[]
-          rejectedToolCallIds?: string[]
-        } = { runStore: options.runStore, agent: req.agent }
+        const opts: SubAgentResumeOptions = { runStore: options.runStore, agent: req.agent }
         if (req.approvedToolCallIds) opts.approvedToolCallIds = req.approvedToolCallIds
         if (req.rejectedToolCallIds) opts.rejectedToolCallIds = req.rejectedToolCallIds
+        // Thread the shared projector + correlate each update back to this item.
+        if (options.streaming !== undefined) opts.streaming = options.streaming
+        if (options.onUpdate) {
+          const batchOnUpdate = options.onUpdate
+          opts.onUpdate = (update) => batchOnUpdate(update, base)
+        }
 
         const r = await Agent.resumeAsTool(req.subRunId, req.clientToolResults ?? [], opts)
         if (r.kind === 'completed') return { ...base, kind: 'completed', response: r.response }
@@ -770,7 +827,12 @@ export abstract class Agent {
 
 // ─── asTool helpers ──────────────────────────────────────
 
-type ChunkProjector = (chunk: StreamChunk) => SubAgentUpdate | null
+/**
+ * Projects an inner-agent {@link StreamChunk} into a {@link SubAgentUpdate} the
+ * host can render, or `null` to suppress it. Used by both {@link Agent.asTool}
+ * (`streaming`) and the streaming resume path ({@link SubAgentResumeOptions.streaming}).
+ */
+export type ChunkProjector = (chunk: StreamChunk) => SubAgentUpdate | null
 
 /**
  * Default projection from inner-agent stream chunks to {@link SubAgentUpdate}
@@ -801,7 +863,12 @@ function defaultSubAgentProjector(chunk: StreamChunk): SubAgentUpdate | null {
   return null
 }
 
-type AsToolStreamingOption  = boolean | ChunkProjector
+/**
+ * Live-progress option shared by {@link Agent.asTool} and the streaming resume
+ * surface: `true` uses {@link defaultSubAgentProjector}; a function is your own
+ * {@link ChunkProjector}.
+ */
+export type AsToolStreamingOption  = boolean | ChunkProjector
 type AsToolSuspendableOption = { runStore: SubAgentRunStore }
 
 /**
