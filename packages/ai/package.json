@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/ai",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "description": "AI engine — providers, agents, tools, streaming, middleware",
   "rudderjs": {
     "provider": "AiProvider",
