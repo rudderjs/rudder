@@ -161,6 +161,33 @@ export default {
 
 Only the middleware that establish request context — session and auth — run on the upgrade; CSRF, rate-limit, and other `web`-group middleware are skipped (a rate-limiter would otherwise spend a token per upgrade). Standalone `@rudderjs/sync` with no server adapter has no context runner, so there `onAuth` receives only the raw `headers` + `url` (use the token pattern above). Both forms **fail closed** — a thrown error, a rejected promise, or a `false` return all deny and close the socket with code 4401.
 
+### Record-backed rooms: `createCollabRoomAuth`
+
+When each room is one record (`resource:recordId`), the `onAuth` chain is always the same: parse the room, resolve the user, load the record, apply a view policy, deny on every gap. Without it, every `resource:recordId` room is world-open — anyone can read and write any record's `Y.Doc` by guessing the key (an IDOR). `@rudderjs/sync/collab` packages that chain into one builder:
+
+```ts
+// config/sync.ts
+import { createCollabRoomAuth } from '@rudderjs/sync/collab'
+import { Auth } from '@rudderjs/auth'
+import { Post } from 'App/Models/Post.js'
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  path: '/ws-sync',
+  onAuth: createCollabRoomAuth({
+    // Room `…:posts:42` → Post.find('42'), then Post.canView(user, post).
+    resources:   { posts: Post },
+    resolveUser: () => Auth.user(),   // resolves from the session cookie, as above
+  }),
+} satisfies SyncConfig
+```
+
+The record contract is **duck-typed** — any object with `find(id)` and `canView(user, record)` qualifies (an ORM model, a repository, or a stub), so there is no hard `@rudderjs/orm` dependency. The builder **fails closed** at every step: room that doesn't parse, no matching resource, record not found, no authenticated user, or `canView` returning anything but `true` (or throwing) all deny.
+
+- **Room parsing** defaults to "last two segments = `[resource, recordId]`", so both `posts:42` and `tenant:posts:42` resolve to `posts` / `42`. To scope by a leading tenant/panel segment, pass your own `parseRoom` and return `null` on a mismatch.
+- **`resources`** can be a static map (looked up with own-property semantics, so a room segment like `constructor` never resolves a prototype method) or a function for dynamic routing.
+- **Guests** are denied by default. Set `allowGuests: true` (builder-wide) or `allowGuests` on a single resource to forward a `null` user to `canView` for deliberately public surfaces — an admitted guest can read **and** write the doc.
+
 ## Editor adapters
 
 The core `@rudderjs/sync` package handles transport and persistence. For server-side mutations against editor-specific document shapes (rich-text trees, structured documents), import an adapter from the matching subpath:
