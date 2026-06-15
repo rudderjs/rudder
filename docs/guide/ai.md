@@ -361,6 +361,29 @@ let batch = await Agent.resumeManyAsTool(
 
 Each request carries its own `agent` (the sub-agents may be different classes). Options: `onError: 'capture'` (default — a bad item becomes a `{ kind: 'error' }` outcome and the rest still resume) or `'throw'` (reject the whole batch); `concurrency: 'parallel'` (default) or `'serial'` (deterministic side-effect order).
 
+#### Live progress while resuming (`streaming`)
+
+By default a resume runs the inner loop non-streaming — the sub-agent's bubble freezes until it completes or pauses again. Pass `streaming` to keep it live: the resume runs via `stream()` and forwards each projected chunk to `onUpdate`, mirroring `asTool({ streaming })` on the initial-dispatch path. `streaming: true` uses the default projector (`tool_call` per inner call, `agent_pending_approval` on inner approval gates); a function is your own `(chunk) => SubAgentUpdate | null`.
+
+```ts
+// Singular — forward updates straight to one SSE stream.
+const r = await Agent.resumeAsTool(subRunId, browserResults, {
+  runStore, agent: subAgent,
+  streaming: true,
+  onUpdate:  (update) => sse.send('tool_update', update),
+})
+
+// Batch — onUpdate is tagged with the originating request so you can fan out
+// to per-sub-agent channels. `ctx.key` is the `key` you set on the request.
+let batch = await Agent.resumeManyAsTool(requests, {
+  runStore,
+  streaming: true,
+  onUpdate:  (update, ctx) => sseFor(ctx.key).send('tool_update', update),
+})
+```
+
+`onUpdate` is awaited, so a slow sink applies backpressure to the resume. The pause/completion partition (`completed` / `paused` / `errors` / `pendingToolCallIds` / `allCompleted`) is identical whether or not you stream — this only adds a progress channel. Leaving `streaming` unset keeps the legacy non-streaming behavior (and `onUpdate` never fires).
+
 ### Standalone run persistence — top-level `stream()` that pauses
 
 The sub-agent run store covers pauses *inside* a parent loop. A **top-level** `agent.stream()` pauses for the same two reasons — a client tool with no handler, or an approval gate — but across an HTTP boundary: the run stops on one request and resumes on the next. Persist the run state between them with `CachedAgentRunStore` (the standalone sibling of `CachedSubAgentRunStore`):
