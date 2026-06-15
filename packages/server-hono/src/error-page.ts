@@ -275,6 +275,11 @@ export function renderErrorPage(
   // etc. — the browser hands the scheme to the OS, which routes to the IDE.
   // Set `APP_EDITOR=none` to disable wrapping (renders as plain text).
   const editor = resolveEditor()
+  // Primary "Open in editor" action — targets the top application frame (the
+  // line a developer almost always wants). Null when `APP_EDITOR=none` or the
+  // top frame is unknown (e.g. an error with no stack), in which case the
+  // button is omitted entirely.
+  const topFrameEditorUrl = topFrame ? buildEditorUrl(editor, topFrame.file, topFrame.line) : null
   const frameLabel = (f: StackFrame) => {
     const label = `${esc(rel(f.file))}:${f.line}`
     const url   = buildEditorUrl(editor, f.file, f.line)
@@ -302,10 +307,11 @@ body{background:#0d0d0f;color:#d4d4d4;font-family:ui-sans-serif,system-ui,-apple
 .container{max-width:1100px;margin:0 auto;padding:40px 24px}
 h1{font-size:28px;font-weight:700;color:#f4f4f5;margin:0}
 .title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:4px}
+.actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .location{font-size:13px;color:#71717a;margin-bottom:12px;font-family:ui-monospace,monospace}
 .message{font-size:17px;color:#a1a1aa;margin-bottom:24px}
-.badges{display:flex;gap:8px;margin-bottom:32px;flex-wrap:wrap}
-.badge{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:.04em}
+.badges{display:flex;align-items:center;gap:8px;margin-bottom:32px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;line-height:1;padding:5px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:.04em}
 .badge-gray{background:#27272a;color:#a1a1aa}
 .badge-red{background:#450a0a;color:#f87171}
 .request-bar{display:flex;align-items:center;gap:10px;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:12px 16px;margin-bottom:36px}
@@ -339,7 +345,9 @@ table tr{border-bottom:1px solid #27272a}
 table tr:last-child{border-bottom:none}
 table th{text-align:left;padding:8px 16px;color:#52525b;font-weight:500;width:200px;font-size:12px;font-family:ui-monospace,monospace}
 table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;color:#a1a1aa;word-break:break-all}
-.copy-btn{display:inline-flex;align-items:center;gap:6px;background:#27272a;color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;padding:6px 12px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:background .12s,border-color .12s}
+.copy-btn,.action-btn{display:inline-flex;align-items:center;line-height:1;gap:6px;background:#27272a;color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;padding:7px 12px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;text-decoration:none;transition:background .12s,border-color .12s}
+.open-editor-btn{background:#0c2a4a;border-color:#1d4ed8;color:#bfdbfe}
+.open-editor-btn:hover{background:#10366b;border-color:#3b82f6}
 .copy-btn:hover{background:#3f3f46;border-color:#52525b}
 .copy-btn:active{background:#18181b}
 .copy-btn.copied{background:#064e3b;border-color:#10b981;color:#a7f3d0}
@@ -356,13 +364,22 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
 <div class="container">
   <div class="title-row">
     <h1>${esc(error.name)}</h1>
-    <button class="copy-btn" id="rjs-copy-md" type="button" title="Copy error context as Markdown — paste into an AI chat for debugging">
-      <svg class="copy-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span>Copy as Markdown</span>
-    </button>
+    <div class="actions">
+      ${topFrameEditorUrl ? `<a class="action-btn open-editor-btn" href="${esc(topFrameEditorUrl)}" title="Open ${esc(rel(topFrame!.file))}:${topFrame!.line} in your editor (APP_EDITOR=${esc(editor)})">
+        <svg class="copy-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="16 18 22 12 16 6"></polyline>
+          <polyline points="8 6 2 12 8 18"></polyline>
+        </svg>
+        <span>Open in editor</span>
+      </a>` : ''}
+      <button class="copy-btn" id="rjs-copy-md" type="button" title="Copy error context as Markdown — paste into an AI chat for debugging">
+        <svg class="copy-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>Copy as Markdown</span>
+      </button>
+    </div>
   </div>
   ${topFrame ? `<div class="location">${esc(rel(topFrame.file))}:${topFrame.line}</div>` : ''}
   <div class="message">${esc(error.message)}</div>
