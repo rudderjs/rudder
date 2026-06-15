@@ -119,6 +119,43 @@ describe('MemoryAdapter', () => {
     assert.strictEqual(await adapter.increment('hits', 2, 60), 2)
   })
 
+  it('increment() rejects a non-integer `by` (NaN/Infinity/float) so it matches Redis', async () => {
+    for (const bad of [NaN, Infinity, -Infinity, 1.5, 0.1]) {
+      await assert.rejects(
+        () => adapter.increment('hits', bad),
+        /must be an integer/,
+        `increment(by=${bad}) should reject`,
+      )
+    }
+    // A poisoned `by` must never have touched the counter.
+    assert.strictEqual(await adapter.get('hits'), null)
+  })
+
+  it('increment() still allows a negative integer (decrement)', async () => {
+    await adapter.increment('hits', 5)
+    assert.strictEqual(await adapter.increment('hits', -2), 3)
+  })
+
+  it('caps the store at maxEntries, evicting expired entries first then oldest (DoS bound)', async () => {
+    const capped = new MemoryAdapter({ maxEntries: 5 })
+    // One soon-to-expire entry at the front, then fill to the cap.
+    await capped.set('stale', 'x', 0.02)
+    for (let i = 0; i < 4; i++) await capped.set(`live:${i}`, i)
+    await sleep(40) // 'stale' is now expired but still occupies a slot (lazy)
+
+    // Inserting a 6th distinct key trips the cap: the expired 'stale' is the victim.
+    await capped.set('fresh', 'v')
+    assert.strictEqual(await capped.get('stale'), null, 'expired entry evicted')
+    assert.strictEqual(await capped.get('fresh'), 'v')
+
+    // A write-only flood of fresh keys stays hard-bounded at the cap (no OOM).
+    for (let i = 0; i < 1_000; i++) await capped.set(`flood:${i}`, i)
+    assert.ok(
+      (capped as unknown as { store: Map<string, unknown> }).store.size <= 5,
+      'store size must never exceed maxEntries under a write flood',
+    )
+  })
+
   it('increment() under serial concurrent calls produces a deterministic total', async () => {
     const results = await Promise.all(
       Array.from({ length: 25 }, () => adapter.increment('hits', 1, 60)),
@@ -347,6 +384,22 @@ describe('CacheProvider', () => {
     restore = withCacheConfig({ default: 'missing', stores: {} })
     await new CacheProvider(fakeApp).boot()
     assert.ok(CacheRegistry.get() !== null)
+  })
+
+  it('warns loudly (not silently) when the default store is undefined and it falls back to memory', async () => {
+    restore = withCacheConfig({ default: 'redis', stores: {} })
+    const original = console.warn
+    const warnings: string[] = []
+    console.warn = (...args: unknown[]) => { warnings.push(args.join(' ')) }
+    try {
+      await new CacheProvider(fakeApp).boot()
+    } finally {
+      console.warn = original
+    }
+    assert.ok(
+      warnings.some(w => w.includes('"redis"') && w.includes('memory')),
+      'expected a fallback warning naming the missing store',
+    )
   })
 
   it('throws on an unknown driver', async () => {

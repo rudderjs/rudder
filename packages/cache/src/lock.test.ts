@@ -131,6 +131,20 @@ for (const [name, build] of drivers) {
       }
     })
 
+    it('block() rejects a non-finite/negative wait budget instead of spinning forever', async () => {
+      // A NaN budget would make the deadline NaN and `Date.now() >= NaN` always
+      // false — the poll loop would hang forever (DoS) while the lock is held.
+      const holder = adapter.lock('thing', 60)
+      assert.strictEqual(await holder.get(), true)
+      for (const bad of [NaN, Infinity, -1]) {
+        await assert.rejects(
+          () => adapter.lock('thing', 60).block(bad),
+          /finite, non-negative/,
+          `block(${bad}) should reject`,
+        )
+      }
+    })
+
     it('TTL expiry frees the lock for the next caller', async () => {
       // TTL + sleep need to comfortably exceed Date.now() / setTimeout
       // resolution. Windows Node 20 quantizes both to ~15-32ms; a 50ms TTL

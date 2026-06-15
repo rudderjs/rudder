@@ -51,9 +51,11 @@ export class LockTimeoutError extends Error {
   }
 }
 
-/** Generate a 128-bit random owner token. */
+/** Generate a random owner token (122 bits of entropy, v4 UUID). */
 export function newOwnerToken(): string {
-  // 128 bits of entropy. globalThis.crypto is the Web Crypto API — works in Node 18+ and browsers.
+  // A v4 UUID carries 122 random bits — strong enough that guessing an owner
+  // token (the sole credential for release()) is infeasible. globalThis.crypto
+  // is the Web Crypto API — works in Node 18+ and browsers.
   return globalThis.crypto.randomUUID()
 }
 
@@ -96,6 +98,17 @@ export abstract class BaseLock implements Lock {
   block(seconds: number): Promise<void>
   block<T>(seconds: number, callback: () => T | Promise<T>): Promise<T>
   async block<T>(seconds: number, callback?: () => T | Promise<T>): Promise<T | void> {
+    // Guard the wait budget. A NaN/Infinity `seconds` (e.g. a non-numeric
+    // value that flowed through arithmetic, or `parseInt` of bad input) would
+    // make `deadline` NaN, and `Date.now() >= NaN` is ALWAYS false — the poll
+    // loop would spin forever, never acquiring and never throwing
+    // LockTimeoutError. That is an unbounded hang (DoS). Require a finite,
+    // non-negative budget up front.
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      throw new RangeError(
+        `[RudderJS Cache] block() wait seconds must be a finite, non-negative number, got ${seconds}.`,
+      )
+    }
     const deadline = Date.now() + seconds * 1_000
     const interval = 250
     while (true) {
