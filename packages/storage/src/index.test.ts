@@ -6,6 +6,7 @@ import nodePath from 'node:path'
 import { Readable } from 'node:stream'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
 import { buildS3ClientConfig } from './adapters/s3.js'
+import { Url } from '@rudderjs/router'
 import {
   LocalAdapter,
   S3Adapter,
@@ -391,6 +392,96 @@ describe('serveTemporaryUrls()', () => {
       () => serveTemporaryUrls(router, { disk: 'local-temp-test', routePath: '/storage/temp' }),
       /must end in/,
     )
+  })
+})
+
+// ─── serveTemporaryUrls() handler behaviour (end-to-end signed requests) ─────
+
+describe('serveTemporaryUrls() handler', () => {
+  let root: string
+  let adapter: LocalAdapter
+  let handler: (req: { url: string; headers?: Record<string, string> }) => Promise<Response>
+
+  beforeEach(async () => {
+    Url.setKey('serve-temp-test-key')
+    root    = await makeTmpDir()
+    adapter = new LocalAdapter({ driver: 'local', root })
+    StorageRegistry.set('local-temp-test', adapter)
+    const calls: Array<{ handler: typeof handler }> = []
+    const router = { get(_path: string, h: typeof handler) { calls.push({ handler: h }); return undefined } }
+    await serveTemporaryUrls(router, { disk: 'local-temp-test', routePath: '/storage/temp/*' })
+    handler = calls[0]!.handler
+  })
+
+  afterEach(async () => {
+    StorageRegistry.reset()
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  const future = () => new Date(Date.now() + 60_000)
+
+  it('streams a valid signed file with nosniff + attachment headers', async () => {
+    await adapter.put('notes.txt', 'hello world')
+    const signed = await adapter.temporaryUrl('notes.txt', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 200)
+    assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff')
+    assert.strictEqual(res.headers.get('content-disposition'), 'attachment')
+    assert.strictEqual(res.headers.get('content-type'), 'text/plain')
+    assert.strictEqual(await res.text(), 'hello world')
+  })
+
+  it('does not let user-uploaded HTML render in-origin (nosniff + attachment)', async () => {
+    await adapter.put('evil.html', '<script>alert(1)</script>')
+    const signed = await adapter.temporaryUrl('evil.html', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 200)
+    assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff')
+    assert.strictEqual(res.headers.get('content-disposition'), 'attachment')
+  })
+
+  it('round-trips a filename containing "#" (regression: encodeURI fragment bug)', async () => {
+    await adapter.put('my#report.txt', 'secret')
+    const signed = await adapter.temporaryUrl('my#report.txt', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 200)
+    assert.strictEqual(await res.text(), 'secret')
+  })
+
+  it('serves a filename containing a ".." substring (not a traversal segment)', async () => {
+    await adapter.put('archive..v2.zip', 'data')
+    const signed = await adapter.temporaryUrl('archive..v2.zip', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 200)
+    assert.strictEqual(await res.text(), 'data')
+  })
+
+  it('returns 403 for an invalid signature', async () => {
+    await adapter.put('notes.txt', 'x')
+    const res = await handler({ url: '/storage/temp/notes.txt?signature=deadbeef', headers: {} })
+    assert.strictEqual(res.status, 403)
+  })
+
+  it('returns 404 for a signed URL to a missing file', async () => {
+    const signed = await adapter.temporaryUrl('ghost.txt', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 404)
+  })
+
+  it('does not stream a symlink whose target escapes the root', async () => {
+    const outside = await makeTmpDir()
+    const secret  = nodePath.join(outside, 'secret.txt')
+    await fs.writeFile(secret, 'TOP SECRET')
+    try {
+      await fs.symlink(secret, nodePath.join(root, 'leak.txt'))
+    } catch {
+      await fs.rm(outside, { recursive: true, force: true })
+      return // symlink unsupported on this platform — skip
+    }
+    const signed = await adapter.temporaryUrl('leak.txt', future())
+    const res = await handler({ url: signed, headers: {} })
+    assert.strictEqual(res.status, 404)
+    await fs.rm(outside, { recursive: true, force: true })
   })
 })
 

@@ -74,18 +74,37 @@ export async function serveTemporaryUrls(
       return new Response('Invalid or expired URL signature.', { status: 403 })
     }
 
-    const url      = new URL(req.url, 'http://placeholder.local')
-    const filePath = decodeURI(url.pathname.slice(prefix.length))
-    if (!filePath || filePath.includes('..')) {
+    const url = new URL(req.url, 'http://placeholder.local')
+    // Decode per segment — symmetric with temporaryUrl's per-segment encode.
+    // A malformed escape (decodeURIComponent throws) is just "not found".
+    let filePath: string
+    try {
+      filePath = url.pathname.slice(prefix.length).split('/').map(decodeURIComponent).join('/')
+    } catch {
+      return new Response('Not found.', { status: 404 })
+    }
+    // Reject a real `..` path SEGMENT only — a filename merely containing `..`
+    // (e.g. `archive..v2.zip`) is legitimate and contain() already blocks the
+    // actual traversal.
+    if (!filePath || filePath.split('/').includes('..')) {
       return new Response('Not found.', { status: 404 })
     }
 
-    if (!(await adapter.exists(filePath))) {
-      return new Response('Not found.', { status: 404 })
-    }
+    // openForServe resolves symlinks, confirms the file exists (clean 404, no
+    // 200-with-erroring-body), and returns a best-effort Content-Type.
+    const opened = await adapter.openForServe(filePath)
+    if (!opened) return new Response('Not found.', { status: 404 })
 
-    const stream = await adapter.readStream(filePath)
     const { Readable } = await import('node:stream')
-    return new Response(Readable.toWeb(stream) as ReadableStream)
+    // Serve untrusted content defensively: `attachment` + `nosniff` mean a
+    // user-uploaded HTML/SVG can never render (and thus never execute JS) in the
+    // app's own origin via this signed-URL route.
+    return new Response(Readable.toWeb(opened.stream) as ReadableStream, {
+      headers: {
+        'Content-Type':           opened.contentType,
+        'Content-Disposition':    'attachment',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
   })
 }

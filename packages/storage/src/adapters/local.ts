@@ -215,7 +215,14 @@ export class LocalAdapter extends BaseAdapter {
     }
     if (!mod.Url) throw new StorageNotSupportedError('local', 'temporaryUrl')
 
-    const path = `${this._tempUrlConfig.routePrefix}${encodeURI(filePath)}`
+    // Encode per path segment, not the whole string: `encodeURI` leaves the
+    // URL-reserved `#`, `?`, `&` unescaped, so a filename containing them would
+    // be signed as a fragment/query (verify-side `new URL()` strips the fragment
+    // → permanent 403, or folds `?` into the query → the wrong file is served).
+    // Per-segment `encodeURIComponent` keeps `/` boundaries while escaping the
+    // rest, matching the serve handler's per-segment decode. (Same pattern as
+    // the S3 adapter's CopySource encoding.)
+    const path = `${this._tempUrlConfig.routePrefix}${encodeRelPath(filePath)}`
     return mod.Url.sign(path, expiresAt)
   }
 
@@ -223,4 +230,52 @@ export class LocalAdapter extends BaseAdapter {
   serveAt(routePrefix: string): void {
     this._tempUrlConfig = { routePrefix }
   }
+
+  /**
+   * Resolve a path for serving over HTTP and return an open read stream plus a
+   * best-effort Content-Type — or `null` if the file is missing, not a regular
+   * file, or escapes the root. Beyond the lexical `contain()` check, this
+   * resolves the real path (`fs.realpath`) so a symlink planted under the root
+   * (e.g. by an archive extractor or a shared upload dir) can't stream an
+   * out-of-root file, and it confirms existence eagerly so a missing file is a
+   * clean 404 rather than a 200 whose body errors mid-stream.
+   * @internal — invoked by serveTemporaryUrls().
+   */
+  async openForServe(filePath: string): Promise<{ stream: Readable; contentType: string } | null> {
+    let abs: string
+    try { abs = this.abs(filePath) } catch { return null } // lexical traversal → not found
+    try {
+      const real     = await fs.realpath(abs)
+      const rootReal  = await fs.realpath(this.root)
+      const rootWithSep = rootReal.endsWith(nodePath.sep) ? rootReal : rootReal + nodePath.sep
+      if (real !== rootReal && !real.startsWith(rootWithSep)) return null // symlink escape
+      const stat = await fs.stat(real)
+      if (!stat.isFile()) return null
+      const { createReadStream } = await import('node:fs')
+      return { stream: createReadStream(real), contentType: contentTypeFor(filePath) }
+    } catch {
+      return null // ENOENT and friends → not found
+    }
+  }
+}
+
+/** Per-segment URI encoding — escapes reserved chars while preserving `/`. */
+function encodeRelPath(filePath: string): string {
+  return filePath.split('/').map(encodeURIComponent).join('/')
+}
+
+// Minimal extension → MIME map for the temp-URL serve path. Content is served
+// with `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`,
+// so this is a convenience, not the security boundary. Unknown → octet-stream.
+const MIME_TYPES: Record<string, string> = {
+  '.txt': 'text/plain', '.csv': 'text/csv', '.html': 'text/html', '.htm': 'text/html',
+  '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json',
+  '.xml': 'application/xml', '.pdf': 'application/pdf', '.zip': 'application/zip',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.woff': 'font/woff', '.woff2': 'font/woff2',
+}
+
+function contentTypeFor(filePath: string): string {
+  return MIME_TYPES[nodePath.extname(filePath).toLowerCase()] ?? 'application/octet-stream'
 }

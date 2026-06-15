@@ -197,6 +197,20 @@ describe('Pipeline', () => {
       /fail/
     )
   })
+
+  it('throws if a middleware calls next() more than once', async () => {
+    // Guards against silent double-execution of downstream middleware and the
+    // destination (DB write / mail / payment) when a middleware forgets to
+    // return after next() or calls it in both a try and a catch.
+    let destRuns = 0
+    await assert.rejects(
+      async () => new Pipeline([
+        async (_req, _res, next) => { await next(); await next() },
+      ]).run(makeReq(), makeRes().res, async () => { destRuns++ }),
+      /next\(\) called multiple times/
+    )
+    assert.strictEqual(destRuns, 1)
+  })
 })
 
 // ─── CorsMiddleware ────────────────────────────────────────
@@ -327,6 +341,33 @@ describe('ThrottleMiddleware', () => {
     assert.ok(passed)
   })
 
+  it('prunes expired records so the hits map does not grow unbounded', async () => {
+    // Regression: a one-shot key (IP churn / spoofed XFF) must not leak forever.
+    const throttle = new ThrottleMiddleware(5, 20)
+    const hits = (throttle as unknown as { hits: Map<string, unknown> }).hits
+    await throttle.handle(makeReq({ ip: '1.1.1.1' }), makeRes().res, async () => {})
+    assert.strictEqual(hits.size, 1)
+    await new Promise(resolve => setTimeout(resolve, 60)) // let the 20ms window expire
+    await throttle.handle(makeReq({ ip: '2.2.2.2' }), makeRes().res, async () => {})
+    assert.strictEqual(hits.size, 1)
+    assert.ok(hits.has('2.2.2.2'))
+    assert.ok(!hits.has('1.1.1.1'))
+  })
+
+  it('does NOT skip throttling for an unsafe request to an asset-like path', async () => {
+    // Regression: the asset skip must never bypass throttling for unsafe methods.
+    // A POST to a dotted-segment path (e.g. /auth/login.json) previously slipped
+    // through unthrottled because isAsset() matched regardless of method.
+    const throttle = new ThrottleMiddleware(1, 10_000)
+    const req = makeReq({ method: 'POST', path: '/auth/login.json', ip: '9.9.9.9' })
+    let nextCount = 0
+    await throttle.handle(req, makeRes().res, async () => { nextCount++ })
+    const blocked = makeRes()
+    await throttle.handle(req, blocked.res, async () => { nextCount++ })
+    assert.strictEqual(nextCount, 1)
+    assert.strictEqual(blocked.getStatus(), 429)
+  })
+
   it('uses x-forwarded-for header for client key', async () => {
     const throttle = new ThrottleMiddleware(1, 10_000)
     const req = makeReq({ headers: { 'x-forwarded-for': '10.0.0.1, 192.168.1.1' } })
@@ -441,6 +482,47 @@ describe('CsrfMiddleware()', () => {
     assert.ok(cookie?.startsWith('csrf_token='))
   })
 
+  it('omits Secure by default outside production', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware()(makeReq({ method: 'GET', headers: {} }), bag.res, async () => {})
+    assert.ok(!/;\s*Secure/i.test(bag.headers.get('set-cookie') ?? ''))
+  })
+
+  it('appends Secure when secure: true is set', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware({ secure: true })(makeReq({ method: 'GET', headers: {} }), bag.res, async () => {})
+    assert.match(bag.headers.get('set-cookie') ?? '', /;\s*Secure/i)
+  })
+
+  it('forces Secure when the cookieName uses a __Host- prefix', async () => {
+    const bag = makeRes()
+    await CsrfMiddleware({ cookieName: '__Host-csrf_token' })(
+      makeReq({ method: 'GET', headers: {} }),
+      bag.res,
+      async () => {},
+    )
+    const cookie = bag.headers.get('set-cookie') ?? ''
+    assert.ok(cookie.startsWith('__Host-csrf_token='))
+    assert.match(cookie, /;\s*Secure/i)
+  })
+
+  it('rejects an unsafe request carrying a duplicate token cookie — 419', async () => {
+    // A shadowing cookie (sibling-subdomain injection / MITM) could override the
+    // legitimate value; parseCookies keeps the last, so we must fail closed.
+    const token = 'a'.repeat(64)
+    const bag = makeRes()
+    await CsrfMiddleware()(
+      makeReq({
+        method: 'POST',
+        headers: { cookie: `csrf_token=${token}; csrf_token=${token}`, 'x-csrf-token': token },
+      }),
+      bag.res,
+      async () => {},
+    )
+    assert.strictEqual(bag.getStatus(), 419)
+    assert.strictEqual((bag.getJson() as { error?: string })?.error, 'CSRF_DUPLICATE_COOKIE')
+  })
+
   it('skips excluded paths', async () => {
     let reached = false
     await CsrfMiddleware({ exclude: ['/api/*'] })(
@@ -494,6 +576,18 @@ describe('CsrfMiddleware()', () => {
 describe('getCsrfToken()', () => {
   it('returns empty string in non-browser environment (no document)', () => {
     assert.strictEqual(getCsrfToken(), '')
+  })
+
+  it('matches a cookieName with regex metacharacters literally', () => {
+    // Regression: an unescaped `.` in the name treated `csrf.token` as a wildcard
+    // and could read an unrelated `csrfXtoken` cookie instead of the real one.
+    const g = globalThis as Record<string, unknown>
+    g['document'] = { cookie: 'csrfXtoken=DECOY; csrf.token=REAL' }
+    try {
+      assert.strictEqual(getCsrfToken('csrf.token'), 'REAL')
+    } finally {
+      delete g['document']
+    }
   })
 })
 
@@ -565,6 +659,19 @@ describe('RateLimit', () => {
     let passed = false
     await handler(makeReq({ path: '/assets/app.js' }), makeRes().res, async () => { passed = true })
     assert.ok(passed)
+  })
+
+  it('does NOT skip rate limiting for an unsafe request to an asset-like path', async () => {
+    // Regression: the asset skip must never bypass rate limiting for unsafe
+    // methods. A POST to a dotted-segment path (e.g. /auth/forgot/a@b.com)
+    // previously slipped through with no throttling because isRateLimitAsset()
+    // matched regardless of method.
+    const handler = RateLimit.perMinute(1)
+    const req = makeReq({ method: 'POST', path: '/auth/forgot/a@b.com', ip: '8.8.8.8' })
+    await handler(req, makeRes().res, async () => {})
+    const bag = makeRes()
+    await handler(req, bag.res, async () => {})
+    assert.strictEqual(bag.getStatus(), 429)
   })
 
   it('.message() overrides the 429 body', async () => {

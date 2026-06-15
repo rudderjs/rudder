@@ -105,7 +105,14 @@ export class Crypt {
    */
   static encrypt(value: unknown): string {
     const key = CryptRegistry.getKey()
-    const data = Buffer.from(JSON.stringify(value), 'utf8')
+    // JSON.stringify returns the JS value `undefined` (not a string) for
+    // undefined / functions / symbols; Buffer.from(undefined) would then throw
+    // an opaque node TypeError. Fail with a clear message instead.
+    const json = JSON.stringify(value)
+    if (json === undefined) {
+      throw new Error('[RudderJS Crypt] Cannot encrypt a value that serializes to undefined (undefined, function, or symbol).')
+    }
+    const data = Buffer.from(json, 'utf8')
     const payload = encryptRaw(key, data)
     return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
   }
@@ -208,7 +215,17 @@ export class CryptProvider extends ServiceProvider {
       throw new Error(`[RudderJS Crypt] APP_KEY must be 32 bytes for AES-256. Got ${key.length} bytes.`)
     }
 
-    const previousKeys = (cfg.previousKeys ?? []).map(parseKey)
+    // Validate rotation keys with the same 32-byte rule as the primary key.
+    // Without this a misconfigured previous key (wrong length / stray
+    // whitespace) is accepted at boot and silently decrypts nothing — surfacing
+    // only as a runtime "no matching key" on live ciphertext, not at deploy.
+    const previousKeys = (cfg.previousKeys ?? []).map((raw, i) => {
+      const k = parseKey(raw)
+      if (k.length !== 32) {
+        throw new Error(`[RudderJS Crypt] previousKeys[${i}] must be 32 bytes for AES-256. Got ${k.length} bytes.`)
+      }
+      return k
+    })
     CryptRegistry.set(key, previousKeys)
     this.app.instance('crypt', Crypt)
   }

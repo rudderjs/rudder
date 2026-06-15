@@ -16,6 +16,10 @@
 export function getCsrfToken(cookieName = 'csrf_token'): string {
   if (typeof (globalThis as Record<string, unknown>)['document'] === 'undefined') return ''
   const doc = (globalThis as Record<string, unknown>)['document'] as { cookie: string }
-  const match = doc.cookie.match(new RegExp(`(?:^|;\\s*)${cookieName}=([^;]+)`))
+  // Escape regex metacharacters so a custom cookieName like `csrf.token` matches
+  // literally (the server reads it with an exact key lookup). Without this the
+  // `.` is a wildcard and could read an unrelated `csrfXtoken` cookie.
+  const safe = cookieName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = doc.cookie.match(new RegExp(`(?:^|;\\s*)${safe}=([^;]+)`))
   return match?.[1] ? decodeURIComponent(match[1]) : ''
 }
