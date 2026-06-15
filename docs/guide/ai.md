@@ -361,6 +361,44 @@ let batch = await Agent.resumeManyAsTool(
 
 Each request carries its own `agent` (the sub-agents may be different classes). Options: `onError: 'capture'` (default — a bad item becomes a `{ kind: 'error' }` outcome and the rest still resume) or `'throw'` (reject the whole batch); `concurrency: 'parallel'` (default) or `'serial'` (deterministic side-effect order).
 
+### Standalone run persistence — top-level `stream()` that pauses
+
+The sub-agent run store covers pauses *inside* a parent loop. A **top-level** `agent.stream()` pauses for the same two reasons — a client tool with no handler, or an approval gate — but across an HTTP boundary: the run stops on one request and resumes on the next. Persist the run state between them with `CachedAgentRunStore` (the standalone sibling of `CachedSubAgentRunStore`):
+
+```ts
+import { CachedAgentRunStore, newAgentRunId, type AgentRunState } from '@rudderjs/ai'
+
+const runs = new CachedAgentRunStore()   // backed by @rudderjs/cache, 5-minute TTL
+
+// First request — the stream pauses on a client tool:
+const { stream, response } = agent({ tools: [browserTool] }).stream(input)
+for await (const _ of stream) { /* forward chunks to the client */ }
+const res = await response
+
+if (res.pendingClientToolCalls?.length) {
+  const runId = newAgentRunId()
+  await runs.store(runId, {
+    messages:           conversationSoFar,                   // full history to replay on resume
+    pendingToolCallIds: res.pendingClientToolCalls.map(c => c.id),
+    stepsSoFar:         res.steps.length,
+    tokensSoFar:        res.usage.totalTokens,
+    meta:               { userId },                          // opaque, never read by the framework
+  })
+  return { runId, pending: res.pendingClientToolCalls }      // hand runId to the client
+}
+```
+
+```ts
+// Follow-up request — the client returns tool results for `runId`:
+const state = await runs.consume(runId)   // atomic single-use: a replayed runId can't read twice
+if (!state) throw new Error('run expired or already resumed')
+
+await agent({ tools: [browserTool] })
+  .stream(/* original input */, { messages: [...state.messages, ...toolResultMessages] })
+```
+
+`store` / `load` / `consume` are the three operations: `load()` is a non-destructive peek (render a "waiting for approval" view on a GET without burning the run), `consume()` is the atomic read-and-delete you call on the actual resume. `AgentRunState` carries `pauseKind` (`'client_tool'` | `'approval'`) and `pendingApprovalToolCall` so approval pauses round-trip the same way. `newAgentRunId()` mints an unguessable id (a `runId` is a capability handle to a parked conversation). `InMemoryAgentRunStore` is the test / single-process backend; `CachedAgentRunStore` plugs into `@rudderjs/cache` for cross-process / cross-restart persistence, or pass `{ cache }` explicitly.
+
 ### Hand-rolled sub-agent tools
 
 For full control — custom progress shape, sub-agent token-deltas as `tool-update` chunks, anything outside the `asTool` envelope — write the wrapping tool by hand:

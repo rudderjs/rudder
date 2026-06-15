@@ -162,6 +162,17 @@ export {
   type CachedSubAgentRunStoreOptions,
 } from './sub-agent-run-store.js'
 
+// Standalone agent run store (top-level stream() client-tool / approval pauses)
+export {
+  InMemoryAgentRunStore,
+  CachedAgentRunStore,
+  newAgentRunId,
+  type AgentRunStore,
+  type AgentRunState,
+  type AgentPauseKind,
+  type CachedAgentRunStoreOptions,
+} from './agent-run-store.js'
+
 // Facade
 export { AI } from './facade.js'
 
