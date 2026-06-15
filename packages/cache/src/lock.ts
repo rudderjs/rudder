@@ -51,6 +51,14 @@ export class LockTimeoutError extends Error {
   }
 }
 
+/**
+ * Reserved key prefix under which every driver stores its lock entries
+ * (`__lock__:<name>`). The cache value API (`get`/`set`/`forget`/…) rejects
+ * keys starting with this prefix so a value write/read can't forge, destroy,
+ * or read the owner token of a lock that lives in the same keyspace.
+ */
+export const LOCK_KEY_PREFIX = '__lock__:'
+
 /** Generate a random owner token (122 bits of entropy, v4 UUID). */
 export function newOwnerToken(): string {
   // A v4 UUID carries 122 random bits — strong enough that guessing an owner
@@ -149,7 +157,7 @@ export class MemoryLock extends BaseLock {
     super(name, seconds, owner)
   }
 
-  private key(): string { return `__lock__:${this._name}` }
+  private key(): string { return `${LOCK_KEY_PREFIX}${this._name}` }
 
   private readEntry(): LockBackedEntry | null {
     const k = this.key()
@@ -209,7 +217,7 @@ export class RedisLock extends BaseLock {
     super(name, seconds, owner)
   }
 
-  private key(): string { return `${this.prefix}__lock__:${this._name}` }
+  private key(): string { return `${this.prefix}${LOCK_KEY_PREFIX}${this._name}` }
 
   protected async acquire(): Promise<boolean> {
     if (this._seconds <= 0) return false

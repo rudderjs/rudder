@@ -2,9 +2,57 @@ import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { resolveIoredisClass, reusableConnection } from '@rudderjs/support'
 
 import { FakeCacheAdapter } from './fake.js'
-import { MemoryLock, RedisLock, newOwnerToken, type Lock, type RedisLockClient } from './lock.js'
+import { MemoryLock, RedisLock, newOwnerToken, LOCK_KEY_PREFIX, type Lock, type RedisLockClient } from './lock.js'
 export { FakeCacheAdapter, type CacheOperation } from './fake.js'
-export { type Lock, LockTimeoutError, MemoryLock, RedisLock, BaseLock } from './lock.js'
+export { type Lock, LockTimeoutError, MemoryLock, RedisLock, BaseLock, LOCK_KEY_PREFIX } from './lock.js'
+
+// ─── Reserved-key guard ────────────────────────────────────
+
+/**
+ * Reject a value-API key that collides with the lock namespace. Locks live in
+ * the same keyspace under `LOCK_KEY_PREFIX` (`__lock__:`), so an un-guarded
+ * `Cache.set('__lock__:podcast', token)` could forge a lock's owner token,
+ * `Cache.forget('__lock__:podcast')` could destroy a held lock, and
+ * `Cache.get('__lock__:podcast')` could read the secret token — all from the
+ * ordinary value API with a caller-influenced key. The prefix is reserved.
+ */
+export function assertValueKey(key: string): void {
+  if (key.startsWith(LOCK_KEY_PREFIX)) {
+    throw new Error(
+      `[RudderJS Cache] Key "${key}" uses the reserved lock prefix "${LOCK_KEY_PREFIX}". ` +
+      `Use Cache.lock(name, ttl) for locks; value keys may not start with this prefix.`,
+    )
+  }
+}
+
+/**
+ * Escape Redis glob metacharacters so a configured key prefix is matched
+ * LITERALLY by `SCAN MATCH`. Without this, a prefix like `app[staging]:` or
+ * `team*:` is interpreted as a glob — matching the wrong keys (cross-namespace
+ * over-match, or silently missing keys). @internal
+ */
+export function escapeRedisGlob(value: string): string {
+  return value.replace(/[\\*?[\]]/g, '\\$&')
+}
+
+interface RedisScanClient {
+  scan(cursor: string, ...args: unknown[]): Promise<[string, string[]]>
+  del(...keys: string[]): Promise<unknown>
+}
+
+/**
+ * Non-blocking prefix flush: walk the keyspace with a `SCAN` cursor (NOT the
+ * O(N)-blocking `KEYS`, which stalls the whole Redis instance on a large
+ * keyspace) and delete matches in batches. @internal
+ */
+export async function scanAndDelete(client: RedisScanClient, pattern: string): Promise<void> {
+  let cursor = '0'
+  do {
+    const [next, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+    if (keys.length) await client.del(...keys)
+    cursor = next
+  } while (cursor !== '0')
+}
 
 // ─── Adapter Contract ──────────────────────────────────────
 
@@ -37,6 +85,14 @@ export interface CacheAdapter {
    * claims (queue unique-jobs, single-leader election, idempotency keys).
    */
   add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean>
+  /**
+   * Atomically read `key` and remove it in one operation, returning the prior
+   * value (or `null`). Optional: adapters that implement it close the
+   * get-then-delete race where two concurrent `pull`s both observe the same
+   * value (double-redemption of a one-time token). The `Cache.pull` facade
+   * falls back to a non-atomic get-then-forget when an adapter omits it.
+   */
+  pull?<T = unknown>(key: string): Promise<T | null>
   /** Build a lock backed by this driver. Does NOT acquire — call .get() or .block(). */
   lock(name: string, seconds: number): Lock
   /** Rebuild a lock with a specific owner token (cross-process release). */
@@ -173,10 +229,16 @@ export class Cache {
   /**
    * Retrieve a value and immediately remove it from the cache.
    * Returns null if the key does not exist.
+   *
+   * Atomic when the driver supports it (Redis Lua get+del; in-memory sync
+   * get+delete) — so two concurrent `pull`s of a one-time token can't both
+   * win. Adapters without an atomic `pull` fall back to get-then-forget.
    */
   static async pull<T = unknown>(key: string): Promise<T | null> {
-    const value = await this.get<T>(key)
-    if (value !== null) await this.forget(key)
+    const store = this.store()
+    if (store.pull) return store.pull<T>(key)
+    const value = await store.get<T>(key)
+    if (value !== null) await store.forget(key)
     return value
   }
 
@@ -306,19 +368,32 @@ export class MemoryAdapter implements CacheAdapter {
   }
 
   async get<T = unknown>(key: string): Promise<T | null> {
+    assertValueKey(key)
     const entry = this.store.get(key)
     if (!entry) return null
     if (this.expired(entry)) { this.store.delete(key); return null }
     return entry.value as T
   }
 
+  /** Atomic read-and-remove — synchronous in-process, so concurrent pulls can't both win. */
+  async pull<T = unknown>(key: string): Promise<T | null> {
+    assertValueKey(key)
+    const entry = this.store.get(key)
+    if (!entry) return null
+    this.store.delete(key)
+    if (this.expired(entry)) return null
+    return entry.value as T
+  }
+
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    assertValueKey(key)
     if (!this.store.has(key)) this.evictIfFull()
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this.store.set(key, { value, expiresAt })
   }
 
   async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    assertValueKey(key)
     assertIncrementBy(by)
     const existing = this.store.get(key)
     if (existing && !this.expired(existing) && typeof existing.value === 'number') {
@@ -333,6 +408,7 @@ export class MemoryAdapter implements CacheAdapter {
   }
 
   async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    assertValueKey(key)
     const existing = this.store.get(key)
     if (existing && !this.expired(existing)) return false
     if (!this.store.has(key)) this.evictIfFull()
@@ -341,9 +417,10 @@ export class MemoryAdapter implements CacheAdapter {
     return true
   }
 
-  async forget(key: string): Promise<void>  { this.store.delete(key) }
+  async forget(key: string): Promise<void>  { assertValueKey(key); this.store.delete(key) }
 
   async has(key: string): Promise<boolean> {
+    assertValueKey(key)
     const entry = this.store.get(key)
     if (!entry) return false
     if (this.expired(entry)) { this.store.delete(key); return false }
@@ -386,7 +463,7 @@ class RedisAdapter implements CacheAdapter {
     set(key: string, value: string, ...args: unknown[]): Promise<unknown>
     del(...keys: string[]): Promise<unknown>
     exists(...keys: string[]): Promise<number>
-    keys(pattern: string): Promise<string[]>
+    scan(cursor: string, ...args: unknown[]): Promise<[string, string[]]>
     flushdb(): Promise<unknown>
     eval(script: string, numKeys: number, ...args: unknown[]): Promise<unknown>
   }> {
@@ -416,7 +493,7 @@ class RedisAdapter implements CacheAdapter {
     return this.client as Awaited<ReturnType<RedisAdapter['getClient']>>
   }
 
-  private k(key: string): string { return `${this.prefix}${key}` }
+  private k(key: string): string { assertValueKey(key); return `${this.prefix}${key}` }
 
   async get<T = unknown>(key: string): Promise<T | null> {
     const client = await this.getClient()
@@ -426,6 +503,23 @@ class RedisAdapter implements CacheAdapter {
       return JSON.parse(raw) as T
     } catch {
       await this.forget(key)
+      return null
+    }
+  }
+
+  async pull<T = unknown>(key: string): Promise<T | null> {
+    const client = await this.getClient()
+    // Atomic get-and-delete via Lua (portable across Redis versions — GETDEL
+    // needs 6.2). Returns the prior value or nil, deleting in the same call so
+    // two concurrent pulls can't both observe it.
+    const script = `local v = redis.call('GET', KEYS[1])
+                    if v then redis.call('DEL', KEYS[1]) end
+                    return v`
+    const raw = await client.eval(script, 1, this.k(key)) as string | null
+    if (raw === null) return null
+    try {
+      return JSON.parse(raw) as T
+    } catch {
       return null
     }
   }
@@ -486,8 +580,10 @@ class RedisAdapter implements CacheAdapter {
   async flush(): Promise<void> {
     const client = await this.getClient()
     if (this.prefix) {
-      const keys = await client.keys(`${this.prefix}*`)
-      if (keys.length) await client.del(...keys)
+      // Non-blocking SCAN over the escaped prefix (KEYS is O(N) and stalls the
+      // whole instance; an un-escaped prefix with glob metachars would match
+      // the wrong keys). Only this adapter's namespace is touched.
+      await scanAndDelete(client, `${escapeRedisGlob(this.prefix)}*`)
     } else {
       await client.flushdb()
     }
