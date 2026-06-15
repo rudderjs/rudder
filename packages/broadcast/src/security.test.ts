@@ -13,6 +13,9 @@ import { broadcastObservers, type BroadcastEvent } from './observers.js'
 interface ServerOptions {
   allowedOrigins?:      string[]
   maxConnectionsPerIp?: number
+  trustProxy?:          boolean | number
+  maxPayload?:          number
+  maxChannelsPerSocket?: number
   heartbeat?:           { interval: number; timeout: number } | false
 }
 
@@ -41,10 +44,10 @@ async function withServer<T>(
 /** Open a WebSocket with optional Origin header; wait for open or unexpected-response. */
 function openSocket(
   port:    number,
-  options: { origin?: string } = {},
+  options: { origin?: string; headers?: Record<string, string> } = {},
 ): Promise<{ ws: WebSocket; status?: number }> {
   return new Promise((resolve) => {
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = { ...(options.headers ?? {}) }
     if (options.origin) headers.origin = options.origin
     const ws = new WebSocket(`ws://localhost:${port}/ws`, { headers })
     ws.once('open',                () => resolve({ ws }))
@@ -348,6 +351,111 @@ describe('Phase 5c — Per-socket message serialization', () => {
         unsubscribe()
         console.error = originalErr
       }
+    })
+  )
+})
+
+describe('Client-IP trust (X-Forwarded-For)', () => {
+  it('ignores X-Forwarded-For by default — a forged header cannot bypass the per-IP cap', () =>
+    // trustProxy off (default): every connection keys off the shared socket
+    // address (127.0.0.1), so a unique forged XFF per upgrade can NOT scatter
+    // them into fresh buckets. Pre-fix, extractIp took the leftmost XFF entry
+    // unconditionally, so each forged value bypassed the cap.
+    withServer({ maxConnectionsPerIp: 2 }, async (port) => {
+      const a = await openSocket(port, { headers: { 'x-forwarded-for': '1.1.1.1' } })
+      const b = await openSocket(port, { headers: { 'x-forwarded-for': '2.2.2.2' } })
+      const c = await openSocket(port, { headers: { 'x-forwarded-for': '3.3.3.3' } })
+      assert.equal(a.status, undefined)
+      assert.equal(b.status, undefined)
+      assert.equal(c.status, 429, 'forged XFF must not bypass the per-IP cap when trustProxy is off')
+      a.ws.terminate(); b.ws.terminate()
+    })
+  )
+
+  it('with trustProxy on, resolves the rightmost X-Forwarded-For entry (not the client-forgeable leftmost)', () =>
+    withServer({ trustProxy: true }, async (port) => {
+      const { events, unsubscribe } = captureObserver()
+      try {
+        const { ws } = await openSocket(port, {
+          headers: { 'x-forwarded-for': 'spoofed-client, 10.0.0.5' },
+        })
+        await new Promise((r) => setTimeout(r, 30))
+        const opened = events.find(e => e.kind === 'connection.opened')
+        assert.ok(opened && opened.kind === 'connection.opened')
+        assert.equal(opened.ip, '10.0.0.5',
+          'must take the rightmost (proxy-appended) entry, never the leftmost client-supplied one')
+        ws.terminate()
+      } finally { unsubscribe() }
+    })
+  )
+})
+
+describe('Frame-size cap (maxPayload)', () => {
+  it('rejects an oversized inbound frame at the protocol layer, before it is processed', () =>
+    withServer({ maxPayload: 256 }, async (port) => {
+      const { ws } = await openSocket(port)
+      // The server resets the socket on an over-cap frame; the client surfaces
+      // that as an 'error' as well as a 'close'. Swallow the error so the
+      // unhandled-error doesn't crash the test process.
+      ws.on('error', () => { /* expected on reset */ })
+      let gotPong = false
+      ws.on('message', (raw) => {
+        const m = JSON.parse(String(raw)) as Record<string, unknown>
+        if (m['type'] === 'pong') gotPong = true
+      })
+      await new Promise((r) => setTimeout(r, 20))  // let 'connected' flush
+
+      const closeCode = await new Promise<number>((resolve) => {
+        ws.once('close', (code) => resolve(code))
+        // A `ping` frame well over the 256-byte cap. If it were processed it
+        // would come back as a `pong`; instead the connection must be closed.
+        ws.send(JSON.stringify({ type: 'ping', pad: 'x'.repeat(2000) }))
+      })
+
+      assert.equal(gotPong, false, 'the oversized frame must never reach the message handler')
+      assert.equal(closeCode, 1009, 'oversized frame must be rejected with WS close code 1009 (message too big)')
+    })
+  )
+})
+
+describe('Per-socket subscription cap (maxChannelsPerSocket)', () => {
+  it('rejects subscribes past the cap with an error frame', () =>
+    withServer({ maxChannelsPerSocket: 2 }, async (port) => {
+      const { ws } = await openSocket(port)
+      const messages: Record<string, unknown>[] = []
+      ws.on('message', (raw) => { messages.push(JSON.parse(String(raw)) as Record<string, unknown>) })
+      await new Promise((r) => setTimeout(r, 30))
+
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'public-a' }))
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'public-b' }))
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'public-c' }))
+      await new Promise((r) => setTimeout(r, 80))
+
+      const subscribed = messages.filter(m => m['type'] === 'subscribed')
+      assert.equal(subscribed.length, 2, 'only the first two subscribes should succeed')
+      const limitErr = messages.find(
+        m => m['type'] === 'error' && m['message'] === 'Subscription limit reached'
+      )
+      assert.ok(limitErr, 'the over-cap subscribe must return a Subscription limit reached error')
+      assert.equal(limitErr!['channel'], 'public-c')
+      ws.terminate()
+    })
+  )
+
+  it('a repeat subscribe to an already-joined channel does not consume cap headroom', () =>
+    withServer({ maxChannelsPerSocket: 1 }, async (port) => {
+      const { ws } = await openSocket(port)
+      const messages: Record<string, unknown>[] = []
+      ws.on('message', (raw) => { messages.push(JSON.parse(String(raw)) as Record<string, unknown>) })
+      await new Promise((r) => setTimeout(r, 30))
+
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'public-a' }))
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'public-a' }))
+      await new Promise((r) => setTimeout(r, 80))
+
+      const limitErr = messages.find(m => m['type'] === 'error' && m['message'] === 'Subscription limit reached')
+      assert.equal(limitErr, undefined, 're-subscribing the same channel must not trip the cap')
+      ws.terminate()
     })
   )
 })
