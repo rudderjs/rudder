@@ -55,7 +55,7 @@ RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)
 RateLimit.perMinute(60).by((req) => `${req.ip}:${req.path}`)
 ```
 
-Always use `req.ip`, not raw headers. The server adapter normalizes IPv6 loopback (`::1` → `127.0.0.1`) and respects `TRUST_PROXY` (Laravel `Request::ip()` parity): with it on, proxy headers win (`x-forwarded-for`'s first hop, then `x-real-ip`); with it off, client-sent proxy headers are ignored and the direct socket address is used. Reading raw headers in `.by()` produces inconsistent results across dev and production.
+Always use `req.ip`, not raw headers. The server adapter normalizes IPv6 loopback (`::1` → `127.0.0.1`) and respects `TRUST_PROXY`: with it on, proxy headers win — the **rightmost** `x-forwarded-for` entry (the address the trusted proxy appended; set `TRUST_PROXY` to a number to trust that many chained proxies), then `x-real-ip`; with it off, client-sent proxy headers are ignored and the direct socket address is used. The rightmost (not leftmost) entry is what stops a client from spoofing `req.ip` to dodge the limit when the proxy appends rather than replaces the header. Reading raw headers in `.by()` produces inconsistent results across dev and production.
 
 ## Multi-process deployments
 

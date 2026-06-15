@@ -37,7 +37,21 @@ import type {
   AppRequest,
   AppResponse,
 } from '@rudderjs/contracts'
-import { attachInputAccessors, MalformedBodyError } from '@rudderjs/contracts'
+import { attachInputAccessors, MalformedBodyError, PayloadTooLargeError } from '@rudderjs/contracts'
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+// Carries the SPA-nav "original URL" from the outer fetch handler (which does
+// the `.pageContext.json` rewrite) into the route handler that builds the
+// ViewResponse — WITHOUT a client-visible header. The previous header channel
+// (`x-rudder-original-url`) was forgeable: a direct request could set it and
+// inject an arbitrary URL into Vike's renderPage routing. ALS is per-request
+// and unreachable from the client.
+const spaNavUrlStore = new AsyncLocalStorage<string>()
+
+// Default cap on the JSON / form-urlencoded body the adapter buffers itself.
+// Multipart is NOT buffered here (handlers stream it via c.req.parseBody()), so
+// this does not constrain file uploads. Overridable per-app via HonoConfig.bodyLimit.
+const DEFAULT_BODY_LIMIT = 1024 * 1024 // 1 MB
 
 // ─── ViewResponse duck-type check ──────────────────────────
 // Detects @rudderjs/view ViewResponse instances without importing the package.
@@ -56,8 +70,31 @@ function isViewResponse(value: unknown): value is ViewResponseLike {
 export interface HonoConfig {
   /** Port to listen on when using listen() — default 3000 */
   port?: number
-  /** Trust X-Forwarded-* headers from proxies */
-  trustProxy?: boolean
+  /**
+   * Trust proxy-forwarded client-IP headers (`X-Forwarded-For` / `X-Real-IP`).
+   *
+   * - `false` (default): never read forwarding headers — the socket address is
+   *   the client.
+   * - `true`: trust ONE proxy hop. `req.ip` is the rightmost `X-Forwarded-For`
+   *   entry — the address the immediately-trusted proxy appended, which a client
+   *   can't forge. (Taking the *leftmost* entry, as before, let a client spoof
+   *   `req.ip` whenever the proxy appends rather than replaces the header — the
+   *   nginx `proxy_add_x_forwarded_for` default — defeating ip-keyed rate limits
+   *   and allowlists.)
+   * - `number N`: trust N chained proxy hops — `req.ip` is the Nth entry from the
+   *   right (`parts[len - N]`). Use when several reverse proxies sit in front.
+   *
+   * Secure-by-default vs Laravel's `TrustProxies = '*'`: the boolean default
+   * trusts exactly one hop instead of the whole client-supplied chain.
+   */
+  trustProxy?: boolean | number
+  /**
+   * Max bytes the adapter will buffer for a JSON / form-urlencoded request body
+   * before rejecting it with HTTP 413. Enforced via a streaming byte count, so a
+   * chunked body with no (or a lying) Content-Length can't exhaust memory.
+   * Default 1 MB. Does not apply to multipart/form-data (streamed by handlers).
+   */
+  bodyLimit?: number
   /** CORS options applied as a global middleware */
   cors?: {
     origin?:  string
@@ -113,31 +150,49 @@ function socketAddress(c: Context): string | undefined {
   return env?.incoming?.socket?.remoteAddress
 }
 
+/** Number of trusted proxy hops from a `trustProxy` config value. */
+function trustedHops(trustProxy: boolean | number): number {
+  if (trustProxy === true) return 1
+  if (typeof trustProxy === 'number' && trustProxy > 0) return Math.floor(trustProxy)
+  return 0
+}
+
 /**
- * Resolve the client IP — Laravel `Request::ip()` semantics.
+ * Resolve the client IP.
  *
- * With `trustProxy` enabled, proxy headers win: `x-forwarded-for` (first
- * hop) then `x-real-ip`. In every case the direct socket address is the
- * fallback (`REMOTE_ADDR` parity) — a trusted-proxy config hit directly
- * (no header) still resolves the caller, and with `trustProxy` off the
- * socket IS the client. Client-sent proxy headers are never read when
- * `trustProxy` is false.
+ * With `trustProxy` enabled, proxy headers win: `x-forwarded-for` then
+ * `x-real-ip`. The `x-forwarded-for` entry chosen is the one the trusted proxy
+ * chain appended — the **rightmost** entry, or the Nth-from-right when N hops
+ * are trusted — NOT the leftmost (the leftmost is whatever the client sent and
+ * is forgeable when the proxy appends rather than replaces the header). In every
+ * case the direct socket address is the fallback (`REMOTE_ADDR` parity) — a
+ * trusted-proxy config hit directly (no header) still resolves the caller, and
+ * with `trustProxy` off the socket IS the client. Client-sent proxy headers are
+ * never read when `trustProxy` is false.
  *
- * One dev-only exception: the vite dev pipeline converts the Node request
- * to a plain web `Request` before it reaches this adapter, so no socket is
- * reachable. There the `x-real-ip` header injected by `@rudderjs/vite`'s
- * `rudderjs:ip` plugin (from `req.socket.remoteAddress`) stands in for the
- * socket channel. The branch is gated off `NODE_ENV=production`, which the
- * production server pins (universal-deploy defaults it; the scaffolded
- * `start` script sets it explicitly).
+ * One dev-only exception: the vite dev pipeline converts the Node request to a
+ * plain web `Request` before it reaches this adapter, so no socket is reachable.
+ * There the `x-real-ip` header injected by `@rudderjs/vite`'s `rudderjs:ip`
+ * plugin (from `req.socket.remoteAddress`) stands in for the socket channel. The
+ * branch is gated off `NODE_ENV=production`, which the production server pins.
  *
  * Returns `undefined` only when no channel exists (edge runtimes with
  * `trustProxy` off). Addresses normalize via {@link normalizeIp}.
  */
-function extractIp(c: Context, trustProxy: boolean): string | undefined {
-  if (trustProxy) {
+function extractIp(c: Context, trustProxy: boolean | number): string | undefined {
+  const hops = trustedHops(trustProxy)
+  if (hops > 0) {
     const xff = c.req.header('x-forwarded-for')
-    if (xff) return normalizeIp(xff.split(',')[0]!.trim())
+    if (xff) {
+      const parts = xff.split(',').map((s) => s.trim()).filter(Boolean)
+      if (parts.length > 0) {
+        // The real client is the entry the trusted proxy chain appended. With one
+        // trusted proxy that's the rightmost entry; with N proxies it's N from the
+        // right. Clamp so a short (or spoofed-short) chain falls back to leftmost.
+        const idx = Math.max(0, parts.length - hops)
+        return normalizeIp(parts[idx]!)
+      }
+    }
     const xri = c.req.header('x-real-ip')
     if (xri) return normalizeIp(xri)
     // Trusted proxy configured but no header on this hit (direct request) —
@@ -145,11 +200,48 @@ function extractIp(c: Context, trustProxy: boolean): string | undefined {
   }
   const sock = socketAddress(c)
   if (sock) return normalizeIp(sock)
-  if (!trustProxy && process.env['NODE_ENV'] !== 'production') {
+  if (hops === 0 && process.env['NODE_ENV'] !== 'production') {
     const xri = c.req.header('x-real-ip')
     if (xri) return normalizeIp(xri)
   }
   return undefined
+}
+
+/**
+ * @internal — exposed for tests. Whether the rich dev error page (full stack +
+ * on-disk source + all request headers) should render for the given env.
+ * Secure-by-default: TRUE only when the env is EXPLICITLY development/local; an
+ * unset or unknown env returns FALSE (treated as production), so a misconfigured
+ * deploy that forgets `NODE_ENV=production` can't leak source + secret headers.
+ */
+export function devErrorPageEnabled(env: { APP_ENV?: string | undefined; NODE_ENV?: string | undefined }): boolean {
+  const appEnv = env.APP_ENV
+  const nodeEnv = env.NODE_ENV
+  if (appEnv === 'production' || nodeEnv === 'production') return false
+  if (appEnv === 'local' || appEnv === 'development' || appEnv === 'dev') return true
+  if (appEnv === undefined && nodeEnv === 'development') return true
+  return false
+}
+
+/**
+ * Read a request body as text, bounded to `limit` bytes. A declared
+ * `Content-Length` over the limit is rejected BEFORE anything is buffered — the
+ * realistic large-body attack — so it can't exhaust memory. A body with no (or a
+ * lying) `Content-Length` is buffered once and then rejected if oversized, which
+ * caps a single request to one body and never amplifies. Reads a CLONE so the
+ * original stream stays intact for handlers that consume it themselves (e.g. MCP
+ * streaming).
+ */
+async function readBodyText(raw: Request, limit: number, contentType: string): Promise<string> {
+  const cl = raw.headers.get('content-length')
+  if (cl !== null && Number.isFinite(Number(cl)) && Number(cl) > limit) {
+    throw new PayloadTooLargeError(contentType, limit)
+  }
+  const text = await raw.clone().text()
+  if (Buffer.byteLength(text, 'utf8') > limit) {
+    throw new PayloadTooLargeError(contentType, limit)
+  }
+  return text
 }
 
 /**
@@ -172,7 +264,7 @@ function extractIp(c: Context, trustProxy: boolean): string | undefined {
  * `params` merges `__rjs_host_params` (captured by `host` route templates)
  * with path params; path params win on collision.
  */
-function normalizeRequest(c: Context, trustProxy = false): AppRequest {
+function normalizeRequest(c: Context, trustProxy: boolean | number = false): AppRequest {
   const url = new URL(c.req.url)
   // Subdomain params captured by the route's `host` template are stashed by
   // registerRoute() before the chain runs. Merge them into `req.params` so
@@ -622,7 +714,8 @@ function attachTestSideChannel(
 
 class HonoAdapter implements ServerAdapter {
   private app: Hono
-  private _trustProxy: boolean
+  private _trustProxy: boolean | number
+  private _bodyLimit: number
   private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
   private _groupMiddleware: Record<'web' | 'api', MiddlewareHandler[]> = { web: [], api: [] }
   /**
@@ -663,9 +756,10 @@ class HonoAdapter implements ServerAdapter {
     return undefined
   }
 
-  constructor(app?: Hono, trustProxy = false) {
+  constructor(app?: Hono, trustProxy: boolean | number = false, bodyLimit: number = DEFAULT_BODY_LIMIT) {
     this.app = app ?? new Hono()
     this._trustProxy = trustProxy
+    this._bodyLimit = bodyLimit
   }
 
   applyGroupMiddleware(group: 'web' | 'api', middleware: MiddlewareHandler): void {
@@ -766,14 +860,14 @@ class HonoAdapter implements ServerAdapter {
       if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
         const ct = c.req.header('content-type') ?? ''
         if (ct.includes('application/json')) {
-          // Read the cloned body as text first so we can distinguish empty
-          // bodies (leave req.body at the default — validators emit their
-          // normal "field required" errors) from malformed JSON (throw 400
-          // via the central exception pipeline — see MalformedBodyError's
-          // httpStatus duck-type in `@rudderjs/core/src/app-builder.ts`).
-          // The old `req.body = {}` fallback made malformed requests look
-          // like missing-field validation errors to handlers.
-          const text = await c.req.raw.clone().text()
+          // Read the body (size-bounded) as text first so we can distinguish
+          // empty bodies (leave req.body at the default — validators emit their
+          // normal "field required" errors) from malformed JSON (throw 400 via
+          // the central exception pipeline — see MalformedBodyError's httpStatus
+          // duck-type in `@rudderjs/core/src/app-builder.ts`). The old
+          // `req.body = {}` fallback made malformed requests look like
+          // missing-field validation errors to handlers.
+          const text = await readBodyText(c.req.raw, this._bodyLimit, 'application/json')
           if (text.length > 0) {
             try { req.body = JSON.parse(text) }
             catch (e) {
@@ -783,14 +877,16 @@ class HonoAdapter implements ServerAdapter {
         } else if (ct.includes('application/x-www-form-urlencoded')) {
           // `URLSearchParams` is tolerant — it never throws on malformed
           // input, just parses what it can. Only a body-stream read error
-          // surfaces here.
+          // (or the size guard) surfaces here.
+          let text: string
           try {
-            const text = await c.req.raw.clone().text()
-            if (text.length > 0) {
-              req.body = Object.fromEntries(new URLSearchParams(text))
-            }
+            text = await readBodyText(c.req.raw, this._bodyLimit, 'application/x-www-form-urlencoded')
           } catch (e) {
+            if (e instanceof PayloadTooLargeError) throw e
             throw new MalformedBodyError('application/x-www-form-urlencoded', e instanceof Error ? e : undefined)
+          }
+          if (text.length > 0) {
+            req.body = Object.fromEntries(new URLSearchParams(text))
           }
         }
       }
@@ -822,8 +918,11 @@ class HonoAdapter implements ServerAdapter {
             // server-hono has no hard import on @rudderjs/view.
             // Pass the original URL (preserving any .pageContext.json suffix
             // from Vike's client router) so toResponse() can request JSON
-            // instead of HTML for SPA navigation.
-            const originalUrl = c.req.header('x-rudder-original-url') ?? c.req.url
+            // instead of HTML for SPA navigation. The original URL comes from a
+            // per-request ALS set ONLY by the outer fetch handler's SPA-nav
+            // rewrite — never from a client header, which a direct request could
+            // forge to inject an arbitrary URL into Vike's renderPage routing.
+            const originalUrl = spaNavUrlStore.getStore() ?? c.req.url
             const tv = trace ? performance.now() : 0
             markBoundary(perfId, B.VIEW_TORESPONSE_IN)
             c.res = await result.toResponse({ url: originalUrl })
@@ -941,7 +1040,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
     type: 'hono',
 
     create(): ServerAdapter {
-      return new HonoAdapter(undefined, config.trustProxy ?? false)
+      return new HonoAdapter(undefined, config.trustProxy ?? false, config.bodyLimit ?? DEFAULT_BODY_LIMIT)
     },
 
     createApp(): Hono {
@@ -967,9 +1066,16 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         })
       }
 
-      const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
+      // Secure-by-default: the rich dev error page (full stack + on-disk source
+      // + ALL request headers, incl. Authorization/Cookie) renders ONLY when the
+      // env is EXPLICITLY development/local. An unset or unrecognized env is
+      // treated as production, so a deploy that forgets `NODE_ENV=production`
+      // can't leak source + secrets — the inverse of the old
+      // `APP_ENV==='production' || NODE_ENV==='production'` gate, which defaulted
+      // to the leaky dev page whenever neither var was set.
+      const isProd = !devErrorPageEnabled(process.env)
 
-      const adapter = new HonoAdapter(app, trustProxy)
+      const adapter = new HonoAdapter(app, trustProxy, config.bodyLimit ?? DEFAULT_BODY_LIMIT)
       setup?.(adapter)
 
       // Install error handler — setup() may have registered one via adapter.setErrorHandler().
@@ -1040,10 +1146,12 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const perfId = startRequest()
         markBoundary(perfId, B.HONO_FETCH_IN)
         // Vike client-router SPA nav: rewrite /<path>.pageContext.json → /<path>
-        // so the controller route matches. Stash the original URL on a header so
-        // ViewResponse.toResponse() can pass it back to Vike — Vike then emits the
-        // JSON pageContext envelope instead of HTML, and the client does a smooth
-        // SPA transition. Without this, every controller-view link is a full reload.
+        // so the controller route matches. Carry the original URL on a per-request
+        // ALS (spaNavUrlStore) so ViewResponse.toResponse() can pass it back to
+        // Vike — Vike then emits the JSON pageContext envelope instead of HTML, and
+        // the client does a smooth SPA transition. Without this, every controller-
+        // view link is a full reload. The ALS (not a header) is what keeps a direct
+        // client from forging the URL handed to Vike's renderPage routing.
         // Vike's client router uses `/<path>/index.pageContext.json` (the
         // `/index` prefix is hard-coded — see Vike's handlePageContextRequestUrl).
         // For controller-view URLs, strip that suffix and route to the
@@ -1052,6 +1160,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         // For pageContext.json requests targeting normal Vike pages, leave
         // the request alone — Vike's middleware handles those directly.
         let actualRequest = request
+        let spaOriginalUrl: string | undefined
         const reqUrl = new URL(request.url)
         const PAGE_CTX_SUFFIX = '/index.pageContext.json'
         if (reqUrl.pathname.endsWith(PAGE_CTX_SUFFIX)) {
@@ -1063,19 +1172,27 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
           if (adapter._matchesControllerView(stripped)) {
             const rewrittenUrl = new URL(request.url)
             rewrittenUrl.pathname = stripped
-            const headers = new Headers(request.headers)
-            headers.set('x-rudder-original-url', request.url)
             actualRequest = new Request(rewrittenUrl.toString(), {
               method: request.method,
-              headers,
+              headers: request.headers,
             })
+            spaOriginalUrl = request.url
           }
         }
+
+        // Run the app under the SPA-nav ALS when (and only when) we did the
+        // rewrite ourselves. A non-rewritten request has no store, so the route
+        // handler's `spaNavUrlStore.getStore()` returns undefined and falls back
+        // to the request's own URL — a client-sent value never reaches Vike.
+        const fetchApp = (): Response | Promise<Response> =>
+          spaOriginalUrl !== undefined
+            ? spaNavUrlStore.run(spaOriginalUrl, () => runWithRequest(perfId, () => app.fetch(actualRequest)))
+            : runWithRequest(perfId, () => app.fetch(actualRequest))
 
         const display = logPath(new URL(request.url).pathname)
         if (display === null) {
           markBoundary(perfId, B.APP_FETCH_IN)
-          const r = await runWithRequest(perfId, () => app.fetch(actualRequest))
+          const r = await fetchApp()
           markBoundary(perfId, B.APP_FETCH_OUT)
           markBoundary(perfId, B.HONO_FETCH_OUT)
           finishRequest(perfId)
@@ -1084,7 +1201,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const n     = nextReqId()
         const start = performance.now()
         markBoundary(perfId, B.APP_FETCH_IN)
-        const res   = await runWithRequest(perfId, () => app.fetch(actualRequest))
+        const res   = await fetchApp()
         markBoundary(perfId, B.APP_FETCH_OUT)
         console.log(formatRequestLog(n, display, res.status, performance.now() - start))
         markBoundary(perfId, B.HONO_FETCH_OUT)

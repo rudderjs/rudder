@@ -58,7 +58,7 @@ These are the right tool for a quick endpoint or controller. For complex validat
 
 ## Client IP
 
-`req.ip` is set by the server adapter (Laravel `Request::ip()` parity). With `TRUST_PROXY=true`, proxy headers win — `x-forwarded-for`'s first hop, then `x-real-ip`; with it off, client-sent proxy headers are ignored. In every case the direct socket address is the fallback wherever the runtime exposes one (the production vike server and `adapter.listen()` both do; in dev the `rudderjs:ip` Vite plugin injects a stand-in header). It normalizes IPv6 loopback (`::1` → `127.0.0.1`). The type is `string | undefined` — undefined only on edge runtimes with no socket and no trusted header.
+`req.ip` is set by the server adapter. With `TRUST_PROXY=true`, proxy headers win — the **rightmost** `x-forwarded-for` entry (the address the trusted proxy appended; set `TRUST_PROXY` to a number N to trust N chained proxies and read the Nth-from-right entry), then `x-real-ip`; with it off, client-sent proxy headers are ignored. The rightmost (never the leftmost) entry is the one a client can't forge, since a proxy appends its observed peer to whatever the client sent. In every case the direct socket address is the fallback wherever the runtime exposes one (the production vike server and `adapter.listen()` both do; in dev the `rudderjs:ip` Vite plugin injects a stand-in header). It normalizes IPv6 loopback (`::1` → `127.0.0.1`). The type is `string | undefined` — undefined only on edge runtimes with no socket and no trusted header.
 
 ```ts
 const limiter = RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)

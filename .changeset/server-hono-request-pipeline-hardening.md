@@ -1,0 +1,11 @@
+---
+"@rudderjs/server-hono": minor
+"@rudderjs/contracts": patch
+---
+
+Harden the request pipeline against forged proxy headers, oversized bodies, header forgery, and error-page disclosure.
+
+- **`X-Forwarded-For` no longer trusts the client-supplied entry.** With `trustProxy` enabled, `req.ip` was taken from the *leftmost* `X-Forwarded-For` entry. Behind a proxy that appends rather than replaces the header (the nginx `proxy_add_x_forwarded_for` default), the leftmost is whatever the client sent, so a client could forge `req.ip` and defeat ip-keyed rate limits and allowlists. `req.ip` now reads the **rightmost** entry (the address the immediately-trusted proxy appended, which a client can't forge). `trustProxy` accepts a **number** to trust N chained proxy hops (`parts[len - N]`). Secure-by-default vs Laravel's `TrustProxies = '*'`, which trusts the whole client-supplied chain.
+- **Request bodies are size-capped.** The adapter buffered JSON / form-urlencoded bodies via an unbounded `.text()`, so a multi-GB body could exhaust memory. A new `HonoConfig.bodyLimit` (default 1 MB) rejects a request whose declared `Content-Length` exceeds the limit BEFORE anything is buffered, and caps a body with no (or a lying) `Content-Length` after a single buffered read — either way with the new `PayloadTooLargeError` (HTTP 413). Multipart uploads are unaffected (handlers stream them).
+- **The internal SPA-nav URL is no longer client-forgeable.** The original URL handed to Vike's `renderPage()` for a controller `view()` travelled via an `x-rudder-original-url` request header that was never stripped from inbound requests — a direct request could forge it to inject an arbitrary URL into Vike's routing. It now travels via a per-request `AsyncLocalStorage` set only by the framework's own rewrite; a client-sent header is ignored.
+- **The dev error page is secure-by-default.** Its gate previously rendered the rich page (full stack, on-disk source, and every request header including `Authorization`/`Cookie`) whenever neither `APP_ENV` nor `NODE_ENV` was `production` — so a deploy that forgot `NODE_ENV=production` leaked source and secrets. It now renders only when the env is *explicitly* `local`/`development`/`dev`; an unset or unknown env is treated as production.
