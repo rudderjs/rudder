@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { ConfigRepository, setConfigRepository, getConfigRepository, rudder } from '@rudderjs/core'
-import { CacheProvider, Cache, CacheRegistry, MemoryAdapter, type CacheConfig } from './index.js'
+import { CacheProvider, Cache, CacheRegistry, MemoryAdapter, escapeRedisGlob, scanAndDelete, type CacheConfig } from './index.js'
 
 function withCacheConfig(cfg: CacheConfig): () => void {
   const previous = getConfigRepository()
@@ -187,6 +187,36 @@ describe('MemoryAdapter', () => {
     await sleep(80)
     assert.strictEqual(await adapter.add('claim', '2', 60), true)
     assert.strictEqual(await adapter.get('claim'), '2')
+  })
+
+  it('rejects value-API keys that collide with the lock namespace', async () => {
+    // A lock held under "__lock__:job" must not be forgeable / destroyable /
+    // readable via the value API with a caller-influenced key.
+    const lock = adapter.lock('job', 60)
+    assert.strictEqual(await lock.get(), true)
+    const owner = lock.owner()
+
+    await assert.rejects(() => adapter.set('__lock__:job', 'forged'), /reserved lock prefix/)
+    await assert.rejects(() => adapter.forget('__lock__:job'),        /reserved lock prefix/)
+    await assert.rejects(() => adapter.get('__lock__:job'),           /reserved lock prefix/)
+    await assert.rejects(() => adapter.increment('__lock__:job'),     /reserved lock prefix/)
+    await assert.rejects(() => adapter.add('__lock__:job', 'x'),      /reserved lock prefix/)
+
+    // The lock is intact: a second acquirer is still locked out, the real owner
+    // can still release.
+    assert.strictEqual(await adapter.lock('job', 60).get(), false)
+    assert.strictEqual(await adapter.restoreLock('job', owner).release(), true)
+  })
+
+  it('pull() atomically reads-and-removes (a second concurrent pull gets null)', async () => {
+    await adapter.set('one-time', 'token', 60)
+    const [a, b] = await Promise.all([adapter.pull('one-time'), adapter.pull('one-time')])
+    assert.strictEqual([a, b].filter(v => v === 'token').length, 1, 'exactly one pull wins')
+    assert.strictEqual(await adapter.get('one-time'), null)
+  })
+
+  it('pull() returns null for a missing key', async () => {
+    assert.strictEqual(await adapter.pull('nope'), null)
   })
 })
 
@@ -442,5 +472,51 @@ describe('CacheProvider', () => {
     await cmd!.handler([], {})
 
     assert.strictEqual(await swapped.get('swapped-key'), null, 'the CURRENT adapter was flushed')
+  })
+})
+
+// ─── Redis flush helpers (no live Redis needed) ────────────
+
+describe('escapeRedisGlob', () => {
+  it('escapes glob metacharacters so a prefix matches literally', () => {
+    assert.strictEqual(escapeRedisGlob('app[staging]:'), 'app\\[staging\\]:')
+    assert.strictEqual(escapeRedisGlob('team*:'),        'team\\*:')
+    assert.strictEqual(escapeRedisGlob('q?:'),           'q\\?:')
+    assert.strictEqual(escapeRedisGlob('a\\b:'),         'a\\\\b:')
+  })
+
+  it('leaves a plain prefix unchanged', () => {
+    assert.strictEqual(escapeRedisGlob('rudderjs:'), 'rudderjs:')
+  })
+})
+
+describe('scanAndDelete', () => {
+  it('walks the SCAN cursor to completion and deletes every batch (never KEYS)', async () => {
+    // Fake client: two SCAN pages then cursor '0'. Records what was deleted.
+    const pages: Array<[string, string[]]> = [
+      ['10', ['rudderjs:a', 'rudderjs:b']],
+      ['0',  ['rudderjs:c']],
+    ]
+    const deleted: string[] = []
+    let call = 0
+    const client = {
+      async scan(_cursor: string, ..._args: unknown[]): Promise<[string, string[]]> {
+        return pages[call++] ?? ['0', []]
+      },
+      async del(...keys: string[]): Promise<unknown> { deleted.push(...keys); return keys.length },
+    }
+    await scanAndDelete(client, 'rudderjs:*')
+    assert.deepStrictEqual(deleted, ['rudderjs:a', 'rudderjs:b', 'rudderjs:c'])
+    assert.strictEqual(call, 2, 'looped until the cursor returned 0')
+  })
+
+  it('does not call del when a page is empty', async () => {
+    let delCalls = 0
+    const client = {
+      async scan(): Promise<[string, string[]]> { return ['0', []] },
+      async del(...keys: string[]): Promise<unknown> { delCalls++; return keys.length },
+    }
+    await scanAndDelete(client, 'x:*')
+    assert.strictEqual(delCalls, 0)
   })
 })

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { CacheRegistry } from './index.js'
+import { CacheRegistry, assertValueKey } from './index.js'
 import type { CacheAdapter } from './index.js'
-import { BaseLock, newOwnerToken, type Lock } from './lock.js'
+import { BaseLock, newOwnerToken, LOCK_KEY_PREFIX, type Lock } from './lock.js'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ export class FakeCacheAdapter implements CacheAdapter {
   // ─── CacheAdapter ───────────────────────────────────────
 
   async get<T = unknown>(key: string): Promise<T | null> {
+    assertValueKey(key)
     this._operations.push({ type: 'get', key })
     const entry = this._store.get(key)
     if (!entry) return null
@@ -56,12 +57,14 @@ export class FakeCacheAdapter implements CacheAdapter {
   }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    assertValueKey(key)
     this._operations.push({ type: 'set', key, value, ttl: ttlSeconds })
     const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null
     this._store.set(key, { value, expiresAt })
   }
 
   async increment(key: string, by = 1, ttlSeconds?: number): Promise<number> {
+    assertValueKey(key)
     // Mirror the real drivers: reject a non-integer `by` so the fake catches
     // counter-poisoning bugs (NaN/Infinity/float) in tests instead of letting
     // them slip through to a prod Redis that would reject the same input.
@@ -84,6 +87,7 @@ export class FakeCacheAdapter implements CacheAdapter {
   }
 
   async add(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    assertValueKey(key)
     this._operations.push({ type: 'add', key, value, ttl: ttlSeconds })
     const existing = this._store.get(key)
     const now = Date.now()
@@ -96,11 +100,13 @@ export class FakeCacheAdapter implements CacheAdapter {
   }
 
   async forget(key: string): Promise<void> {
+    assertValueKey(key)
     this._operations.push({ type: 'forget', key })
     this._store.delete(key)
   }
 
   async has(key: string): Promise<boolean> {
+    assertValueKey(key)
     this._operations.push({ type: 'has', key })
     const entry = this._store.get(key)
     if (!entry) return false
@@ -219,7 +225,7 @@ class FakeLock extends BaseLock {
     super(name, seconds, owner)
   }
 
-  private key(): string { return `__lock__:${this._name}` }
+  private key(): string { return `${LOCK_KEY_PREFIX}${this._name}` }
 
   private readEntry(): FakeEntry | null {
     const k = this.key()
