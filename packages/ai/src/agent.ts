@@ -109,6 +109,91 @@ export function hasToolCall(toolName: string): StopCondition {
   }
 }
 
+// ─── Batch sub-agent resume (resumeManyAsTool) ───────────
+
+/**
+ * One entry in a {@link Agent.resumeManyAsTool} batch — a single paused
+ * sub-agent to resume. Mirrors the positional args of the singular
+ * {@link Agent.resumeAsTool}, plus an optional host `key` echoed back on the
+ * matching outcome so callers can correlate results without relying on array
+ * order.
+ */
+export interface SubAgentResumeRequest {
+  /** The paused run's id (the `subRunId` from its pause chunk/snapshot). */
+  subRunId:             string
+  /** The sub-agent instance to resume (each item may be a different agent). */
+  agent:                Agent
+  /** Client tool-results for a `client_tool` pause (one per pending id). */
+  clientToolResults?:   ReadonlyArray<{ toolCallId: string; result: unknown }>
+  /** Approved ids for an `approval` pause. */
+  approvedToolCallIds?: string[]
+  /** Rejected ids for an `approval` pause. */
+  rejectedToolCallIds?: string[]
+  /** Opaque correlation key echoed back on this item's outcome. */
+  key?:                 string
+}
+
+/** Outcome for a single item in a {@link Agent.resumeManyAsTool} batch. */
+export type SubAgentResumeOutcome =
+  | { key?: string; originalSubRunId: string; kind: 'completed'; response: AgentResponse }
+  | {
+      key?:               string
+      originalSubRunId:   string
+      kind:               'paused'
+      subRunId:           string
+      pauseKind:          SubAgentPauseKind
+      pendingToolCallIds: string[]
+      toolCall?:          ToolCall
+      isClientTool?:      boolean
+    }
+  | { key?: string; originalSubRunId: string; kind: 'error'; error: Error }
+
+export interface SubAgentResumeManyOptions {
+  /** Shared run store all the snapshots live in. */
+  runStore:     SubAgentRunStore
+  /**
+   * What to do when one item fails (expired/forged `subRunId`, duplicate
+   * result id, inner error):
+   * - `'capture'` (default) — record it as a `{ kind: 'error' }` outcome and
+   *   let the rest of the batch resume; the aggregated round-trip still
+   *   returns.
+   * - `'throw'` — reject the whole call on the first failure, matching the
+   *   singular `resumeAsTool` strictness.
+   */
+  onError?:     'capture' | 'throw'
+  /**
+   * - `'parallel'` (default) — resume all snapshots concurrently. Snapshots
+   *   are independent and `consume()` is per-id atomic, so this is safe and
+   *   fastest.
+   * - `'serial'` — resume one at a time in array order, for deterministic
+   *   side-effect ordering when sub-agents touch shared state.
+   */
+  concurrency?: 'parallel' | 'serial'
+}
+
+/** Aggregated result of a {@link Agent.resumeManyAsTool} batch. */
+export interface SubAgentResumeManyResult {
+  /** Every item's outcome, in input order. */
+  results:            SubAgentResumeOutcome[]
+  /** The items that paused again (need another client round-trip). */
+  paused:             Extract<SubAgentResumeOutcome, { kind: 'paused' }>[]
+  /** The items that ran to completion. */
+  completed:          Extract<SubAgentResumeOutcome, { kind: 'completed' }>[]
+  /** The items that failed (only populated under `onError: 'capture'`). */
+  errors:             Extract<SubAgentResumeOutcome, { kind: 'error' }>[]
+  /**
+   * All pending tool-call ids across every paused item, flattened — the
+   * single set the host gathers client results / approvals for before the
+   * next `resumeManyAsTool`. Empty when nothing paused.
+   */
+  pendingToolCallIds: string[]
+  /**
+   * `true` when nothing is still paused and no item errored — i.e. there is
+   * no further round-trip to do. Loop `resumeManyAsTool` until this is `true`.
+   */
+  allCompleted:       boolean
+}
+
 // ─── Agent Base Class ────────────────────────────────────
 
 export abstract class Agent {
@@ -599,6 +684,87 @@ export abstract class Agent {
     }
 
     return { kind: 'completed', response: result }
+  }
+
+  /**
+   * Resume MANY paused sub-agents in one call and aggregate their pending
+   * tool calls into a single client round-trip.
+   *
+   * When an orchestrator dispatches several sub-agents in one parent turn
+   * and more than one pauses on a client tool (or approval gate), the host
+   * would otherwise loop over {@link Agent.resumeAsTool} by hand and stitch
+   * the pending sets back together. This does that: each request resumes its
+   * own `(subRunId, agent)` snapshot, and the result carries the combined
+   * `completed` / `paused` / `errors` partition plus the flattened
+   * `pendingToolCallIds` the host collects the next batch of results for.
+   *
+   * Re-entrant: feed the next round of `clientToolResults` / approvals back
+   * in as a fresh batch keyed off each paused item's NEW `subRunId` until
+   * `allCompleted` is `true`.
+   *
+   * @example
+   * let batch = await Agent.resumeManyAsTool(
+   *   paused.map(p => ({ subRunId: p.subRunId, agent: p.agent, clientToolResults: results[p.subRunId] })),
+   *   { runStore },
+   * )
+   * // batch.pendingToolCallIds → gather the next round from the browser, repeat.
+   */
+  static async resumeManyAsTool(
+    requests: ReadonlyArray<SubAgentResumeRequest>,
+    options:  SubAgentResumeManyOptions,
+  ): Promise<SubAgentResumeManyResult> {
+    const onError     = options.onError     ?? 'capture'
+    const concurrency = options.concurrency ?? 'parallel'
+
+    const runOne = async (req: SubAgentResumeRequest): Promise<SubAgentResumeOutcome> => {
+      const base = { originalSubRunId: req.subRunId, ...(req.key !== undefined ? { key: req.key } : {}) }
+      try {
+        const opts: {
+          runStore:             SubAgentRunStore
+          agent:                Agent
+          approvedToolCallIds?: string[]
+          rejectedToolCallIds?: string[]
+        } = { runStore: options.runStore, agent: req.agent }
+        if (req.approvedToolCallIds) opts.approvedToolCallIds = req.approvedToolCallIds
+        if (req.rejectedToolCallIds) opts.rejectedToolCallIds = req.rejectedToolCallIds
+
+        const r = await Agent.resumeAsTool(req.subRunId, req.clientToolResults ?? [], opts)
+        if (r.kind === 'completed') return { ...base, kind: 'completed', response: r.response }
+        return {
+          ...base,
+          kind:               'paused',
+          subRunId:           r.subRunId,
+          pauseKind:          r.pauseKind,
+          pendingToolCallIds: r.pendingToolCallIds,
+          ...(r.toolCall     !== undefined ? { toolCall: r.toolCall } : {}),
+          ...(r.isClientTool !== undefined ? { isClientTool: r.isClientTool } : {}),
+        }
+      } catch (err) {
+        if (onError === 'throw') throw err
+        return { ...base, kind: 'error', error: err instanceof Error ? err : new Error(String(err)) }
+      }
+    }
+
+    let results: SubAgentResumeOutcome[]
+    if (concurrency === 'serial') {
+      results = []
+      for (const req of requests) results.push(await runOne(req))
+    } else {
+      results = await Promise.all(requests.map(runOne))
+    }
+
+    const paused    = results.filter((o): o is Extract<SubAgentResumeOutcome, { kind: 'paused' }>    => o.kind === 'paused')
+    const completed = results.filter((o): o is Extract<SubAgentResumeOutcome, { kind: 'completed' }> => o.kind === 'completed')
+    const errors    = results.filter((o): o is Extract<SubAgentResumeOutcome, { kind: 'error' }>     => o.kind === 'error')
+
+    return {
+      results,
+      paused,
+      completed,
+      errors,
+      pendingToolCallIds: paused.flatMap((p) => p.pendingToolCallIds),
+      allCompleted:       paused.length === 0 && errors.length === 0,
+    }
   }
 }
 

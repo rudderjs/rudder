@@ -339,6 +339,28 @@ A resume can pause again on a different kind than it started on — e.g. an appr
 
 `InMemorySubAgentRunStore` works for tests / single-process dev; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process / cross-restart persistence. Suspend without streaming throws at builder time — silent suspend is a UX trap.
 
+#### Resuming several sub-agents at once
+
+When an orchestrator dispatches several sub-agents in one parent turn and more than one pauses, `Agent.resumeManyAsTool(requests, { runStore })` resumes them as a batch and aggregates their pending tool calls into a single client round-trip, instead of looping over `resumeAsTool` by hand:
+
+```ts
+let batch = await Agent.resumeManyAsTool(
+  paused.map(p => ({
+    subRunId:          p.subRunId,
+    agent:             rebuildSubAgent(p),
+    clientToolResults: resultsBySubRun[p.subRunId],   // or approvedToolCallIds / rejectedToolCallIds
+    key:               p.subRunId,                    // echoed back for correlation
+  })),
+  { runStore },
+)
+
+// batch.completed / batch.paused / batch.errors partition the outcomes.
+// batch.pendingToolCallIds is the combined set to gather the next round for.
+// Re-call with each paused item's NEW subRunId until batch.allCompleted.
+```
+
+Each request carries its own `agent` (the sub-agents may be different classes). Options: `onError: 'capture'` (default — a bad item becomes a `{ kind: 'error' }` outcome and the rest still resume) or `'throw'` (reject the whole batch); `concurrency: 'parallel'` (default) or `'serial'` (deterministic side-effect order).
+
 ### Hand-rolled sub-agent tools
 
 For full control — custom progress shape, sub-agent token-deltas as `tool-update` chunks, anything outside the `asTool` envelope — write the wrapping tool by hand:
