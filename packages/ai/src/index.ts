@@ -114,7 +114,13 @@ export type { HandoffTool, HandoffOptions, HandoffSpec } from './handoff.js'
 
 // Agent
 export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore, setUserMemory, resolveUserMemory } from './agent.js'
-export type { InvalidToolArgumentsError } from './agent.js'
+export type {
+  InvalidToolArgumentsError,
+  SubAgentResumeRequest,
+  SubAgentResumeOutcome,
+  SubAgentResumeManyOptions,
+  SubAgentResumeManyResult,
+} from './agent.js'
 export { QueuedPromptBuilder } from './queue-job.js'
 
 // Middleware
