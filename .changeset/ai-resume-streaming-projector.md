@@ -1,5 +1,0 @@
----
-"@rudderjs/ai": minor
----
-
-Add a streaming projector to the sub-agent resume surface. `Agent.resumeAsTool` and `Agent.resumeManyAsTool` now accept `streaming?: AsToolStreamingOption` (`boolean | (chunk) => SubAgentUpdate | null`, the same projector as `asTool({ streaming })`) plus an `onUpdate` sink. When set, the resume runs the inner loop via `stream()` instead of `prompt()` and forwards each projected update as it arrives — the singular form calls `onUpdate(update)`, the batch form calls `onUpdate(update, { key?, originalSubRunId })` so a host can correlate a chunk back to its originating request and fan it out (e.g. to a per-sub-agent SSE channel). This closes the gap where a resumed sub-agent emitted nothing until it completed or re-paused, freezing the in-bubble progress UI. The pause/completion partition is unchanged; this only adds an opt-in live-progress channel. Leaving `streaming` unset keeps the existing non-streaming resume. Also exports `SubAgentResumeOptions`, `AsToolStreamingOption`, and `ChunkProjector`.
