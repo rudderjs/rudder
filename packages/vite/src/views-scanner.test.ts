@@ -757,6 +757,69 @@ describe('views-scanner — syncViewsFromDisk (CLI surface)', () => {
   })
 })
 
+describe('views-scanner — codegen-injection hardening', () => {
+  const prevCwd = process.cwd()
+  let root = ''
+  let warnSpy: string[] = []
+  const realWarn = console.warn
+
+  beforeEach(() => { warnSpy = []; console.warn = (...a: unknown[]) => { warnSpy.push(a.join(' ')) } })
+  afterEach(() => {
+    console.warn = realWarn
+    process.chdir(prevCwd)
+    if (root) fs.rmSync(root, { recursive: true, force: true })
+    root = ''
+  })
+
+  it('skips (and warns about) a view whose filename contains a quote — no page is generated', () => {
+    root = scaffold('react')
+    // A hostile / templated filename that would break out of the single-quoted
+    // import-specifier in the generated +Page.tsx.
+    fs.writeFileSync(path.join(root, 'app', 'Views', "Ev'il.tsx"), 'export default () => null\n')
+    process.chdir(root)
+    const result = syncViewsFromDisk()
+
+    // Only the safe Home view is generated; the quoted one is dropped.
+    assert.equal(result.viewCount, 1)
+    assert.ok(fs.existsSync(path.join(root, 'pages', '__view', 'home', '+Page.tsx')))
+    const registry = fs.existsSync(path.join(root, '.rudder', 'types', 'views.d.ts'))
+      ? fs.readFileSync(path.join(root, '.rudder', 'types', 'views.d.ts'), 'utf8')
+      : ''
+    assert.doesNotMatch(registry, /Ev/, 'the unsafe view must not reach the generated registry')
+    assert.ok(warnSpy.some(w => w.includes('Skipping view') && w.includes('unsafe')),
+      'a warning must name the skipped unsafe view')
+  })
+
+  it('does not ingest a symlinked file under app/Views/ (out-of-tree escape)', () => {
+    root = scaffold('react')
+    // A secret file OUTSIDE the app tree, linked in as a view.
+    const outside = path.join(root, 'secret.tsx')
+    fs.writeFileSync(outside, 'export default () => null\n')
+    try {
+      fs.symlinkSync(outside, path.join(root, 'app', 'Views', 'Linked.tsx'))
+    } catch {
+      return // platform without symlink permission — skip
+    }
+    process.chdir(root)
+    const result = syncViewsFromDisk()
+
+    assert.equal(result.viewCount, 1, 'only the real Home view, not the symlinked file')
+    assert.ok(!fs.existsSync(path.join(root, 'pages', '__view', 'linked', '+Page.tsx')))
+  })
+
+  it('does NOT serialize viewHeaders to the client (passToClient is viewProps only)', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    syncViewsFromDisk()
+    const cfg = fs.readFileSync(path.join(root, 'pages', '__view', '+config.ts'), 'utf8')
+    assert.match(cfg, /passToClient:\s*\['viewProps'\]/)
+    // The passToClient array itself must not carry viewHeaders (the comment may
+    // still mention it).
+    const arrayLine = cfg.split('\n').find(l => l.includes('passToClient')) ?? ''
+    assert.doesNotMatch(arrayLine, /viewHeaders/, 'viewHeaders must stay server-only')
+  })
+})
+
 describe('views-scanner — framework hook emission contract', () => {
   // pageContext enhancers (session/auth/localization push user/flash/locale
   // enhancers unconditionally in their provider boot()) only ever RUN because
