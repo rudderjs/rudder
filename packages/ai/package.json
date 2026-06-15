@@ -56,6 +56,10 @@
       "import": "./dist/mcp/index.js",
       "types": "./dist/mcp/index.d.ts"
     },
+    "./chat-mentions": {
+      "import": "./dist/chat-mentions.js",
+      "types": "./dist/chat-mentions.d.ts"
+    },
     "./conversation-orm": {
       "import": "./dist/conversation-orm/index.js",
       "types": "./dist/conversation-orm/index.d.ts"
