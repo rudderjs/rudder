@@ -354,6 +354,23 @@ async function onMessage(
 
     case 'subscribe': {
       const { channel, token } = msg
+
+      // Idempotent re-subscribe. A socket already in this channel gets a fresh
+      // `subscribed` confirmation (and, for presence, the current roster) — but
+      // NO re-run of the auth callback and, crucially, NO second `presence.joined`
+      // broadcast to peers. Without this guard a client could loop subscribe
+      // frames to spam `presence.joined`, leaving append-only client rosters with
+      // ghost duplicates of itself (only one `presence.left` fires on disconnect).
+      // Matches Pusher's already-subscribed semantics.
+      if (state.subscriptions.get(id)?.has(channel)) {
+        send(ws, { type: 'subscribed', channel })
+        if (channel.startsWith('presence-')) {
+          const members = [...(state.presence.get(channel)?.values() ?? [])]
+          send(ws, { type: 'presence.members', channel, members })
+        }
+        return
+      }
+
       const isPrivate  = channel.startsWith('private-')
       const isPresence = channel.startsWith('presence-')
       const channelType: 'public' | 'private' | 'presence' =

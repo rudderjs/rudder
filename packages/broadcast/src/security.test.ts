@@ -352,6 +352,46 @@ describe('Phase 5c — Per-socket message serialization', () => {
   )
 })
 
+describe('Presence re-subscribe idempotency', () => {
+  it('re-subscribing a presence channel does not re-broadcast presence.joined to peers', () =>
+    withServer({}, async (port) => {
+      registerAuth('presence-room.*', async (req) => ({ id: req.token ?? 'anon' }))
+
+      const a = await openSocket(port, { origin: 'https://app.com' })
+      const aJoins: Record<string, unknown>[] = []
+      a.ws.on('message', (raw) => {
+        const m = JSON.parse(String(raw)) as Record<string, unknown>
+        if (m['type'] === 'presence.joined') aJoins.push(m)
+      })
+      a.ws.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.1', token: 'a' }))
+      await new Promise((r) => setTimeout(r, 60))
+
+      const b = await openSocket(port, { origin: 'https://app.com' })
+      b.ws.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.1', token: 'b' }))
+      await new Promise((r) => setTimeout(r, 60))
+      assert.equal(aJoins.length, 1, 'A should observe B joining exactly once')
+
+      // B re-subscribes to the same presence channel. Pre-fix, this re-emitted
+      // presence.joined to A, leaving an append-only roster with a ghost B.
+      b.ws.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.1', token: 'b' }))
+      await new Promise((r) => setTimeout(r, 80))
+      assert.equal(aJoins.length, 1, 're-subscribe must not re-broadcast presence.joined')
+
+      // The re-subscribe still gets a fresh confirmation + roster snapshot.
+      const bMsgs: Record<string, unknown>[] = []
+      b.ws.on('message', (raw) => { bMsgs.push(JSON.parse(String(raw)) as Record<string, unknown>) })
+      b.ws.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.1', token: 'b' }))
+      await new Promise((r) => setTimeout(r, 60))
+      assert.ok(bMsgs.some(m => m['type'] === 'subscribed' && m['channel'] === 'presence-room.1'),
+        're-subscribe must still confirm the subscription')
+      assert.ok(bMsgs.some(m => m['type'] === 'presence.members'),
+        're-subscribe must still return the presence roster')
+
+      a.ws.terminate(); b.ws.terminate()
+    })
+  )
+})
+
 describe('Phase 5b — Heartbeat', () => {
   it('terminates socket when pong deadline missed', () =>
     withServer({ heartbeat: { interval: 30, timeout: 60 } }, async (port) => {

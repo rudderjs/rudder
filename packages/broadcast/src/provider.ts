@@ -118,6 +118,19 @@ export class BroadcastingProvider extends ServiceProvider {
     // connections per edit. On re-boot the live ws-server keeps its driver.
     const driver = cfg.driver && !isWsServerRunning() ? await cfg.driver() : undefined
 
+    // A cross-instance driver fans regular broadcast() / client-event traffic
+    // across the cluster, but presence rosters + join/leave deltas are tracked
+    // per-instance and do NOT fan across the driver. Surface this once at boot
+    // so operators aren't silently misled into expecting a cluster-wide roster.
+    if (driver !== undefined) {
+      console.warn(
+        '[RudderJS Broadcast] A cross-instance driver is configured. Presence channel ' +
+        'rosters and presence.joined/left events are per-instance only — they do not fan ' +
+        'across the cluster. Pin presence clients to one instance (sticky sessions) or ' +
+        'aggregate roster state yourself. Regular broadcast() / client-event traffic is cluster-wide.'
+      )
+    }
+
     initWsServer({
       ...(cfg.allowedOrigins      ? { allowedOrigins:      cfg.allowedOrigins      } : {}),
       ...(cfg.maxConnectionsPerIp ? { maxConnectionsPerIp: cfg.maxConnectionsPerIp } : {}),
