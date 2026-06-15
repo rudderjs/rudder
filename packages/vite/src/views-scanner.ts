@@ -197,10 +197,18 @@ function walk(dir: string, extensions: string[], base = dir): string[] {
  * the guard only fires on pathological or hostile inputs (a templated/vendored
  * view file with a crafted name), which we skip loudly rather than emit.
  */
-const CODEGEN_UNSAFE_RE = /['"`\\]|[\x00-\x1f\x7f]/
+// Quote, double-quote, backtick, or backslash — the chars that break out of a
+// single-quoted codegen string. Control chars are checked separately by code
+// point (a control-char regex range trips eslint's no-control-regex).
+const CODEGEN_UNSAFE_RE = /['"`\\]/
 
 function isCodegenSafe(value: string): boolean {
-  return !CODEGEN_UNSAFE_RE.test(value)
+  if (CODEGEN_UNSAFE_RE.test(value)) return false
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i)
+    if (c <= 0x1f || c === 0x7f) return false // C0 control chars + DEL
+  }
+  return true
 }
 
 /**
