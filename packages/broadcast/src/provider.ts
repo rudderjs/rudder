@@ -31,6 +31,26 @@ export interface BroadcastConfig {
    */
   maxConnectionsPerIp?: number
   /**
+   * Whether to trust `X-Forwarded-For` / `X-Real-IP` proxy headers when
+   * resolving the client IP for the per-IP cap and observer events.
+   * `false` (default) = socket address only (a client can't forge it);
+   * `true` = rightmost XFF entry (one trusted proxy); `number N` = N hops.
+   * Never reads the leftmost (client-forgeable) entry. Mirrors
+   * `@rudderjs/server-hono`'s `trustProxy`.
+   */
+  trustProxy?: boolean | number
+  /**
+   * Maximum size in bytes of a single inbound WebSocket frame. Frames over
+   * this size are rejected at the protocol layer (close code 1009) before
+   * being buffered. Default: 65536 (64 KiB).
+   */
+  maxPayload?: number
+  /**
+   * Maximum number of channels a single connection may subscribe to.
+   * `undefined` uses the default 100; `0` disables the cap.
+   */
+  maxChannelsPerSocket?: number
+  /**
    * Server-side heartbeat. The server sends a WebSocket PING every
    * `interval` ms; if no PONG arrives within `timeout` ms the socket is
    * terminated. Pass `false` to disable. Default: `{ interval: 30000, timeout: 60000 }`.
@@ -121,6 +141,9 @@ export class BroadcastingProvider extends ServiceProvider {
     initWsServer({
       ...(cfg.allowedOrigins      ? { allowedOrigins:      cfg.allowedOrigins      } : {}),
       ...(cfg.maxConnectionsPerIp ? { maxConnectionsPerIp: cfg.maxConnectionsPerIp } : {}),
+      ...(cfg.trustProxy !== undefined          ? { trustProxy:           cfg.trustProxy           } : {}),
+      ...(cfg.maxPayload !== undefined          ? { maxPayload:           cfg.maxPayload           } : {}),
+      ...(cfg.maxChannelsPerSocket !== undefined ? { maxChannelsPerSocket: cfg.maxChannelsPerSocket } : {}),
       ...(cfg.heartbeat !== undefined ? { heartbeat: cfg.heartbeat } : {}),
       ...(driver !== undefined        ? { driver }                  : {}),
     })
