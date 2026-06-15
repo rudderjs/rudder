@@ -1,6 +1,9 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { Url } from '@rudderjs/router'
+import type { AppRequest } from '@rudderjs/contracts'
 import {
   Gate,
   Policy,
@@ -8,6 +11,7 @@ import {
   toAuthenticatable,
   PasswordBroker,
   MemoryTokenRepository,
+  verifyEmailFromRequest,
   type Authenticatable,
   type UserProvider,
 } from './index.js'
@@ -154,5 +158,75 @@ describe('PasswordBroker — reset invalidates outstanding remember cookies', ()
       async () => {},
     )
     assert.strictEqual(status, 'PASSWORD_RESET', 'a failed token-cycle write must not break the reset')
+  })
+})
+
+// ─── verifyEmailFromRequest: enforces the URL signature itself ────────────────
+
+function sha256(s: string) { return createHash('sha256').update(s).digest('hex') }
+
+function verifyUser(email: string) {
+  let verified = false
+  return {
+    id: '1',
+    getAuthIdentifier: () => '1',
+    hasVerifiedEmail: () => verified,
+    markEmailAsVerified: async () => { verified = true },
+    getEmailForVerification: () => email,
+    get _verified() { return verified },
+  }
+}
+
+function fakeVerifyReq(url: string, params: Record<string, string>): AppRequest {
+  return { url, params } as unknown as AppRequest
+}
+
+describe('verifyEmailFromRequest — fails closed without a valid signature', () => {
+  beforeEach(() => Url.setKey('test-app-key-test-app-key-test-app-key'))
+
+  const email = 'victim@x.com'
+  const hash  = sha256(email)
+  const path  = `/email/verify/1/${hash}`
+
+  it('verifies when the signature is valid and the email hash matches', async () => {
+    const signed = Url.sign(path)
+    const user = verifyUser(email)
+    const ok = await verifyEmailFromRequest(fakeVerifyReq(signed, { id: '1', hash }), async () => user)
+    assert.strictEqual(ok, true)
+    assert.strictEqual(user._verified, true, 'a valid request must mark the user verified')
+  })
+
+  it('refuses an UNSIGNED request even when the email hash is correct (the core fix)', async () => {
+    // Without enforcing the signature, the unkeyed sha256(email) hash is public,
+    // so this would forge a verification for any known email.
+    const user = verifyUser(email)
+    const ok = await verifyEmailFromRequest(fakeVerifyReq(path, { id: '1', hash }), async () => user)
+    assert.strictEqual(ok, false, 'a missing signature must fail closed')
+    assert.strictEqual(user._verified, false)
+  })
+
+  it('refuses a tampered signature', async () => {
+    const signed = Url.sign(path).replace(/signature=([0-9a-f]+)/, (_m, s) => `signature=${s.split('').reverse().join('')}`)
+    const user = verifyUser(email)
+    const ok = await verifyEmailFromRequest(fakeVerifyReq(signed, { id: '1', hash }), async () => user)
+    assert.strictEqual(ok, false)
+  })
+
+  it('refuses an expired signature', async () => {
+    const expired = Url.sign(path, new Date(Date.now() - 10_000))
+    const user = verifyUser(email)
+    const ok = await verifyEmailFromRequest(fakeVerifyReq(expired, { id: '1', hash }), async () => user)
+    assert.strictEqual(ok, false)
+  })
+
+  it('still enforces the email-hash binding under a valid signature (wrong-email hash denied)', async () => {
+    // A correctly-signed link whose hash belongs to a DIFFERENT email must not
+    // verify the resolved user (hash binding survives the signature gate).
+    const attackerHash = sha256('attacker@x.com')
+    const signedForWrongHash = Url.sign(`/email/verify/1/${attackerHash}`)
+    const user = verifyUser(email) // resolves to victim@x.com
+    const ok = await verifyEmailFromRequest(fakeVerifyReq(signedForWrongHash, { id: '1', hash: attackerHash }), async () => user)
+    assert.strictEqual(ok, false)
+    assert.strictEqual(user._verified, false)
   })
 })

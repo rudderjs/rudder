@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto'
 import { Url } from '@rudderjs/router'
-import type { MiddlewareHandler } from '@rudderjs/contracts'
+import type { AppRequest, MiddlewareHandler } from '@rudderjs/contracts'
 import { Auth } from './auth-manager.js'
 import type { Authenticatable, AuthUser } from './contracts.js'
 
@@ -128,8 +128,48 @@ export function verificationUrl(user: MustVerifyEmail & { id?: string | number; 
 // ─── Verify handler helper ──────────────────────────────────
 
 /**
+ * Verify a signed verification REQUEST end to end: re-check the URL signature,
+ * then match the email hash and mark the user verified.
+ *
+ * Prefer this over the bare {@link handleEmailVerification} form. The email hash
+ * in the URL is an *unkeyed* `sha256(email)` — anyone who knows a target's email
+ * can compute it — so the ONLY thing that makes a verification link
+ * unforgeable is the URL signature (the `APP_KEY` HMAC). `handleEmailVerification`
+ * trusts the caller to have validated that signature via `ValidateSignature()`
+ * middleware; if the route forgets it, verification becomes forgeable for any
+ * known email. This helper validates the signature itself, so it fails closed
+ * regardless of middleware wiring (Laravel `EmailVerificationRequest` parity).
+ *
+ * @example
+ * router.get('/email/verify/:id/:hash', async (req, res) => {
+ *   const ok = await verifyEmailFromRequest(req, (id) => User.find(id))
+ *   res.status(ok ? 200 : 403).json({ message: ok ? 'Email verified.' : 'Invalid link.' })
+ * }).name('verification.verify')
+ */
+export async function verifyEmailFromRequest(
+  req: AppRequest,
+  findUser: (id: string) => Promise<(MustVerifyEmail & Record<string, unknown>) | null>,
+): Promise<boolean> {
+  // Fail closed on a missing/invalid/expired signature BEFORE touching the DB
+  // or the (publicly computable) email hash.
+  if (!Url.isValidSignature(req)) return false
+
+  const params = (req.params ?? {}) as Record<string, string>
+  const id   = String(params['id']   ?? '')
+  const hash = String(params['hash'] ?? '')
+  if (!id || !hash) return false
+
+  return handleEmailVerification(id, hash, findUser)
+}
+
+/**
  * Verifies the email hash matches and marks the user as verified.
  * Use inside the verification route handler.
+ *
+ * NOTE: this does NOT validate the URL signature — the route MUST mount
+ * `ValidateSignature()` (the email hash is an unkeyed `sha256(email)`, so the
+ * signature is the only forgery defense). Prefer {@link verifyEmailFromRequest},
+ * which enforces the signature itself and cannot be left unguarded.
  *
  * @example
  * router.get('/email/verify/:id/:hash', async (req, res) => {

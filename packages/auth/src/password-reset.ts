@@ -89,9 +89,16 @@ export class PasswordBroker {
       // Run the same early token-store round-trip and token-hash work before
       // returning, so an attacker can't tell "no account" from "throttled /
       // sent" by latency on the otherwise-constant `{ status: 'sent' }`
-      // response. The mail send itself can't be faked for a non-existent
-      // address — queue it (so the response doesn't block on delivery) to fully
-      // flatten the remaining gap.
+      // response.
+      //
+      // One residual asymmetry remains and CANNOT be closed here: the
+      // registered path awaits `sendLink` (the mail send), which has no
+      // equivalent on the no-account path (there's no real inbox to mail). A
+      // synchronous mailer therefore leaks account existence by response
+      // latency. The fix is the APP's: dispatch the reset mail through a queued
+      // mailer (`ShouldQueue` / `Mail.queue()`), so the response never blocks on
+      // delivery on EITHER path. The broker can't force that — `sendLink` is
+      // app-supplied and the broker has no queue dependency.
       await this.tokens.find(credentials.email)
       this.hashToken(randomBytes(32).toString('hex'))
       return 'INVALID_USER'

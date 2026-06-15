@@ -50,7 +50,7 @@ export { SessionGuard } from './session-guard.js'
 export { EloquentUserProvider, toAuthenticatable } from './providers.js'
 export { Gate, Policy, AuthorizationError } from './gate.js'
 export { PasswordBroker, MemoryTokenRepository } from './password-reset.js'
-export { EnsureEmailIsVerified, verificationUrl, handleEmailVerification, mustVerifyEmail } from './verification.js'
+export { EnsureEmailIsVerified, verificationUrl, handleEmailVerification, verifyEmailFromRequest, mustVerifyEmail } from './verification.js'
 export { RequireGuest } from './require-guest.js'
 export {
   newRememberToken,
