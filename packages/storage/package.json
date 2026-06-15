@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/storage",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "rudderjs": {
     "provider": "StorageProvider",
     "stage": "feature"
