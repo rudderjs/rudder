@@ -104,7 +104,7 @@ describe('SafeString brand (anti-laundering)', () => {
     fake.value = '<script>alert(1)</script>'
     const out = html`<div>${fake}</div>`.value
     // The fake must be escaped (treated as untrusted), not emitted raw.
-    assert.doesNotMatch(out, /<script>/)
+    assert.doesNotMatch(out, /<script>/i)
     assert.match(out, /&lt;script&gt;/)
   })
 

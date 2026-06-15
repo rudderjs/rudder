@@ -119,7 +119,9 @@ function filterReservedHeaders(headers: Record<string, string>): Record<string, 
     // the CR/LF here also forecloses any response-header-injection vector.
     if (!HEADER_NAME_TOKEN.test(k)) continue
     const value = String(v)
-    if (/[\r\n\0]/.test(value)) continue
+    // CR / LF / NUL would split the header line (and trip undici). Checked by
+    // membership, not a regex — a control-char regex trips no-control-regex.
+    if (value.includes('\r') || value.includes('\n') || value.includes('\0')) continue
     out[k] = value
   }
   return out
@@ -404,11 +406,19 @@ export function escapeHtml(value: unknown): string {
  */
 export function safeUrl(value: unknown): string {
   const url = value === null || value === undefined ? '' : String(value)
-  // Browsers ignore tab/CR/LF inside a URL before resolving its scheme, so
-  // `java\tscript:` would slip past a naive prefix test — strip them first,
-  // then trim leading whitespace/controls, before checking the scheme.
-  const probe = url.replace(/[\t\r\n]/g, '').replace(/^[\x00-\x20]+/, '')
-  if (/^(?:javascript|data|vbscript):/i.test(probe)) return '#'
+  // Browsers ignore tab/CR/LF anywhere in a URL and skip leading control/space
+  // chars before resolving the scheme, so `java\tscript:` would slip past a
+  // naive prefix test. Normalize the same way (via code points, so no
+  // control-char regex) before checking the scheme.
+  let probe = ''
+  for (let i = 0; i < url.length; i++) {
+    const c = url.charCodeAt(i)
+    if (c === 0x09 || c === 0x0a || c === 0x0d) continue // tab / LF / CR anywhere
+    probe += url[i]
+  }
+  let start = 0
+  while (start < probe.length && probe.charCodeAt(start) <= 0x20) start++
+  if (/^(?:javascript|data|vbscript):/i.test(probe.slice(start))) return '#'
   return url
 }
 
