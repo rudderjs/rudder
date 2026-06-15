@@ -56,6 +56,10 @@
       "import": "./dist/mcp/index.js",
       "types": "./dist/mcp/index.d.ts"
     },
+    "./conversation-orm": {
+      "import": "./dist/conversation-orm/index.js",
+      "types": "./dist/conversation-orm/index.d.ts"
+    },
     "./memory-orm": {
       "import": "./dist/memory-orm/index.js",
       "types": "./dist/memory-orm/index.d.ts"
