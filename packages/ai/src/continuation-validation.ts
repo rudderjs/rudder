@@ -46,13 +46,58 @@ export interface ContinuationValidationResult {
   index?: number
 }
 
-/** Stable string form of a message for prefix-equality comparison. */
-function canonical(m: AiMessage): string {
-  const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-  const toolCalls = m.toolCalls
-    ? m.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments }))
-    : undefined
-  return JSON.stringify({ role: m.role, content, toolCallId: m.toolCallId ?? null, toolCalls: toolCalls ?? null })
+/**
+ * Recursively sort object keys (and drop `undefined`) so two semantically
+ * equal values compare equal regardless of key insertion order. Without this,
+ * a tool-call `arguments` object reordered across a serialization boundary
+ * (e.g. loaded back from a Postgres `jsonb` column, which does not preserve
+ * key order, or rebuilt by the client) would be read as a forgery.
+ */
+function canonicalize(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map(canonicalize)
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    const v = (value as Record<string, unknown>)[key]
+    if (v === undefined) continue
+    out[key] = canonicalize(v)
+  }
+  return out
+}
+
+/** Order-insensitive JSON of a value. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalize(value))
+}
+
+/** Order-insensitive string form of message content. */
+function contentString(content: AiMessage['content']): string {
+  return typeof content === 'string' ? content : canonicalJson(content)
+}
+
+/**
+ * Compare two messages field by field, order-insensitively. Returns a
+ * human-readable reason naming the first diverging field, or `null` when the
+ * messages are equivalent. Used by the prefix check so a rejection points at
+ * exactly what diverged.
+ */
+function messageDiffReason(a: AiMessage, b: AiMessage): string | null {
+  if (a.role !== b.role) return `role: persisted "${a.role}" vs incoming "${b.role}"`
+  if (contentString(a.content) !== contentString(b.content)) return 'content differs'
+  if ((a.toolCallId ?? null) !== (b.toolCallId ?? null)) {
+    return `toolCallId: persisted "${a.toolCallId ?? 'null'}" vs incoming "${b.toolCallId ?? 'null'}"`
+  }
+  const aCalls = a.toolCalls ?? []
+  const bCalls = b.toolCalls ?? []
+  if (aCalls.length !== bCalls.length) return `toolCalls length: persisted ${aCalls.length} vs incoming ${bCalls.length}`
+  for (let i = 0; i < aCalls.length; i++) {
+    const ac = aCalls[i]!
+    const bc = bCalls[i]!
+    if (ac.id !== bc.id)     return `toolCalls[${i}].id: persisted "${ac.id}" vs incoming "${bc.id}"`
+    if (ac.name !== bc.name) return `toolCalls[${i}].name: persisted "${ac.name}" vs incoming "${bc.name}"`
+    if (canonicalJson(ac.arguments) !== canonicalJson(bc.arguments)) return `toolCalls[${i}].arguments differ (${ac.name})`
+  }
+  return null
 }
 
 /** Collect every tool-call id the model requested across the given messages. */
@@ -73,10 +118,12 @@ function requestedToolCallIds(messages: readonly AiMessage[]): Set<string> {
  *
  * Checks, in order:
  *
- * - **Prefix equality.** Every message the two share by position must be
- *   byte-for-byte identical (role, content, `toolCallId`, and any assistant
- *   `toolCalls`). A mismatch means the caller rewrote history or is
- *   replaying a different thread (IDOR) → `not-a-prefix`.
+ * - **Prefix equality.** Every message the two share by position must match
+ *   (role, content, `toolCallId`, and any assistant `toolCalls`). Comparison
+ *   is order-insensitive for nested objects, so a tool-call `arguments` map
+ *   reordered across a serialization boundary still matches. A genuine
+ *   mismatch means the caller rewrote history or is replaying a different
+ *   thread (IDOR) → `not-a-prefix`.
  * - **Tool-result forgery.** Every `tool` message in `incoming` must answer
  *   a tool call actually requested by some assistant message (in either
  *   `persisted` or `incoming`). A `tool` message with no matching request is
@@ -90,15 +137,18 @@ export function validateContinuation(
   incoming: readonly AiMessage[],
   opts: ValidateContinuationOptions = {},
 ): ContinuationValidationResult {
-  // 1. Prefix equality over the shared region.
+  // 1. Prefix equality over the shared region. Comparison is order-insensitive
+  //    for nested objects (tool-call arguments, structured content) so a
+  //    legitimately reordered argument map is not mistaken for a forgery.
   const overlap = Math.min(persisted.length, incoming.length)
   for (let i = 0; i < overlap; i++) {
-    if (canonical(persisted[i]!) !== canonical(incoming[i]!)) {
+    const diff = messageDiffReason(persisted[i]!, incoming[i]!)
+    if (diff) {
       return {
         ok: false,
         code: 'not-a-prefix',
         index: i,
-        reason: `incoming message at index ${i} does not match the persisted history (role "${incoming[i]!.role}")`,
+        reason: `incoming message at index ${i} diverges from the persisted history (${diff})`,
       }
     }
   }

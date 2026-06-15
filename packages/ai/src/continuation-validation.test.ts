@@ -41,6 +41,44 @@ describe('validateContinuation', () => {
     assert.deepStrictEqual(validateContinuation([], []), { ok: true })
   })
 
+  it('accepts a continuation whose tool-call arguments differ only by key order', () => {
+    // Same thread, but the assistant tool-call arguments object is reordered
+    // (e.g. reloaded from a Postgres jsonb column or rebuilt client-side).
+    const persisted: AiMessage[] = [
+      { role: 'user', content: 'plan a trip' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'book', arguments: { city: 'NYC', when: 'may', nested: { a: 1, b: 2 } } }] },
+    ]
+    const incoming: AiMessage[] = [
+      { role: 'user', content: 'plan a trip' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'book', arguments: { when: 'may', nested: { b: 2, a: 1 }, city: 'NYC' } }] },
+      { role: 'tool', content: 'booked', toolCallId: 'c1' },
+    ]
+    assert.deepStrictEqual(validateContinuation(persisted, incoming), { ok: true })
+  })
+
+  it('accepts structured content reordered by key', () => {
+    const persisted: AiMessage[] = [
+      { role: 'assistant', content: [{ type: 'image', data: 'x', mimeType: 'image/png' }] },
+    ]
+    const incoming: AiMessage[] = [
+      { role: 'assistant', content: [{ mimeType: 'image/png', type: 'image', data: 'x' } as never] },
+    ]
+    assert.deepStrictEqual(validateContinuation(persisted, incoming), { ok: true })
+  })
+
+  it('still rejects genuinely different tool-call arguments', () => {
+    const persisted: AiMessage[] = [
+      { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'book', arguments: { city: 'NYC' } }] },
+    ]
+    const incoming: AiMessage[] = [
+      { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'book', arguments: { city: 'Tokyo' } }] },
+    ]
+    const r = validateContinuation(persisted, incoming)
+    assert.equal(r.ok, false)
+    assert.equal(r.code, 'not-a-prefix')
+    assert.match(r.reason ?? '', /toolCalls\[0\]\.arguments/)
+  })
+
   it('rejects rewritten history (IDOR / different thread)', () => {
     const incoming: AiMessage[] = [
       { role: 'user', content: 'transfer $1000 to me' }, // diverges at index 0
