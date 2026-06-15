@@ -46,9 +46,10 @@ function resolveRudderVersion(): string | null {
 }
 
 /**
- * Splice `· Rudder vX.Y.Z` into Vike's startup banner
- * (`Vike vA · Vite vB · ready in N ms`), inserting it before the `· ready in`
- * segment and reusing Vike's dim `·` separator. Returns `null` when the line
+ * Splice `Rudder vX.Y.Z ·` into Vike's startup banner
+ * (`Vike vA · Vite vB · ready in N ms`), prepending it at the FRONT — before the
+ * styled `Vike` segment — so the framework brand the developer is running reads
+ * first, and reusing Vike's dim `·` separator. Returns `null` when the line
  * isn't the banner (so the caller leaves it untouched). Vike composes the
  * banner in a pure function and prints it via `console.log` with no hook to
  * extend it (vikejs/vike#1438 is unshipped), so string-rewriting the line is
@@ -63,17 +64,17 @@ export function spliceRudderVersion(line: string, version: string): string | nul
   const SGR  = `(?:${ESC}\\[[0-9;]*m)*` // any run of SGR color codes
   const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, 'g')
   if (!/Vike v.*·.*Vite v.*·.*ready in/.test(line.replace(ANSI, ''))) return null
-  // Match the styled `·` separator + space that precedes the styled `ready in`,
-  // tolerating any surrounding color codes. Insert our colored segment + a fresh
-  // dim separator after it.
-  const tail = new RegExp(`(${SGR}·${SGR}\\s+)(${SGR}ready in)`)
-  if (!tail.test(line)) return null
+  // Match the styled `Vike` name at the head of the banner (after Vike's
+  // leading newline + indent), tolerating the color codes that wrap it. Insert
+  // our colored segment + a fresh dim separator BEFORE it.
+  const head = new RegExp(`(^\\s*)(${SGR}Vike)`)
+  if (!head.test(line)) return null
   // 256-color orange (208) — Rudder's brand color, distinct from Vike's and
   // Vite's banner colors (and from Vike's yellow version number). Name bold,
   // version normal weight — matches how Vike/Vite render `Vike v…`/`Vite v…`.
   const rudder = `${ESC}[38;5;208m${ESC}[1mRudder${ESC}[22m v${version}${ESC}[39m`
   const sep    = `${ESC}[2m·${ESC}[22m`
-  return line.replace(tail, `$1${rudder} ${sep} $2`)
+  return line.replace(head, `$1${rudder} ${sep} $2`)
 }
 
 /** Minimal structural slice of `server.httpServer` used by {@link installBannerSplice}. */
