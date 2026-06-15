@@ -127,6 +127,19 @@ export default {
 
 `update` is the binary CRDT update (a `Uint8Array`). For semantic processing, decode it through the document type — see the editor adapters below.
 
+### Composite room ids
+
+The server derives the room (doc) name from the **last non-empty `/`-segment** of the connection URL. So a `/`-joined composite id like `panel/posts/42` silently collapses to `42`, and two resources sharing a record id (`posts/42` and `comments/42`) would end up in the same `Y.Doc`. Build composite ids with `composeRoomId` / `parseRoomId` (a non-slash separator, default `':'`) so the whole id survives as one path segment:
+
+```ts
+import { composeRoomId, parseRoomId } from '@rudderjs/sync'
+
+const room = composeRoomId(['default', 'posts', '42'])   // 'default:posts:42'
+parseRoomId(room)                                        // ['default', 'posts', '42']
+```
+
+`composeRoomId` throws if a segment contains `/` or the separator, so a collision can never slip through silently.
+
 ### Reading the signed-in user in `onAuth`
 
 When your app runs under the default server adapter (`@rudderjs/server-hono`), the framework establishes the **same session and auth context on a WebSocket upgrade that an HTTP request gets**, then runs `onAuth` inside it. So you can call `Auth.user()` / `Session` directly — exactly as in a controller — instead of re-parsing the cookie by hand:
