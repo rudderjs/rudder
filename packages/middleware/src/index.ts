@@ -67,6 +67,16 @@ export class Pipeline {
 
 // ─── Built-in Middleware ───────────────────────────────────
 
+/**
+ * Safe (non-state-changing) HTTP methods. The asset/Vite skip heuristics below
+ * (a path whose last segment contains a dot) must ONLY apply to these — gating
+ * an unsafe request on a dotted path silently disables throttling/validation for
+ * routes like `POST /users/john.doe` or `POST /auth/forgot/a@b.com`.
+ */
+function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+}
+
 /** CORS middleware */
 export class CorsMiddleware extends Middleware {
   constructor(
@@ -164,8 +174,11 @@ export class ThrottleMiddleware extends Middleware {
   }
 
   handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
-    // Never throttle static assets — would break Vite HMR and page loads in dev
-    if (this.isAsset(req.path)) return next()
+    // Never throttle static assets — would break Vite HMR and page loads in dev.
+    // Gated on safe methods so an unsafe request to a dotted path (e.g.
+    // `POST /auth/login.json`) can't slip past throttling — the dotted-segment
+    // heuristic only ever describes GETs. Mirrors the CSRF asset-gate fix.
+    if (isSafeMethod(req.method) && this.isAsset(req.path)) return next()
 
     // Key by client IP. Uses the shared clientIp() so a missing req.ip warns
     // once (otherwise every client silently collapses into one 'unknown' bucket
@@ -210,6 +223,16 @@ function parseCookies(header: string): Record<string, string> {
   )
 }
 
+/**
+ * Count how many cookies in a Cookie header carry `name`. `parseCookies` keeps
+ * only the last occurrence, so a shadowing duplicate (injected by a sibling
+ * subdomain or a network MITM) would silently win — the CSRF check uses this to
+ * fail closed when more than one token cookie is present.
+ */
+function countCookieOccurrences(header: string, name: string): number {
+  return header.split(';').filter(c => c.trim().split('=')[0]?.trim() === name).length
+}
+
 function generateCsrfToken(): string {
   return crypto.randomBytes(32).toString('hex')
 }
@@ -229,6 +252,19 @@ export interface CsrfOptions {
   cookieName?: string
   headerName?: string
   fieldName?: string
+  /**
+   * Emit the token cookie with the `Secure` attribute so it is never sent over
+   * plaintext HTTP (where a passive observer could read it, or an active MITM
+   * could pin a known value and forge the matching header). Defaults to `true`
+   * when `NODE_ENV === 'production'`, `false` otherwise (so dev over http works).
+   * Forced on automatically when `cookieName` uses a `__Host-`/`__Secure-`
+   * prefix — browsers reject those cookie names without `Secure`.
+   *
+   * Tip: set `cookieName: '__Host-csrf_token'` (and read it with
+   * `getCsrfToken('__Host-csrf_token')`) to also block sibling-subdomain cookie
+   * injection — the `__Host-` prefix forbids a `Domain` attribute.
+   */
+  secure?: boolean
 }
 
 /**
@@ -245,12 +281,18 @@ class _CsrfMiddleware extends Middleware {
   private readonly cookieName: string
   private readonly headerName: string
   private readonly fieldName:  string
+  private readonly secure:     boolean
 
   constructor(private readonly options: CsrfOptions = {}) {
     super()
     this.cookieName = options.cookieName ?? 'csrf_token'
     this.headerName = options.headerName ?? 'x-csrf-token'
     this.fieldName  = options.fieldName  ?? '_token'
+    // `__Host-`/`__Secure-` prefixed cookies are rejected by browsers without
+    // the Secure attribute, so force it on regardless of the option/env.
+    const prefixed = this.cookieName.startsWith('__Host-') || this.cookieName.startsWith('__Secure-')
+    this.secure = options.secure
+      ?? (prefixed || (typeof process !== 'undefined' && process.env['NODE_ENV'] === 'production'))
   }
 
   private isExcluded(path: string): boolean {
@@ -270,13 +312,16 @@ class _CsrfMiddleware extends Middleware {
     const isAssetLike = req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')
     if (isSafe && isAssetLike) return next()
 
-    const cookies  = parseCookies(req.headers['cookie'] ?? '')
-    const existing = cookies[this.cookieName]
+    const rawCookie = req.headers['cookie'] ?? ''
+    const cookies   = parseCookies(rawCookie)
+    const existing  = cookies[this.cookieName]
 
     // Ensure cookie is always present
     if (!existing) {
       const token = generateCsrfToken()
-      res.header('Set-Cookie', `${this.cookieName}=${token}; Path=/; SameSite=Strict`)
+      const parts = [`${this.cookieName}=${token}`, 'Path=/', 'SameSite=Strict']
+      if (this.secure) parts.push('Secure')
+      res.header('Set-Cookie', parts.join('; '))
     }
 
     // Safe methods — no validation needed
@@ -284,6 +329,17 @@ class _CsrfMiddleware extends Middleware {
 
     // Excluded paths
     if (this.isExcluded(req.path)) return next()
+
+    // Fail closed on a duplicate token cookie. parseCookies keeps the last
+    // occurrence, so a shadowing cookie (sibling-subdomain injection / MITM)
+    // could override the legitimate value — we can't tell which is authentic.
+    if (countCookieOccurrences(rawCookie, this.cookieName) > 1) {
+      res.status(419).json({
+        message: 'Duplicate CSRF cookie — refusing to guess which token is authentic.',
+        error: 'CSRF_DUPLICATE_COOKIE',
+      })
+      return
+    }
 
     // Validate
     const body         = req.body as Record<string, unknown> | null
@@ -405,7 +461,12 @@ function nextRateLimitId(): string {
 
 function makeRateLimitHandler(opts: RateLimitOptions, instanceId: string): MiddlewareHandler {
   return async function RateLimit(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
-    if (isRateLimitAsset(req.path)) return next()
+    // Asset skip is gated on safe methods: ungated, the dotted-last-segment
+    // heuristic disables rate limiting for ANY state-changing request whose path
+    // ends in a dot (`POST /users/john.doe`, `POST /auth/forgot/a@b.com`),
+    // silently voiding brute-force protection. The /@ and /node_modules Vite
+    // prefixes are GET-only, so they stay covered. Mirrors the CSRF asset-gate.
+    if (isSafeMethod(req.method) && isRateLimitAsset(req.path)) return next()
     if (opts.skipIf?.(req))         return next()
 
     const cache = CacheRegistry.get()
