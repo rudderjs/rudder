@@ -83,8 +83,10 @@ export interface SyncConfig {
    * **If your application uses composite room ids** (e.g. `panel/resource/id`)
    * you must flatten them with a non-slash separator before mounting —
    * otherwise distinct logical rooms with the same trailing segment will
-   * collide into one shared `Y.Doc`. For example, `panel-posts-42` rather
-   * than `panel/posts/42`.
+   * collide into one shared `Y.Doc`. Use {@link composeRoomId} /
+   * {@link parseRoomId} for a collision-safe round-trip (default separator
+   * `':'`), for example `composeRoomId(['panel','posts','42'])` rather than
+   * `panel/posts/42`.
    */
   path?: string
   /** Server-side persistence adapter. Default: in-memory (resets on restart). */
@@ -812,6 +814,49 @@ function encodeAwarenessRemoval(entries: Array<{ clientID: number; clock: number
 // join another.
 function extractDocName(url: string | undefined): string {
   return ((url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
+}
+
+/** Default separator for {@link composeRoomId} / {@link parseRoomId}. */
+export const DEFAULT_ROOM_SEPARATOR = ':'
+
+/**
+ * Compose a collision-safe composite room id from its parts.
+ *
+ * The server derives the Y.Doc room name as the **last non-empty `/`-segment**
+ * of the connection URL (see `SyncConfig.path`), so a `/`-joined id like
+ * `panel/posts/42` silently collapses to `42` and distinct logical rooms
+ * sharing a trailing segment (`posts/42` vs `comments/42`) end up in the SAME
+ * room. Join the parts with a non-slash separator (default `':'`) instead, so
+ * the whole id survives as one path segment:
+ *
+ * ```ts
+ * const room = composeRoomId(['default', 'posts', '42'])   // 'default:posts:42'
+ * parseRoomId(room)                                        // ['default', 'posts', '42']
+ * ```
+ *
+ * Throws when a segment is empty, contains `/`, or contains the separator
+ * (any of which would break round-tripping or URL extraction), or when the
+ * separator is `/` or not a single character.
+ */
+export function composeRoomId(segments: readonly string[], separator: string = DEFAULT_ROOM_SEPARATOR): string {
+  if (separator.length !== 1) throw new Error('[RudderJS Sync] composeRoomId: separator must be a single character.')
+  if (separator === '/')      throw new Error("[RudderJS Sync] composeRoomId: separator cannot be '/'; the room extractor splits on it.")
+  if (segments.length === 0)  throw new Error('[RudderJS Sync] composeRoomId: needs at least one segment.')
+  for (const s of segments) {
+    if (s === '')              throw new Error('[RudderJS Sync] composeRoomId: segments must be non-empty.')
+    if (s.includes('/'))       throw new Error(`[RudderJS Sync] composeRoomId: segment "${s}" contains "/", which the room extractor would split.`)
+    if (s.includes(separator)) throw new Error(`[RudderJS Sync] composeRoomId: segment "${s}" contains the separator "${separator}".`)
+  }
+  return segments.join(separator)
+}
+
+/**
+ * Inverse of {@link composeRoomId}: split a composite room id back into its
+ * parts. Uses the same default separator (`':'`); pass a custom one if you
+ * composed with it. A room id with no separator returns a single-element array.
+ */
+export function parseRoomId(roomId: string, separator: string = DEFAULT_ROOM_SEPARATOR): string[] {
+  return roomId.split(separator)
 }
 
 async function handleConnection(
