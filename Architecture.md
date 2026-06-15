@@ -162,8 +162,8 @@ rudderjs/
 │                           #   migrate deploy + vendor:publish + passport:keys + git init so the
 │                           #   final panel is just `cd app && pnpm dev`. Demos dropped from default
 │                           #   scaffold (registry subpath export still ships for the playground).
-│                           #   Published on npm. Legacy `create-rudder-app/` is a stub package
-│                           #   that delegates here for old install commands.
+│                           #   Published on npm as the single scaffolder. The legacy
+│                           #   `create-rudder-app` npm alias is deprecated (no longer in the repo).
 ├── .github/workflows/      # CI (build, typecheck, lint, test) + Release (Changesets auto-publish)
 ├── docs/                   # VitePress documentation site
 ├── playground/             # Framework demo app, NATIVE engine (port 3000) — auth, routing, ORM, queue, mail,
@@ -185,14 +185,14 @@ rudderjs/
 
 **GitHub Actions workflows** at `.github/workflows/`:
 
-- **`ci.yml`** — runs on every push/PR to main: `pnpm build` → `pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder-app' --filter='./create-rudder'` → `pnpm lint` → `pnpm test`. Scoped to packages (excludes playgrounds which may reference WIP exports).
+- **`ci.yml`** — runs on every push/PR to main: `pnpm build` → `pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder'` → `pnpm lint` → `pnpm test`. Scoped to packages (excludes playgrounds which may reference WIP exports).
 - **`release.yml`** — runs on push to main. Uses `changesets/action@v1` to either create a "Version Packages" PR (when changesets exist) or publish to npm (when the version PR is merged). Requires `NPM_TOKEN` secret with 2FA bypass enabled.
 
 **Incremental TypeScript builds** — `tsconfig.base.json` has `incremental: true` and `tsBuildInfoFile: "./dist/.tsbuildinfo"`. Cold build ~32s, single-package change ~10s, full cache hit ~400ms. Build artifacts (`*.tsbuildinfo`) are gitignored.
 
 **Release workflow gotchas:**
 - Org-level AND repo-level "Workflow permissions" must be set to **Read and write** with **"Allow GitHub Actions to create and approve pull requests"** checked
-- NPM token must be **Granular Access Token** with **"Bypass two-factor authentication"** enabled, scoped to **All packages** (covers `@rudderjs/*`, `create-rudder-app`, and `create-rudder`)
+- NPM token must be **Granular Access Token** with **"Bypass two-factor authentication"** enabled, scoped to **All packages** (covers `@rudderjs/*` and `create-rudder`; the deprecated `create-rudder-app` alias is no longer published from this repo)
 
 **Release flow:**
 1. `pnpm changeset` locally → select packages + semver bump + summary
@@ -390,8 +390,7 @@ RudderJS Framework
 │    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mcp:*, passport:*, etc.
 │
 ├─── Scaffolding
-│    ├── create-rudder                Interactive project scaffolder — source of truth (`npm create rudder@latest`)
-│    └── create-rudder-app            Legacy alias stub — delegates to `create-rudder`
+│    └── create-rudder                Interactive project scaffolder — the single source of truth (`npm create rudder@latest`)
 │
 └─── Build
      └── @rudderjs/vite               Vike integration, SSR externals, WS patch, route watcher

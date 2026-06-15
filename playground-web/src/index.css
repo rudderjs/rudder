@@ -131,7 +131,7 @@
 /* ─── Scaffolded / vendored view classes ─────────────────────
    Semantic classes shared by app/Views/Welcome.tsx and
    vendored @rudderjs/auth views. Kept as a single block so the
-   --no-tailwind variant of create-rudder-app can ship an
+   --no-tailwind variant of create-rudder can ship an
    equivalent hand-authored CSS file with identical selectors. */
 
 .page {

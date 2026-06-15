@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.5.3",
   "scripts": {
     "build": "turbo run build",
-    "build:publish": "turbo run build --filter=./packages/* --filter=./create-rudder --filter=./create-rudder-app",
+    "build:publish": "turbo run build --filter=./packages/* --filter=./create-rudder",
     "dev": "turbo run dev",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\"",
     "typecheck": "turbo run typecheck",

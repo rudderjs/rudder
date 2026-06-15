@@ -607,7 +607,8 @@ async function main(): Promise<void> {
   printLogo()
   console.log()
   // Soft deprecation nudge — only when the user invoked the legacy bin.
-  // The `create-rudder-app` stub sets RUDDER_INVOKED_AS=create-rudder-app
+  // The deprecated `create-rudder-app` npm alias (no longer in this repo, but
+  // still published and pointing here) sets RUDDER_INVOKED_AS=create-rudder-app
   // so we can detect users who are still on the old install command.
   if (process.env['RUDDER_INVOKED_AS'] === 'create-rudder-app') {
     log.info('This scaffolder now ships as `create-rudder` — use `npm create rudder@latest` next time.')

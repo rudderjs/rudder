@@ -1,15 +1,14 @@
 name: Scaffolder Canary
 
-# Weekly smoke against the *published* legacy `create-rudder-app` alias +
+# Weekly smoke against the *published* `create-rudder` scaffolder +
 # `@rudderjs/*`
 # packages on npm. Closes the cross-version-drift gap that the per-PR
 # matrix can't see — the per-PR smoke uses pnpm.overrides to point at the
 # local workspace, so it never resolves `latest` from the npm registry.
 #
 # This job does:
-#   1. `pnpm create rudder-app smoke-canary --recipe=web-app --install=true`
-#      → fetches the published `create-rudder-app` (which delegates to
-#        `create-rudder`) from npm, scaffolds
+#   1. `pnpm create rudder smoke-canary --recipe=web-app --install=true`
+#      → fetches the published `create-rudder` from npm, scaffolds
 #        a fresh project, and installs every `@rudderjs/*` dep from `latest`.
 #   2. `pnpm build` → builds the prod bundle against real npm tarballs.
 #   3. Boots the server, curls `/` + `/api/health` + `/login`.
@@ -42,7 +41,7 @@ jobs:
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           # Canary doesn't check out the repo (it tests `pnpm create
-          # rudder-app` against real npm in isolation), so `packageManager`
+          # rudder` against real npm in isolation), so `packageManager`
           # autodetect has no package.json to read. Pin to match the repo's
           # `packageManager` field — bump together if that bumps.
           version: 11.5.3
@@ -52,7 +51,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Scaffold via `pnpm create rudder-app` (real npm)
+      - name: Scaffold via `pnpm create rudder` (real npm)
         working-directory: ${{ runner.temp }}
         # `--json` flips into non-interactive mode; recipe + framework +
         # install are required by validateJsonMode (--db is optional now that
@@ -61,7 +60,7 @@ jobs:
         # `--install=true` is the load-bearing bit — it actually fetches all
         # `@rudderjs/*` peer constraints from npm.
         run: |
-          pnpm create rudder-app smoke-canary \
+          pnpm create rudder smoke-canary \
             --json \
             --recipe=web-app \
             --framework=react \
