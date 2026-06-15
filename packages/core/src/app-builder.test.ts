@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { MiddlewareHandler, ServerAdapter, ServerAdapterProvider } from '@rudderjs/contracts'
+import type { AppRequest, MiddlewareHandler, ServerAdapter, ServerAdapterProvider } from '@rudderjs/contracts'
 import {
   Application,
   ServiceProvider,
@@ -9,7 +9,7 @@ import {
   rudder,
   resetGroupMiddleware,
 } from './index.js'
-import { warnIfDuplicateSessionMiddleware, resetDuplicateSessionWarning } from './app-builder.js'
+import { ExceptionConfigurator, warnIfDuplicateSessionMiddleware, resetDuplicateSessionWarning } from './app-builder.js'
 
 // ─── Application.configure() — server adapter resolution ────────────────────
 //
@@ -186,5 +186,46 @@ describe('warnIfDuplicateSessionMiddleware', () => {
       warnIfDuplicateSessionMiddleware(dup)
     })
     assert.equal(warns.length, 1)
+  })
+})
+
+// ─── ExceptionConfigurator.buildHandler() — debug-gated rethrow ─────────────
+//
+// The unhandled-error path must RE-THROW in dev for HTML clients (so the server
+// adapter's Ignition-style error page fires) and otherwise return the safe
+// `renderServerError` 500. Production must NEVER re-throw (no source leak), and
+// JSON clients always get the safe page (no HTML to render). This contract was
+// previously untested, so a regression that swallowed the rethrow would have
+// silently killed the dev error page.
+
+describe('ExceptionConfigurator.buildHandler() — debug-gated rethrow', () => {
+  const htmlReq = { headers: { accept: 'text/html' } } as unknown as AppRequest
+  const jsonReq = { headers: { accept: 'application/json' } } as unknown as AppRequest
+
+  function handlerWithDebug(debug: boolean): ReturnType<ExceptionConfigurator['buildHandler']> {
+    freshState()
+    Application.create({ debug })
+    const exc = new ExceptionConfigurator()
+    exc.reportUsing(() => { /* silence the default reporter under test */ })
+    return exc.buildHandler()
+  }
+
+  it('re-throws an unhandled error in debug mode for an HTML client (adapter renders Ignition)', async () => {
+    const handle = handlerWithDebug(true)
+    await assert.rejects(async () => { await handle(new Error('boom'), htmlReq) }, /boom/)
+  })
+
+  it('returns the safe 500 page (no rethrow) in debug mode for a JSON client', async () => {
+    const handle = handlerWithDebug(true)
+    const res = await handle(new Error('boom'), jsonReq)
+    assert.equal(res.status, 500)
+    assert.match(res.headers.get('content-type') ?? '', /application\/json/)
+  })
+
+  it('returns the safe 500 page (never re-throws) in production, even for an HTML client', async () => {
+    const handle = handlerWithDebug(false)
+    const res = await handle(new Error('boom'), htmlReq)
+    assert.equal(res.status, 500)
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
   })
 })
