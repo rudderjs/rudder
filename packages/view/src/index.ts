@@ -102,15 +102,79 @@ const VIEW_URL_PREFIX = '/__view'
 const RESERVED_HEADER_PREFIXES = ['x-rudderjs-']
 const RESERVED_HEADERS = new Set(['set-cookie', 'vary'])
 
+/** RFC 7230 header field-name token — anything else is not a valid header name. */
+const HEADER_NAME_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+
 function filterReservedHeaders(headers: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(headers)) {
     const key = k.toLowerCase()
     if (RESERVED_HEADERS.has(key)) continue
     if (RESERVED_HEADER_PREFIXES.some(p => key.startsWith(p))) continue
-    out[k] = v
+    // Defense-in-depth: drop a header whose name isn't a valid HTTP token, or
+    // whose value carries CR/LF/NUL. Such a header would otherwise make
+    // undici's `Headers` THROW deep inside Vike's renderPage() — surfacing as
+    // a request-triggered 500 (when the value flows from request data, e.g. a
+    // CSP nonce or cache key) rather than a quietly-dropped header. Stripping
+    // the CR/LF here also forecloses any response-header-injection vector.
+    if (!HEADER_NAME_TOKEN.test(k)) continue
+    const value = String(v)
+    // CR / LF / NUL would split the header line (and trip undici). Checked by
+    // membership, not a regex — a control-char regex trips no-control-regex.
+    if (value.includes('\r') || value.includes('\n') || value.includes('\0')) continue
+    out[k] = value
   }
   return out
+}
+
+/**
+ * Walk a value and replace anything exposing a `toJSON()` method with its
+ * `toJSON()` result, recursively. See {@link serializeViewProps}.
+ */
+function scrubForSerialization(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value
+
+  // Date is the one built-in carrying a toJSON method that Vike's serializer
+  // deliberately preserves as a real Date across the wire — leave it intact.
+  if (value instanceof Date) return value
+
+  // Circular reference — hand it back untouched; Vike reports it downstream
+  // exactly as it does today (we don't change that failure mode).
+  if (seen.has(value)) return value
+
+  // toJSON-bearing (ORM Model, JsonResource, or any custom class) — honor it,
+  // then recurse into the (plain) result so nested Models are scrubbed too.
+  const toJSON = (value as { toJSON?: unknown }).toJSON
+  if (typeof toJSON === 'function') {
+    return scrubForSerialization((value as { toJSON(): unknown }).toJSON(), seen)
+  }
+
+  seen.add(value)
+  if (Array.isArray(value)) return value.map(v => scrubForSerialization(v, seen))
+  // Map/Set carry no toJSON and Vike preserves them — pass through untouched.
+  if (value instanceof Map || value instanceof Set) return value
+
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value)) out[k] = scrubForSerialization(v, seen)
+  return out
+}
+
+/**
+ * Restore native `JSON.stringify`'s `toJSON()` contract for the props handed
+ * to Vike's client-hydration serializer.
+ *
+ * Vike serializes `viewProps` into the page for client hydration with a
+ * serializer that — unlike `JSON.stringify` — does **not** invoke `toJSON()`.
+ * So `view('dashboard', { user })` where `user` is an ORM Model would ship
+ * EVERY column (including `password` / `rememberToken`) to the browser,
+ * silently bypassing the Model's `static hidden` allowlist that the framework
+ * advertises as the way to protect secret columns. Walking the prop tree and
+ * honoring `toJSON()` before serialization makes the SSR/view path enforce
+ * `hidden`/`visible` exactly like the API/`JsonResource` path. `Date` and
+ * `Map`/`Set` (which Vike round-trips specially) are left intact.
+ */
+export function serializeViewProps(props: ViewProps): ViewProps {
+  return scrubForSerialization(props, new WeakSet()) as ViewProps
 }
 
 export class ViewResponse {
@@ -174,8 +238,10 @@ export class ViewResponse {
     const pageContext = await renderPage({
       urlOriginal,
       // Forwarded into pageContext on both server and client; the generated
-      // Vike page reads it via `usePageContext().viewProps`.
-      viewProps: this.props,
+      // Vike page reads it via `usePageContext().viewProps`. Scrubbed through
+      // toJSON() first so an ORM Model's `static hidden` columns never reach
+      // the client hydration payload (Vike's serializer ignores toJSON).
+      viewProps: serializeViewProps(this.props),
       // Surfaced on pageContext.viewHeaders; @rudderjs/vite's +headersResponse
       // hook (registered via the config preset) reads this and attaches them
       // to the SSR response.
@@ -303,6 +369,17 @@ export const VIEW_URL_PREFIX_INTERNAL = VIEW_URL_PREFIX
  *   return `<h1>${escapeHtml(title)}</h1>`
  * }
  * ```
+ *
+ * **Two contexts `escapeHtml` does NOT make safe** (it escapes `& < > " '`
+ * only — enough for element text and *quoted* attributes):
+ *
+ * 1. **Unquoted attributes.** `escapeHtml` leaves spaces and `=` intact, so
+ *    `<div class=${escapeHtml(x)}>` lets `x = 'a onmouseover=alert(1)'`
+ *    introduce an event handler. **Always quote interpolated attributes:**
+ *    `<div class="${escapeHtml(x)}">`.
+ * 2. **URL schemes.** `<a href="${escapeHtml(u)}">` does not block
+ *    `u = 'javascript:alert(1)'` — the value is quoted-safe but still executes
+ *    on click. Pass URLs through {@link safeUrl} instead.
  */
 export function escapeHtml(value: unknown): string {
   if (value === null || value === undefined) return ''
@@ -312,6 +389,37 @@ export function escapeHtml(value: unknown): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+/**
+ * Neutralize a URL for safe interpolation into an `href` / `src` attribute.
+ *
+ * `escapeHtml` does NOT validate URL schemes — an escaped-but-unchanged
+ * `javascript:alert(1)` still runs on click. `safeUrl` returns `'#'` for any
+ * `javascript:` / `data:` / `vbscript:` URL (including tab/newline-obfuscated
+ * and leading-whitespace evasions that browsers strip before scheme parsing),
+ * and passes http/https/mailto/relative URLs through unchanged.
+ *
+ * ```ts
+ * html`<a href="${safeUrl(user.website)}">profile</a>`
+ * ```
+ */
+export function safeUrl(value: unknown): string {
+  const url = value === null || value === undefined ? '' : String(value)
+  // Browsers ignore tab/CR/LF anywhere in a URL and skip leading control/space
+  // chars before resolving the scheme, so `java\tscript:` would slip past a
+  // naive prefix test. Normalize the same way (via code points, so no
+  // control-char regex) before checking the scheme.
+  let probe = ''
+  for (let i = 0; i < url.length; i++) {
+    const c = url.charCodeAt(i)
+    if (c === 0x09 || c === 0x0a || c === 0x0d) continue // tab / LF / CR anywhere
+    probe += url[i]
+  }
+  let start = 0
+  while (start < probe.length && probe.charCodeAt(start) <= 0x20) start++
+  if (/^(?:javascript|data|vbscript):/i.test(probe.slice(start))) return '#'
+  return url
 }
 
 /**
@@ -331,6 +439,17 @@ export function escapeHtml(value: unknown): string {
  */
 export class SafeString {
   /**
+   * Brand. A genuine SafeString built through this constructor carries the
+   * `#safe` private field; an object forged via `Object.create(SafeString.
+   * prototype)` (or a structurally-identical `{ value }` whose prototype was
+   * swapped) does NOT, because the constructor never ran. `renderHtmlValue`
+   * gates on this brand (via {@link SafeString.isSafe}) instead of
+   * `instanceof`, so attacker-controlled data cannot launder unescaped markup
+   * past `html\`\``'s escaping by impersonating a SafeString.
+   */
+  #safe = true
+
+  /**
    * Wraps a string as already-escaped HTML. **Does NOT escape its argument.**
    * The caller is responsible for ensuring `value` cannot contain
    * unsanitized user input — pass user-controlled strings through
@@ -339,11 +458,20 @@ export class SafeString {
    */
   constructor(public readonly value: string) {}
   toString(): string { return this.value }
+
+  /**
+   * Brand check — true only for genuine SafeString instances built through the
+   * constructor. Use this instead of `instanceof` (which a prototype-spoofed
+   * object passes) anywhere unescaped pass-through is decided.
+   */
+  static isSafe(value: unknown): value is SafeString {
+    return typeof value === 'object' && value !== null && #safe in (value as object)
+  }
 }
 
 function renderHtmlValue(value: unknown): string {
   if (value === null || value === undefined || value === false) return ''
-  if (value instanceof SafeString) return value.value
+  if (SafeString.isSafe(value)) return value.value
   if (Array.isArray(value)) return value.map(renderHtmlValue).join('')
   return escapeHtml(value)
 }
