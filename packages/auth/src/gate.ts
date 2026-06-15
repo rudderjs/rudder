@@ -52,6 +52,49 @@ type PolicyClass = new () => Policy
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ModelClass = abstract new (...args: any[]) => unknown
 
+/**
+ * Resolve an ability to a *genuine* policy method.
+ *
+ * A naive `policy[ability]` lookup is a fail-open authorization hole: every
+ * object inherits callable members from `Object.prototype` (`toString`,
+ * `valueOf`, `toLocaleString`, `hasOwnProperty`, `isPrototypeOf`,
+ * `propertyIsEnumerable`), all of which are functions that return a truthy
+ * value. So `Gate.allows('toString', somePoliciedModel)` would call
+ * `Object.prototype.toString` and treat its `"[object Object]"` result as
+ * "allowed" — granting access for any authenticated user against any model
+ * with a registered policy whenever the ability name collides with an inherited
+ * member. `constructor` is similar (a function that throws when called).
+ *
+ * Resolve the method only from the policy instance's own properties and its
+ * prototype chain *up to but excluding* `Object.prototype`, where real policy
+ * methods actually live. Anything inherited from `Object.prototype` (or the
+ * reserved `constructor` / `__proto__`) yields `null` → the caller denies.
+ */
+function resolvePolicyMethod(
+  policy: object,
+  ability: string,
+): ((...a: unknown[]) => boolean | Promise<boolean>) | null {
+  if (!ability || ability === 'constructor' || ability === '__proto__') return null
+
+  // Own instance property (covers arrow-function fields assigned in the ctor).
+  if (Object.prototype.hasOwnProperty.call(policy, ability)) {
+    const own = (policy as Record<string, unknown>)[ability]
+    return typeof own === 'function' ? (own as (...a: unknown[]) => boolean | Promise<boolean>) : null
+  }
+
+  // Prototype chain, stopping before Object.prototype so inherited Object
+  // methods can never be mistaken for an authorization method.
+  let proto = Object.getPrototypeOf(policy) as object | null
+  while (proto && proto !== Object.prototype) {
+    if (Object.prototype.hasOwnProperty.call(proto, ability)) {
+      const m = (proto as Record<string, unknown>)[ability]
+      return typeof m === 'function' ? (m as (...a: unknown[]) => boolean | Promise<boolean>) : null
+    }
+    proto = Object.getPrototypeOf(proto) as object | null
+  }
+  return null
+}
+
 // ─── Gate ─────────────────────────────────────────────────
 
 /**
@@ -217,10 +260,11 @@ export class Gate {
       if (result === false) return false
     }
 
-    // Call the specific method
-    const method = (policy as Record<string, unknown>)[ability]
-    if (typeof method !== 'function') return false
-    return (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, user, ...args)
+    // Call the specific method (own/prototype method only — never an inherited
+    // Object.prototype member, which would fail-open to "allowed").
+    const method = resolvePolicyMethod(policy, ability)
+    if (!method) return false
+    return method.call(policy, user, ...args)
   }
 
   /** Emit an observation event to the gate observer registry (if present). */
@@ -289,6 +333,12 @@ class GateForUser {
   }
 
   private async _check(ability: string, ...args: unknown[]): Promise<CheckResult> {
+    // Deny-by-default for a null/undefined principal — mirrors `Gate.allows`,
+    // which short-circuits guests before any policy/ability runs. `forUser`'s
+    // type forbids null, but a runtime `forUser(null as any)` must not reach a
+    // policy method with a null user (where `!post.private` would fail-open).
+    if (!this.user) return { allowed: false, resolvedVia: 'default' }
+
     // Before callbacks
     for (const cb of this.beforeCallbacks) {
       const result = await cb(this.user, ability)
@@ -309,11 +359,11 @@ class GateForUser {
             if (result === true)  return { allowed: true,  resolvedVia: 'before' }
             if (result === false) return { allowed: false, resolvedVia: 'before' }
           }
-          const method = (policy as Record<string, unknown>)[ability]
-          if (typeof method !== 'function') {
+          const method = resolvePolicyMethod(policy, ability)
+          if (!method) {
             return { allowed: false, resolvedVia: 'policy', policy: PolicyCtor.name }
           }
-          const allowed = await (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, this.user, ...args)
+          const allowed = await method.call(policy, this.user, ...args)
           return { allowed, resolvedVia: 'policy', policy: PolicyCtor.name }
         }
       }

@@ -49,7 +49,12 @@ export const DEFAULT_AUTH_RATE_LIMITS: Readonly<Required<AuthRateLimits>> = Obje
   requestPasswordReset: RateLimit.perMinute(3)
     .by((req) => {
       const body = req.body as { email?: unknown } | null | undefined
-      const email = typeof body?.email === 'string' ? body.email : undefined
+      // Normalize (trim + lowercase) before keying. Without this, `Victim@x.com`,
+      // `victim@x.com`, and ` victim@x.com ` are three distinct buckets, so an
+      // attacker trivially multiplies the per-account budget against one inbox
+      // (and one mailer) by varying case/whitespace on the same address.
+      const raw = typeof body?.email === 'string' ? body.email : undefined
+      const email = raw ? raw.trim().toLowerCase() : undefined
       return email ?? (req as unknown as { ip?: string }).ip ?? 'unknown'
     })
     .message('Too many password reset requests. Please try again later.'),
