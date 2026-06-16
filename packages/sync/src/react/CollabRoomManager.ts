@@ -35,6 +35,14 @@ export interface CollabRoomManagerOptions {
   factories?: CollabRoomFactories
 }
 
+/**
+ * WebSocket close codes the sync server's `onAuth` gate uses to reject an
+ * upgrade (see `createCollabRoomAuth` / the server's `ws.close(4401, …)`).
+ * A close with one of these codes is a POLICY verdict, not a transient
+ * network blip, so the manager stops reconnecting on it.
+ */
+const AUTH_DENIED_CLOSE_CODES = new Set([4401, 4403])
+
 interface Handles {
   ydoc?:        YDoc
   provider?:    WebsocketProvider
@@ -49,6 +57,9 @@ export class CollabRoomManager {
   private syncedResolve!: () => void
   private syncedReject!:  (e: Error) => void
   private onRoomCb?: (room: CollabRoom | null) => void
+  private onDeniedCb?: () => void
+  private closeHandler?: ((event: unknown) => void) | undefined
+  private deniedFlag = false
 
   /** Resolves on the provider's first `synced` event; rejects if construction fails. */
   readonly synced: Promise<void>
@@ -70,6 +81,25 @@ export class CollabRoomManager {
    */
   onRoomChange(cb: (room: CollabRoom | null) => void): void {
     this.onRoomCb = cb
+  }
+
+  /**
+   * `true` once the server rejected the WS upgrade with an auth-denied close
+   * code (4401/4403). A denied room never syncs, so consumers should treat it
+   * as nonexistent and fall back to non-collaborative editing.
+   */
+  get denied(): boolean {
+    return this.deniedFlag
+  }
+
+  /**
+   * Register a callback fired once when the room is auth-denied (the server
+   * closed the upgrade with 4401/4403). The manager has already stopped
+   * reconnecting and emitted a `null` room via {@link onRoomChange} by the
+   * time this fires. Single-slot — last registration wins.
+   */
+  onDenied(cb: () => void): void {
+    this.onDeniedCb = cb
   }
 
   /**
@@ -132,6 +162,24 @@ export class CollabRoomManager {
         provider.on('synced' as never, onSynced as never)
       }
 
+      // y-websocket treats every socket close as transient and reconnects
+      // immediately (no backoff). An auth-denied close (4401/4403 from the
+      // server's onAuth gate) is a policy verdict, not a blip — disconnect
+      // for good, mark the room denied, and surface a `null` room so the
+      // consumer falls back to non-collaborative editing. (`connection-close`
+      // isn't on y-websocket's typed event map; cast like the `synced` path.)
+      const onClose = (event: unknown): void => {
+        const code = (event as { code?: number } | null)?.code
+        if (code == null || !AUTH_DENIED_CLOSE_CODES.has(code)) return
+        this.deniedFlag = true
+        this.cancelled  = true
+        try { provider.disconnect() } catch { /* already torn down */ }
+        this.onRoomCb?.(null)
+        this.onDeniedCb?.()
+      }
+      this.closeHandler = onClose
+      provider.on('connection-close' as never, onClose as never)
+
       this.onRoomCb?.({
         ydoc:        this.handles.ydoc,
         provider:    this.handles.provider,
@@ -166,6 +214,10 @@ export class CollabRoomManager {
   }
 
   private destroyHandles(): void {
+    if (this.closeHandler) {
+      try { this.handles.provider?.off('connection-close' as never, this.closeHandler as never) } catch { /* torn down */ }
+      this.closeHandler = undefined
+    }
     try { this.handles.provider?.disconnect() } catch { /* already-closed sockets throw */ }
     try { this.handles.provider?.destroy()    } catch { /* idempotent destroy */ }
     try { this.handles.persistence?.destroy() } catch { /* idempotent destroy */ }

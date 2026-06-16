@@ -268,6 +268,48 @@ provider.awareness.on('change', () => {
 
 The first argument to `WebsocketProvider` is the path; the second is the document name.
 
+### React hooks
+
+`@rudderjs/sync/react` wraps the provider lifecycle in a hook so a component connects to a room without re-implementing it. `useCollabRoom(roomKey, options?)` returns a `CollabRoom | null` (the live `ydoc` + `provider`), reconnecting and tearing down with the component:
+
+```tsx
+import { useCollabRoom } from '@rudderjs/sync/react'
+
+function Editor({ id }: { id: string }) {
+  const room = useCollabRoom(`doc:${id}`, { offline: true })
+  if (!room) return <Spinner />
+  // bind room.ydoc / room.provider to your editor...
+}
+```
+
+If the server's `onAuth` gate rejects the upgrade (WS close 4401/4403), the hook stops reconnecting (y-websocket would otherwise retry ~10x/second) and returns `null`. Pass `onDenied` to tell "denied" apart from "still connecting":
+
+```tsx
+const room = useCollabRoom(`doc:${id}`, { onDenied: () => setDenied(true) })
+```
+
+### Presence
+
+The presence hooks layer awareness on top of a room. `useCollabPresence` mirrors the local user's `{ name, color }` onto awareness so peers can render carets and chips; `collabColorFromSeed` derives a stable `#rrggbb` color from a seed (hex, because Tiptap's CollaborationCaret rejects `hsl(...)`):
+
+```tsx
+import { useCollabPresence, collabColorFromSeed } from '@rudderjs/sync/react'
+
+useCollabPresence(room, { name: user.name, color: collabColorFromSeed(user.email) })
+```
+
+`useReportAwarenessField(room, key, value)` writes a value into the local awareness (clearing it on change/unmount); `useAwarenessField(room, key)` reads the remote peers that hold a non-null value for that key (local excluded, deduped, re-rendering only on a real change). `useFieldPresence(room, fieldName)` is the convenience built on top for "who else is editing this field":
+
+```tsx
+import { useReportAwarenessField, useFieldPresence } from '@rudderjs/sync/react'
+
+// writer: report the focused field
+useReportAwarenessField(room, 'focusField', isFocused ? fieldName : null)
+
+// reader: peers focused on this field
+const editors = useFieldPresence(room, fieldName)   // [{ clientId, name, color }]
+```
+
 ## Rudder commands
 
 | Command | Description |

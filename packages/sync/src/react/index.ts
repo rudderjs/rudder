@@ -16,6 +16,15 @@ export { useCollabRoom }                        from './useCollabRoom.js'
 export { useCollabSeed, useCollabSeedText }     from './useCollabSeed.js'
 export { CollabRoomManager }                    from './CollabRoomManager.js'
 
+export {
+  collabColorFromSeed,
+  computeAwarenessPeers,
+  useCollabPresence,
+  useReportAwarenessField,
+  useAwarenessField,
+  useFieldPresence,
+}                              from './presence.js'
+
 export type {
   CollabRoom,
   UseCollabRoomOptions,
@@ -24,3 +33,8 @@ export type {
   CollabRoomFactories,
   CollabRoomManagerOptions,
 }                              from './CollabRoomManager.js'
+export type {
+  CollabUser,
+  AwarenessPeer,
+  FieldPresenceUser,
+}                              from './presence.js'

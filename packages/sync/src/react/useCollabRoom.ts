@@ -1,4 +1,4 @@
-import { useEffect, useState }    from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CollabRoomManager }      from './CollabRoomManager.js'
 import type {
   CollabRoom,
@@ -28,8 +28,13 @@ export function useCollabRoom(
   roomKey: string,
   options: UseCollabRoomOptions = {},
 ): CollabRoom | null {
-  const { wsUrl = DEFAULT_WS_URL, offline = false, enabled = true } = options
+  const { wsUrl = DEFAULT_WS_URL, offline = false, enabled = true, onDenied } = options
   const [room, setRoom] = useState<CollabRoom | null>(null)
+
+  // Read the denial callback live so an inline closure doesn't land in the
+  // effect deps and re-trigger the WS handshake on every render.
+  const onDeniedRef = useRef(onDenied)
+  onDeniedRef.current = onDenied
 
   useEffect(() => {
     // SSR — never connect. Check via `globalThis` so we don't depend on
@@ -48,6 +53,7 @@ export function useCollabRoom(
 
     const manager = new CollabRoomManager({ roomKey, wsUrl, offline })
     manager.onRoomChange(setRoom)
+    manager.onDenied(() => onDeniedRef.current?.())
     void manager.start()
 
     return () => { manager.stop() }

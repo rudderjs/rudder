@@ -360,4 +360,65 @@ describe('CollabRoomManager', () => {
     assert.equal(state.docs.length, 1)
     assert.equal(state.providers.length, 1)
   })
+
+  it('marks the room denied and stops on a 4401 auth-denied close', async () => {
+    const seen: (CollabRoom | null)[] = []
+    let deniedFired = 0
+    const mgr = new CollabRoomManager({
+      roomKey:  'doc:auth',
+      wsUrl:    'ws://test',
+      factories: makeFactories(state),
+    })
+    mgr.onRoomChange(room => seen.push(room))
+    mgr.onDenied(() => { deniedFired++ })
+    await mgr.start()
+
+    assert.equal(mgr.denied, false)
+    assert.ok(seen[0], 'room emitted on start')
+
+    state.providers[0]!.emit('connection-close', { code: 4401 })
+
+    assert.equal(mgr.denied, true)
+    assert.equal(deniedFired, 1)
+    assert.equal(state.providers[0]!.disconnected, true, 'provider disconnected to stop the reconnect loop')
+    assert.equal(seen[seen.length - 1], null, 'room cleared to null on denial')
+  })
+
+  it('treats 4403 as auth-denied too', async () => {
+    const mgr = new CollabRoomManager({
+      roomKey: 'doc:auth2', wsUrl: 'ws://test', factories: makeFactories(state),
+    })
+    await mgr.start()
+    state.providers[0]!.emit('connection-close', { code: 4403 })
+    assert.equal(mgr.denied, true)
+  })
+
+  it('ignores a transient (non-policy) close code', async () => {
+    const seen: (CollabRoom | null)[] = []
+    let deniedFired = 0
+    const mgr = new CollabRoomManager({
+      roomKey: 'doc:blip', wsUrl: 'ws://test', factories: makeFactories(state),
+    })
+    mgr.onRoomChange(room => seen.push(room))
+    mgr.onDenied(() => { deniedFired++ })
+    await mgr.start()
+
+    state.providers[0]!.emit('connection-close', { code: 1006 })   // abnormal closure
+
+    assert.equal(mgr.denied, false)
+    assert.equal(deniedFired, 0)
+    assert.equal(state.providers[0]!.disconnected, false)
+    assert.notEqual(seen[seen.length - 1], null, 'room left intact on a transient blip')
+  })
+
+  it('removes the close listener on stop()', async () => {
+    const mgr = new CollabRoomManager({
+      roomKey: 'doc:cleanup', wsUrl: 'ws://test', factories: makeFactories(state),
+    })
+    await mgr.start()
+    mgr.stop()
+    // A late close event after teardown must not flip denied.
+    state.providers[0]!.emit('connection-close', { code: 4401 })
+    assert.equal(mgr.denied, false)
+  })
 })
