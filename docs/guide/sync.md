@@ -188,6 +188,41 @@ The record contract is **duck-typed** — any object with `find(id)` and `canVie
 - **`resources`** can be a static map (looked up with own-property semantics, so a room segment like `constructor` never resolves a prototype method) or a function for dynamic routing.
 - **Guests** are denied by default. Set `allowGuests: true` (builder-wide) or `allowGuests` on a single resource to forward a `null` user to `canView` for deliberately public surfaces — an admitted guest can read **and** write the doc.
 
+### Seeding rooms from a record: `createCollabRoomSeeder`
+
+A record-backed room usually starts empty and needs its first state populated from the database — the post's title and body, say — so the first client sees content instead of a blank doc. `SyncConfig.onFirstConnect` fires once per room, after persistence has hydrated the `Y.Doc` and before the first client receives the initial state, which is exactly the moment to seed. `createCollabRoomSeeder` is the seeding counterpart to `createCollabRoomAuth`: it parses the room, loads the record, projects it to a field map, and writes it into the doc only if the doc is still empty.
+
+```ts
+// config/sync.ts
+import { createCollabRoomAuth, createCollabRoomSeeder } from '@rudderjs/sync/collab'
+import { Auth } from '@rudderjs/auth'
+import { Post } from 'App/Models/Post.js'
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  path: '/ws-sync',
+  onAuth: createCollabRoomAuth({
+    resources:   { posts: Post },
+    resolveUser: () => Auth.user(),
+  }),
+  onFirstConnect: createCollabRoomSeeder({
+    resources: {
+      // Room `…:posts:42` → Post.find('42'), then project to the doc's fields.
+      posts: {
+        find: (id)   => Post.find(id),
+        seed: (post) => ({ title: post.title, body: post.body }),
+      },
+    },
+  }),
+} satisfies SyncConfig
+```
+
+The seed resource is **duck-typed** — any object with `find(id)` and `seed(record)` qualifies, so there is no hard `@rudderjs/orm` dependency. A single object can satisfy both builders (add a `seed` method alongside `find`/`canView`) so one model drives auth **and** seeding.
+
+- **Idempotent and race-safe** — the write happens in a single `doc.transact`, gated on the target map still being empty. A doc already hydrated from persistence (or seeded by a racing connection) is left untouched.
+- **Fail-soft on absence, fail-loud on error** — a room that doesn't parse, an unresolved resource, a missing record, or an empty `seed()` result all **skip** quietly. A `find()` / `seed()` **throw** propagates so the framework leaves the room unfired and retries on the next connection (the error surfaces via observers, never killing the socket).
+- **`mapName`** defaults to `'fields'` (the same map `Sync.seed()` and the React `useCollabSeed` helpers use); **`origin`** defaults to `'rudder-sync-seed'` so a client can tell a seed apart from a user edit. Room parsing and the `resources` map/function forms behave exactly as in `createCollabRoomAuth`.
+
 ## Editor adapters
 
 The core `@rudderjs/sync` package handles transport and persistence. For server-side mutations against editor-specific document shapes (rich-text trees, structured documents), import an adapter from the matching subpath:
