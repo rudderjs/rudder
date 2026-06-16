@@ -1,0 +1,69 @@
+name: auto-audit
+
+# Daily per-package framework audit. Runs Claude Code headless, files capped/deduped
+# issues as the Rudder Bot GitHub App. Logic lives in claude-notes/auto-audit-playbook.md;
+# the prompt lives in .github/auto-audit-prompt.md. Tune those, not this file.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily (09:00 Asia/Jerusalem during IDT)
+  workflow_dispatch: {}    # allow manual "Run workflow"
+
+# The job authenticates to GitHub as the Rudder Bot App (issues:write), NOT via the
+# default GITHUB_TOKEN. Keep the workflow token read-only.
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mint Rudder Bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RUDDER_BOT_APP_ID }}
+          private-key: ${{ secrets.RUDDER_BOT_PRIVATE_KEY }}
+          # installation is auto-resolved for this repo's owner.
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Verify Rudder Bot auth
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          gh auth status
+          gh issue list -R rudderjs/rudder --label audit:tracker --state open --limit 1
+
+      - name: Run auto-audit
+        env:
+          # Claude Code auth: populate EITHER of these as a repo secret.
+          #   - CLAUDE_CODE_OAUTH_TOKEN: uses a Claude Pro/Max subscription (no per-token cost).
+          #     Generate locally with `claude setup-token`.
+          #   - ANTHROPIC_API_KEY: pay-per-token from console.anthropic.com.
+          # The CLI uses whichever is set (OAuth token takes precedence).
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # GitHub auth for every `gh` call Claude runs: the Rudder Bot installation token.
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          claude -p "$(cat .github/auto-audit-prompt.md)" \
+            --allowedTools "Bash,Read,Grep,Glob,Task,WebSearch,WebFetch" \
+            --permission-mode bypassPermissions \
+            --max-turns 120 \
+            --model claude-sonnet-4-6 \
+            --verbose
