@@ -21,6 +21,7 @@
 import type * as Y from 'yjs'
 
 import { defaultParseCollabRoom, type ParsedCollabRoom } from './index.js'
+import { seedBoundFields, type CollabFieldBindings } from './bindings.js'
 import type { SyncConfig } from '../index.js'
 
 /** Default Y.Map name seeded into, matching {@link Sync.seed}. */
@@ -50,6 +51,15 @@ export interface CollabSeedResource<Rec = unknown> {
    * sync or async; a throw propagates (retry on next connection).
    */
   seed(record: Rec): Record<string, unknown> | Promise<Record<string, unknown>>
+  /**
+   * Optional field bindings mapping the keys `seed` returns to the Y share type
+   * that backs each — `text` → a collaborative `Y.Text`, `array` → a `Y.Array`,
+   * `map` → a nested `Y.Map`, `scalar` (the default) → an entry in the shared
+   * fields map. Omit to seed everything as scalars into one map (the flat-form
+   * default). A per-field `validate` rejects (skips) a value at seed time. See
+   * {@link CollabFieldBindings}.
+   */
+  fields?: CollabFieldBindings
 }
 
 /**
@@ -183,16 +193,12 @@ export function createCollabRoomSeeder<Rec = unknown>(
     if (record === null || record === undefined) return
 
     const data = await res.seed(record)
-    const entries = Object.entries(data ?? {})
-    if (entries.length === 0) return
 
-    // Single transaction, gated on the map still being empty — idempotent and
+    // Route each field into the share its binding names (scalars into the shared
+    // map, text/array/map into dedicated shares), all in one transaction. Each
+    // write is gated on its target share still being empty — idempotent and
     // race-safe against a second concurrent first-connect (Yjs serialises
-    // transacts per doc, so the loser sees size > 0 and skips).
-    const fields = doc.getMap(mapName)
-    doc.transact(() => {
-      if (fields.size > 0) return
-      for (const [key, val] of entries) fields.set(key, val ?? null)
-    }, origin)
+    // transacts per doc, so the loser sees a populated share and skips).
+    seedBoundFields(doc, data ?? {}, { bindings: res.fields, mapName, origin })
   }
 }

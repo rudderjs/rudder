@@ -238,3 +238,12 @@ export {
   type CollabSeedResourceResolver,
   type CreateCollabRoomSeederOptions,
 } from './seed.js'
+
+export {
+  normalizeBinding,
+  type CollabFieldType,
+  type CollabFieldBinding,
+  type CollabFieldBindings,
+  type CollabValueFieldType,
+  type CollabValueBinding,
+} from './bindings.js'

@@ -223,6 +223,74 @@ The seed resource is **duck-typed** — any object with `find(id)` and `seed(rec
 - **Fail-soft on absence, fail-loud on error** — a room that doesn't parse, an unresolved resource, a missing record, or an empty `seed()` result all **skip** quietly. A `find()` / `seed()` **throw** propagates so the framework leaves the room unfired and retries on the next connection (the error surfaces via observers, never killing the socket).
 - **`mapName`** defaults to `'fields'` (the same map `Sync.seed()` and the React `useCollabSeed` helpers use); **`origin`** defaults to `'rudder-sync-seed'` so a client can tell a seed apart from a user edit. Room parsing and the `resources` map/function forms behave exactly as in `createCollabRoomAuth`.
 
+## Form-collab bindings: field ↔ share-type mapping
+
+A flat scalar form seeds fine into one Y.Map. A **structured** form wants more: a rich-text field that merges keystroke-by-keystroke wants a `Y.Text`; a tag list wants a `Y.Array`; a nested object wants its own `Y.Map`. A **field binding** maps each field name to the Y share type that backs it, plus an optional per-field validator — the minimal, duck-typed contract that lets a structured form edit collaboratively without the framework owning a form-schema layer.
+
+Declare bindings as the `fields` property on a seed resource — one resource then declares its share-type layout alongside `find` / `seed`:
+
+```ts
+import { createCollabRoomSeeder, type CollabFieldBindings } from '@rudderjs/sync/collab'
+
+const fields: CollabFieldBindings = {
+  title:  'text',                                   // collaborative string → Y.Text
+  body:   'text',
+  tags:   'array',                                  // list → Y.Array
+  meta:   'map',                                    // nested object → nested Y.Map
+  status: { type: 'scalar', validate: (v) => v === 'draft' || v === 'published' },
+}
+
+onFirstConnect: createCollabRoomSeeder({
+  resources: {
+    posts: {
+      find:   (id)   => Post.find(id),
+      seed:   (post) => ({ title: post.title, body: post.body, tags: post.tags, meta: post.meta, status: post.status }),
+      fields,                                        // route seed values into the right share type
+    },
+  },
+}),
+```
+
+| `type`     | Backing share                          | Seeded from                | Default |
+|------------|----------------------------------------|----------------------------|---------|
+| `'scalar'` | an entry in the shared fields `Y.Map`  | the value, verbatim        | ✓ (unbound fields) |
+| `'text'`   | a dedicated `Y.Text` keyed by the field| a string                   | |
+| `'array'` | a dedicated `Y.Array` keyed by the field| a JS array                 | |
+| `'map'`    | a dedicated `Y.Map` keyed by the field | a plain object             | |
+
+- **Scalars seed as a group**, gated on the shared map still being empty (the same whole-map idempotence as the binding-less seeder). Each `text` / `array` / `map` share gates on **its own** emptiness, so a half-seeded doc fills in the missing shares without clobbering populated ones — all in one origin-tagged transaction.
+- **`validate` rejects (skips) a value** both at seed time (fail-soft, like a missing record) and on every client edit.
+- Bindings are **optional and per-resource** — omit `fields` and every key seeds as a scalar, exactly as before.
+
+### Binding a form input on the client
+
+`@rudderjs/sync/react` exposes `useCollabField` — the client counterpart to a binding. It two-way binds a form input to its share: reads the current value, re-renders when a peer changes it, and returns a setter that validates then writes.
+
+```tsx
+import { useCollabRoom, useCollabField } from '@rudderjs/sync/react'
+
+function PostForm({ id }: { id: string }) {
+  const room = useCollabRoom(`posts:${id}`)
+  const [status, setStatus] = useCollabField<string>(room, 'status', {
+    type: 'scalar',
+    validate: (v) => v === 'draft' || v === 'published',
+  })
+  const [tags, setTags] = useCollabField<string[]>(room, 'tags', 'array')
+
+  return (
+    <>
+      <select value={status ?? 'draft'} onChange={(e) => setStatus(e.target.value)}>
+        <option>draft</option>
+        <option>published</option>
+      </select>
+      <TagInput value={tags ?? []} onChange={setTags} />
+    </>
+  )
+}
+```
+
+The setter returns `false` when the validator rejects the value (the write never reaches the CRDT), so a form can surface the rejection. `useCollabField` handles the **value-shaped** share types — `scalar`, `array`, `map`. Collaborative-string (`text`) fields merge per-keystroke and bind through an editor instead (`useCollabSeedText` + a `Y.Text` editor binding); passing a `'text'` binding to `useCollabField` is a compile error.
+
 ## Editor adapters
 
 The core `@rudderjs/sync` package handles transport and persistence. For server-side mutations against editor-specific document shapes (rich-text trees, structured documents), import an adapter from the matching subpath:
