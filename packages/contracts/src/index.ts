@@ -1009,6 +1009,14 @@ export interface AppResponse {
   json:    (data: unknown) => void
   send:    (data: string) => void
   redirect:(url: string, code?: number) => void
+  /**
+   * Open-redirect-safe redirect to a user-supplied `target`. Only same-origin
+   * absolute paths are honored; any absolute URL, protocol-relative (`//host`),
+   * or backslash-smuggled target falls back to `fallback` (default `'/'`).
+   * Use for "redirect back to the intended URL" flows where `target` comes from
+   * a request param (e.g. `?redirect=`).
+   */
+  intended:(target: string, fallback?: string, code?: number) => void
   raw:     unknown  // the original server-specific response object
 }
 

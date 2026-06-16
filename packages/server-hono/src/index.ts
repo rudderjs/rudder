@@ -4,6 +4,9 @@ import { renderErrorPage, applyDevStackFix } from './error-page.js'
 import { serve } from '@hono/node-server'
 import http from 'node:http'
 import { B, startRequest, markBoundary, finishRequest, runWithRequest, currentPerfId } from './perf-boundaries.js'
+import { safeRedirectTarget } from './safe-redirect.js'
+
+export { isSafeRedirect, safeRedirectTarget } from './safe-redirect.js'
 
 // ─── WebSocket upgrade handler for production ──────────────
 // Monkey-patch http.createServer at module load time so that any HTTP server
@@ -430,6 +433,10 @@ function normalizeResponse(c: Context): AppResponse {
     },
     redirect(url, code = 302) {
       c.res = c.redirect(url, code as RedirectStatusCode)
+      return c.res
+    },
+    intended(target, fallback = '/', code = 302) {
+      c.res = c.redirect(safeRedirectTarget(target, fallback), code as RedirectStatusCode)
       return c.res
     },
   }
