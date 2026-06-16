@@ -6,7 +6,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { MalformedBodyError, PayloadTooLargeError } from '@rudderjs/contracts'
-import { hono, compileControllerViewRegex, devErrorPageEnabled } from './index.js'
+import { hono, compileControllerViewRegex, devErrorPageEnabled, requestLogEnabled } from './index.js'
 import { renderErrorPage, buildErrorMarkdown, resolveErrorLine, applyDevStackFix, resolveRudderVersion } from './error-page.js'
 
 /** Walk up from the test cwd to the pnpm workspace root. */
@@ -1557,5 +1557,25 @@ describe('devErrorPageEnabled — secure-by-default error-page gate', () => {
     assert.strictEqual(devErrorPageEnabled({ NODE_ENV: 'production' }), false)
     assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'staging' }), false)
     assert.strictEqual(devErrorPageEnabled({ APP_ENV: 'production', NODE_ENV: 'development' }), false)
+  })
+})
+
+describe('requestLogEnabled — per-request access log gate', () => {
+  it('is on only in a dev-like env by default (off in prod / unset)', () => {
+    assert.strictEqual(requestLogEnabled({}), false)
+    assert.strictEqual(requestLogEnabled({ NODE_ENV: 'production' }), false)
+    assert.strictEqual(requestLogEnabled({ APP_ENV: 'staging' }), false)
+    assert.strictEqual(requestLogEnabled({ APP_ENV: 'local' }), true)
+    assert.strictEqual(requestLogEnabled({ NODE_ENV: 'development' }), true)
+  })
+
+  it('RUDDER_REQUEST_LOG forces it on in any env', () => {
+    assert.strictEqual(requestLogEnabled({ NODE_ENV: 'production', RUDDER_REQUEST_LOG: '1' }), true)
+    assert.strictEqual(requestLogEnabled({ NODE_ENV: 'production', RUDDER_REQUEST_LOG: 'true' }), true)
+  })
+
+  it('RUDDER_REQUEST_LOG=0 forces it off even in dev', () => {
+    assert.strictEqual(requestLogEnabled({ APP_ENV: 'local', RUDDER_REQUEST_LOG: '0' }), false)
+    assert.strictEqual(requestLogEnabled({ NODE_ENV: 'development', RUDDER_REQUEST_LOG: 'false' }), false)
   })
 })
