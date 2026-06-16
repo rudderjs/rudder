@@ -1,5 +1,32 @@
 # @rudderjs/ai
 
+## 1.14.0
+
+### Minor Changes
+
+- e314cd6: Add a named-event SSE protocol for streaming an agent loop to a browser, as a sibling to the existing Vercel data-stream protocol.
+
+  `@rudderjs/ai` already ships `toVercelResponse()` (the numeric-prefix wire). For apps that want a plain `text/event-stream` with self-describing event names, this adds a matched server framer + browser reader so the wire vocabulary can never drift:
+
+  - Server: `toAgentSseStream(streaming)` / `toAgentSseResponse(streaming)` project an `agent.stream()` result onto named SSE events (`text`, `tool_call`, `tool_update`, `tool_result`, `pending_client_tools`, `tool_approval_required`, `handoff`) and a terminal `complete` event carrying `{ done, finishReason, awaiting, steps, usage }`, or an `error` event if the run throws.
+  - Browser: `readAgentStream(resp, callbacks?)` decodes the same events back into an accumulated `AgentStreamTurn` and fires per-event callbacks. `applyAgentSseEvent(...)` is exported for unit-testing the reducer, and `newAgentStreamTurn()` seeds an empty turn.
+
+  Runtime-agnostic (web globals only, no `node:` imports); shipped from the main entry. App-specific events (conversation ids, billing, sub-run fan-out) stay on a separate channel.
+
+- 8f2982e: Add `sanitizeConversation()` and apply it in `OrmConversationStore.load()` so persisted histories are replay-safe.
+
+  A conversation interrupted mid-turn (a crash after the assistant message persisted but before all of its tool-result rows landed) leaves a malformed graph in the store. Replaying it 400s: Anthropic rejects a dangling `tool_use` with no matching `tool_result`, and OpenAI-compatible providers (DeepSeek, OpenRouter, Azure) reject an orphan `role:'tool'` not preceded by `tool_calls`.
+
+  `sanitizeConversation(messages)` walks the history and enforces the tool-call / tool-result invariant in both directions: complete tool turns are kept (results re-emitted in `toolCalls` order, one per call, extras dropped), dangling turns have their `toolCalls` stripped while preserving any text, and orphan tool results are dropped. It is pure and idempotent. `OrmConversationStore.load()` now applies it automatically; a custom `ConversationStore` can call the exported function from its own `load()`.
+
+- 9eb2d7e: Add `@rudderjs/ai/gateway` — an abstract template for normalizing an upstream LLM gateway behind the `ProviderAdapter` contract.
+
+  `HttpGatewayAdapter` is the Laravel custom-driver pattern (Template Method) for AI providers: the base class owns the reusable lifecycle — `fetch`, JSON / SSE handling, `AbortSignal` wiring, and error mapping — and leaves four `protected` hooks for the gateway's wire format (`buildHeaders`, `buildRequestBody`, `parseResponse`, `parseStreamEvent`). Subclass it, then register via the usual `AiRegistry.register()` path (the framework's `extend()` equivalent).
+
+  Reach for this only when the gateway's wire format matches no built-in provider. An OpenAI- or Anthropic-compatible gateway needs no subclass — register the `openai` / `anthropic` driver with a `baseUrl` override instead.
+
+  The subpath also exports `parseSseStream(body, signal)` + `SseEvent` for adapters that need raw `text/event-stream` framing. Runtime-agnostic (any `fetch`-capable runtime; no `node:` imports).
+
 ## 1.13.0
 
 ### Minor Changes

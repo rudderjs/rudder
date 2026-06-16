@@ -1,5 +1,33 @@
 # @rudderjs/sync
 
+## 1.9.0
+
+### Minor Changes
+
+- bbe2af7: Add client-side collab presence to `@rudderjs/sync/react`.
+
+  The React layer managed the Y.Doc + WebSocket lifecycle but exposed nothing for presence/awareness, so every consumer re-derived the same Yjs gotchas. This adds the client mirror of the server-side awareness helpers:
+
+  - **Auth-denial reconnect-stop.** `useCollabRoom` / `CollabRoomManager` now detect a WS close with an auth-denied code (4401/4403 from the server's `onAuth` gate), disconnect instead of letting y-websocket reconnect ~10x/second, and return a `null` room. A new `onDenied` option on `useCollabRoom` surfaces the verdict so the UI can tell "denied" apart from "still connecting".
+  - **`useCollabPresence(room, user)`** mirrors the local `{ name, color }` onto awareness, with `collabColorFromSeed(seed)` deriving a deterministic `#rrggbb` color (hex, because Tiptap's CollaborationCaret rejects `hsl(...)`).
+  - **`useReportAwarenessField(room, key, value)`** writes a value into local awareness (clearing on change/unmount); **`useAwarenessField(room, key)`** reads remote peers holding a non-null value for that key (local excluded, deduped, `queueMicrotask`-deferred, re-rendering only on a real change). **`useFieldPresence(room, fieldName)`** is the convenience for per-field "who's editing this".
+  - `computeAwarenessPeers` is exported as a pure, testable reducer.
+
+- 626491f: Add `createCollabRoomSeeder` to `@rudderjs/sync/collab` — first-connect record seeding for record-backed collaboration.
+
+  `SyncConfig.onFirstConnect` fires once per room, after persistence hydrates the `Y.Doc` and before the first client receives the initial state — the moment to seed an empty doc from a database record. `createCollabRoomSeeder` is the seeding counterpart to `createCollabRoomAuth`: it parses the room, resolves the backing resource, loads the record, projects it to a field map, and writes it into the doc only if the doc is still empty.
+
+  The seed resource is duck-typed (`find(id)` + `seed(record)`) — no hard `@rudderjs/orm` dependency, and one object can satisfy both builders (add `seed` alongside `find`/`canView`). The write is idempotent and race-safe (single gated `doc.transact`), fail-soft on absence (unparsed room / unresolved resource / missing record / empty projection all skip) and fail-loud on error (a `find`/`seed` throw propagates so the framework retries on the next connection). Configurable `mapName` (default `'fields'`) and transact `origin` (default `'rudder-sync-seed'`).
+
+- c9e9bb4: feat(sync): form-collab bindings (form-field ↔ share-type mapping)
+
+  Add field bindings that map a form field to the Yjs share type that backs it, so a structured form edits collaboratively. A `CollabFieldBindings` descriptor (`'scalar' | 'text' | 'array' | 'map'`, with an optional per-field `validate` predicate) declares the layout; it lives on a `CollabSeedResource`'s new `fields` property, so one resource drives auth, seeding, and share-type routing.
+
+  - `createCollabRoomSeeder` now routes each seeded value into the share its binding names — `text` → a dedicated `Y.Text`, `array` → a `Y.Array`, `map` → a nested `Y.Map`, `scalar` (the default) → an entry in the shared fields map. Scalars seed as a group gated on the shared map being empty (unchanged idempotence); each non-scalar share gates on its own emptiness, all in one origin-tagged transaction. A value the validator rejects is skipped (fail-soft). Resources without `fields` keep the flat scalar-only behavior.
+  - New `useCollabField` hook in `@rudderjs/sync/react` two-way binds a form input to its share for the value-shaped types (`scalar` / `array` / `map`): reads the current value, re-renders on peer changes, and returns a setter that validates then writes (returning `false` on rejection). Collaborative-string `text` fields bind through an editor (`useCollabSeedText`) and are excluded at the type level.
+
+  The contract is duck-typed with no `@rudderjs/orm` or form-schema dependency, the same posture as `createCollabRoomAuth` / `createCollabRoomSeeder`.
+
 ## 1.8.0
 
 ### Minor Changes
