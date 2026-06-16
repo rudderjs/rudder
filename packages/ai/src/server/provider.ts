@@ -138,7 +138,7 @@ export class AiProvider extends ServiceProvider {
         // (see requireKey). Skip with a grouped boot notice so the app boots
         // and `AI.use('${name}')` surfaces the standard "not registered"
         // error at the use-site with a clear hint to set the env var.
-        bootNotice('ai', `${name} skipped — apiKey empty (set config('ai').providers.${name}.apiKey)`)
+        bootNotice('ai', `${name} skipped, no API key (set it in .env)`)
         continue
       }
       AiRegistry.register(instance)

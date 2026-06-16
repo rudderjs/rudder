@@ -1905,7 +1905,7 @@ describe('AiProvider — empty apiKey skip-and-warn', () => {
 
     assert.equal(warnings.length, 1, 'one notice for the skipped anthropic provider')
     assert.match(warnings[0]!, /anthropic skipped/)
-    assert.match(warnings[0]!, /apiKey empty/)
+    assert.match(warnings[0]!, /no API key/)
     assert.throws(
       () => AiRegistry.getFactory('anthropic'),
       /Unknown AI provider "anthropic"/,

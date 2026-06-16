@@ -163,7 +163,7 @@ export function resolveRememberSecret(override?: string): string {
     )
   }
   if (!_devSecretWarned) {
-    bootNotice('auth', 'using a dev remember-me secret — set AUTH_SECRET (>= 32 chars) for production')
+    bootNotice('auth', 'using a dev remember-me secret, set AUTH_SECRET (>= 32 chars) for production')
     _devSecretWarned = true
   }
   return 'rudderjs-dev-remember-secret'

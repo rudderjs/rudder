@@ -67,7 +67,7 @@ export class PasswordBroker {
       )
     } else {
       if (!_devSecretWarned) {
-        bootNotice('auth', 'using a dev password secret — pass `secret` to PasswordBroker (e.g. from AUTH_SECRET) for production')
+        bootNotice('auth', 'using a dev password secret, pass `secret` to PasswordBroker (e.g. from AUTH_SECRET) for production')
         _devSecretWarned = true
       }
       this.secret = 'password-reset'

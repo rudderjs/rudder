@@ -5,7 +5,7 @@
 // `bootNotice()` during `boot()` instead of `console.warn`-ing inline, so the
 // framework can flush them as ONE grouped, aligned block AFTER the provider
 // tree — rather than scattered between providers as they boot. Keeps the dev
-// startup readable: banner → tree → notices → ready.
+// startup readable: banner, tree, ready, then notices as a trailing footnote.
 //
 // Buffer lives on `globalThis` (not module scope) so a provider package that
 // reaches a second copy of @rudderjs/core (bundled + node_modules) still writes
@@ -48,6 +48,7 @@ export function drainBootNotices(): BootNotice[] {
 const c = {
   dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
   yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  cyan:   (s: string) => `\x1b[36m${s}\x1b[0m`,
 }
 
 /**
@@ -60,7 +61,7 @@ const c = {
 export function formatBootNotices(notices: BootNotice[]): string[] {
   if (notices.length === 0) return []
   const width = Math.max(...notices.map(n => n.scope.length))
-  const lines = [`  ${c.yellow('⚠')} ${notices.length} notice${notices.length === 1 ? '' : 's'}`]
+  const lines = [`  ${c.cyan('ℹ')} ${notices.length} notice${notices.length === 1 ? '' : 's'}`]
   for (const n of notices) {
     lines.push(`   ${c.dim('•')} ${c.yellow(n.scope.padEnd(width))}  ${n.message}`)
   }
