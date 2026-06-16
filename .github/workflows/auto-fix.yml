@@ -1,8 +1,12 @@
 name: auto-fix
 
-# On-demand fix-bot: runs Claude Code headless as the Rudder Bot GitHub App to fix ONE audit
-# issue and open a PR for review. Mechanical/safe scope only. Logic lives in
-# .github/auto-fix-prompt.md. Never auto-merges.
+# On-demand fix-bot: runs Claude Code headless as the Rudder Bot GitHub App to fix ONE
+# issue and open a PR for review. Logic lives in .github/auto-fix-prompt.md. Never auto-merges.
+#
+# Scope: a MANUAL trigger (label or dispatch) may target ANY issue of any dimension; the bot
+# stays disciplined (smallest change, tests must pass, defers if it can't do it cleanly). The
+# daily auto-pick scheduler only ever feeds it mechanical/safe issues (docs/tests/quality), so
+# autonomous runs never touch security/behavior code unprompted.
 #
 # Two ways to start it:
 #   - Add the `bot:fix` label to an issue (easy path: it fires automatically on that issue).
