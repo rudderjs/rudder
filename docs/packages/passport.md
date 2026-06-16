@@ -73,6 +73,30 @@ router.get ('/api/feed',   [RequireBearer(), scopeAny('read', 'admin')], showFee
 
 On success, `req.user` is populated. The wildcard scope `*` on a token grants every scope.
 
+### Optional-auth routes
+
+Some routes serve both authenticated and unauthenticated users: a public feed that shows personalized data when the caller is signed in is the canonical example. Use `BearerMiddleware()` instead of `RequireBearer()`:
+
+- **`RequireBearer()`** validates the token, stamps `req.user`, and rejects unauthenticated requests with a 401.
+- **`BearerMiddleware()`** validates the token and stamps `req.user` when a token is present, but always calls `next()` without sending a 401. When no token is sent, `req.user` is `null`.
+
+```ts
+import { RequireBearer, BearerMiddleware, scope } from '@rudderjs/passport'
+
+// Protected: unauthenticated requests are rejected with 401.
+router.get('/api/posts', [RequireBearer(), scope('read')], listPosts)
+
+// Optional auth: unauthenticated requests pass through; check req.user in the handler.
+router.get('/api/feed', [BearerMiddleware()], (req) => {
+  if (req.user) {
+    return personalizedFeed(req.user)
+  }
+  return publicFeed()
+})
+```
+
+> **Do not pair `scope()` or `scopeAny()` with `BearerMiddleware()`.** Scope middleware reads token state that `BearerMiddleware` may not have set (no token means no scopes). Use `scope()` / `scopeAny()` only after `RequireBearer()`.
+
 ## OAuth grants
 
 Four grants. All exchange via `POST /oauth/token`.
@@ -257,6 +281,7 @@ JWT claims: `jti` (token ID), `sub` (user ID), `aud` (client ID), `scopes`, `iat
 
 - **Missing RSA keys.** `passport.token()` throws. Run `pnpm rudder passport:keys` or set `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY`.
 - **`scope(...)` / `scopeAny(...)` before `RequireBearer()`.** Scope middleware reads request state that `RequireBearer` sets. Order matters.
+- **`scope(...)` / `scopeAny(...)` after `BearerMiddleware()`.** `BearerMiddleware` passes unauthenticated requests through, so when no token is present there are no scopes to check. Only use `scope()` / `scopeAny()` after `RequireBearer()`, which guarantees a valid token before the scope check runs.
 - **PKCE missing on public clients.** Public clients **must** send `code_challenge` + `code_challenge_method=S256`. Without PKCE → `invalid_request`.
 - **Mounting `AuthMiddleware` globally for API.** `@rudderjs/auth` is `web`-only by design. Use `RequireBearer()` per-route on the `api` group.
 - **`static table` on custom Models.** It's the Prisma delegate (camelCase, e.g. `oauthClient`), NOT the SQL table (`oauth_clients`).
