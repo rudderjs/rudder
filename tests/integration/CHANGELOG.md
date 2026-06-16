@@ -1,5 +1,12 @@
 # @rudderjs/integration-tests
 
+## 0.0.87
+
+### Patch Changes
+
+- Updated dependencies [817aa1c]
+  - @rudderjs/contracts@1.18.0
+
 ## 0.0.86
 
 ### Patch Changes
