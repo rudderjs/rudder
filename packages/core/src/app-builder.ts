@@ -506,11 +506,6 @@ export class RudderJS {
     // slower for ≤4 loaders and keeps the group context correct.
     for (const loader of this._loaders) await loader()
     if (this._app.isDevelopment()) this._printDevBootLog()
-    // Flush collected boot notices as one grouped block — after the provider
-    // tree (dev) or standalone (prod), but always printed so warnings aren't
-    // lost. Empty → nothing printed (a fully-configured app boots clean).
-    const notices = drainBootNotices()
-    if (notices.length > 0) console.warn('\n' + formatBootNotices(notices).join('\n'))
     if (hmrTrace) {
       console.log(`[hmr] reboot→ready ${(performance.now() - tStart).toFixed(1)}ms`)
       delete g['__rudderjs_hmr_t0__']
@@ -521,6 +516,14 @@ export class RudderJS {
     // Active line (like Vike's `➜ Local`): bright green arrow, bold "App".
     if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  \x1b[1mApp\x1b[22m is ready`)
     else console.log('[RudderJS] ready')
+    // Flush collected boot notices as a trailing footnote AFTER the ready line,
+    // so non-fatal notices sit at the bottom of the boot output rather than
+    // wedged above it. Always printed so warnings aren't lost; empty input
+    // prints nothing (a fully-configured app boots clean).
+    const notices = drainBootNotices()
+    // Trailing '\n' leaves one blank line after the block so per-request logs
+    // that follow don't butt right up against the last notice.
+    if (notices.length > 0) console.warn('\n' + formatBootNotices(notices).join('\n') + '\n')
   }
 
   /**

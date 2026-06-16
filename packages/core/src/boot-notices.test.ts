@@ -32,9 +32,9 @@ describe('boot notices', () => {
       { scope: 'auth', message: 'dev secret' },
     ]).map(stripAnsi)
     assert.equal(lines.length, 3, 'header + 2 rows')
-    assert.match(lines[0]!, /⚠ 2 notices/)
-    assert.match(lines[1]!, /• ai .*google skipped/)
-    assert.match(lines[2]!, /• auth .*dev secret/)
+    assert.match(lines[0]!, /▲ 2 notices/)
+    assert.match(lines[1]!, /→ ai .*google skipped/)
+    assert.match(lines[2]!, /→ auth .*dev secret/)
     // scope column is padded to the widest scope ('auth'), so the message
     // columns line up across rows.
     assert.equal(
@@ -46,6 +46,6 @@ describe('boot notices', () => {
 
   it('uses a singular header for a single notice', () => {
     const lines = formatBootNotices([{ scope: 'ai', message: 'x' }]).map(stripAnsi)
-    assert.match(lines[0]!, /⚠ 1 notice\b/)
+    assert.match(lines[0]!, /▲ 1 notice\b/)
   })
 })

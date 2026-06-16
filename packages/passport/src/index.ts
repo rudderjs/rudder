@@ -137,7 +137,7 @@ export function checkOAuthKeysAtBoot(opts: {
       `config('passport').requireKeys is set, so the app refuses to boot without OAuth signing keys.`,
     )
   }
-  return `${base} — token issuance and verification will fail until keys are present.`
+  return `${base}. Token issuance and verification will fail until keys are present.`
 }
 
 // ─── Service Provider ─────────────────────────────────────
