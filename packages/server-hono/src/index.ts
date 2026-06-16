@@ -227,6 +227,27 @@ export function devErrorPageEnabled(env: { APP_ENV?: string | undefined; NODE_EN
 }
 
 /**
+ * @internal — exposed for tests. Whether the per-request access log (the colored
+ * `#n PATH .... 12ms 200` line) is written. It is a **development affordance**:
+ * on by default only in a dev-like env (same gate as {@link devErrorPageEnabled}),
+ * off in production. A `console.log` per request is synchronous stdout I/O that
+ * caps throughput and, under stdout backpressure (a piped log sink), degrades into
+ * error-object formatting (`ErrnoException` + stack capture + `util.inspect`) — a
+ * dominant per-request cost a profile of a no-op route surfaces immediately.
+ * Force it on or off in any env with `RUDDER_REQUEST_LOG=1` / `=0`.
+ */
+export function requestLogEnabled(env: {
+  APP_ENV?: string | undefined
+  NODE_ENV?: string | undefined
+  RUDDER_REQUEST_LOG?: string | undefined
+}): boolean {
+  const flag = env.RUDDER_REQUEST_LOG
+  if (flag === '1' || flag === 'true') return true
+  if (flag === '0' || flag === 'false') return false
+  return devErrorPageEnabled(env)
+}
+
+/**
  * Read a request body as text, bounded to `limit` bytes. A declared
  * `Content-Length` over the limit is rejected BEFORE anything is buffered — the
  * realistic large-body attack — so it can't exhaust memory. A body with no (or a
@@ -446,6 +467,9 @@ function normalizeResponse(c: Context): AppResponse {
 
 const g     = globalThis as Record<string, unknown>
 const isTTY = process.stdout.isTTY ?? false
+// Per-request access logging is a dev affordance — gated off in production (see
+// requestLogEnabled). Captured once at module load; env does not change at runtime.
+const REQUEST_LOG = requestLogEnabled(process.env)
 
 function clr(code: string, s: string): string {
   return isTTY ? `\x1b[${code}m${s}\x1b[0m` : s
@@ -1196,7 +1220,9 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
             ? spaNavUrlStore.run(spaOriginalUrl, () => runWithRequest(perfId, () => app.fetch(actualRequest)))
             : runWithRequest(perfId, () => app.fetch(actualRequest))
 
-        const display = logPath(new URL(request.url).pathname)
+        // Skip the access-log path entirely when logging is off (production
+        // default): no URL parse, no logPath, no counter, no console.log.
+        const display = REQUEST_LOG ? logPath(new URL(request.url).pathname) : null
         if (display === null) {
           markBoundary(perfId, B.APP_FETCH_IN)
           const r = await fetchApp()
