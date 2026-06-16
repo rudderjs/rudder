@@ -64,6 +64,10 @@
       "import": "./dist/conversation-orm/index.js",
       "types": "./dist/conversation-orm/index.d.ts"
     },
+    "./gateway": {
+      "import": "./dist/gateway/index.js",
+      "types": "./dist/gateway/index.d.ts"
+    },
     "./memory-orm": {
       "import": "./dist/memory-orm/index.js",
       "types": "./dist/memory-orm/index.d.ts"
