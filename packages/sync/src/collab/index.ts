@@ -230,3 +230,11 @@ export function createCollabRoomAuth<User = unknown, Rec = unknown>(
     }
   }
 }
+
+// First-connect record seeding — the seeding counterpart to the auth builder.
+export {
+  createCollabRoomSeeder,
+  type CollabSeedResource,
+  type CollabSeedResourceResolver,
+  type CreateCollabRoomSeederOptions,
+} from './seed.js'
