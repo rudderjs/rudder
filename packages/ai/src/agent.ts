@@ -138,6 +138,14 @@ export interface SubAgentResumeOptions {
    * backpressure to the resume.
    */
   onUpdate?:            (update: SubAgentUpdate) => void | Promise<void>
+  /**
+   * Opaque correlation key for the streaming projector's `ctx` 2nd arg. Set
+   * internally by {@link Agent.resumeManyAsTool} from each request's `key` so a
+   * batch host's projector can route a raw {@link StreamChunk} to the right
+   * per-sub-agent channel. Not part of the public singular call surface.
+   * @internal
+   */
+  key?:                 string
 }
 
 // ─── Batch sub-agent resume (resumeManyAsTool) ───────────
@@ -682,8 +690,9 @@ export abstract class Agent {
     if (options.streaming) {
       const project: ChunkProjector = options.streaming === true ? defaultSubAgentProjector : options.streaming
       const { stream, response } = options.agent.stream('', promptOpts)
+      const ctx = { originalSubRunId: subRunId, ...(options.key !== undefined ? { key: options.key } : {}) }
       for await (const chunk of stream) {
-        const update = project(chunk)
+        const update = project(chunk, ctx)
         if (update && options.onUpdate) await options.onUpdate(update)
       }
       result = await response
@@ -780,6 +789,7 @@ export abstract class Agent {
         if (req.rejectedToolCallIds) opts.rejectedToolCallIds = req.rejectedToolCallIds
         // Thread the shared projector + correlate each update back to this item.
         if (options.streaming !== undefined) opts.streaming = options.streaming
+        if (req.key !== undefined) opts.key = req.key
         if (options.onUpdate) {
           const batchOnUpdate = options.onUpdate
           opts.onUpdate = (update) => batchOnUpdate(update, base)
@@ -831,8 +841,23 @@ export abstract class Agent {
  * Projects an inner-agent {@link StreamChunk} into a {@link SubAgentUpdate} the
  * host can render, or `null` to suppress it. Used by both {@link Agent.asTool}
  * (`streaming`) and the streaming resume path ({@link SubAgentResumeOptions.streaming}).
+ *
+ * On the resume paths the projector also receives a `ctx` 2nd arg carrying the
+ * originating sub-run's `originalSubRunId` (and the host `key` when batched via
+ * {@link Agent.resumeManyAsTool}), so a side-effect projector can fan a raw
+ * chunk out to the correct per-sub-agent channel and return `null`:
+ *
+ * ```ts
+ * streaming: (chunk, ctx) => { pumpToChannel(ctx!.originalSubRunId, chunk); return null }
+ * ```
+ *
+ * `ctx` is optional — {@link Agent.asTool}'s initial-dispatch path omits it, and
+ * existing projectors that ignore the arg are unaffected.
  */
-export type ChunkProjector = (chunk: StreamChunk) => SubAgentUpdate | null
+export type ChunkProjector = (
+  chunk: StreamChunk,
+  ctx?:  { originalSubRunId: string; key?: string },
+) => SubAgentUpdate | null
 
 /**
  * Default projection from inner-agent stream chunks to {@link SubAgentUpdate}
