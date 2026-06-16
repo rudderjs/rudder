@@ -91,3 +91,59 @@ registerDoctorCheck({
 
 // `deps:auth-views` moved to @rudderjs/auth/doctor in Phase 3 — it's a
 // package-specific concern that lives with the package that owns it.
+
+/** Merged dependencies + devDependencies key set. */
+function allDeps(pkg: AppPkg): Set<string> {
+  return new Set([
+    ...Object.keys(pkg.dependencies    ?? {}),
+    ...Object.keys(pkg.devDependencies ?? {}),
+  ])
+}
+
+registerDoctorCheck({
+  id:       'deps:single-orm-driver',
+  category: 'deps',
+  title:    'ORM driver',
+  run(): DoctorResult {
+    const pkg = readJsonSafe<AppPkg>('package.json')
+    if (!pkg) return { status: 'ok', message: 'package.json unreadable (skipped)' }
+    // Any `@rudderjs/orm-*` is an adapter (orm-prisma, orm-drizzle, …); the bare
+    // `@rudderjs/orm` / `@rudderjs/database` native engine is not prefixed `orm-`.
+    const drivers = [...allDeps(pkg)].filter(name => name.startsWith('@rudderjs/orm-'))
+    if (drivers.length <= 1) {
+      return { status: 'ok', message: drivers[0] ?? 'native engine' }
+    }
+    return {
+      status:  'warn',
+      message: `${drivers.length} ORM adapters installed (${drivers.join(', ')}) — one is selected silently`,
+      fix:     'Remove the unused adapter, or set DB_DRIVER (e.g. DB_DRIVER=prisma) / config("database.driver") to choose explicitly',
+    }
+  },
+})
+
+// The view scanner requires exactly one Vike renderer installed; two or more
+// makes it throw a cryptic "multi-renderer" error. Surface it as a clear,
+// actionable check. (vike-react-rsc-rudder is intentionally excluded — it is an
+// RSC variant that can legitimately sit alongside its base.)
+const VIKE_RENDERERS = ['vike-react', 'vike-vue', 'vike-solid'] as const
+
+registerDoctorCheck({
+  id:       'deps:single-vike-renderer',
+  category: 'deps',
+  title:    'Vike renderer',
+  run(): DoctorResult {
+    const pkg = readJsonSafe<AppPkg>('package.json')
+    if (!pkg) return { status: 'ok', message: 'package.json unreadable (skipped)' }
+    const deps  = allDeps(pkg)
+    const found = VIKE_RENDERERS.filter(r => deps.has(r))
+    if (found.length <= 1) {
+      return { status: 'ok', message: found[0] ?? 'none (vanilla / no controller views)' }
+    }
+    const toRemove = found.slice(1)
+    return {
+      status:  'error',
+      message: `${found.length} Vike renderers installed (${found.join(', ')}) — the view scanner needs exactly one`,
+      fix:     `Keep one and remove the rest, e.g. \`pnpm remove ${toRemove.join(' ')}\``,
+    }
+  },
+})

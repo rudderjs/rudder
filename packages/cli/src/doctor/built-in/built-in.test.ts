@@ -59,7 +59,7 @@ describe('built-in checks — golden path', () => {
     }))
     writeFile('pnpm-lock.yaml', '')
     writeFile('.env', 'APP_KEY=' + Buffer.alloc(32, 0xab).toString('base64') + '\nAPP_ENV=local\n')
-    writeFile('bootstrap/app.ts',       'Application.configure({}).create()')
+    writeFile('bootstrap/app.ts',       "import 'reflect-metadata'\nApplication.configure({}).create()")
     writeFile('bootstrap/providers.ts', 'export default []')
     writeFile('routes/web.ts',          'export default () => {}')
     writeFile('app/Views/Welcome.tsx',  'export default () => null')
@@ -404,5 +404,114 @@ describe('deps:version-skew', () => {
     writeInstalledPkg('@rudderjs/contracts', '1.15.2')
     const o = outcomeFor((await runChecks({})).outcomes, 'deps:version-skew')
     assert.equal(o.status, 'ok')
+  })
+})
+
+describe('structure:reflect-metadata', () => {
+  it('errors when bootstrap/app.ts does not import reflect-metadata', async () => {
+    writeFile('package.json', '{}')
+    writeFile('bootstrap/app.ts', 'Application.configure({}).create()')
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:reflect-metadata')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.fix)
+  })
+
+  it('passes when the import is present', async () => {
+    writeFile('package.json', '{}')
+    writeFile('bootstrap/app.ts', "import 'reflect-metadata'\nApplication.configure({}).create()")
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:reflect-metadata')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('skips (ok) when there is no bootstrap/app.ts', async () => {
+    writeFile('package.json', '{}')
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:reflect-metadata')
+    assert.strictEqual(o.status, 'ok')
+  })
+})
+
+describe('structure:tsconfig-decorators', () => {
+  it('passes when both flags are set directly', async () => {
+    writeFile('package.json', '{}')
+    writeFile('tsconfig.json', JSON.stringify({
+      compilerOptions: { experimentalDecorators: true, emitDecoratorMetadata: true },
+    }))
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:tsconfig-decorators')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('resolves flags inherited from an extended base (and tolerates JSONC comments)', async () => {
+    writeFile('package.json', '{}')
+    writeFile('tsconfig.base.json', JSON.stringify({
+      compilerOptions: { experimentalDecorators: true, emitDecoratorMetadata: true },
+    }))
+    writeFile('tsconfig.json', '{\n  // app config\n  "extends": "./tsconfig.base.json",\n  "compilerOptions": { "strict": true },\n}')
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:tsconfig-decorators')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('errors when the flags are missing across a fully-resolved chain', async () => {
+    writeFile('package.json', '{}')
+    writeFile('tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }))
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:tsconfig-decorators')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.message.includes('experimentalDecorators'))
+  })
+
+  it('warns (does not hard-error) when an extended tsconfig is unreadable', async () => {
+    writeFile('package.json', '{}')
+    writeFile('tsconfig.json', JSON.stringify({ extends: './missing-base.json', compilerOptions: {} }))
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:tsconfig-decorators')
+    assert.strictEqual(o.status, 'warn')
+  })
+
+  it('skips (ok) when there is no tsconfig.json', async () => {
+    writeFile('package.json', '{}')
+    const o = outcomeFor((await runChecks()).outcomes, 'structure:tsconfig-decorators')
+    assert.strictEqual(o.status, 'ok')
+  })
+})
+
+describe('deps:single-orm-driver', () => {
+  it('ok with a single adapter', async () => {
+    writeFile('package.json', JSON.stringify({ dependencies: { '@rudderjs/orm-prisma': '*' } }))
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-orm-driver')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('ok on the native engine (no orm-* adapter)', async () => {
+    writeFile('package.json', JSON.stringify({ dependencies: { '@rudderjs/orm': '*', '@rudderjs/database': '*' } }))
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-orm-driver')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('warns when two adapters are installed', async () => {
+    writeFile('package.json', JSON.stringify({
+      dependencies: { '@rudderjs/orm-prisma': '*' }, devDependencies: { '@rudderjs/orm-drizzle': '*' },
+    }))
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-orm-driver')
+    assert.strictEqual(o.status, 'warn')
+    assert.ok(o.fix && o.fix.includes('DB_DRIVER'))
+  })
+})
+
+describe('deps:single-vike-renderer', () => {
+  it('ok with one renderer', async () => {
+    writeFile('package.json', JSON.stringify({ dependencies: { 'vike-react': '*' } }))
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-vike-renderer')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('ok with none (vanilla)', async () => {
+    writeFile('package.json', '{}')
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-vike-renderer')
+    assert.strictEqual(o.status, 'ok')
+  })
+
+  it('errors with two renderers and names them in the fix', async () => {
+    writeFile('package.json', JSON.stringify({ dependencies: { 'vike-react': '*', 'vike-vue': '*' } }))
+    const o = outcomeFor((await runChecks()).outcomes, 'deps:single-vike-renderer')
+    assert.strictEqual(o.status, 'error')
+    assert.ok(o.fix && o.fix.includes('pnpm remove'))
   })
 })
