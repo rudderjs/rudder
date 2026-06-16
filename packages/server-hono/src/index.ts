@@ -339,6 +339,21 @@ function normalizeRequest(c: Context, trustProxy: boolean | number = false): App
     enumerable: true,
     configurable: true,
   })
+  // SPA-nav original URL + a boolean convenience, both backed by the per-request
+  // `spaNavUrlStore` ALS (NOT a client header) so they're unforgeable. The store
+  // is populated only when the outer fetch handler rewrote a controller-view
+  // `.pageContext.json` request, so these read `undefined`/`false` for any direct
+  // request. Supported replacement for the removed `x-rudder-original-url` header.
+  Object.defineProperty(req, 'spaNavUrl', {
+    get: () => spaNavUrlStore.getStore(),
+    enumerable: true,
+    configurable: true,
+  })
+  Object.defineProperty(req, 'isPageContextRequest', {
+    get: () => spaNavUrlStore.getStore() !== undefined,
+    enumerable: true,
+    configurable: true,
+  })
   attachInputAccessors(req)
   return req as unknown as AppRequest
 }

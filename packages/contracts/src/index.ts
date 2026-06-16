@@ -854,6 +854,27 @@ export interface AppRequest {
    */
   ip?: string
 
+  /**
+   * When this request is a Vike client-router SPA navigation that the server
+   * adapter rewrote (`/<path>/index.pageContext.json` → `/<path>` for a
+   * controller-view route), this is the ORIGINAL `.pageContext.json` URL;
+   * `undefined` for direct (non-rewritten) requests.
+   *
+   * Non-forgeable: the adapter sets it from a per-request `AsyncLocalStorage`,
+   * not a client header, so a direct client cannot inject it. This is the
+   * supported replacement for the removed `x-rudder-original-url` header —
+   * guard/policy middleware reads it to return a Vike-parseable JSON envelope
+   * for SPA fetches but a real `302`/HTML for top-level navigations.
+   */
+  spaNavUrl?: string
+
+  /**
+   * `true` when {@link spaNavUrl} is set (a rewritten Vike pageContext fetch),
+   * `false`/`undefined` otherwise. Convenience boolean for middleware that only
+   * needs to branch on "is this an SPA-nav pageContext request" without the URL.
+   */
+  isPageContextRequest?: boolean
+
   // user?, session?, token? are intentionally absent from this base interface.
   // Each is declared via module augmentation in its owning package:
   //   user?    → @rudderjs/auth   (AuthUser)
