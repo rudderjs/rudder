@@ -164,7 +164,11 @@ export function createCollabRoomSeeder<Rec = unknown>(
   const mapName = opts.mapName ?? DEFAULT_MAP_NAME
   const origin = opts.origin ?? DEFAULT_ORIGIN
 
-  return async (docName: string, doc: Y.Doc): Promise<void> => {
+  return async (
+    docName: string,
+    doc: Y.Doc,
+    _ctx: { firstClient: unknown; persistence: unknown },
+  ): Promise<void> => {
     const parsed = parseRoom(docName)
     if (!parsed) return
 

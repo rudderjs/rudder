@@ -5,7 +5,8 @@ import * as Y from 'yjs'
 import { composeRoomId } from '../index.js'
 import { createCollabRoomSeeder, type CollabSeedResource } from './index.js'
 
-// onFirstConnect's ctx is unused by the seeder; pass a minimal stub.
+// onFirstConnect's ctx is unused by the seeder; pass a minimal stub to match
+// the handler's arity.
 const CTX = { firstClient: {} as never, persistence: {} as never }
 
 /** A duck-typed seed resource backed by an in-memory record table. */
