@@ -232,6 +232,44 @@ if (turn.awaiting === 'client_tools') runClientTools(turn.pendingClientTools)
 
 The reducer is exposed as `applyAgentSseEvent(event, data, turn, callbacks)` for unit-testing event handling without a live stream. App-specific events (conversation ids, billing, sub-run fan-out) are not part of this protocol — emit and decode those on your own channel alongside it.
 
+### React client (`useAgentRun`)
+
+`@rudderjs/ai/react` wraps `readAgentStream` in a hook so a component doesn't hand-roll the same state machine — driving the stream, accumulating a transcript, tracking status, and surfacing pending client-tool calls and approval gates. React lives behind the subpath; the main `@rudderjs/ai` entry stays runtime-agnostic (same split as `@rudderjs/sync/react`).
+
+```tsx
+import { useAgentRun } from '@rudderjs/ai/react'
+
+function Chat() {
+  const { status, outputs, run, pendingApproval, approve, reject } = useAgentRun({
+    // The app owns the endpoint + body shape — only your route can rebuild the
+    // server-side message history from a resume intent.
+    request: (req, signal) =>
+      fetch('/api/agent', { method: 'POST', body: JSON.stringify(req), signal }),
+    // Optional: auto-execute client tools in the browser and resume.
+    clientTools: (call) => runLocalTool(call.name, call.arguments),
+  })
+
+  return (
+    <>
+      {outputs.map((o, i) => <Entry key={i} output={o} />)}
+      {pendingApproval && (
+        <Confirm
+          onYes={() => approve(pendingApproval.toolCall.id)}
+          onNo={() => reject(pendingApproval.toolCall.id)}
+        />
+      )}
+      <button disabled={status === 'running'} onClick={() => run('Summarize the latest report')}>
+        Ask
+      </button>
+    </>
+  )
+}
+```
+
+The hook returns `status` (`idle` / `running` / `complete` / `error`), the `outputs` transcript (text, tool calls/results, `approval_request`, handoffs), `pendingClientTools`, `pendingApproval`, and `error`, plus imperative `run` / `respond` / `approve` / `reject` / `reset`. While paused awaiting client tools (no resolver) or an approval decision, `status` stays `running` and the matching `pending*` field is populated until you resume. With a `clientTools` resolver, client-tool pauses auto-resume; approval gates always wait for an explicit `approve` / `reject`.
+
+The state machine and stream driver are exported framework-free for non-React use or tests: `driveAgentRun(initial, opts)`, `executeClientTools(calls, resolver)`, and the `appendAgentOutput(outputs, event, data)` transcript reducer.
+
 ## Cancellation
 
 Pass an `AbortSignal` to cancel an in-flight run. The signal is honored at iteration boundaries and forwarded to the provider adapter so the underlying network request is also cancelled. When the signal aborts, `prompt()` rejects (and `stream()`'s `response` promise rejects) with the signal's reason:
