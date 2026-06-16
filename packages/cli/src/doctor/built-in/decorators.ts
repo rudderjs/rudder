@@ -96,8 +96,13 @@ function resolveDecoratorFlags(startFile: string): {
 
   const visit = (absFile: string, depth: number): void => {
     if (depth > 10) { fullyResolved = false; return }
-    let text: string | null = null
-    try { text = fs.readFileSync(absFile, 'utf-8') } catch { fullyResolved = false; return }
+    let text: string
+    try {
+      text = fs.readFileSync(absFile, 'utf-8')
+    } catch {
+      fullyResolved = false
+      return
+    }
     const cfg = parseJsonc<TsConfig>(text)
     if (!cfg) { fullyResolved = false; return }
 
