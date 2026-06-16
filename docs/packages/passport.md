@@ -58,6 +58,42 @@ The legacy single-mount `registerPassportRoutes(router)` still works for single-
 
 > **POST `/oauth/authorize` is CSRF-protected.** Mount `CsrfMiddleware()` on the entire `web` group (`m.web(CsrfMiddleware())` in `withMiddleware`) — that covers it along with every other state-changing web route. Don't also pass `[CsrfMiddleware()]` via `authorizeMiddleware`; double-mounting emits duplicate `Set-Cookie`s on GETs.
 
+## Key validation at boot
+
+By default, `PassportProvider` warns when no RSA keypair is found at boot and continues starting. The server comes up, but every `/oauth/*` request fails at runtime when a grant tries to sign or verify a token.
+
+For production deployments that depend on OAuth, enable fail-fast mode with `requireKeys`:
+
+```ts
+// config/passport.ts
+export default {
+  scopes: { read: 'Read access', write: 'Write access' },
+  requireKeys: true,   // refuse to boot when keys are missing
+} satisfies PassportConfig
+```
+
+| `requireKeys` | Missing keys behavior |
+|---|---|
+| `false` (default) | Boot succeeds; a notice is logged via `bootNotice`. Token issuance fails at runtime. |
+| `true` | Boot throws, refusing to start. The error names the expected `keyPath` and the `rudder passport:keys` command. |
+
+> **`requireKeys: true` is the recommended production setting.** A deployment that starts without keys silently issues tokens that no client can verify. Failing fast at boot is a far better failure mode than a running server that 500s every token request.
+
+`checkOAuthKeysAtBoot()` is exported from `@rudderjs/passport` for apps that need a custom boot-time check outside the provider lifecycle — for example, when loading keys from a secrets manager in `AppServiceProvider.boot()`:
+
+```ts
+import { checkOAuthKeysAtBoot, Passport } from '@rudderjs/passport'
+
+// Inside AppServiceProvider.boot(), after loading keys from a secrets manager:
+const warning = checkOAuthKeysAtBoot({
+  keysAvailable: await Passport.keysAvailable(),
+  requireKeys:   true,
+  keyPath:       Passport.keyPath(),
+})
+// Returns null when keys are present; throws when requireKeys is true and keys are missing.
+// Returns a warning string when requireKeys is false and keys are missing.
+```
+
 ## Protecting API routes
 
 `RequireBearer()` validates the JWT signature, expiration, and revocation. Pair it with `scope(...)` (AND — every listed scope required) or `scopeAny(...)` (OR — at least one):
