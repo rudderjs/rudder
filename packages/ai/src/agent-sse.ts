@@ -273,6 +273,10 @@ export interface AgentStreamCallbacks {
   onHandoff?:              (handoff: AgentSseHandoffPayload) => void
   onComplete?:             (data: AgentSseCompletePayload) => void
   onError?:                (error: AgentSseErrorPayload) => void
+  /** Fired for any SSE event outside the standard protocol vocabulary. Use this
+   *  to observe app-specific events (e.g. a server-issued `run_started` carrying
+   *  a `runId`) without consuming the response body twice. */
+  onAppEvent?:             (event: string, data: unknown) => void
 }
 
 function randomId(): string {
@@ -399,5 +403,7 @@ export function applyAgentSseEvent(
       callbacks.onError?.(d)
       return
     }
+    default:
+      callbacks.onAppEvent?.(event, data)
   }
 }
