@@ -1,5 +1,16 @@
 # create-rudder
 
+## 1.10.4
+
+### Patch Changes
+
+- 3f5cf5a: feat(create-rudder): scaffolded AppServiceProvider logs via bootLine()
+
+  The generated `AppServiceProvider.boot()` now calls `bootLine(\`${this.app.name} ready\`)`instead of a raw`console.log(\`[AppServiceProvider] booted ...\`)`. `bootLine()`(from`@rudderjs/core`) prints a Vike-style `➜` line in dev that sits with the framework's startup banner, and degrades to a plain line in production, so a freshly scaffolded app's boot output is consistent with the rest of the framework instead of an out-of-place bracketed debug print.
+
+- Updated dependencies [a48a97a]
+  - @rudderjs/auth@6.7.1
+
 ## 1.10.3
 
 ### Patch Changes
