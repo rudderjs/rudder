@@ -135,6 +135,7 @@ export default defineConfig({
             { text: 'AI',             link: '/guide/ai' },
             { text: 'Vector Stores',  link: '/guide/vector-stores' },
             { text: 'Computer-use',   link: '/guide/computer-use' },
+            { text: 'Custom Gateway', link: '/guide/custom-gateway-provider' },
             { text: 'Boost',          link: '/packages/boost' },
           ],
         },

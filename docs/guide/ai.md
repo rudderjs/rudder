@@ -43,6 +43,8 @@ Models are always `provider/model`. A bare model name throws.
 
 The provider is auto-discovered.
 
+Behind an LLM gateway or proxy? If it's OpenAI- or Anthropic-compatible, just set `baseUrl` on the matching driver. If it speaks its own wire format, subclass `HttpGatewayAdapter` — see [Custom Gateway Provider](./custom-gateway-provider).
+
 ## Runtime compatibility
 
 `@rudderjs/ai` works in any `fetch`-capable JS runtime — Node, browser, Electron (main and renderer), React Native. The main entry has zero `node:*` static imports.
