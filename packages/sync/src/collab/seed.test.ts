@@ -131,6 +131,21 @@ describe('createCollabRoomSeeder', () => {
     })
   })
 
+  it('routes seed values through a resource\'s field bindings', async () => {
+    const resource: CollabSeedResource<{ title: string; body: string; tags: string[] }> = {
+      find: () => ({ title: 'Hi', body: 'Body text', tags: ['x', 'y'] }),
+      seed: (r) => ({ title: r.title, body: r.body, tags: r.tags }),
+      fields: { body: 'text', tags: 'array' },
+    }
+    const seed = createCollabRoomSeeder({ resources: { posts: resource } })
+    const doc = new Y.Doc()
+    await seed(composeRoomId(['posts', '42']), doc, CTX)
+
+    assert.equal(doc.getMap('fields').get('title'), 'Hi') // unbound → scalar
+    assert.equal(doc.getText('body').toString(), 'Body text') // text share
+    assert.deepEqual(doc.getArray('tags').toJSON(), ['x', 'y']) // array share
+  })
+
   it('supports a function resolver with recordId/docName routing', async () => {
     const seen: Array<{ resource: string; recordId: string; docName: string }> = []
     const seed = createCollabRoomSeeder({

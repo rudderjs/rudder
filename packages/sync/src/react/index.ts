@@ -14,7 +14,15 @@
 
 export { useCollabRoom }                        from './useCollabRoom.js'
 export { useCollabSeed, useCollabSeedText }     from './useCollabSeed.js'
+export { useCollabField, FIELD_WRITE_ORIGIN }   from './useCollabField.js'
 export { CollabRoomManager }                    from './CollabRoomManager.js'
+
+export type {
+  CollabFieldType,
+  CollabFieldBinding,
+  CollabValueFieldType,
+  CollabValueBinding,
+}                              from '../collab/bindings.js'
 
 export {
   collabColorFromSeed,
