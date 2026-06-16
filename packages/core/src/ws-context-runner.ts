@@ -77,7 +77,7 @@ export function synthesizeRequest(rawReq: IncomingMessage): AppRequest {
 
 /**
  * A throwaway `AppResponse` for the upgrade path. There is no HTTP response, so
- * status/header/json/send/redirect are no-ops and any Set-Cookie the session
+ * status/header/json/send/redirect/intended are no-ops and any Set-Cookie the session
  * middleware writes (a new-session cookie, or a redis TTL refresh) is discarded.
  *
  * `raw` is a `HonoContextLike`-compatible sink: `session.save()` reads `res.raw`,
@@ -92,6 +92,7 @@ export function makeThrowawayResponse(): AppResponse {
     json() { /* discarded — no HTTP response on an upgrade */ },
     send() { /* discarded */ },
     redirect() { /* discarded */ },
+    intended() { /* discarded */ },
     raw: { header() { /* Set-Cookie sink */ } },
   }
   return res

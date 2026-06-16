@@ -30,6 +30,7 @@ const res: AppResponse = {
   json()     {},
   send()     {},
   redirect() {},
+  intended() {},
   raw:       null,
 }
 

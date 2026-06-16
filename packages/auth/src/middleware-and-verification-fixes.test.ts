@@ -92,6 +92,7 @@ function makeRes() {
     json(data)  { jsonBody = data },
     send()      {},
     redirect()  {},
+    intended()  {},
     raw:        null,
   }
   return { res, getStatus: () => statusCode, getJson: () => jsonBody }
