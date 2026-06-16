@@ -108,6 +108,11 @@ export {
 export type { PauseForClientToolsChunk, PauseForApprovalChunk } from './tool.js'
 export { zodToJsonSchema } from './zod-to-json-schema.js'
 
+// Scoped / multi-capability tools — collapse a discriminated union of
+// capability branches into one flat function-call schema.
+export { scopedTool, capability, flattenCapabilities, ScopedToolError } from './scoped-tool.js'
+export type { ScopedToolOptions, ScopedCapability, FlatPlan } from './scoped-tool.js'
+
 // Handoffs
 export { handoff, isHandoffTool } from './handoff.js'
 export type { HandoffTool, HandoffOptions, HandoffSpec } from './handoff.js'
