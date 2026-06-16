@@ -85,6 +85,18 @@ export interface SubAgentRunStore {
    * replayed `subRunId` must not return data twice.
    */
   consume(subRunId: string): Promise<SubAgentRunSnapshot | null>
+  /**
+   * Non-destructive read. Returns the snapshot without deleting it, or
+   * `null` if the id is unknown or the snapshot has expired. Optional —
+   * for hosts that need a **validate-then-resume** pre-flight: inspect a
+   * paused snapshot's `meta` (ownership, resource-context, tool-result
+   * coverage) before handing the id to {@link Agent.resumeAsTool} /
+   * {@link Agent.resumeManyAsTool}, which own the single {@link consume}.
+   * The resume paths never call this — so a `load` then resume reads the
+   * snapshot once for validation and consumes it once on resume, with no
+   * `consume` then re-`store` round-trip. Mirrors {@link AgentRunStore.load}.
+   */
+  load?(subRunId: string): Promise<SubAgentRunSnapshot | null>
 }
 
 // ─── In-memory ─────────────────────────────────────────────
@@ -106,6 +118,10 @@ export class InMemorySubAgentRunStore implements SubAgentRunStore {
     if (!snapshot) return null
     this.snapshots.delete(subRunId)
     return snapshot
+  }
+
+  async load(subRunId: string): Promise<SubAgentRunSnapshot | null> {
+    return this.snapshots.get(subRunId) ?? null
   }
 
   /** Test helper — clears all snapshots without consuming. */
@@ -197,5 +213,10 @@ export class CachedSubAgentRunStore implements SubAgentRunStore {
     if (!snapshot) return null
     await cache.forget(key)
     return snapshot
+  }
+
+  async load(subRunId: string): Promise<SubAgentRunSnapshot | null> {
+    const cache = await this.getCache()
+    return cache.get<SubAgentRunSnapshot>(this.keyPrefix + subRunId)
   }
 }
