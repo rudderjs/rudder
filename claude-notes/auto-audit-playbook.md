@@ -163,11 +163,16 @@ Do NOT set an assignee on filed issues (leave it empty).
 
 ## 9. Severity to priority & rotation seeding
 
-| Severity | Priority label |
-|---|---|
-| high (security/data-loss/auth) | `priority:p1` |
-| medium | `priority:p2` |
-| low | `priority:p2` (no p3 label exists; keep p2) |
+**Calibrate severity honestly, do NOT inflate.** Priority is only useful if `p1` is rare. Most
+findings are `low` or `medium`. Reserve `high` for things that are genuinely dangerous or broken.
+Expect the majority of docs/tests/quality findings to be `low`; `p1` is the exception, not the
+default.
+
+| Severity | Means | Priority label |
+|---|---|---|
+| **high** | Exploitable security hole, data loss, auth bypass, or a correctness bug that breaks a documented public API for real inputs. | `priority:p1` |
+| **medium** | A real bug on a less-common path, a missing test for a known-fragile area, or a wrong/misleading doc that would cause a user error. | `priority:p2` |
+| **low** | Docs gaps/clarity, nice-to-have tests, mechanical dedup, minor DX. The default for most findings. | `priority:p3` |
 
 **Rotation seed order** (most security/blast-radius-sensitive first, so the riskiest surface is
 covered earliest in the very first cycle):

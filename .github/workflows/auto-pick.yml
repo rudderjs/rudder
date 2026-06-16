@@ -1,0 +1,59 @@
+name: auto-pick
+
+# Daily scheduler: picks the single highest-priority IN-SCOPE open audit issue and labels it
+# `bot:fix`. That label (applied via the Rudder Bot app token, which CAN trigger workflows,
+# unlike the default GITHUB_TOKEN) fires .github/workflows/auto-fix.yml, which opens the fix PR.
+#
+# In scope = audit:docs / audit:tests / audit:quality (the fix-bot's mechanical/safe scope).
+# Security / parity / dx are intentionally never auto-picked; label those by hand.
+# Idempotent: issues already carrying `bot:fix` are skipped, so nothing is picked twice.
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC daily (1h after the audit at 06:00)
+  workflow_dispatch: {}    # allow a manual pick
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-pick
+  cancel-in-progress: false
+
+jobs:
+  pick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint Rudder Bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RUDDER_BOT_APP_ID }}
+          private-key: ${{ secrets.RUDDER_BOT_PRIVATE_KEY }}
+
+      - name: Pick top in-scope issue and label it
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          set -euo pipefail
+          num=$(gh issue list -R rudderjs/rudder --state open --label audit:auto --limit 100 \
+            --json number,labels,createdAt --jq '
+              [ .[]
+                | (.labels | map(.name)) as $n
+                | select( ($n|index("audit:docs")) or ($n|index("audit:tests")) or ($n|index("audit:quality")) )
+                | select( ($n|index("bot:fix")) | not )
+                | { number,
+                    prio: (if ($n|index("priority:p1")) then 1 elif ($n|index("priority:p2")) then 2 else 3 end),
+                    createdAt }
+              ] | sort_by(.prio, .createdAt) | (.[0].number // empty) ')
+
+          if [ -z "${num}" ]; then
+            echo "No eligible in-scope audit issue to pick. Nothing to do."
+            exit 0
+          fi
+
+          echo "Picking issue #${num} for the fix-bot."
+          gh issue edit "${num}" -R rudderjs/rudder --add-label "bot:fix"
+          gh issue comment "${num}" -R rudderjs/rudder \
+            --body "Auto-picked by the daily fix-bot scheduler. Rudder Bot will open a fix PR shortly."
