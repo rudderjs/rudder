@@ -197,6 +197,41 @@ Chunk types: `text-delta`, `tool-call`, `tool-update` (per-yield progress from s
 
 For Vercel AI SDK / `useChat()` interop, convert via `toVercelResponse(stream)` from `@rudderjs/ai`.
 
+### Server-Sent Events (named-event protocol)
+
+When you want a plain `text/event-stream` with self-describing event names (rather than the Vercel numeric-prefix wire), `@rudderjs/ai` ships a matched pair so the wire vocabulary can never drift between server and browser.
+
+On the server, return `toAgentSseResponse(agent.stream(...))` straight from a route handler:
+
+```ts
+import { toAgentSseResponse } from '@rudderjs/ai'
+
+router.post('/chat', (req) => {
+  const streaming = agent('You are a helpful assistant.').stream(req.body.message)
+  return toAgentSseResponse(streaming)   // text/event-stream Response
+})
+```
+
+It emits one named event per loop chunk — `text`, `tool_call`, `tool_update`, `tool_result`, `pending_client_tools`, `tool_approval_required`, `handoff` — then a terminal `complete` event carrying `{ done, finishReason, awaiting, steps, usage }` (or an `error` event if the run throws). `awaiting` is `'client_tools'` or `'approval'` when the loop paused.
+
+In the browser, `readAgentStream(response, callbacks?)` decodes those events back into an accumulated `AgentStreamTurn` and fires per-event callbacks:
+
+```ts
+import { readAgentStream } from '@rudderjs/ai'
+
+const resp = await fetch('/chat', { method: 'POST', body: JSON.stringify({ message }) })
+if (!resp.ok) throw new Error(await resp.text())   // caller owns the error branch
+
+const turn = await readAgentStream(resp, {
+  onText: (t) => appendToBubble(t),
+  onToolCall: (c) => showToolChip(c.tool),
+})
+
+if (turn.awaiting === 'client_tools') runClientTools(turn.pendingClientTools)
+```
+
+The reducer is exposed as `applyAgentSseEvent(event, data, turn, callbacks)` for unit-testing event handling without a live stream. App-specific events (conversation ids, billing, sub-run fan-out) are not part of this protocol — emit and decode those on your own channel alongside it.
+
 ## Cancellation
 
 Pass an `AbortSignal` to cancel an in-flight run. The signal is honored at iteration boundaries and forwarded to the provider adapter so the underlying network request is also cancelled. When the signal aborts, `prompt()` rejects (and `stream()`'s `response` promise rejects) with the signal's reason:

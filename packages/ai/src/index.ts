@@ -193,6 +193,29 @@ export { WebSearch, WebFetch, CodeExecution } from './provider-tools.js'
 // Vercel AI Protocol
 export { toVercelDataStream, toVercelResponse } from './vercel-protocol.js'
 
+export {
+  toAgentSseStream,
+  toAgentSseResponse,
+  readAgentStream,
+  applyAgentSseEvent,
+  newAgentStreamTurn,
+} from './agent-sse.js'
+export type {
+  AgentSseEventName,
+  AgentAwaiting,
+  AgentSseTextPayload,
+  AgentSseToolCallPayload,
+  AgentSseToolUpdatePayload,
+  AgentSseToolResultPayload,
+  AgentSsePendingClientToolsPayload,
+  AgentSseApprovalPayload,
+  AgentSseHandoffPayload,
+  AgentSseCompletePayload,
+  AgentSseErrorPayload,
+  AgentStreamTurn,
+  AgentStreamCallbacks,
+} from './agent-sse.js'
+
 // Reranking
 export { Reranker } from './rerank.js'
 
