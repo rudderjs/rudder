@@ -1,0 +1,81 @@
+name: auto-fix
+
+# On-demand fix-bot: runs Claude Code headless as the Rudder Bot GitHub App to fix ONE audit
+# issue and open a PR for review. Manual dispatch for now (pass the issue number). Mechanical/
+# safe scope only. Logic lives in .github/auto-fix-prompt.md. Never auto-merges.
+#
+# Prerequisite: the Rudder Bot app needs Contents: Read & write and Pull requests: Read & write
+# (in addition to Issues: Read & write), with the new permissions accepted on the installation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number to fix (e.g. 1224)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-fix-${{ github.event.inputs.issue }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # Mint the bot token BEFORE checkout so the checkout (and thus git push) uses it,
+      # making the branch + commits + PR all authored by Rudder Bot.
+      - name: Mint Rudder Bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RUDDER_BOT_APP_ID }}
+          private-key: ${{ secrets.RUDDER_BOT_PRIVATE_KEY }}
+
+      - name: Checkout (as Rudder Bot)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure bot git identity
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          slug="${{ steps.bot.outputs.app-slug }}"
+          uid=$(gh api "/users/${slug}[bot]" --jq '.id')
+          git config --global user.name "${slug}[bot]"
+          git config --global user.email "${uid}+${slug}[bot]@users.noreply.github.com"
+          echo "Committing as ${slug}[bot] <${uid}+${slug}[bot]@users.noreply.github.com>"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run fix-bot
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue }}
+        run: |
+          claude -p "$(cat .github/auto-fix-prompt.md)" \
+            --allowedTools "Bash,Read,Grep,Glob,Edit,Write,Task,WebSearch,WebFetch" \
+            --permission-mode bypassPermissions \
+            --max-turns 150 \
+            --model claude-sonnet-4-6 \
+            --verbose
