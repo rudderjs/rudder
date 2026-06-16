@@ -59,9 +59,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-13 — added the three committed `.vscode/`
-  // scaffolder files (launch.json / extensions.json / settings.json), so the
-  // F5-debuggable-out-of-the-box DX win. +3 files, +1558 bytes.
+  // Baseline last captured 2026-06-16: scaffolded AppServiceProvider.boot()
+  // now logs via bootLine() instead of a raw console.log, for a startup line
+  // consistent with the framework banner. -17 bytes, same file set.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +71,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 51440
-const EXPECTED_CONTENT_HASH = 'ac04ddd418eb836870431f165e3ad9825687b876673505051c8b1e678dd36dd2'
+const EXPECTED_TOTAL_BYTES = 51423
+const EXPECTED_CONTENT_HASH = '5bda3dd3b3a20f667c9bf523dc9ec143f8826c70d14b124ee9ee967e423274e6'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
