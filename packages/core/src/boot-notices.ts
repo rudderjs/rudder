@@ -48,7 +48,6 @@ export function drainBootNotices(): BootNotice[] {
 const c = {
   dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
   yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
-  cyan:   (s: string) => `\x1b[36m${s}\x1b[0m`,
 }
 
 /**
@@ -61,9 +60,9 @@ const c = {
 export function formatBootNotices(notices: BootNotice[]): string[] {
   if (notices.length === 0) return []
   const width = Math.max(...notices.map(n => n.scope.length))
-  const lines = [`  ${c.cyan('ℹ')} ${notices.length} notice${notices.length === 1 ? '' : 's'}`]
+  const lines = [`  ${c.yellow('▲')} ${notices.length} notice${notices.length === 1 ? '' : 's'}`]
   for (const n of notices) {
-    lines.push(`   ${c.dim('•')} ${c.yellow(n.scope.padEnd(width))}  ${n.message}`)
+    lines.push(`   ${c.yellow('→')} ${c.yellow(n.scope.padEnd(width))}  ${n.message}`)
   }
   return lines
 }
