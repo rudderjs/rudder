@@ -418,6 +418,7 @@ describe('Router.bind() — route model binding', () => {
       json() {},
       send() {},
       redirect() {},
+      intended() {},
       raw: null,
     }
   }
@@ -944,6 +945,7 @@ describe('RouteBuilder.missing()', () => {
       json(data) { (this as unknown as { _json: unknown })._json = data },
       send(data) { (this as unknown as { _send: string })._send = data },
       redirect() {},
+      intended() {},
       raw: { res: undefined as Response | undefined },
     }
     return r
