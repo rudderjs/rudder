@@ -521,7 +521,9 @@ export class RudderJS {
     // wedged above it. Always printed so warnings aren't lost; empty input
     // prints nothing (a fully-configured app boots clean).
     const notices = drainBootNotices()
-    if (notices.length > 0) console.warn('\n' + formatBootNotices(notices).join('\n'))
+    // Trailing '\n' leaves one blank line after the block so per-request logs
+    // that follow don't butt right up against the last notice.
+    if (notices.length > 0) console.warn('\n' + formatBootNotices(notices).join('\n') + '\n')
   }
 
   /**
