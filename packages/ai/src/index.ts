@@ -134,6 +134,7 @@ export { Output, type OutputWrapper } from './output.js'
 
 // Conversation
 export { MemoryConversationStore } from './conversation.js'
+export { sanitizeConversation } from './sanitize-conversation.js'
 export {
   validateContinuation,
   assertValidContinuation,

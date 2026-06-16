@@ -631,6 +631,17 @@ setConversationStore(new OrmConversationStore())
 
 It stores two tables (`AiConversation` + `AiConversationMessage`). Copy the schema from the exported `conversationOrmPrismaSchema` into your Prisma schema, add an equivalent native migration, or define + register the matching Drizzle tables. (Need a different backend, like Redis or an external service? Implement the `ConversationStore` interface directly; it is five methods.)
 
+`OrmConversationStore.load()` runs the persisted history through `sanitizeConversation()` first. A thread interrupted mid-turn (a crash after the assistant row landed but before its tool-result rows) would otherwise replay into a provider `400` (a dangling `tool_use` on Anthropic, an orphan `role:'tool'` on OpenAI-compatible providers). The sanitizer drops the incomplete turns so any loaded history is replay-safe. It is a pure, idempotent function exported from `@rudderjs/ai` directly, so a custom `ConversationStore` (Redis, external service) can apply the same guard in its own `load()`:
+
+```ts
+import { sanitizeConversation } from '@rudderjs/ai'
+
+async load(conversationId: string) {
+  const messages = await this.readFromBackend(conversationId)
+  return sanitizeConversation(messages)
+}
+```
+
 ### Auto-persist (`conversational()`)
 
 For chat-style agents, threading `forUser()` through every call site is a footgun — forget it once and the conversation silently doesn't persist. Override `conversational()` on the agent class to auto-load + auto-save without each caller passing the user id:
