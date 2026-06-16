@@ -15,6 +15,7 @@
 export { useCollabRoom }                        from './useCollabRoom.js'
 export { useCollabSeed, useCollabSeedText }     from './useCollabSeed.js'
 export { useCollabField, FIELD_WRITE_ORIGIN }   from './useCollabField.js'
+export { useCollabRows, ROW_WRITE_ORIGIN }      from './useCollabRows.js'
 export { CollabRoomManager }                    from './CollabRoomManager.js'
 
 export type {
@@ -23,6 +24,9 @@ export type {
   CollabValueFieldType,
   CollabValueBinding,
 }                              from '../collab/bindings.js'
+
+export type { CollabRowsApi }  from './useCollabRows.js'
+export type { CollabRow }      from '../collab/rows.js'
 
 export {
   collabColorFromSeed,

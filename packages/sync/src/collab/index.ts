@@ -247,3 +247,21 @@ export {
   type CollabValueFieldType,
   type CollabValueBinding,
 } from './bindings.js'
+
+// Row-array bindings — array-of-records collab with stable identity + reorder.
+export {
+  ROW_DATA_MAP,
+  ROW_ORDER_MAP,
+  newRowId,
+  readRows,
+  readRow,
+  addRow,
+  removeRow,
+  moveRow,
+  setRowField,
+  updateRow,
+  seedRows,
+  observeRows,
+  type CollabRow,
+  type RowMutateOptions,
+} from './rows.js'

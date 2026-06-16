@@ -291,6 +291,69 @@ function PostForm({ id }: { id: string }) {
 
 The setter returns `false` when the validator rejects the value (the write never reaches the CRDT), so a form can surface the rejection. `useCollabField` handles the **value-shaped** share types — `scalar`, `array`, `map`. Collaborative-string (`text`) fields merge per-keystroke and bind through an editor instead (`useCollabSeedText` + a `Y.Text` editor binding); passing a `'text'` binding to `useCollabField` is a compile error.
 
+## Row arrays: repeatable rows with stable identity
+
+The `array` field binding above backs a flat list of **scalars** (a tag list) with one `Y.Array`. An **array of records** (a repeater, an editable table, a list of objects) needs more: each row wants a stable identity that survives concurrent edits, and a clean reorder. Yjs has no native move on `Y.Array`, and the usual delete-then-insert workaround on an array of objects throws away the moved row's per-field merge history. So a **row-array binding** keeps data and order in separate shares:
+
+| Share       | Shape                                                    | Holds |
+|-------------|----------------------------------------------------------|-------|
+| `row-data`  | `Y.Map<arrayName, Y.Map<rowId, Y.Map<field, value>>>`    | each row's fields, keyed by a stable id |
+| `row-order` | `Y.Map<arrayName, Y.Array<rowId>>`                       | the row sequence |
+
+A row's id is a generated UUID for a fresh row, or a DB primary key you pass in. The row map is attached once and **never moves**: a reorder only deletes+inserts the plain `rowId` string in the order array, which is lossless because the row's data stays put. Non-text field values use whole-value LWW. Both shares live in the same `Y.Doc` as your field bindings (under distinct top-level roots), so they persist over the same transport with no schema or server change.
+
+### Server / framework-free primitives
+
+`@rudderjs/sync/collab` exposes the primitives: a plain `Y.Doc` in, plain rows out, no React, no ORM:
+
+```ts
+import { addRow, moveRow, removeRow, readRows, seedRows } from '@rudderjs/sync/collab'
+import { Sync } from '@rudderjs/sync'
+
+const doc = await Sync.load('invoices:42')
+
+// Seed once (idempotent, gated on the order array still being empty):
+seedRows(doc, 'lineItems', [{ id: 'pk-1', sku: 'A', qty: 2 }])
+
+const id = addRow(doc, 'lineItems', { sku: 'B', qty: 1 })  // → stable id (UUID)
+moveRow(doc, 'lineItems', id, 0)                           // order-only, lossless
+removeRow(doc, 'lineItems', 'pk-1')
+
+readRows(doc, 'lineItems')   // → [{ id, sku, qty }, …] in order
+```
+
+Companion primitives: `readRow`, `setRowField` / `updateRow` (whole-value LWW), `observeRows`, and `newRowId`.
+
+### Binding rows on the client
+
+`@rudderjs/sync/react` exposes `useCollabRows`, the row counterpart to `useCollabField`. It reads the rows in order, re-renders when a peer adds / removes / reorders a row or edits any field, and returns a referentially-stable mutation API:
+
+```tsx
+import { useCollabRoom, useCollabRows } from '@rudderjs/sync/react'
+
+function LineItems({ id }: { id: string }) {
+  const room = useCollabRoom(`invoices:${id}`)
+  const [rows, items] = useCollabRows<{ sku: string; qty: number }>(room, 'lineItems')
+
+  return (
+    <>
+      {rows.map((r) => (
+        <tr key={r.id}>
+          <td><input value={r.sku} onChange={(e) => items.setField(r.id, 'sku', e.target.value)} /></td>
+          <td><input type="number" value={r.qty} onChange={(e) => items.setField(r.id, 'qty', +e.target.value)} /></td>
+          <td><button onClick={() => items.remove(r.id)}>×</button></td>
+        </tr>
+      ))}
+      <button onClick={() => items.add({ sku: '', qty: 1 })}>Add row</button>
+    </>
+  )
+}
+```
+
+The `key={r.id}` is the point: because the id is stable, React keeps each row's DOM (and its caret / focus) across a reorder, and a peer's concurrent field edit lands on the right row even while another peer is moving it. Until the room resolves, `rows` is `[]` and the mutation API is a set of no-ops.
+
+> **Text inside a row.** `useCollabRows` carries non-text values (whole-value LWW). A per-row rich-text field that should merge keystroke-by-keystroke is a renderer choice: keep its text leaves in a dedicated `Y.Text` keyed by the row id and bind it through an editor adapter, exactly as a top-level `text` field does.
+
 ## Editor adapters
 
 The core `@rudderjs/sync` package handles transport and persistence. For server-side mutations against editor-specific document shapes (rich-text trees, structured documents), import an adapter from the matching subpath:
