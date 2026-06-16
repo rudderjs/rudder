@@ -1,5 +1,23 @@
 # @rudderjs/cli
 
+## 4.18.0
+
+### Minor Changes
+
+- 1a6a9f8: feat(doctor): add four preflight checks for common setup cliffs
+
+  `rudder doctor` gains four fast-path (no-boot) checks that catch misconfigurations which otherwise fail late with cryptic runtime errors:
+
+  - **`structure:reflect-metadata`** — errors when `bootstrap/app.ts` does not `import 'reflect-metadata'` (DI and decorators silently break without it).
+  - **`structure:tsconfig-decorators`** — verifies `experimentalDecorators` and `emitDecoratorMetadata` are enabled, resolving the `extends` chain (JSONC-tolerant). Warns rather than errors when an extended tsconfig can't be read.
+  - **`deps:single-orm-driver`** — warns when more than one `@rudderjs/orm-*` adapter is installed (one is selected silently); points to `DB_DRIVER` / `config('database.driver')`.
+  - **`deps:single-vike-renderer`** — errors when more than one Vike renderer (`vike-react` / `vike-vue` / `vike-solid`) is installed (the view scanner needs exactly one), with the exact `pnpm remove` command to fix it.
+
+### Patch Changes
+
+- Updated dependencies [a48a97a]
+  - @rudderjs/core@1.13.1
+
 ## 4.17.1
 
 ### Patch Changes

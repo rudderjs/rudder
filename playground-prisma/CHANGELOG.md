@@ -1,5 +1,19 @@
 # rudderjs-playground
 
+## 0.0.162
+
+### Patch Changes
+
+- Updated dependencies [a48a97a]
+- Updated dependencies [ba9e629]
+- Updated dependencies [8968835]
+  - @rudderjs/core@1.13.1
+  - @rudderjs/ai@1.16.0
+  - @rudderjs/auth@6.7.1
+  - @rudderjs/passport@2.0.5
+  - @rudderjs/contracts@1.19.0
+  - @rudderjs/server-hono@1.10.0
+
 ## 0.0.161
 
 ### Patch Changes
