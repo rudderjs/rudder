@@ -42,6 +42,7 @@
  */
 
 import { Model } from '@rudderjs/orm'
+import { sanitizeConversation } from '../sanitize-conversation.js'
 import type {
   AiMessage,
   ConversationStore,
@@ -117,7 +118,10 @@ export class OrmConversationStore implements ConversationStore {
       .where('conversationId', conversationId)
       .orderBy('position', 'ASC')
       .get() as unknown as AiConversationMessageRecord[]
-    return rows.map(rowToMessage)
+    // A thread persisted mid-turn (crash between the assistant row and its
+    // tool-result rows) would otherwise replay into a provider 400. Drop the
+    // incomplete turns at the load boundary so the history is replay-safe.
+    return sanitizeConversation(rows.map(rowToMessage))
   }
 
   async append(conversationId: string, messages: AiMessage[]): Promise<void> {
