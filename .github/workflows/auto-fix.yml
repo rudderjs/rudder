@@ -1,8 +1,12 @@
 name: auto-fix
 
 # On-demand fix-bot: runs Claude Code headless as the Rudder Bot GitHub App to fix ONE audit
-# issue and open a PR for review. Manual dispatch for now (pass the issue number). Mechanical/
-# safe scope only. Logic lives in .github/auto-fix-prompt.md. Never auto-merges.
+# issue and open a PR for review. Mechanical/safe scope only. Logic lives in
+# .github/auto-fix-prompt.md. Never auto-merges.
+#
+# Two ways to start it:
+#   - Add the `bot:fix` label to an issue (easy path: it fires automatically on that issue).
+#   - Actions > auto-fix > Run workflow, passing the issue number (manual fallback).
 #
 # Prerequisite: the Rudder Bot app needs Contents: Read & write and Pull requests: Read & write
 # (in addition to Issues: Read & write), with the new permissions accepted on the installation.
@@ -14,18 +18,24 @@ on:
         description: "Issue number to fix (e.g. 1224)"
         required: true
         type: string
+  issues:
+    types: [labeled]
 
 permissions:
   contents: read
 
 concurrency:
-  group: auto-fix-${{ github.event.inputs.issue }}
+  group: auto-fix-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.issue || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   fix:
+    # Manual dispatch always runs; the label trigger runs ONLY for the `bot:fix` label.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'bot:fix' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.issue || github.event.issue.number }}
     steps:
       # Mint the bot token BEFORE checkout so the checkout (and thus git push) uses it,
       # making the branch + commits + PR all authored by Rudder Bot.
@@ -71,7 +81,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ steps.bot.outputs.token }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue }}
+          # ISSUE_NUMBER comes from job-level env (handles both dispatch and label triggers).
         run: |
           claude -p "$(cat .github/auto-fix-prompt.md)" \
             --allowedTools "Bash,Read,Grep,Glob,Edit,Write,Task,WebSearch,WebFetch" \
