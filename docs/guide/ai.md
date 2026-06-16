@@ -144,6 +144,40 @@ class CounterAgent extends Agent {
 
 **Client tools** — omit `.server()` and the loop pauses, surfacing the call as `pendingClientToolCalls` on the response so the browser can execute it and resume. See the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai) for the resume protocol.
 
+### Scoped tools — one tool, many capabilities
+
+Function-calling APIs (OpenAI, DeepSeek, others) don't reliably honor a top-level `oneOf` in a tool's input schema, so a tool that exposes several distinct "capabilities" can't be modeled cleanly as a discriminated union. `scopedTool(...)` collapses N named capability branches into **one flat function-call schema** with a `sub_tool` discriminator enum, then dispatches to the right branch at call time:
+
+```ts
+import { scopedTool, capability } from '@rudderjs/ai'
+import { z } from 'zod'
+
+const search = scopedTool({
+  name:        'search',
+  description: 'Run a search across one of several engines.',
+  capabilities: {
+    web: capability({
+      description: 'Web results',
+      input:       z.object({ query: z.string(), page: z.number().optional() }),
+      handler:     async ({ query }) => webSearch(query),
+    }),
+    images: capability({
+      description: 'Image results',
+      input:       z.object({ query: z.string(), safe: z.boolean() }),
+      handler:     async ({ query, safe }) => imageSearch(query, safe),
+    }),
+  },
+})
+```
+
+The generated schema is a single object: the discriminator (`sub_tool: 'web' | 'images'`) plus the **union of every branch's fields**. A field is top-level `required` only when **every** branch requires it (here `query`); fields that belong to a subset of branches (here `safe`) are optional at the top level and annotated with the capabilities that use them — and the chosen branch's required fields are validated **in code** before its handler runs. An unknown or disabled discriminator value is rejected with a clear error the model can correct on its next step.
+
+- `capability({ input, handler, description? })` infers each branch's input type so the `handler` parameter is typed without annotation. Handlers may be plain async functions or `async function*` generators (which stream `tool-update` chunks, exactly like `.server()`).
+- `discriminator` overrides the field name (default `'sub_tool'`).
+- `allow: ['web']` exposes only a subset of declared capabilities — both the enum and the runtime dispatch honor it (per-plan gating).
+
+`scopedTool(...)` returns a normal server tool, so it drops straight into an agent's `tools()` array alongside `toolDefinition(...)` tools.
+
 ## Hosted vector stores & RAG
 
 `fileSearch({ stores })` is a first-class agent tool for retrieval-augmented generation backed by a provider-hosted vector store. The provider runs ingestion, chunking, embedding, and search server-side; the model invokes the native tool block (OpenAI's `file_search` or Gemini's `fileSearch`) and the results land inline in the assistant reply — no tool round-trip, no `execute` to write.
