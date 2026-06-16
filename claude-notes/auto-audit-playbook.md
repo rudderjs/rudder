@@ -53,8 +53,8 @@ by label (`audit:tracker`), never by a hardcoded issue number.
    scoped to the chosen package directory and returning structured findings (section 5).
 4. **Dedup + cap**: for each finding, run the section 6 gate. Drop duplicates and anything past
    the cap.
-5. **File issues**: create the survivors with the section 7 template, the section 8 labels, AND
-   assigned to `suliemandev`.
+5. **File issues**: create the survivors with the section 7 template and the section 8 labels.
+   Do NOT set an assignee (leave it empty).
 6. **Update the tracker**: set the row's `Last audited` to today (pass the date in via
    `date -u +%Y-%m-%d`; the agent's clock may be unavailable), `Last findings` to the count filed,
    `Dimensions clean` to the dimensions that produced zero filed issues.
@@ -119,7 +119,7 @@ recoverable next cycle; noise erodes trust in the whole system.
 **Title:** `[<pkg-short>] <dimension>: <specific summary>`
 (e.g. `[passport] security: scope check skipped when token has no audience claim`)
 
-**Assignee:** `suliemandev` (always).
+**Assignee:** none (leave empty).
 
 **Body:**
 ```markdown
@@ -145,7 +145,7 @@ recoverable next cycle; noise erodes trust in the whole system.
 
 ---
 
-## 8. Labels & assignee
+## 8. Labels
 
 Every filed issue gets, at minimum:
 
@@ -154,7 +154,8 @@ Every filed issue gets, at minimum:
   `audit:quality` | `audit:dx`.
 - `area:<pkg>` (the package area label).
 - A priority from the severity map (section 9).
-- **Assignee `suliemandev`** on every filed issue (`gh issue create ... --assignee suliemandev`).
+
+Do NOT set an assignee on filed issues (leave it empty).
 
 `audit:tracker` is reserved for the single rotation tracker issue; never put it on a finding.
 

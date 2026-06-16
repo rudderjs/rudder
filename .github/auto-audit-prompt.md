@@ -10,8 +10,7 @@ Environment notes:
   lose the analysis).
 
 Two standing rules:
-- Every issue you file MUST be assigned to `suliemandev`
-  (`gh issue create ... --assignee suliemandev`) in addition to its labels.
+- Do NOT assign filed issues to anyone (leave the assignee empty).
 - NEVER use the em-dash character in any issue title, body, or comment. Use a regular
   hyphen, a colon, parentheses, or rephrase.
 
@@ -29,7 +28,7 @@ Steps:
 5. Dedup and cap per playbook section 6 (search all-time `audit:auto` issues; skip open
    duplicates and issues closed within 90 days; max 2 per dimension, 12 per run).
 6. File the surviving issues with the playbook section 7 title/body template and section 8
-   labels (`audit:auto` + dimension + `area:<pkg>` + priority) AND assigned to `suliemandev`.
+   labels (`audit:auto` + dimension + `area:<pkg>` + priority). Do not set an assignee.
 7. Update that package's row in the tracker via `gh issue edit` (set Last audited to today's
    date from `date -u +%Y-%m-%d`, Last findings to the count filed, Dimensions clean to the
    dimensions that produced zero filed issues).
