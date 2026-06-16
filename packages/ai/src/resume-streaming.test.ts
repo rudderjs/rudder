@@ -187,6 +187,50 @@ describe('Agent.resumeManyAsTool — streaming projector', () => {
     assert.ok(forTwo.every(t => t.originalSubRunId === 'r2' && t.tool === 'echo'))
   })
 
+  it('passes correlation ctx to a side-effect projector so every raw chunk self-identifies', async () => {
+    await seedPause(runStore, 'r1', 'c1')
+    await seedPause(runStore, 'r2', 'c2')
+    // Serial → r1 fully (echo x:'a'), then r2 (echo x:'b'); the echo arg lets us
+    // map a raw tool-call chunk back to the sub-agent it came from.
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 's1', name: 'echo', arguments: { x: 'a' } }] }, // r1 step 0
+      { text: 'r1 done' },                                                // r1 step 1
+      { toolCalls: [{ id: 's2', name: 'echo', arguments: { x: 'b' } }] }, // r2 step 0
+      { text: 'r2 done' },                                                // r2 step 1
+    ])
+
+    // A pure side-effect projector: fans the raw chunk to a per-sub-agent channel
+    // using ctx.originalSubRunId, returns null (so onUpdate never fires).
+    const channels: Record<string, Array<{ type: string; arg?: unknown }>> = {}
+    let onUpdateCalls = 0
+    const batch = await Agent.resumeManyAsTool(
+      [
+        { subRunId: 'r1', agent: new Sub(), clientToolResults: [{ toolCallId: 'c1', result: 'a' }], key: 'one' },
+        { subRunId: 'r2', agent: new Sub(), clientToolResults: [{ toolCallId: 'c2', result: 'b' }], key: 'two' },
+      ],
+      {
+        runStore,
+        concurrency: 'serial',
+        streaming:   (chunk, ctx) => {
+          assert.ok(ctx, 'projector received no correlation ctx')
+          const list = (channels[ctx.originalSubRunId] ??= [])
+          list.push({ type: chunk.type, arg: chunk.type === 'tool-call' ? chunk.toolCall?.arguments?.x : undefined })
+          return null
+        },
+        onUpdate:    () => { onUpdateCalls++ },
+      },
+    )
+
+    assert.equal(batch.allCompleted, true)
+    assert.equal(onUpdateCalls, 0, 'a null-returning projector must not fire onUpdate')
+
+    // Every chunk landed in exactly its own sub-agent's channel.
+    assert.deepEqual(Object.keys(channels).sort(), ['r1', 'r2'])
+    const argsFor = (id: string) => channels[id]!.filter(c => c.type === 'tool-call').map(c => c.arg)
+    assert.ok(argsFor('r1').includes('a') && !argsFor('r1').includes('b'), 'r1 channel leaked a foreign chunk')
+    assert.ok(argsFor('r2').includes('b') && !argsFor('r2').includes('a'), 'r2 channel leaked a foreign chunk')
+  })
+
   it('does not stream when streaming is unset (back-compat) — onUpdate never fires', async () => {
     await seedPause(runStore, 'r1', 'c1')
     fake.respondWith('done')
