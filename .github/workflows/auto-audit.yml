@@ -51,13 +51,13 @@ jobs:
 
       - name: Run auto-audit
         env:
-          # Claude Code auth: populate EITHER of these as a repo secret.
-          #   - CLAUDE_CODE_OAUTH_TOKEN: uses a Claude Pro/Max subscription (no per-token cost).
-          #     Generate locally with `claude setup-token`.
-          #   - ANTHROPIC_API_KEY: pay-per-token from console.anthropic.com.
-          # The CLI uses whichever is set (OAuth token takes precedence).
+          # Claude Code auth via a Claude Max subscription (no per-token cost).
+          # Generated locally with `claude setup-token`, stored as a repo secret.
+          # Do NOT also set an empty ANTHROPIC_API_KEY here: when present (even empty)
+          # the CLI prefers it over the OAuth token and fails with 401.
+          # To switch to pay-per-token instead, replace this line with
+          #   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # GitHub auth for every `gh` call Claude runs: the Rudder Bot installation token.
           GH_TOKEN: ${{ steps.bot.outputs.token }}
         run: |
