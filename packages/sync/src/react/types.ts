@@ -54,4 +54,16 @@ export interface UseCollabRoomOptions {
    * before the hook (illegal under Rules of Hooks).
    */
   enabled?: boolean
+
+  /**
+   * Fired once if the server rejects the WS upgrade with an auth-denied close
+   * code (4401/4403 from the `onAuth` gate). The hook stops reconnecting and
+   * returns `null` (the room is treated as nonexistent, so collab fields fall
+   * back to plain editing); this callback lets the UI distinguish "denied"
+   * from "still connecting" — e.g. to show a "sign in to collaborate" notice.
+   *
+   * The callback reference is read live, so an inline closure doesn't
+   * re-trigger the connection effect.
+   */
+  onDenied?: () => void
 }
