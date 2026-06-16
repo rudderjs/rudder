@@ -36,9 +36,23 @@ overrides:
   # (isServerEntryOutsideOfCwd) that we previously carried as a local patch.
   '@brillout/vite-plugin-server-entry': 0.7.19
   '@types/node': 20.19.35
-  hono: ^4.12.4
-  protobufjs@7: ^7.6.1
+  # GHSA: CORS wildcard-with-credentials (high) + 4 medium, fixed in 4.12.25.
+  hono: ^4.12.25
+  protobufjs@7: ^7.6.3
   protobufjs@8: ^8.4.2
+  # GHSA: vite `server.fs.deny` bypass on Windows (high) + launch-editor NTLM
+  # disclosure, fixed in 7.3.5 / 8.0.16. Scoped per-major: the 7.x copy under
+  # @rudderjs/docs and the 8.x copy the framework runs both clear.
+  vite@7: ^7.3.5
+  vite@8: ^8.0.16
+  # GHSA: form-data CRLF injection (high), fixed in 4.0.6.
+  form-data: ^4.0.6
+  # GHSA: OTel core unbounded W3C Baggage allocation, fixed in 2.8.0.
+  '@opentelemetry/core': ^2.8.0
+  # GHSA: js-yaml quadratic-complexity DoS in merge-key handling, fixed in 4.2.0.
+  js-yaml@4: ^4.2.0
+  # GHSA: @babel/core arbitrary file read via sourceMappingURL, fixed in 7.29.6.
+  '@babel/core': ^7.29.6
   '@google/genai>ws': ^8.21.0
   express>qs: ^6.15.2
   postcss: ^8.5.10
