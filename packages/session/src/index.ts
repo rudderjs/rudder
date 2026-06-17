@@ -546,14 +546,19 @@ export function resolveSessionSecret(configured: string | undefined): string {
 // (same key → same symbol; an import would add a version floor for no gain).
 const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
 
-let _duplicateInstallWarned = false
-
 export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
   // Resolve the effective signing secret once (boot time): a placeholder/empty
   // SESSION_SECRET falls back to APP_KEY rather than signing with a public
   // constant. See resolveSessionSecret().
   const resolvedSecret = resolveSessionSecret(config.secret)
   const driver = makeDriver(resolvedSecret === config.secret ? config : { ...config, secret: resolvedSecret })
+
+  // Scoped to this closure so each sessionMiddleware() call (e.g. a new
+  // SessionProvider boot during HMR) starts with a fresh flag. A module-level
+  // flag would suppress the warning permanently after the first hit, making
+  // re-introduced misconfigurations invisible across HMR re-boots and causing
+  // duplicate-install tests to be order-dependent.
+  let _duplicateInstallWarned = false
 
   const fn = async function SessionMiddleware(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
     // An outer sessionMiddleware already ran on this request — the canonical
