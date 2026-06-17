@@ -21,8 +21,15 @@ That freedom comes with discipline:
 Defer (comment on the issue explaining why, then STOP, do NOT push) when:
 - The issue is not actionable as a code change (a question, a discussion, needs a product/design
   decision, or is too vague to fix safely).
+- **The issue is multi-part** (it bundles several distinct changes, e.g. "N gaps", a checklist, or
+  several separate features/fixes). Do NOT implement them all in one PR. Defer with a comment
+  recommending it be split into one issue per change, so each can become a focused, reviewable PR.
+- **The issue is `size:m` or larger** (`size:m` / `size:l`, or clearly a multi-day / large change
+  even if unlabeled). These are too big for one safe autonomous change. Defer to a human.
 - The fix would be large, sprawling, or architectural, or you cannot get a clean, minimal,
   test-passing change. A skipped issue is fine; a wrong or sprawling PR is not.
+
+Only proceed when the issue is a single, focused, `size:s`-scale change.
 
 ## Steps
 1. `gh issue view "$ISSUE_NUMBER" -R rudderjs/rudder --json number,title,body,labels` and read it.
