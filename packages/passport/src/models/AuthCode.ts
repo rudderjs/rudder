@@ -1,4 +1,5 @@
 import { Model } from '@rudderjs/orm'
+import { isExpiredAt } from './helpers.js'
 
 export class AuthCode extends Model {
   // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
@@ -46,7 +47,7 @@ export class AuthCode extends Model {
 
   /** Whether this auth code has expired. */
   isExpired(): boolean {
-    return new Date(this.expiresAt).getTime() <= Date.now()
+    return isExpiredAt(this.expiresAt)
   }
 
   /** Whether PKCE was used. */

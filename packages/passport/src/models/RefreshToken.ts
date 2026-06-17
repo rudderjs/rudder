@@ -1,4 +1,5 @@
 import { Model } from '@rudderjs/orm'
+import { isExpiredAt } from './helpers.js'
 
 export class RefreshToken extends Model {
   // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
@@ -36,6 +37,6 @@ export class RefreshToken extends Model {
 
   /** Whether this token has expired. */
   isExpired(): boolean {
-    return new Date(this.expiresAt).getTime() <= Date.now()
+    return isExpiredAt(this.expiresAt)
   }
 }
