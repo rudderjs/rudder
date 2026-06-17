@@ -21,9 +21,15 @@ on:
 permissions:
   contents: read
 
+# Serialize runs per PR but DON'T cancel superseded ones. A PR open quickly
+# followed by label adds fires `opened` + several `labeled` events; with
+# cancel-in-progress the superseded runs are CANCELLED, and a cancelled run
+# renders as a red ✗ on the PR/commit even though the job only ever skips for
+# non-bot:review PRs. Queue instead of cancel so those no-op runs finish as a
+# neutral `skipped` rather than a misleading failure.
 concurrency:
   group: auto-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:
