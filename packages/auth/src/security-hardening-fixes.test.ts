@@ -106,6 +106,28 @@ describe('EloquentUserProvider — empty stored password hash is rejected', () =
     const user = toAuthenticatable({ id: '1', email: 'john@x.com', password: '$2b$04$real' })
     assert.strictEqual(await provider.validateCredentials(user, { password: 'secret' }), true)
   })
+
+  it('getAuthPassword() returns null (not "") for a NULL/absent password column (#1237)', async () => {
+    // The semantic distinction must survive: a third-party provider that checks
+    // `hashed.length > 0` would treat a coerced "" as a present-but-empty hash.
+    assert.strictEqual(toAuthenticatable({ id: '9', email: 'oauth@x.com', password: null }).getAuthPassword(), null)
+    assert.strictEqual(toAuthenticatable({ id: '9', email: 'oauth@x.com' }).getAuthPassword(), null)
+    // A genuine hash passes through unchanged.
+    assert.strictEqual(toAuthenticatable({ id: '1', password: '$2b$04$real' }).getAuthPassword(), '$2b$04$real')
+  })
+
+  it('rejects a NULL-password row even when the hasher would say true (#1237)', async () => {
+    const checked: Array<[string, string]> = []
+    const spyCheck = async (plain: string, hashed: string) => { checked.push([plain, hashed]); return true }
+    const provider = new EloquentUserProvider(fakeModel([]), spyCheck)
+
+    const passwordless = toAuthenticatable({ id: '9', email: 'oauth@x.com', password: null })
+    const result = await provider.validateCredentials(passwordless, { password: 'anything' })
+
+    assert.strictEqual(result, false, 'a NULL-password row must never authenticate by password')
+    assert.equal(checked.length, 1, 'a dummy verify must still run to keep timing flat')
+    assert.ok(checked[0]![1].length > 0, 'the dummy verify must use a non-empty hash, not the absent stored one')
+  })
 })
 
 // ─── PasswordBroker: a successful reset cycles the remember token ─────────────

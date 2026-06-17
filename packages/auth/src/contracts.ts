@@ -2,7 +2,14 @@
 
 export interface Authenticatable {
   getAuthIdentifier(): string
-  getAuthPassword(): string
+  /**
+   * The stored password hash, or `null` when the account has no usable
+   * password (OAuth-only / SSO / invited-not-yet-set rows where the column is
+   * NULL). Returns `null` — never the empty string — so "no password set"
+   * stays distinguishable from "password is the empty string" and a caller
+   * can't feed an empty hash to the verifier and fail open.
+   */
+  getAuthPassword(): string | null
   getRememberToken(): string | null
   setRememberToken(token: string): void
   /**
