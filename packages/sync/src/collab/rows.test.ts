@@ -6,12 +6,15 @@ import {
   ROW_DATA_MAP,
   ROW_ORDER_MAP,
   addRow,
+  ensureRowArray,
   moveRow,
   newRowId,
+  observeRowChanges,
   observeRows,
   readRow,
   readRows,
   removeRow,
+  renameRow,
   seedRows,
   setRowField,
   updateRow,
@@ -220,6 +223,194 @@ describe('observeRows', () => {
     addRow(doc, 'late', { name: 'x' })
     assert.equal(last, 1)
     stop()
+  })
+})
+
+describe('ensureRowArray', () => {
+  it('pre-allocates both shares without adding any rows', () => {
+    const doc = new Y.Doc()
+    ensureRowArray(doc, 'items')
+    assert.ok(doc.getMap(ROW_ORDER_MAP).has('items'), 'order share created')
+    assert.ok(doc.getMap(ROW_DATA_MAP).has('items'), 'data share created')
+    assert.deepEqual(readRows(doc, 'items'), [])
+  })
+
+  it('is idempotent — calling twice leaves the array empty', () => {
+    const doc = new Y.Doc()
+    ensureRowArray(doc, 'items')
+    ensureRowArray(doc, 'items')
+    assert.deepEqual(readRows(doc, 'items'), [])
+  })
+
+  it('does not interfere with a subsequent addRow', () => {
+    const doc = new Y.Doc()
+    ensureRowArray(doc, 'items')
+    const id = addRow(doc, 'items', { name: 'x' })
+    assert.deepEqual(ids(doc, 'items'), [id])
+  })
+})
+
+describe('renameRow', () => {
+  it('moves the row to a new id at the same position, clearing the old key', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const b = addRow(doc, 'rows', { name: 'b' })
+    assert.equal(renameRow(doc, 'rows', a, 'pk-a'), true)
+    assert.deepEqual(ids(doc), ['pk-a', b])
+    assert.deepEqual(readRow(doc, 'rows', 'pk-a'), { id: 'pk-a', name: 'a' })
+    assert.equal(readRow(doc, 'rows', a), undefined)
+    assert.equal(rawData(doc).has(a), false)
+  })
+
+  it('no-ops on oldId === newId', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    assert.equal(renameRow(doc, 'rows', a, a), false)
+    assert.deepEqual(ids(doc), [a])
+  })
+
+  it('no-ops when oldId is unknown', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    assert.equal(renameRow(doc, 'rows', 'nope', 'pk-nope'), false)
+    assert.deepEqual(ids(doc), [a])
+  })
+
+  it('no-ops (fail-safe) when newId already exists', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const b = addRow(doc, 'rows', { name: 'b' })
+    assert.equal(renameRow(doc, 'rows', a, b), false)
+    assert.deepEqual(ids(doc), [a, b])
+  })
+
+  it('preserves all field values in the cloned row map', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { x: 1, y: 'two', z: null })
+    renameRow(doc, 'rows', a, 'pk-1')
+    assert.deepEqual(readRow(doc, 'rows', 'pk-1'), { id: 'pk-1', x: 1, y: 'two', z: null })
+  })
+})
+
+describe('readRows / readRow with idKey', () => {
+  it('projects the stable id under a custom key', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const rows = readRows<{ name: string }, '__id'>(doc, 'rows', { idKey: '__id' })
+    assert.equal(rows[0]!['__id'], a)
+    assert.equal(rows[0]!.name, 'a')
+    // default key not present
+    assert.equal(Object.prototype.hasOwnProperty.call(rows[0], 'id'), false)
+  })
+
+  it('readRow with idKey stamps the custom key', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const row = readRow<{ name: string }, '__id'>(doc, 'rows', a, { idKey: '__id' })
+    assert.equal(row!['__id'], a)
+  })
+})
+
+describe('addRow / seedRows mirrorId', () => {
+  it('addRow with mirrorId:true stores the id inside the row map', () => {
+    const doc = new Y.Doc()
+    const id = addRow(doc, 'rows', { name: 'a' }, { mirrorId: true })
+    const raw = rawData(doc).get(id)
+    assert.equal(raw!.get('id'), id)
+    // readRows also sees it in the values
+    assert.equal(readRows(doc, 'rows')[0]!.id, id)
+  })
+
+  it('addRow with mirrorId + custom idKey stores under that key', () => {
+    const doc = new Y.Doc()
+    const id = addRow(doc, 'rows', { name: 'a' }, { mirrorId: true, idKey: '__id' })
+    const raw = rawData(doc).get(id)
+    assert.equal(raw!.get('__id'), id)
+    assert.equal(raw!.has('id'), false)
+  })
+
+  it('seedRows with mirrorId:true stores each id in its row map', () => {
+    const doc = new Y.Doc()
+    const seeded = seedRows(doc, 'rows', [{ id: 'r1', name: 'a' }, { name: 'b' }], { mirrorId: true })
+    assert.equal(rawData(doc).get('r1')!.get('id'), 'r1')
+    assert.equal(rawData(doc).get(seeded[1]!)!.get('id'), seeded[1])
+  })
+})
+
+describe('observeRowChanges', () => {
+  it('emits add with index and values on addRow', () => {
+    const doc = new Y.Doc()
+    const events: unknown[] = []
+    const stop = observeRowChanges<{ name: string }>(doc, 'rows', (e) => events.push(e))
+    const id = addRow(doc, 'rows', { name: 'hello' })
+    stop()
+    assert.deepEqual(events, [{ kind: 'add', rowId: id, index: 0, values: { name: 'hello' } }])
+  })
+
+  it('emits remove with index on removeRow', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const b = addRow(doc, 'rows', { name: 'b' })
+    const events: unknown[] = []
+    const stop = observeRowChanges(doc, 'rows', (e) => events.push(e))
+    removeRow(doc, 'rows', a)
+    stop()
+    assert.deepEqual(events, [{ kind: 'remove', rowId: a, index: 0 }])
+    void b
+  })
+
+  it('coalesces a delete+insert of the same id into a move', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    addRow(doc, 'rows', { name: 'b' })
+    addRow(doc, 'rows', { name: 'c' })
+    const events: unknown[] = []
+    const stop = observeRowChanges(doc, 'rows', (e) => events.push(e))
+    moveRow(doc, 'rows', a, 2)
+    stop()
+    assert.deepEqual(events, [{ kind: 'move', rowId: a, from: 0, to: 2 }])
+  })
+
+  it('emits remove (not move) when the data map is also gone', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    addRow(doc, 'rows', { name: 'b' })
+    const events: unknown[] = []
+    const stop = observeRowChanges(doc, 'rows', (e) => events.push(e))
+    removeRow(doc, 'rows', a)
+    stop()
+    assert.equal((events[0] as { kind: string }).kind, 'remove')
+  })
+
+  it('emits add for the lazily-created array (no prior subscription)', () => {
+    const doc = new Y.Doc()
+    let last: unknown
+    const stop = observeRowChanges<{ x: number }>(doc, 'late', (e) => { last = e })
+    addRow(doc, 'late', { x: 42 })
+    assert.ok(last && (last as { kind: string }).kind === 'add', 'add event emitted')
+    assert.equal((last as { values: { x: number } }).values.x, 42)
+    stop()
+  })
+
+  it('unsubscribe stops further events', () => {
+    const doc = new Y.Doc()
+    const events: unknown[] = []
+    const stop = observeRowChanges(doc, 'rows', (e) => events.push(e))
+    addRow(doc, 'rows', { name: 'a' })
+    const count = events.length
+    stop()
+    addRow(doc, 'rows', { name: 'b' })
+    assert.equal(events.length, count)
+  })
+
+  it('does not fire on field edits (field changes are not row lifecycle events)', () => {
+    const doc = new Y.Doc()
+    const a = addRow(doc, 'rows', { name: 'a' })
+    const events: unknown[] = []
+    const stop = observeRowChanges(doc, 'rows', (e) => events.push(e))
+    setRowField(doc, 'rows', a, 'name', 'A')
+    stop()
+    assert.deepEqual(events, [])
   })
 })
 

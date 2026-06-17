@@ -37,17 +37,43 @@ export const ROW_DATA_MAP = 'row-data'
 export const ROW_ORDER_MAP = 'row-order'
 
 /**
- * A row read out of the CRDT: its stable `id` plus the plain-JS projection of its
- * field map. `id` is reserved — a field literally named `id` on the row map is
- * shadowed by the row's stable id in the returned object.
+ * A row read out of the CRDT: its stable id (under `K`, defaults to `'id'`) plus
+ * the plain-JS projection of its field map. The key `K` is reserved — a field
+ * literally named `K` on the row map is shadowed by the row's stable id.
  */
-export type CollabRow<T = Record<string, unknown>> = T & { id: string }
+export type CollabRow<T = Record<string, unknown>, K extends string = 'id'> = T & { [P in K]: string }
 
 /** Options shared by the mutating primitives — tag the transaction with `origin`. */
 export interface RowMutateOptions {
   /** Transaction origin, so observers can filter framework-originated writes. */
   origin?: unknown
 }
+
+/** Options for read primitives that project a stable identity field. */
+export interface ReadRowsOptions<K extends string = 'id'> {
+  /**
+   * Project the row's stable id under this key instead of the default `'id'`.
+   * Useful for renderers that reserve a different field name (e.g. `'__id'`).
+   * Does not affect storage — only the projected plain-JS output.
+   * Default: `'id'`.
+   */
+  idKey?: K
+}
+
+/**
+ * A granular row lifecycle event emitted by {@link observeRowChanges}.
+ *
+ * - `add`    — a new row was inserted at `index`; `values` is its initial field map.
+ * - `remove` — a row was deleted from `index`.
+ * - `move`   — a row moved from `from` to `to` (order-only; data map untouched).
+ *
+ * Field edits do NOT produce change events — they are covered by
+ * {@link observeRows} (full-snapshot) or direct `readRow` calls.
+ */
+export type RowChangeEvent<T = Record<string, unknown>> =
+  | { kind: 'add';    rowId: string; index: number; values: T }
+  | { kind: 'remove'; rowId: string; index: number }
+  | { kind: 'move';   rowId: string; from: number; to: number }
 
 /** Generate a stable row id. Uses the platform `crypto.randomUUID` (Node ≥ 19,
  *  every modern browser). Exposed so callers can pre-allocate an id if needed. */
@@ -93,43 +119,72 @@ function ensureShares(
 }
 
 /** Project a single row `Y.Map` to a plain object, stamping its stable id last
- *  so the reserved `id` always wins over any field of the same name. */
-function projectRow<T>(id: string, row: Y.Map<unknown>): CollabRow<T> {
-  return { ...(row.toJSON() as T), id }
+ *  so the reserved key always wins over any field of the same name. */
+function projectRow<T, K extends string = 'id'>(
+  id: string,
+  row: Y.Map<unknown>,
+  idKey?: K,
+): CollabRow<T, K> {
+  return { ...(row.toJSON() as T), [idKey ?? 'id']: id } as CollabRow<T, K>
+}
+
+/**
+ * Pre-allocate the order and data shares for an array without seeding any rows.
+ * Calling this idempotently ensures that two peers' concurrent first `addRow` on a
+ * brand-new doc do not each `getOrCreate` a fresh `Y.Array` and LWW-orphan the
+ * loser's entry. A no-op when the shares already exist.
+ *
+ * Useful when the server pre-seeds an empty array so that racing clients converge
+ * on one canonical order array instead of one per client.
+ */
+export function ensureRowArray(
+  doc: Y.Doc,
+  arrayName: string,
+  opts: RowMutateOptions = {},
+): void {
+  doc.transact(() => {
+    ensureShares(doc, arrayName)
+  }, opts.origin)
 }
 
 /**
  * Read every row of an array in order, each projected to a plain JS object with
- * its stable `id`. Order entries whose data map is missing (a dangling id from a
- * concurrent remove) are skipped — the order array is the source of truth for
- * which rows exist and in what sequence. Returns `[]` when the array is unset.
+ * its stable id (under `opts.idKey`, default `'id'`). Order entries whose data map
+ * is missing (a dangling id from a concurrent remove) are skipped — the order array
+ * is the source of truth for which rows exist and in what sequence. Returns `[]`
+ * when the array is unset.
  */
-export function readRows<T = Record<string, unknown>>(
+export function readRows<T = Record<string, unknown>, K extends string = 'id'>(
   doc: Y.Doc,
   arrayName: string,
-): CollabRow<T>[] {
+  opts: ReadRowsOptions<K> = {},
+): CollabRow<T, K>[] {
   const order = orderArray(doc, arrayName)
   if (!order || order.length === 0) return []
   const data = dataMap(doc, arrayName)
   if (!data) return []
 
-  const rows: CollabRow<T>[] = []
+  const rows: CollabRow<T, K>[] = []
   for (const id of order.toArray()) {
     const row = data.get(id)
-    if (row instanceof Y.Map) rows.push(projectRow<T>(id, row))
+    if (row instanceof Y.Map) rows.push(projectRow<T, K>(id, row, opts.idKey))
   }
   return rows
 }
 
-/** Read a single row by id, or `undefined` when it does not exist. */
-export function readRow<T = Record<string, unknown>>(
+/**
+ * Read a single row by id, or `undefined` when it does not exist.
+ * The stable id is projected under `opts.idKey` (default `'id'`).
+ */
+export function readRow<T = Record<string, unknown>, K extends string = 'id'>(
   doc: Y.Doc,
   arrayName: string,
   rowId: string,
-): CollabRow<T> | undefined {
+  opts: ReadRowsOptions<K> = {},
+): CollabRow<T, K> | undefined {
   const data = dataMap(doc, arrayName)
   const row = data?.get(rowId)
-  return row instanceof Y.Map ? projectRow<T>(rowId, row) : undefined
+  return row instanceof Y.Map ? projectRow<T, K>(rowId, row, opts.idKey) : undefined
 }
 
 /**
@@ -139,13 +194,18 @@ export function readRow<T = Record<string, unknown>>(
  * primary key) — adding an id that already exists is a no-op on order (the row
  * is not duplicated) but **merges** the given fields into the existing row map.
  *
+ * Pass `mirrorId: true` to also write the row's stable id into the row map under
+ * `idKey` (default `'id'`). This makes the id available in `readRows` `values`
+ * and across the wire without a projection-side stamp — useful for renderers that
+ * read the id out of the row's fields rather than a reserved projected key.
+ *
  * @returns the row's id (the supplied `id`, or a freshly generated UUID).
  */
 export function addRow(
   doc: Y.Doc,
   arrayName: string,
   fields: Record<string, unknown> = {},
-  opts: RowMutateOptions & { id?: string; index?: number } = {},
+  opts: RowMutateOptions & { id?: string; index?: number; mirrorId?: boolean; idKey?: string } = {},
 ): string {
   const id = opts.id ?? newRowId()
   doc.transact(() => {
@@ -157,6 +217,7 @@ export function addRow(
       data.set(id, row)
     }
     for (const [k, v] of Object.entries(fields)) (row as Y.Map<unknown>).set(k, v)
+    if (opts.mirrorId) (row as Y.Map<unknown>).set(opts.idKey ?? 'id', id)
 
     // Append/insert the id in the order array only when it isn't already
     // tracked, so re-adding a known id updates fields without moving the row.
@@ -277,18 +338,79 @@ export function updateRow(
 }
 
 /**
+ * Re-key a row from `oldId` to `newId` in one transaction. Clones the row map
+ * contents into a fresh `Y.Map` under `newId`, swaps the order-array entry in
+ * place, and removes `oldId`. Returns `false` without mutating when:
+ *   - `oldId === newId` (no-op)
+ *   - `oldId` is not found in the array
+ *   - `newId` already exists (collision — fail-safe, never overwrites)
+ *
+ * The canonical use case is a draft row created under a client UUID that the
+ * server persists under a DB primary key: re-keying inside the CRDT lets peers
+ * converge on the PK without a full reload. Row field values must be plain JS
+ * values (whole-value LWW) — nested `Y.Map`/`Y.Array` values are not supported
+ * and will be silently omitted from the clone.
+ */
+export function renameRow(
+  doc: Y.Doc,
+  arrayName: string,
+  oldId: string,
+  newId: string,
+  opts: RowMutateOptions = {},
+): boolean {
+  if (oldId === newId) return false
+  let renamed = false
+  doc.transact(() => {
+    const order = orderArray(doc, arrayName)
+    const data = dataMap(doc, arrayName)
+    if (!order || !data) return
+
+    const oldRow = data.get(oldId)
+    if (!(oldRow instanceof Y.Map)) return // oldId not found
+    if (data.has(newId)) return            // newId collision — fail-safe
+
+    const idx = order.toArray().indexOf(oldId)
+    if (idx === -1) return // dangling data entry with no order entry
+
+    // Clone plain-value fields into a fresh Y.Map under the new key.
+    const newRow = new Y.Map<unknown>()
+    for (const [k, v] of (oldRow as Y.Map<unknown>).entries()) {
+      // Only plain JS values; nested Y.Types cannot be re-parented.
+      if (!(v instanceof Y.AbstractType)) newRow.set(k, v)
+    }
+    data.set(newId, newRow)
+    data.delete(oldId)
+
+    // Swap the order-array entry at the same position.
+    order.delete(idx, 1)
+    order.insert(idx, [newId])
+
+    renamed = true
+  }, opts.origin)
+  return renamed
+}
+
+/**
  * Seed an array's initial rows, idempotently. Gated on the order array still
  * being empty, so a doc already hydrated from persistence (or seeded by a racing
  * connection) is left untouched — the same whole-share idempotence the field
  * seeder uses. Each row may carry an `id` (a DB primary key); rows without one
  * get a generated UUID. Everything happens in a single `origin`-tagged
  * transaction. Returns the ids of the rows it seeded (empty when it no-ops).
+ *
+ * Pass `mirrorId: true` to write each row's stable id into its row map under
+ * `idKey` (default `'id'`). See {@link addRow} for the mirroring rationale.
+ *
+ * When `rows` is empty the function normally returns early without allocating the
+ * underlying CRDT shares. If you need to pre-allocate shares for a brand-new
+ * empty array (to close the concurrent-first-`addRow` race), call
+ * {@link ensureRowArray} instead.
  */
 export function seedRows(
   doc: Y.Doc,
   arrayName: string,
   rows: ReadonlyArray<Record<string, unknown> & { id?: string }>,
-  opts: RowMutateOptions = {},
+  opts: RowMutateOptions & { mirrorId?: boolean; idKey?: string } = {},
 ): string[] {
   if (rows.length === 0) return []
   const ids: string[] = []
@@ -300,6 +422,7 @@ export function seedRows(
       const id = rawId ?? newRowId()
       const row = new Y.Map<unknown>()
       for (const [k, v] of Object.entries(fields)) row.set(k, v)
+      if (opts.mirrorId) row.set(opts.idKey ?? 'id', id)
       data.set(id, row)
       order.push([id])
       ids.push(id)
@@ -335,6 +458,137 @@ export function observeRows<T = Record<string, unknown>>(
     orderRoot.unobserveDeep(emit)
     dataRoot.unobserveDeep(emit)
   }
+}
+
+/**
+ * Subscribe to **granular** row lifecycle events on an array — `add`, `remove`,
+ * and `move` — without requiring the caller to diff successive snapshots.
+ *
+ * Unlike {@link observeRows} (which fires a full snapshot on every change),
+ * `observeRowChanges` emits one {@link RowChangeEvent} per structural change:
+ *
+ * - `add`    — a new row arrived at `index` with initial `values`.
+ * - `remove` — a row was deleted from `index`.
+ * - `move`   — a row was reordered from `from` to `to` (delete+insert of the
+ *              same id in one transaction, coalesced into a single event).
+ *
+ * Field edits on existing rows do NOT produce events here — subscribe to
+ * {@link observeRows} or use `readRow` directly for field-level reactivity.
+ *
+ * Returns an unsubscribe function.
+ *
+ * @example
+ * const stop = observeRowChanges<Item>(doc, 'items', (event) => {
+ *   if (event.kind === 'add')    list.splice(event.index, 0, { id: event.rowId, ...event.values })
+ *   if (event.kind === 'remove') list.splice(event.index, 1)
+ *   if (event.kind === 'move')   list.splice(event.to, 0, ...list.splice(event.from, 1))
+ * })
+ */
+export function observeRowChanges<T = Record<string, unknown>>(
+  doc: Y.Doc,
+  arrayName: string,
+  cb: (event: RowChangeEvent<T>) => void,
+): () => void {
+  const orderRoot = doc.getMap(ROW_ORDER_MAP)
+  // Shadow copy of the last-known order — used to map delta delete-counts to ids.
+  let prevOrder: string[] = orderArray(doc, arrayName)?.toArray() ?? []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handler = (events: Y.YEvent<any>[]) => {
+    // Scan for the Y.YArrayEvent on our specific order array (path = [arrayName])
+    // and for a Y.YMapEvent signalling the array was lazily created (when creation
+    // and the first insert happen in the same Yjs transaction, only a Y.YMapEvent
+    // fires on the root — no separate Y.YArrayEvent for the initial content).
+    let arrayEvent: Y.YArrayEvent<string> | undefined
+    let orderArrayCreated = false
+
+    for (const event of events) {
+      if (
+        event.path.length === 1 &&
+        event.path[0] === arrayName &&
+        event instanceof Y.YArrayEvent
+      ) {
+        arrayEvent = event as Y.YArrayEvent<string>
+      } else if (
+        event.path.length === 0 &&
+        event instanceof Y.YMapEvent &&
+        (event as Y.YMapEvent<unknown>).keysChanged.has(arrayName)
+      ) {
+        orderArrayCreated = true
+      }
+    }
+
+    if (arrayEvent) {
+      // Walk the Yjs delta against prevOrder to recover which ids were deleted
+      // and inserted.  A delete+insert of the SAME id in one transaction is a
+      // move; a lone delete is a remove; a lone insert is an add.
+      type DeltaOp = { retain?: number; delete?: number; insert?: string[] }
+      const delta = arrayEvent.changes.delta as DeltaOp[]
+      const newOrder = (arrayEvent.target as Y.Array<string>).toArray()
+
+      let oldIdx = 0
+      const deletedIds: string[] = []
+      const insertedIds: string[] = []
+
+      for (const op of delta) {
+        if (op.retain !== undefined) {
+          oldIdx += op.retain
+        } else if (op.delete !== undefined) {
+          for (let i = 0; i < op.delete; i++) {
+            const id = prevOrder[oldIdx + i]
+            if (id !== undefined) deletedIds.push(id)
+          }
+          oldIdx += op.delete
+        } else if (op.insert !== undefined) {
+          insertedIds.push(...op.insert)
+        }
+      }
+
+      const deletedSet = new Set(deletedIds)
+      const insertedSet = new Set(insertedIds)
+      const data = dataMap(doc, arrayName)
+
+      // Emit remove or move for each deleted id.
+      for (const id of deletedIds) {
+        if (insertedSet.has(id)) {
+          // Same id deleted and re-inserted in one transaction: move.
+          cb({ kind: 'move', rowId: id, from: prevOrder.indexOf(id), to: newOrder.indexOf(id) })
+        } else {
+          cb({ kind: 'remove', rowId: id, index: prevOrder.indexOf(id) })
+        }
+      }
+
+      // Emit add for each inserted id that is not part of a move.
+      for (const id of insertedIds) {
+        if (!deletedSet.has(id)) {
+          const index = newOrder.indexOf(id)
+          const row = data?.get(id)
+          const values = row instanceof Y.Map ? (row.toJSON() as T) : ({} as T)
+          cb({ kind: 'add', rowId: id, index, values })
+        }
+      }
+
+      prevOrder = newOrder
+    } else if (orderArrayCreated) {
+      // Fallback: the array was just created — snapshot-diff against prevOrder to
+      // emit adds for any ids the new array already contains.
+      const newOrder = orderArray(doc, arrayName)?.toArray() ?? []
+      const prevSet = new Set(prevOrder)
+      const data = dataMap(doc, arrayName)
+      for (const id of newOrder) {
+        if (!prevSet.has(id)) {
+          const index = newOrder.indexOf(id)
+          const row = data?.get(id)
+          const values = row instanceof Y.Map ? (row.toJSON() as T) : ({} as T)
+          cb({ kind: 'add', rowId: id, index, values })
+        }
+      }
+      prevOrder = newOrder
+    }
+  }
+
+  orderRoot.observeDeep(handler)
+  return () => orderRoot.unobserveDeep(handler)
 }
 
 /** Clamp an insertion index to `[0, max]` (treats non-finite / negative as 0). */
