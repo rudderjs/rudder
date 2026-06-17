@@ -114,6 +114,51 @@ AUTH_SECRET=your-32-char-or-longer-random-secret-here
 
 The same variable is used by `PasswordBroker` for reset tokens, so if you already have it set for password reset, remember-me works without any extra config.
 
+## Lifecycle events
+
+The guard and auth controller dispatch typed events at every auth transition through the [event bus](./events.md), mirroring Laravel's auth events. Hook them for audit logging, welcome emails, clearing other device sessions, presence broadcasting, or Telescope/Horizon integration — without subclassing or monkey-patching the guard.
+
+| Event | Fired when | Payload |
+|---|---|---|
+| `Attempting` | before credentials are checked | `credentials`, `remember` |
+| `Validated` | credentials matched, before the session is written | `user` |
+| `Login` | a session is established (`login`, `attempt`, remember-cookie resume) | `user`, `remember` |
+| `Failed` | a credential check fails | `credentials`, `user` (the matched user on a wrong password, else `null`) |
+| `Logout` | a user is logged out | `user` (or `null`) |
+| `Registered` | a new account is created via `BaseAuthController.signUp` | `user` |
+| `PasswordReset` | a password reset completes | `user` |
+
+Register listeners in `bootstrap/providers.ts`:
+
+```ts
+import { eventsProvider } from '@rudderjs/core'
+import { Login, Failed, Registered } from '@rudderjs/auth'
+
+export default [
+  // ...defaultProviders
+  eventsProvider({
+    Login:      [LogSuccessfulLogin],
+    Failed:     [LogFailedLogin],
+    Registered: [SendWelcomeEmail],
+  }),
+]
+```
+
+A listener is any object with a `handle(event)` method:
+
+```ts
+import type { Listener } from '@rudderjs/core'
+import type { Login } from '@rudderjs/auth'
+
+export class LogSuccessfulLogin implements Listener<Login> {
+  async handle(event: Login) {
+    console.log(`User ${event.user.getAuthIdentifier()} logged in (remember=${event.remember})`)
+  }
+}
+```
+
+`attempt()` fires `Attempting` → `Validated` → `Login` on success, and `Attempting` → `Failed` on failure. `once()` (request-only auth, no session write) fires `Attempting`/`Validated`/`Failed` but never `Login`. With no listeners registered, every dispatch is a cheap no-op.
+
 ## Route protection
 
 Three middleware factories cover the common cases:

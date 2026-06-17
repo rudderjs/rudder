@@ -1,6 +1,8 @@
+import { dispatch } from '@rudderjs/core'
 import type { Authenticatable, Guard, UserProvider } from './contracts.js'
 import { currentTestUser } from './auth-manager.js'
 import { newRememberToken, setRememberDirective } from './remember.js'
+import { Attempting, Validated, Login, Failed, Logout } from './events.js'
 
 // ─── Session Guard ────────────────────────────────────────
 // Cookie-based auth via @rudderjs/session.
@@ -78,18 +80,25 @@ export class SessionGuard implements Guard {
   }
 
   async attempt(credentials: Record<string, unknown>, remember?: boolean): Promise<boolean> {
+    await dispatch(new Attempting(credentials, remember ?? false))
+
     const user = await this.provider.retrieveByCredentials(credentials)
     if (!user) {
       // Equalize timing with the wrong-password path so an attacker can't
       // enumerate accounts by latency (no user = instant; wrong password =
       // slow bcrypt/argon verify).
       await this.provider.fakeValidateCredentials?.(credentials)
+      await dispatch(new Failed(credentials, null))
       return false
     }
 
     const valid = await this.provider.validateCredentials(user, credentials)
-    if (!valid) return false
+    if (!valid) {
+      await dispatch(new Failed(credentials, user))
+      return false
+    }
 
+    await dispatch(new Validated(user))
     await this.login(user, remember)
     return true
   }
@@ -110,6 +119,8 @@ export class SessionGuard implements Guard {
       await this.provider.updateRememberToken(user.getAuthIdentifier(), token)
       setRememberDirective({ action: 'set', userId: user.getAuthIdentifier(), token })
     }
+
+    await dispatch(new Login(user, remember ?? false))
   }
 
   /**
@@ -126,6 +137,9 @@ export class SessionGuard implements Guard {
     await this.session.regenerate()
     this.session.put('auth_user_id', user.getAuthIdentifier())
     this._user = user
+    // A remember-cookie resume is still a login transition — fire Login so
+    // audit/presence listeners see the session (remember = true by definition).
+    await dispatch(new Login(user, true))
     return true
   }
 
@@ -141,6 +155,8 @@ export class SessionGuard implements Guard {
     this.session.forget('auth_user_id')
     await this.session.regenerate()
     this._user = null
+
+    await dispatch(new Logout(user))
   }
 
   async loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
@@ -151,13 +167,22 @@ export class SessionGuard implements Guard {
   }
 
   async once(credentials: Record<string, unknown>): Promise<boolean> {
+    await dispatch(new Attempting(credentials, false))
+
     const user = await this.provider.retrieveByCredentials(credentials)
     if (!user) {
       await this.provider.fakeValidateCredentials?.(credentials)
+      await dispatch(new Failed(credentials, null))
       return false
     }
     const valid = await this.provider.validateCredentials(user, credentials)
-    if (!valid) return false
+    if (!valid) {
+      await dispatch(new Failed(credentials, user))
+      return false
+    }
+    // No Login event — `once()` authenticates for the request only and never
+    // writes the session, so there is no login transition to observe.
+    await dispatch(new Validated(user))
     this._user = user
     return true
   }

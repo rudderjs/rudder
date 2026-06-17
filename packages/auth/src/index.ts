@@ -61,6 +61,7 @@ export {
 export type { RememberCookieAttrs, RememberDirective } from './remember.js'
 export { BaseAuthController, DEFAULT_AUTH_RATE_LIMITS } from './base-auth-controller.js'
 export type { AuthUserModelLike, AuthHashLike, AuthRateLimits } from './base-auth-controller.js'
+export { Attempting, Validated, Login, Failed, Logout, Registered, PasswordReset } from './events.js'
 
 export type { Authenticatable, AuthUser, Guard, UserProvider } from './contracts.js'
 export type { MustVerifyEmail } from './verification.js'
