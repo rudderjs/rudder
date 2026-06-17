@@ -67,6 +67,53 @@ await Auth.logout()
 
 `attempt()` verifies the password via `@rudderjs/hash`. `login()` regenerates the session ID to prevent session fixation.
 
+## Remember me (persistent login)
+
+Pass `true` as the second argument to `attempt()` or `login()` to issue a persistent remember-me cookie:
+
+```ts
+const ok = await Auth.attempt({ email, password }, true)  // remember-me login
+await Auth.login(user, true)                               // after sign-up / social login
+```
+
+`logout()` always invalidates the cookie, regardless of whether remember-me was used.
+
+### What happens under the hood
+
+1. A 256-bit random token is generated, stored on the `rememberToken` column, and a long-lived signed cookie (`rudderjs_remember`, default 400 days) is written to the response.
+2. On a later request with no session but a valid remember cookie, `AuthMiddleware` decodes the cookie, looks the user up by id, constant-time-compares the stored token, and re-establishes the session automatically.
+3. The token is **not rotated per request** — it changes only on a fresh remember-login or on logout. Multiple devices share the same token, so a single `logout()` invalidates all of them at once (matching Laravel's behaviour).
+
+### Requirements
+
+**`rememberToken` column** — your users table needs this column:
+
+```ts
+// database/migrations/xxxx_create_users_table.ts
+Schema.create('users', (table) => {
+  table.id()
+  table.string('email').unique()
+  table.string('password')
+  table.string('rememberToken').nullable()  // required for remember-me
+  table.timestamps()
+})
+```
+
+The `EloquentUserProvider` maps this column automatically. If you wrote a custom `UserProvider`, implement the two optional methods on the `UserProvider` contract:
+
+```ts
+async retrieveByToken(userId: string, token: string): Promise<Authenticatable | null>
+async updateRememberToken(userId: string, token: string | null): Promise<void>
+```
+
+**`AUTH_SECRET` env var** — the remember cookie is HMAC-signed. In production the framework throws at sign-time if `AUTH_SECRET` is unset; in development it falls back to a placeholder and logs a notice. Set it to any random string of 32+ characters:
+
+```
+AUTH_SECRET=your-32-char-or-longer-random-secret-here
+```
+
+The same variable is used by `PasswordBroker` for reset tokens, so if you already have it set for password reset, remember-me works without any extra config.
+
 ## Route protection
 
 Three middleware factories cover the common cases:

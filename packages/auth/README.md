@@ -92,6 +92,24 @@ await Auth.login(user)
 await Auth.logout()
 ```
 
+### Remember me (persistent login)
+
+Pass `true` as the second argument to `attempt()` or `login()` to issue a persistent cookie:
+
+```ts
+const ok = await Auth.attempt({ email, password }, true)
+await Auth.login(user, true)
+```
+
+**Requirements:**
+
+- A `rememberToken` (nullable string) column on your users table. `EloquentUserProvider` maps it automatically.
+- `AUTH_SECRET` in your environment (32+ chars) — the cookie is HMAC-signed and the framework throws in production without it.
+
+The cookie name is `rudderjs_remember` (default 400-day lifetime). `AuthMiddleware` auto-resumes sessions from it on requests with no active session. `logout()` always cycles the stored token, invalidating every outstanding remember cookie for that user across all devices. The token is not rotated per request — all sessions share it until the next login or logout.
+
+For a full walkthrough, see the [authentication guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/authentication.md#remember-me-persistent-login).
+
 ### Route protection
 
 ```ts
