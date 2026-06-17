@@ -202,6 +202,89 @@ registerAuthRoutes(Route)
 
 POST handlers (`/auth/sign-in/email`, `/auth/sign-up/email`, `/auth/sign-out`, `/auth/request-password-reset`, `/auth/reset-password`) live on your `AuthController` (extends `BaseAuthController`). The published views are yours to edit — the package doesn't own them after publish.
 
+## Auth controller
+
+`BaseAuthController` gives you the five auth POST endpoints without writing handler bodies. Subclass it, point it at your User model and hash service, and register it from the `web` group:
+
+```ts
+// app/Http/Controllers/AuthController.ts
+import {
+  BaseAuthController,
+  PasswordBroker,
+  MemoryTokenRepository,
+  EloquentUserProvider,
+  type AuthUserModelLike,
+} from '@rudderjs/auth'
+import { Hash } from '@rudderjs/hash'
+import { User } from 'App/Models/User.js'
+
+export class AuthController extends BaseAuthController {
+  protected userModel = User as unknown as AuthUserModelLike
+  protected hash      = Hash
+
+  // Optional. Enables /auth/request-password-reset + /auth/reset-password.
+  // Leave it unset and those two routes return an enumeration-safe stub
+  // instead of sending mail. Swap MemoryTokenRepository for a persistent
+  // store (Prisma/Redis) in production.
+  protected passwordBroker = new PasswordBroker(
+    new MemoryTokenRepository(),
+    new EloquentUserProvider(User as unknown as never, (plain, hashed) => Hash.check(plain, hashed)),
+    { secret: process.env.AUTH_SECRET ?? '' },
+  )
+}
+```
+
+```ts
+// routes/web.ts
+import { Route } from '@rudderjs/router'
+import { AuthController } from 'App/Http/Controllers/AuthController.js'
+
+Route.registerController(AuthController)
+```
+
+Register from `web` so `AuthMiddleware` and `SessionMiddleware` are in scope, which lets `Auth.attempt` / `Auth.login` read and write the session. Only `userModel` and `hash` are required; everything else has a default.
+
+### Endpoints
+
+| Method + path | Handler | Body | Behavior |
+|---|---|---|---|
+| `POST /auth/sign-in/email` | `signIn` | `email`, `password`, `remember?` | 422 on missing fields, 401 on bad credentials |
+| `POST /auth/sign-up/email` | `signUp` | `name?`, `email`, `password` | 422 if password < 8 chars, 409 on duplicate email; signs the user in and fires `Registered` |
+| `POST /auth/sign-out` | `signOut` | none | logs out, clears the session |
+| `POST /auth/request-password-reset` | `requestPasswordReset` | `email` | always `{ status: 'sent' }` (enumeration-safe); sends mail only when `passwordBroker` is set |
+| `POST /auth/reset-password` | `resetPassword` | `token`, `email`, `newPassword` | 400 on an invalid/expired token, 500 if no `passwordBroker` |
+
+The published [auth views](#auth-views) POST to exactly these paths, so a vendored login/register form works against this controller with no extra wiring. To send real reset emails, set `passwordBroker` (see [Password reset](#password-reset)); leave it unset and `requestPasswordReset` returns its stub without sending mail (in development it logs a one-line warning so the gap is visible).
+
+### Rate limits
+
+The controller applies per-method limits out of the box via `DEFAULT_AUTH_RATE_LIMITS`:
+
+| Method | Default | Keyed by |
+|---|---|---|
+| `signIn` | 10 / minute | IP |
+| `signUp` | 5 / minute | IP |
+| `requestPasswordReset` | 3 / minute | submitted email (falls back to IP) |
+
+Override per method with the static `rateLimits` field. Spread the defaults and replace only the ones you want:
+
+```ts
+import { RateLimit } from '@rudderjs/middleware'
+import { BaseAuthController, DEFAULT_AUTH_RATE_LIMITS } from '@rudderjs/auth'
+
+export class AuthController extends BaseAuthController {
+  protected userModel = User as unknown as AuthUserModelLike
+  protected hash      = Hash
+
+  static override rateLimits = {
+    ...DEFAULT_AUTH_RATE_LIMITS,
+    signIn: RateLimit.perMinute(3).message('Too many login attempts.'),
+  }
+}
+```
+
+Set `static override rateLimits = {}` to disable rate limiting entirely (for example an internal admin panel already behind VPN auth). The field is read once when the controller is first registered, so mutating it afterward has no effect. `RateLimit` needs a [cache provider](./cache.md) registered, or it silently passes through.
+
 ## Password reset
 
 The `PasswordBroker` orchestrates token generation, email sending, and consumption:
