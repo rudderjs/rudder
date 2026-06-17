@@ -323,6 +323,19 @@ describe('sessionMiddleware', () => {
     assert.match(setCookies[0]!, /; Secure/)
   })
 
+  it('sets Secure when cookie.secure is true and sameSite is not none', async () => {
+    // Independently exercises the left-hand side of the OR condition so a
+    // refactor changing it to && would be caught without relying on the
+    // sameSite=none forced-Secure path.
+    const cfg: SessionConfig = { ...config, cookie: { ...config.cookie, secure: true, sameSite: 'lax' } }
+    const mw = sessionMiddleware(cfg)
+    const { req, res, setCookies } = makeReqRes()
+    await mw(req, res, async () => {})
+    assert.ok(setCookies[0], 'a new session must set a cookie')
+    assert.match(setCookies[0]!, /SameSite=lax/)
+    assert.match(setCookies[0]!, /; Secure/)
+  })
+
   it('cookie driver rejects an expired cookie server-side', async () => {
     const realNow = Date.now
     let now = 1_700_000_000_000
