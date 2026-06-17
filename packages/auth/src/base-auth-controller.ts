@@ -251,7 +251,7 @@ export abstract class BaseAuthController {
       // visible during `pnpm dev` without weakening the prod response.
       if (process.env['NODE_ENV'] !== 'production') {
         console.warn(
-          '[RudderJS Auth] requestPasswordReset called but no passwordBroker is configured — ' +
+          '[Rudder Auth] requestPasswordReset called but no passwordBroker is configured — ' +
           'no reset email was sent. Set `this.passwordBroker` in your AuthController subclass to enable password resets.',
         )
       }
