@@ -31,6 +31,43 @@ describe('HasApiTokens.tokenCan — wired to __passport_token', () => {
   class FakeBaseModel {}
   const Mixed = HasApiTokens(FakeBaseModel as any) as any
 
+  function captureWarn(fn: () => void): string[] {
+    const warnings: string[] = []
+    const orig = console.warn
+    console.warn = (...a: unknown[]) => { warnings.push(a.map(String).join(' ')) }
+    try { fn() } finally { console.warn = orig }
+    return warnings
+  }
+
+  function withEnv(value: string | undefined, fn: () => void): void {
+    const prev = process.env['NODE_ENV']
+    if (value === undefined) delete process.env['NODE_ENV']
+    else process.env['NODE_ENV'] = value
+    try { fn() } finally {
+      if (prev === undefined) delete process.env['NODE_ENV']
+      else process.env['NODE_ENV'] = prev
+    }
+  }
+
+  // These two run first so the once-per-process no-context warning is still
+  // armed. The production case takes the short-circuit branch (flag untouched),
+  // so the development case below still observes the first warning.
+  test('stays silent in production when called with no bearer context', () => {
+    const warnings = captureWarn(() => withEnv('production', () => {
+      assert.equal(new Mixed().tokenCan('write'), false)
+    }))
+    assert.equal(warnings.length, 0, `expected no warning in production, got: ${warnings.join(' | ')}`)
+  })
+
+  test('warns once in development when called with no bearer context', () => {
+    const warnings = captureWarn(() => withEnv('development', () => {
+      assert.equal(new Mixed().tokenCan('write'), false) // first no-context call → warns
+      assert.equal(new Mixed().tokenCan('read'),  false) // second → no extra warning
+    }))
+    assert.equal(warnings.length, 1, `expected exactly one warning, got ${warnings.length}`)
+    assert.match(warnings[0]!, /no bearer-token context/)
+  })
+
   test('returns false when no token has been bound', () => {
     const u = new Mixed()
     assert.equal(u.tokenCan('write'), false)
