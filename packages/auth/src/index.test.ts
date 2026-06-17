@@ -308,6 +308,97 @@ describe('SessionGuard', () => {
     const guard = new SessionGuard(provider, sess.instance)
     assert.strictEqual(await guard.id(), null)
   })
+
+  it('loginUsingId() logs in an existing user and returns true', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.loginUsingId('1')
+    assert.strictEqual(result, true)
+    assert.strictEqual(sess.store['auth_user_id'], '1')
+    assert.strictEqual(await guard.check(), true)
+  })
+
+  it('loginUsingId() returns false when user not found', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.loginUsingId('999')
+    assert.strictEqual(result, false)
+    assert.strictEqual(sess.store['auth_user_id'], undefined)
+  })
+
+  it('loginUsingId() accepts a numeric id', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    assert.strictEqual(await guard.loginUsingId(1), true)
+    assert.strictEqual(await guard.check(), true)
+  })
+
+  it('once() authenticates for the request without writing the session', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.once({ email: 'john@example.com', password: 'secret' })
+    assert.strictEqual(result, true)
+    assert.strictEqual(sess.store['auth_user_id'], undefined, 'session must not be written')
+    assert.strictEqual(await guard.check(), true)
+    assert.strictEqual((await guard.user())?.getAuthIdentifier(), '1')
+  })
+
+  it('once() returns false for invalid credentials', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysFalse)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    assert.strictEqual(await guard.once({ email: 'john@example.com', password: 'bad' }), false)
+    assert.strictEqual(await guard.check(), false)
+  })
+
+  it('once() returns false and runs dummy verify for unknown user (anti-enumeration)', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const checks: string[] = []
+    const spyCheck = async (plain: string, _h: string) => { checks.push(plain); return false }
+    const provider = new EloquentUserProvider(model, spyCheck)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    assert.strictEqual(await guard.once({ email: 'ghost@x.com', password: 'pw' }), false)
+    assert.strictEqual(checks.length, 1, 'dummy verify must run')
+  })
+
+  it('onceUsingId() authenticates for the request without writing the session', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.onceUsingId('1')
+    assert.strictEqual(result, true)
+    assert.strictEqual(sess.store['auth_user_id'], undefined, 'session must not be written')
+    assert.strictEqual(await guard.check(), true)
+    assert.strictEqual((await guard.user())?.getAuthIdentifier(), '1')
+  })
+
+  it('onceUsingId() returns false when user not found', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    assert.strictEqual(await guard.onceUsingId('999'), false)
+    assert.strictEqual(await guard.check(), false)
+  })
 })
 
 // ─── AuthManager ──────────────────────────────────────────

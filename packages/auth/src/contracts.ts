@@ -61,4 +61,10 @@ export interface Guard {
   attempt(credentials: Record<string, unknown>, remember?: boolean): Promise<boolean>
   login(user: Authenticatable, remember?: boolean): Promise<void>
   logout(): Promise<void>
+  /** Look up a user by primary key and log them in. Returns false when not found. */
+  loginUsingId(id: string | number, remember?: boolean): Promise<boolean>
+  /** Validate credentials and authenticate for this request only — no session write. */
+  once(credentials: Record<string, unknown>): Promise<boolean>
+  /** Look up a user by primary key and authenticate for this request only — no session write. */
+  onceUsingId(id: string | number): Promise<boolean>
 }

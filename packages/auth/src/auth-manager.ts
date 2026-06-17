@@ -88,6 +88,18 @@ export class AuthManager {
     return this.guard().guest()
   }
 
+  loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
+    return this.guard().loginUsingId(id, remember)
+  }
+
+  once(credentials: Record<string, unknown>): Promise<boolean> {
+    return this.guard().once(credentials)
+  }
+
+  onceUsingId(id: string | number): Promise<boolean> {
+    return this.guard().onceUsingId(id)
+  }
+
   /**
    * Resolve a UserProvider by name, independent of any guard. Used by
    * non-session drivers (e.g. `@rudderjs/sanctum`) that need user lookup
@@ -237,5 +249,17 @@ export class Auth {
 
   static guest(): Promise<boolean> {
     return this.g().guest()
+  }
+
+  static loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
+    return this.g().loginUsingId(id, remember)
+  }
+
+  static once(credentials: Record<string, unknown>): Promise<boolean> {
+    return this.g().once(credentials)
+  }
+
+  static onceUsingId(id: string | number): Promise<boolean> {
+    return this.g().onceUsingId(id)
   }
 }
