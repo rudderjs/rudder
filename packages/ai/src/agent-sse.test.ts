@@ -213,4 +213,29 @@ describe('applyAgentSseEvent', () => {
     applyAgentSseEvent('tool_result', { content: 'orphan' }, turn)
     assert.equal(turn.serverToolResults.length, 0)
   })
+
+  it('fires onAppEvent for unknown events and leaves turn state unchanged', () => {
+    const turn = newAgentStreamTurn()
+    const appEvents: Array<{ event: string; data: unknown }> = []
+    applyAgentSseEvent('run_started', { runId: 'abc-123' }, turn, {
+      onAppEvent: (event, data) => appEvents.push({ event, data }),
+    })
+    assert.deepStrictEqual(appEvents, [{ event: 'run_started', data: { runId: 'abc-123' } }])
+    // Turn state must be unmodified.
+    assert.deepStrictEqual(turn, newAgentStreamTurn())
+  })
+
+  it('readAgentStream fires onAppEvent for non-vocabulary events', async () => {
+    const body =
+      'event: run_started\ndata: {"runId":"xyz"}\n\n' +
+      'event: text\ndata: {"text":"hello"}\n\n' +
+      'event: complete\ndata: {"done":true}\n\n'
+    const appEvents: Array<{ event: string; data: unknown }> = []
+    const turn = await readAgentStream(sseResponse(body), {
+      onAppEvent: (event, data) => appEvents.push({ event, data }),
+    })
+    assert.deepStrictEqual(appEvents, [{ event: 'run_started', data: { runId: 'xyz' } }])
+    assert.equal(turn.assistantText, 'hello')
+    assert.equal(turn.done, true)
+  })
 })

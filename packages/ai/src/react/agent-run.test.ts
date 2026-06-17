@@ -194,4 +194,23 @@ describe('driveAgentRun', () => {
       /status 500/,
     )
   })
+
+  it('forwards onAppEvent from callbacks to the stream reader', async () => {
+    const appEvents: Array<{ event: string; data: unknown }> = []
+    await driveAgentRun(
+      { type: 'run', input: 'hi' },
+      {
+        request: async () => sse([
+          { event: 'run_started', data: { runId: 'r1' } },
+          { event: 'text', data: { text: 'done' } },
+          { event: 'complete', data: { done: true, finishReason: 'stop' } },
+        ]),
+        callbacks: {
+          onAppEvent: (event, data) => appEvents.push({ event, data }),
+        },
+        signal: ctrl().signal,
+      },
+    )
+    assert.deepEqual(appEvents, [{ event: 'run_started', data: { runId: 'r1' } }])
+  })
 })

@@ -37,6 +37,10 @@ export interface UseAgentRunOptions<TInput = unknown> {
   clientTools?: (call: ToolCall) => unknown | Promise<unknown>
   onComplete?:  (data: AgentSseCompletePayload) => void
   onError?:     (message: string) => void
+  /** Fired for any SSE event outside the standard protocol vocabulary (e.g. a
+   *  server-issued `run_started` carrying a correlation `runId`). Forwarded
+   *  directly to `readAgentStream`'s `onAppEvent` callback. */
+  onAppEvent?:  (event: string, data: unknown) => void
 }
 
 export interface UseAgentRunResult<TInput = unknown> {
@@ -114,6 +118,7 @@ export function useAgentRun<TInput = unknown>(
       onHandoff:              d => setOutputs(o => appendAgentOutput(o, 'handoff', d)),
       onError:                d => { sawError = d.message; setOutputs(o => appendAgentOutput(o, 'error', d)) },
       onComplete:             d => opts.onComplete?.(d),
+      ...(opts.onAppEvent ? { onAppEvent: opts.onAppEvent } : {}),
     }
 
     try {
