@@ -781,6 +781,33 @@ describe('Policy', () => {
 
     assert.strictEqual(await Gate.forUser(god).allows('update', post), true)
   })
+
+  it('resolves a base-class policy for a subclass instance (#1245)', async () => {
+    // Policy registered against the base class governs subclass instances via
+    // the `instanceof` walk — Gate (static) and forUser must agree.
+    class FeaturedPost extends Post {}
+    Gate.policy(Post, PostPolicy)
+    const author = authUser({ id: '1' })
+    const featured = new FeaturedPost('1', false)
+
+    // forUser path previously did a direct-constructor lookup only and silently
+    // denied; it must now match the static Gate path.
+    assert.strictEqual(await Gate.forUser(author).allows('update', featured), true)
+
+    const other = authUser({ id: '2' })
+    assert.strictEqual(await Gate.forUser(other).allows('update', featured), false)
+  })
+
+  it('subclass policy resolution honors policy.before via forUser (#1245)', async () => {
+    class FeaturedPost extends Post {}
+    Gate.policy(Post, PostPolicyWithBefore)
+    const superAdmin = authUser({ role: 'super-admin' })
+    const featured = new FeaturedPost('999', false)
+
+    // update() returns false, but before() short-circuits to true for a
+    // subclass instance resolved through the instanceof walk.
+    assert.strictEqual(await Gate.forUser(superAdmin).allows('update', featured), true)
+  })
 })
 
 // ─── AuthorizationError ───────────────────────────────────
