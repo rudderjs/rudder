@@ -1,11 +1,10 @@
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { Passport } from '../Passport.js'
 import type { AccessToken } from '../models/AccessToken.js'
-import type { RefreshToken } from '../models/RefreshToken.js'
 import { RequireBearer } from '../middleware/bearer.js'
-import { revokeFamily } from '../grants/refresh-token.js'
 import type { Router } from './types.js'
 import { requesterIdFrom } from './helpers.js'
+import { revokeAccessTokenChain } from './revoke-chain.js'
 
 /**
  * Register `DELETE /oauth/tokens/:id` — revoke a specific access token.
@@ -31,24 +30,10 @@ export function registerRevokeRoute(router: Router, prefix: string, mw: Middlewa
       return
     }
 
-    // QueryBuilder.updateAll() bypasses the mass-assignment filter;
-    // `revoked` is no longer in `AccessToken.fillable`.
-    await AccessTokenCls.where('id', token.id)
-      .updateAll({ revoked: true } as Record<string, unknown>)
-
-    // RFC 7009 §2.1: revoking an access token MUST also invalidate the refresh
-    // token issued with it — otherwise the holder of the refresh token just
-    // mints a fresh pair and the revocation is moot. Revoke the directly-paired
-    // refresh token(s), and if any belong to a rotation family, kill the whole
-    // chain so an earlier-rotated refresh token can't resurrect the session.
-    const RefreshTokenCls = await Passport.refreshTokenModel()
-    const paired = await RefreshTokenCls.where('accessTokenId', token.id).get() as RefreshToken[]
-    await RefreshTokenCls.where('accessTokenId', token.id)
-      .updateAll({ revoked: true } as Record<string, unknown>)
-    const familyIds = [...new Set(paired.map(rt => rt.familyId).filter((f): f is string => !!f))]
-    for (const familyId of familyIds) {
-      await revokeFamily(RefreshTokenCls, AccessTokenCls, familyId)
-    }
+    // Revoke the access token plus the refresh token(s) issued with it (and any
+    // rotation family) so the session can't be resurrected. See
+    // `revokeAccessTokenChain` for the RFC 7009 §2.1 rationale.
+    await revokeAccessTokenChain(token.id)
 
     res.status(204).send()
   }, [RequireBearer(), ...mw])
