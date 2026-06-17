@@ -262,6 +262,11 @@ export {
   updateRow,
   seedRows,
   observeRows,
+  observeRowChanges,
+  renameRow,
+  ensureRowArray,
   type CollabRow,
   type RowMutateOptions,
+  type ReadRowsOptions,
+  type RowChangeEvent,
 } from './rows.js'
