@@ -10,6 +10,7 @@ green on fresh clones and in CI without a generate step.
 | `types/routes.d.ts` | `route(name, params)` — route name → URL pattern | routes scanner (dev/build) or `rudder routes:sync` |
 | `types/models.d.ts` | `Model.for<'table'>()` — column types from the migrated schema (native engine) | `rudder migrate` or `rudder schema:types` |
 | `types/env.d.ts` | `Env.get('KEY')` — keys declared in `.env.example` | env scanner (dev/build) or `rudder env:sync` |
+| `types/config.d.ts` | `config('section.key')` — sections from `config/index.ts` | config scanner (dev/build) or `rudder config:sync` |
 
 If `tsc` can't see these augmentations, add `".rudder/**/*"` to your
 `tsconfig.json` `include` array (dot-directories are invisible to `**/*`
