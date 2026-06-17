@@ -1,0 +1,56 @@
+name: triage
+
+# When an issue is filed (or a flagged one is edited), assess its clarity as the Rudder Bot App
+# and label it `triage:ready` or `triage:needs-info` (with a checklist of what's missing).
+# Lightweight: reads the issue + comments/labels, no checkout-build. Logic: .github/triage-prompt.md
+#
+# Skips the audit bot's own issues (already templated) and the rotation tracker. On edit, only
+# re-checks issues still flagged `triage:needs-info` (so fixing one flips it to ready; idle edits
+# do not re-trigger).
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    if: >
+      !contains(github.event.issue.labels.*.name, 'audit:auto') &&
+      !contains(github.event.issue.labels.*.name, 'audit:tracker') &&
+      (github.event.action == 'opened' ||
+       (github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'triage:needs-info')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint Rudder Bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RUDDER_BOT_APP_ID }}
+          private-key: ${{ secrets.RUDDER_BOT_PRIVATE_KEY }}
+
+      - name: Checkout (for the triage prompt)
+        uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Triage the issue
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          claude -p "$(cat .github/triage-prompt.md)" \
+            --allowedTools "Bash,Read,Grep,Glob" \
+            --permission-mode bypassPermissions \
+            --max-turns 25 \
+            --model claude-sonnet-4-6 \
+            --verbose
