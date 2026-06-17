@@ -113,6 +113,21 @@ export function userToPlain(user: unknown): AuthUser {
 
 // ─── Auth Middleware ──────────────────────────────────────
 
+// Warn at most once per process when the test-only auth bypass is refused
+// because the runtime is production. This is the audit trail for the dangerous
+// `APP_ENV=testing` + `NODE_ENV=production` misconfiguration (or an active
+// impersonation attempt against such a box).
+let _warnedTestUserInProd = false
+function warnTestUserRefusedInProd(): void {
+  if (_warnedTestUserInProd) return
+  _warnedTestUserInProd = true
+  console.warn(
+    '[RudderJS] Refused an x-testing-user auth header: APP_ENV=testing but ' +
+    'NODE_ENV=production. The test-only auth bypass is disabled on a production ' +
+    'runtime. If this is a real deployment, unset APP_ENV=testing.',
+  )
+}
+
 /**
  * Middleware that sets up the Auth context for the current request.
  * Attaches `req.user` if authenticated (does not block unauthenticated requests).
@@ -130,12 +145,21 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
     // populate `req.user` directly AND install the user into the request's ALS
     // scope (via `runWithTestUser`) so `Auth.guard().user()`, `auth().user()`,
     // and `RequireAuth` resolve to the same synthetic user — even one that
-    // doesn't exist in the database. Gated on `APP_ENV === 'testing'` so prod
-    // never sees this branch.
+    // doesn't exist in the database.
+    //
+    // Gated on `APP_ENV === 'testing'` AND a non-production runtime. The bypass
+    // has no signature, session, or credential check by design, so a single
+    // env-var match would let any caller impersonate any user id (including an
+    // admin) by crafting the header. A real deploy sets `NODE_ENV=production`,
+    // so the production backstop keeps the header inert even if `APP_ENV=testing`
+    // accidentally leaks onto a network-reachable staging/QA box — the exact
+    // misconfiguration that turns this into a full auth bypass. (#1236)
     if (process.env.APP_ENV === 'testing') {
       const testUserRaw = req.headers['x-testing-user']
       if (typeof testUserRaw === 'string' && testUserRaw.length > 0) {
-        try {
+        if (process.env.NODE_ENV === 'production') {
+          warnTestUserRefusedInProd()
+        } else try {
           const parsed = JSON.parse(testUserRaw) as Record<string, unknown>
           // Wrap as Authenticatable — adds the `getAuthIdentifier()` contract
           // method around the plain JSON payload from the test client.
