@@ -242,6 +242,19 @@ export abstract class BaseAuthController {
     if (!this.passwordBroker) {
       // No broker configured — return stub success to prevent email enumeration.
       // Subclasses should set `passwordBroker` to enable real reset emails.
+      //
+      // The constant 200 is intentional in production (an enumeration-safe
+      // no-op), but it's a silent footgun in development: a developer who
+      // forgot to wire `passwordBroker` sees the forgot-password form succeed
+      // and only discovers the gap when users report missing emails. Surface a
+      // one-line warning off the production path so the misconfiguration is
+      // visible during `pnpm dev` without weakening the prod response.
+      if (process.env['NODE_ENV'] !== 'production') {
+        console.warn(
+          '[RudderJS Auth] requestPasswordReset called but no passwordBroker is configured — ' +
+          'no reset email was sent. Set `this.passwordBroker` in your AuthController subclass to enable password resets.',
+        )
+      }
       res.json({ status: 'sent' })
       return
     }
