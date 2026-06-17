@@ -1,7 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { bootNotice } from '@rudderjs/core'
+import { bootNotice, dispatch } from '@rudderjs/core'
 import type { Authenticatable, UserProvider } from './contracts.js'
 import { newRememberToken } from './remember.js'
+import { PasswordReset as PasswordResetEvent } from './events.js'
 
 // ─── Token Repository Contract ────────────────────────────
 
@@ -169,6 +170,11 @@ export class PasswordBroker {
         // Don't fail an otherwise-successful reset if token cycling can't persist.
       }
     }
+
+    // Fire here (not in the controller) so every caller of the broker — not
+    // just BaseAuthController — gets the event, and so the listener receives
+    // the resolved user object rather than just an email.
+    await dispatch(new PasswordResetEvent(user))
 
     return 'PASSWORD_RESET'
   }

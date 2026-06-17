@@ -1,8 +1,10 @@
 import { Controller, Post } from '@rudderjs/router'
+import { dispatch } from '@rudderjs/core'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import { RateLimit } from '@rudderjs/middleware'
 import { Auth } from './auth-manager.js'
 import { toAuthenticatable } from './providers.js'
+import { Registered } from './events.js'
 import type { PasswordBroker } from './password-reset.js'
 
 // ─── Structural dependencies ──────────────────────────────
@@ -221,7 +223,9 @@ export abstract class BaseAuthController {
     const hashed = await this.hash.make(password)
     const user   = await this.userModel.create({ name: name ?? '', email, password: hashed })
 
-    await Auth.login(toAuthenticatable(user as Record<string, unknown>))
+    const authUser = toAuthenticatable(user as Record<string, unknown>)
+    await Auth.login(authUser)
+    await dispatch(new Registered(authUser))
     res.json({ ok: true })
   }
 
