@@ -230,8 +230,9 @@ describe('Passport Phase 6 customization hooks', () => {
       delete: (p: string) => { registered.push(`DELETE ${p}`) },
     }
     registerPassportRoutes(fakeRouter)
-    // authorize (GET/POST/DELETE) + token + tokens/:id + scopes + device/code + device/approve
-    assert.equal(registered.length, 8)
+    // authorize (GET/POST/DELETE) + token + revoke + tokens/:id + scopes + device/code + device/approve
+    assert.equal(registered.length, 9)
+    assert.ok(registered.includes('POST /oauth/revoke'), 'RFC 7009 revocation endpoint mounted')
   })
 
   test('DELETE /oauth/tokens/:id is registered with RequireBearer middleware', () => {

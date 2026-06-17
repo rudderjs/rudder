@@ -4,6 +4,7 @@ import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
 import { OAuthError } from '../grants/index.js'
+import { verifyConfidentialCredentials } from '../grants/verify-client.js'
 import type { PassportRouteOptions } from './types.js'
 
 /**
@@ -95,6 +96,37 @@ export function resolveClientCredentials(
   return bodyClientSecret !== undefined
     ? { clientId: bodyClientId, clientSecret: bodyClientSecret }
     : { clientId: bodyClientId }
+}
+
+/**
+ * Authenticate a confidential OAuth client from a request, for the
+ * machine-to-machine endpoints that require client authentication rather than
+ * an end-user bearer token — `POST /oauth/revoke` (RFC 7009 §2.1) and
+ * `POST /oauth/token/introspect` (RFC 7662 §2.1).
+ *
+ * Resolves credentials the same way the token endpoint does
+ * ({@link resolveClientCredentials} — HTTP Basic or body `client_id`/
+ * `client_secret`, never both), loads the client, and verifies the secret via
+ * the single confidential-client authority ({@link verifyConfidentialCredentials}
+ * with `requireConfidential: true`). A missing/unknown/revoked client, a public
+ * client, or a bad secret all surface as `invalid_client` 401 — deliberately
+ * indistinguishable so the endpoint isn't a client-enumeration oracle.
+ *
+ * The caller is responsible for the `WWW-Authenticate: Basic` header on the 401
+ * (the route handler owns the response shape) — same pattern as the token route.
+ */
+export async function authenticateConfidentialClient(
+  req: { headers?: Record<string, unknown> },
+  body: Record<string, unknown>,
+): Promise<OAuthClient> {
+  const { clientId, clientSecret } = resolveClientCredentials(req, body)
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.where('id', clientId).first() as OAuthClient | null
+  if (!client || client.revoked) {
+    throw new OAuthError('invalid_client', 'Client authentication failed.', 401)
+  }
+  await verifyConfidentialCredentials(client, clientSecret, { requireConfidential: true })
+  return client
 }
 
 /**
