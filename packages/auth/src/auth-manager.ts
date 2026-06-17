@@ -88,6 +88,17 @@ export class AuthManager {
     return this.guard().guest()
   }
 
+  loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
+    // Safe to proxy: login() writes `auth_user_id` to the session, so the next
+    // `guard()` (a fresh instance — see the no-cache note above) resolves the
+    // user from the session. `once()` / `onceUsingId()` are deliberately NOT
+    // proxied here: they set `_user` on the guard instance only and never touch
+    // the session, so a facade-level call would set state on a guard that is
+    // immediately discarded. Request-only auth must hold the guard reference:
+    //   const g = auth().guard(); if (await g.once(creds)) { await g.user() }
+    return this.guard().loginUsingId(id, remember)
+  }
+
   /**
    * Resolve a UserProvider by name, independent of any guard. Used by
    * non-session drivers (e.g. `@rudderjs/sanctum`) that need user lookup
@@ -237,5 +248,14 @@ export class Auth {
 
   static guest(): Promise<boolean> {
     return this.g().guest()
+  }
+
+  static loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
+    // `once()` / `onceUsingId()` are intentionally absent from the facade: they
+    // authenticate for the current request only (no session write), so they are
+    // observable solely on the guard instance they were called on. Use
+    // `Auth.guard()` and keep the reference. `loginUsingId()` persists to the
+    // session, so it is safe to expose here. See AuthManager.loginUsingId.
+    return this.g().loginUsingId(id, remember)
   }
 }

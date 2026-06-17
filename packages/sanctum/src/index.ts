@@ -274,10 +274,15 @@ export class TokenGuard implements Guard {
     return this.sanctum.tokenCan(this._token, ability)
   }
 
-  // Not applicable for token auth
+  // Not applicable for token auth (stateless bearer): no credentials, no
+  // session, no primary-key login. Stubbed for `Guard` conformance, same as
+  // attempt/login/logout.
   async attempt(): Promise<boolean> { return false }
   async login(): Promise<void> {}
   async logout(): Promise<void> {}
+  async loginUsingId(): Promise<boolean> { return false }
+  async once(): Promise<boolean> { return false }
+  async onceUsingId(): Promise<boolean> { return false }
 }
 
 // ─── Middleware ────────────────────────────────────────────
