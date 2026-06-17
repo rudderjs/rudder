@@ -241,6 +241,15 @@ const count = await user.revokeAllTokens()
 if (user.tokenCan('admin')) { ... }
 ```
 
+> **`tokenCan()` needs a bearer context.** It reads the scopes of the token that
+> `RequireBearer()` / `BearerMiddleware()` stamped onto the resolved user model.
+> Called anywhere else — a session-authenticated route, a console command, a
+> queue job, or on the flat `req.user` copy rather than a fresh `User` model — it
+> returns `false` for every scope, which looks like a real denial but is a
+> misconfiguration. A one-time dev warning flags this (silent in production).
+> Call it on a fresh model (`await User.find(req.user.id)`), and for
+> session-authenticated routes use Gate/Policy authorization instead of token scopes.
+
 Personal access tokens are issued against an internal `__personal_access__` OAuth client that Passport auto-creates on first use.
 
 ## Customization Hooks

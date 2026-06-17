@@ -50,6 +50,10 @@ interface HasApiTokensThis {
   __passport_token?: AccessToken
 }
 
+// Warn at most once per process when `tokenCan()` runs with no bearer context,
+// so the dev diagnostic can't flood a hot path (a per-request scope check).
+let _tokenCanContextWarned = false
+
 export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
   Base: T,
 ): T & (new (...args: any[]) => HasApiTokensInstance) {
@@ -147,10 +151,27 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
      * Only works inside a request that went through BearerMiddleware —
      * `__passport_token` is stamped onto the resolved user model and
      * propagates onto `req.user` via the plain-copy step.
+     *
+     * Called with no bearer context (a session route, console command, queue
+     * job, or on the flat `req.user` copy rather than a fresh User model) it
+     * fail-closes to `false` — which looks like a legitimate scope denial but
+     * is really a misconfiguration. A one-time dev warning surfaces that case;
+     * production behavior (deny-by-default) is unchanged.
      */
     tokenCan(scope: string): boolean {
       const token = (this as unknown as HasApiTokensThis).__passport_token
-      if (!token) return false
+      if (!token) {
+        if (!_tokenCanContextWarned && process.env['NODE_ENV'] !== 'production') {
+          _tokenCanContextWarned = true
+          console.warn(
+            '[Rudder Passport] tokenCan() called with no bearer-token context — it returns false for every scope here. ' +
+            'Ensure RequireBearer()/BearerMiddleware() runs before this call, and invoke tokenCan() on a fresh User model ' +
+            '(e.g. `await User.find(req.user.id)`), not the flat `req.user` copy. ' +
+            'For session-authenticated routes use Gate/Policy authorization instead of token scopes.',
+          )
+        }
+        return false
+      }
       return accessTokenHelpers.can(token, scope)
     }
   }
