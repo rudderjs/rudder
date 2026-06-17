@@ -145,9 +145,23 @@ await req.session.regenerate()    // new ID, same data (use after login)
 
 ### `Session` facade
 
-Mirrors `SessionInstance` as static methods, backed by `AsyncLocalStorage`. Throws if called outside a request wrapped by `SessionMiddleware()`.
+Static proxy over `SessionInstance`, backed by `AsyncLocalStorage`. Most methods throw if called outside a request wrapped by `SessionMiddleware()`; the two non-throwing helpers (`maybeCurrent`, `active`) are safe to call anywhere.
 
-`get` · `put` · `forget` · `flash` · `getFlash` · `allFlash` · `has` · `all` · `regenerate`
+| Method | Description |
+|---|---|
+| `get<T>(key, fallback?)` | Read a value. |
+| `put(key, value)` | Write a value. |
+| `forget(key)` | Delete a value. |
+| `flash(key, value)` | Store a value readable on the *next* request via `getFlash()`. |
+| `getFlash<T>(key, fallback?)` | Read a flash value set by the *previous* request. |
+| `allFlash()` | Return all flash values from the previous request. Returns `{}` outside a session context (non-throwing). |
+| `has(key)` | Check whether a key exists. |
+| `all()` | Return a shallow copy of all session data. |
+| `regenerate()` | Assign a new session ID (destroys old in Redis, keeps data). |
+| `maybeCurrent()` | Return the active `SessionInstance`, or `null` if no session is in context (non-throwing). |
+| `active()` | Return `true` if a session is currently in context (non-throwing). |
+
+> `flush()` and `id()` are available on the instance (`req.session.flush()`, `req.session.id()`) but are not forwarded on the static facade.
 
 ---
 
