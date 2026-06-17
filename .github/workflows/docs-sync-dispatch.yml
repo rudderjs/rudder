@@ -1,0 +1,42 @@
+name: Docs sync dispatch
+
+# When a main merge changes user-facing docs, ping rudderjs.com to mirror them.
+# The site's docs-sync workflow does the actual sync + opens a PR (the deploy
+# gate). This is just the trigger — the site also runs a daily fallback, so if
+# SITE_DISPATCH_TOKEN is ever missing this degrades to "synced within a day"
+# rather than breaking.
+#
+# Requires repo secret SITE_DISPATCH_TOKEN: a fine-grained PAT scoped to
+# rudderjs/rudderjs.com with Contents: Read and write (needed to create a
+# repository_dispatch event). The default GITHUB_TOKEN cannot dispatch to
+# another repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/guide/**'
+      - 'docs/packages/**'
+      - 'docs/cli/**'
+      - 'docs/integrations/**'
+      - 'docs/contributing/**'
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Ping rudderjs.com
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send docs-sync repository_dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.SITE_DISPATCH_TOKEN }}
+          repository: rudderjs/rudderjs.com
+          event-type: docs-sync
+          client-payload: |
+            {
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref_name }}"
+            }
