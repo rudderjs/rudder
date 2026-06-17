@@ -70,7 +70,7 @@ export class BetterSqlite3Driver implements Driver {
       Database = mod.default ?? (mod as unknown as Bs3Constructor)
     } catch (err) {
       throw new NativeDriverError(
-        `[RudderJS ORM native] Failed to load "better-sqlite3". It is an optional ` +
+        `[Rudder ORM native] Failed to load "better-sqlite3". It is an optional ` +
         `peer of @rudderjs/orm — install it with \`pnpm add better-sqlite3\` to use ` +
         `the native SQLite engine.`,
         { cause: err },
@@ -83,7 +83,7 @@ export class BetterSqlite3Driver implements Driver {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       throw new NativeDriverError(
-        `[RudderJS ORM native] Could not open SQLite database at ${JSON.stringify(filename)}: ${msg}`,
+        `[Rudder ORM native] Could not open SQLite database at ${JSON.stringify(filename)}: ${msg}`,
         { cause: err },
       )
     }
@@ -127,7 +127,7 @@ export class BetterSqlite3Driver implements Driver {
     // is the same at any depth.
     if (opts?.isolationLevel) {
       throw new Error(
-        '[RudderJS ORM native] SQLite does not support transaction isolation levels — ' +
+        '[Rudder ORM native] SQLite does not support transaction isolation levels — ' +
         'its single-writer model is already serializable. Drop the isolationLevel ' +
         'option, or use the Postgres/MySQL engine.',
       )

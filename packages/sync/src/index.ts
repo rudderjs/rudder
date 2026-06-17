@@ -865,13 +865,13 @@ export const DEFAULT_ROOM_SEPARATOR = ':'
  * separator is `/` or not a single character.
  */
 export function composeRoomId(segments: readonly string[], separator: string = DEFAULT_ROOM_SEPARATOR): string {
-  if (separator.length !== 1) throw new Error('[RudderJS Sync] composeRoomId: separator must be a single character.')
-  if (separator === '/')      throw new Error("[RudderJS Sync] composeRoomId: separator cannot be '/'; the room extractor splits on it.")
-  if (segments.length === 0)  throw new Error('[RudderJS Sync] composeRoomId: needs at least one segment.')
+  if (separator.length !== 1) throw new Error('[Rudder Sync] composeRoomId: separator must be a single character.')
+  if (separator === '/')      throw new Error("[Rudder Sync] composeRoomId: separator cannot be '/'; the room extractor splits on it.")
+  if (segments.length === 0)  throw new Error('[Rudder Sync] composeRoomId: needs at least one segment.')
   for (const s of segments) {
-    if (s === '')              throw new Error('[RudderJS Sync] composeRoomId: segments must be non-empty.')
-    if (s.includes('/'))       throw new Error(`[RudderJS Sync] composeRoomId: segment "${s}" contains "/", which the room extractor would split.`)
-    if (s.includes(separator)) throw new Error(`[RudderJS Sync] composeRoomId: segment "${s}" contains the separator "${separator}".`)
+    if (s === '')              throw new Error('[Rudder Sync] composeRoomId: segments must be non-empty.')
+    if (s.includes('/'))       throw new Error(`[Rudder Sync] composeRoomId: segment "${s}" contains "/", which the room extractor would split.`)
+    if (s.includes(separator)) throw new Error(`[Rudder Sync] composeRoomId: segment "${s}" contains the separator "${separator}".`)
   }
   return segments.join(separator)
 }

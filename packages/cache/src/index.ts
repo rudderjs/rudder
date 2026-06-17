@@ -19,7 +19,7 @@ export { type Lock, LockTimeoutError, MemoryLock, RedisLock, BaseLock, LOCK_KEY_
 export function assertValueKey(key: string): void {
   if (key.startsWith(LOCK_KEY_PREFIX)) {
     throw new Error(
-      `[RudderJS Cache] Key "${key}" uses the reserved lock prefix "${LOCK_KEY_PREFIX}". ` +
+      `[Rudder Cache] Key "${key}" uses the reserved lock prefix "${LOCK_KEY_PREFIX}". ` +
       `Use Cache.lock(name, ttl) for locks; value keys may not start with this prefix.`,
     )
   }
@@ -153,7 +153,7 @@ export class CacheRegistry {
 export class Cache {
   private static store(): CacheAdapter {
     const a = CacheRegistry.get()
-    if (!a) throw new Error('[RudderJS Cache] No cache adapter registered. Add cache() to providers.')
+    if (!a) throw new Error('[Rudder Cache] No cache adapter registered. Add cache() to providers.')
     return a
   }
 
@@ -305,7 +305,7 @@ const DEFAULT_MAX_ENTRIES = 100_000
 function assertIncrementBy(by: number): void {
   if (!Number.isInteger(by)) {
     throw new TypeError(
-      `[RudderJS Cache] increment(by) must be an integer, got ${by}.`,
+      `[Rudder Cache] increment(by) must be an integer, got ${by}.`,
     )
   }
 }
@@ -668,7 +668,7 @@ export class CacheProvider extends ServiceProvider {
     // surface it loudly instead of degrading silently on a config typo.
     if (!definedStore) {
       console.warn(
-        `[RudderJS Cache] Default store "${storeName}" is not defined in config.cache.stores — ` +
+        `[Rudder Cache] Default store "${storeName}" is not defined in config.cache.stores — ` +
         `falling back to the in-process "memory" driver. Locks and rate-limit counters will ` +
         `NOT be shared across processes. Define the store or fix config.cache.default.`,
       )
@@ -682,7 +682,7 @@ export class CacheProvider extends ServiceProvider {
     } else if (driver === 'redis') {
       adapter = new RedisAdapter(storeConfig as RedisCacheConfig)
     } else {
-      throw new Error(`[RudderJS Cache] Unknown driver "${driver}". Available: memory, redis`)
+      throw new Error(`[Rudder Cache] Unknown driver "${driver}". Available: memory, redis`)
     }
 
     CacheRegistry.set(adapter)
@@ -694,7 +694,7 @@ export class CacheProvider extends ServiceProvider {
     // would flush the previous adapter. Same pattern as @rudderjs/queue.
     rudder.command('cache:clear', async () => {
       const a = CacheRegistry.get()
-      if (!a) throw new Error('[RudderJS Cache] No cache adapter registered. Add cache() to providers.')
+      if (!a) throw new Error('[Rudder Cache] No cache adapter registered. Add cache() to providers.')
       await a.flush()
       console.log(`Cache store "${CacheRegistry.getDefaultName() ?? 'default'}" cleared.`)
       // Close the connection so this one-shot command exits — an open ioredis

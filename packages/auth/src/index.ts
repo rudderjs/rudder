@@ -122,7 +122,7 @@ function warnTestUserRefusedInProd(): void {
   if (_warnedTestUserInProd) return
   _warnedTestUserInProd = true
   console.warn(
-    '[RudderJS] Refused an x-testing-user auth header: APP_ENV=testing but ' +
+    '[Rudder] Refused an x-testing-user auth header: APP_ENV=testing but ' +
     'NODE_ENV=production. The test-only auth bypass is disabled on a production ' +
     'runtime. If this is a real deployment, unset APP_ENV=testing.',
   )
@@ -345,7 +345,7 @@ export class AuthProvider extends ServiceProvider {
       hashMake  = (plain) => hashDriver.make(plain)
     } catch {
       throw new Error(
-        '[RudderJS Auth] No hash driver found. Register HashProvider before AuthProvider.',
+        '[Rudder Auth] No hash driver found. Register HashProvider before AuthProvider.',
       )
     }
 

@@ -47,7 +47,7 @@ function rawToSql(fragment: string, bindings: readonly unknown[]): SQL {
   const holes = parts.length - 1
   if (holes !== bindings.length) {
     throw new Error(
-      `[RudderJS ORM Drizzle] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${bindings.length}: ${fragment}`,
+      `[Rudder ORM Drizzle] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${bindings.length}: ${fragment}`,
     )
   }
   const chunks: SQL[] = []
@@ -107,13 +107,13 @@ function parseJsonPath(path: string): { column: string; segments: JsonPathSegmen
   const [column, ...rawSegments] = path.split('->')
   if (!column || rawSegments.length === 0 || rawSegments.some(s => s.length === 0)) {
     throw new Error(
-      `[RudderJS ORM Drizzle] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
+      `[Rudder ORM Drizzle] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
     )
   }
   const segments = rawSegments.map((seg): JsonPathSegment => {
     if (JSON_SEGMENT_REJECT.test(seg)) {
       throw new Error(
-        `[RudderJS ORM Drizzle] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, ` +
+        `[Rudder ORM Drizzle] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, ` +
         'backslash, backtick, or control character — not allowed (path segments are spliced into SQL text).',
       )
     }
@@ -313,7 +313,7 @@ function validateLockOpts(method: string, opts?: LockOptions): LockOptions | nul
   if (!opts) return null
   if (opts.skipLocked && opts.noWait) {
     throw new Error(
-      `[RudderJS ORM Drizzle] ${method}() options skipLocked and noWait are mutually ` +
+      `[Rudder ORM Drizzle] ${method}() options skipLocked and noWait are mutually ` +
       'exclusive — skip conflicting rows OR fail fast on them, not both. Pass at most one.',
     )
   }
@@ -381,7 +381,7 @@ function vectorLiteral(vec: readonly number[]): string {
 async function resolveAutoEmbed(pending: { text: string; embedWith: string } | undefined): Promise<number[]> {
   if (!pending) {
     throw new Error(
-      '[RudderJS ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
+      '[Rudder ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
       'This is a bug — please report it.',
     )
   }
@@ -393,7 +393,7 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(
-      '[RudderJS ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
+      '[Rudder ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
       'Run `pnpm add @rudderjs/ai`, or pre-embed via your own embedder and pass number[] instead. ' +
       `Original: ${msg}`,
       { cause: err },
@@ -404,7 +404,7 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
   const vec = result.embeddings[0]
   if (!vec || vec.length === 0) {
     throw new Error(
-      `[RudderJS ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
+      `[Rudder ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
     )
   }
   return vec
@@ -555,7 +555,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _assertNotSubBuilder(): void {
     if (this._isSubBuilder) {
       throw new Error(
-        '[RudderJS ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
+        '[Rudder ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
       )
     }
   }
@@ -609,7 +609,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   selectRaw(_sql: string, _bindings: readonly unknown[] = []): this {
     throw new Error(
-      '[RudderJS ORM Drizzle] selectRaw() is not supported — Drizzle\'s typed select can\'t map an arbitrary raw projection back to hydrated models. Run the raw query via the DB facade: DB.select(sql, bindings).',
+      '[Rudder ORM Drizzle] selectRaw() is not supported — Drizzle\'s typed select can\'t map an arbitrary raw projection back to hydrated models. Run the raw query via the DB facade: DB.select(sql, bindings).',
     )
   }
 
@@ -767,7 +767,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const col = this.colOf(table, parsed.column)
     if (!col) {
       throw new Error(
-        `[RudderJS ORM Drizzle] Column "${parsed.column}" (JSON path "${path}") is not declared on the table schema.`,
+        `[Rudder ORM Drizzle] Column "${parsed.column}" (JSON path "${path}") is not declared on the table schema.`,
       )
     }
     return { col, segments: parsed.segments }
@@ -882,7 +882,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       const parts = elements.map((v): SQL => {
         if (v !== null && typeof v === 'object') {
           throw new Error(
-            '[RudderJS ORM Drizzle] whereJsonContains on SQLite supports scalar values (and arrays of scalars) ' +
+            '[Rudder ORM Drizzle] whereJsonContains on SQLite supports scalar values (and arrays of scalars) ' +
             'only — object containment has no json_each equality form. Use whereRaw(...) for structural checks.',
           )
         }
@@ -906,7 +906,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
     const count    = value === undefined ? (operatorOrValue as number) : value
     if (!Number.isInteger(count)) {
-      throw new Error(`[RudderJS ORM Drizzle] whereJsonLength expects an integer length, got ${String(count)}.`)
+      throw new Error(`[Rudder ORM Drizzle] whereJsonLength expects an integer length, got ${String(count)}.`)
     }
     const { col, segments } = this._jsonTarget(this.table, column)
     let lhs: SQL
@@ -982,7 +982,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
   crossJoin(table: string): this {
     const tbl = this.resolveTable(table)
-    if (!tbl) throw new Error(`[RudderJS ORM Drizzle] crossJoin("${table}") — table not registered (pass tables: { ${table}: ... }).`)
+    if (!tbl) throw new Error(`[Rudder ORM Drizzle] crossJoin("${table}") — table not registered (pass tables: { ${table}: ... }).`)
     this._joins.push({ kind: 'cross', table: tbl, on: null })
     return this
   }
@@ -997,7 +997,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const tbl = this.resolveTable(table)
     if (!tbl) {
       throw new Error(
-        `[RudderJS ORM Drizzle] join("${table}") — table not registered. Pass tables: { ${table}: myTable } in drizzle() config or call DrizzleTableRegistry.register("${table}", myTable).`,
+        `[Rudder ORM Drizzle] join("${table}") — table not registered. Pass tables: { ${table}: myTable } in drizzle() config or call DrizzleTableRegistry.register("${table}", myTable).`,
       )
     }
     let on: SQL
@@ -1082,7 +1082,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const target = (other as unknown as Record<symbol, unknown>)[QB_TARGET] ?? other
     if (!(target instanceof DrizzleQueryBuilder)) {
       throw new Error(
-        '[RudderJS ORM Drizzle] union()/unionAll() requires another Drizzle query builder — pass a Model.query() of a Drizzle-adapter model.',
+        '[Rudder ORM Drizzle] union()/unionAll() requires another Drizzle query builder — pass a Model.query() of a Drizzle-adapter model.',
       )
     }
     this._unions.push({ all, qb: target as DrizzleQueryBuilder<T> })
@@ -1123,7 +1123,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   with(...relations: string[]): this {
     if (relations.length === 0) return this
     throw new Error(
-      `[RudderJS ORM Drizzle] Constrained eager loading via withWhereHas(${relations.map((r) => `'${r}'`).join(', ')}) ` +
+      `[Rudder ORM Drizzle] Constrained eager loading via withWhereHas(${relations.map((r) => `'${r}'`).join(', ')}) ` +
         `is not implemented on the Drizzle adapter. ` +
         `Plain eager loading (\`Model.with('${relations[0]}')\`) IS supported. ` +
         `For filtering by a relation's existence only, use whereHas('${relations[0]}') ` +
@@ -1192,7 +1192,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       case 'NOT IN': return notInArray(col, value as unknown[]) as SQL
       default: {
         const _exhaustive: never = operator
-        throw new Error(`[RudderJS ORM Drizzle] Unsupported operator: ${String(_exhaustive)}`)
+        throw new Error(`[Rudder ORM Drizzle] Unsupported operator: ${String(_exhaustive)}`)
       }
     }
   }
@@ -1208,7 +1208,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const tbl = this.resolveTable(tableName)
     if (!tbl) {
       throw new Error(
-        `[RudderJS ORM Drizzle] join references table "${tableName}" which isn't registered. ` +
+        `[Rudder ORM Drizzle] join references table "${tableName}" which isn't registered. ` +
         `Pass tables: { ${tableName}: myTable } in drizzle() config or call DrizzleTableRegistry.register("${tableName}", myTable).`,
       )
     }
@@ -1262,12 +1262,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   whereRelationExists(p: RelationExistencePredicate): this {
     if (p.count) {
       throw new Error(
-        `[RudderJS ORM Drizzle] has("${p.relation}", …) count comparison is not implemented on the Drizzle adapter. Use whereHas() for existence, or load the related rows via related() and count in app code.`,
+        `[Rudder ORM Drizzle] has("${p.relation}", …) count comparison is not implemented on the Drizzle adapter. Use whereHas() for existence, or load the related rows via related() and count in app code.`,
       )
     }
     if (p.boolean === 'OR') {
       throw new Error(
-        `[RudderJS ORM Drizzle] orWhereHas("${p.relation}") (OR-rooted relation existence) is not implemented on the Drizzle adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
+        `[Rudder ORM Drizzle] orWhereHas("${p.relation}") (OR-rooted relation existence) is not implemented on the Drizzle adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
       )
     }
     this._extraExprs.push(this._relationExistsExpr(this.table, p))
@@ -1288,7 +1288,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const Related = this.resolveTable(p.relatedTable)
     if (!Related) {
       throw new Error(
-        `[RudderJS ORM Drizzle] whereRelationExists: no table schema registered for "${p.relatedTable}". ` +
+        `[Rudder ORM Drizzle] whereRelationExists: no table schema registered for "${p.relatedTable}". ` +
         `Pass tables: { ${p.relatedTable}: ... } in drizzle() config.`,
       )
     }
@@ -1312,7 +1312,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       const Pivot = this.resolveTable(p.through.pivotTable)
       if (!Pivot) {
         throw new Error(
-          `[RudderJS ORM Drizzle] whereRelationExists: no table schema registered for pivot "${p.through.pivotTable}".`,
+          `[Rudder ORM Drizzle] whereRelationExists: no table schema registered for pivot "${p.through.pivotTable}".`,
         )
       }
       const pivotForeignCol = this.colOf(Pivot, p.through.foreignPivotKey)
@@ -1402,7 +1402,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const Related = this.resolveTable(js.relatedTable)
     if (!Related) {
       throw new Error(
-        `[RudderJS ORM Drizzle] withAggregate: no table schema registered for "${js.relatedTable}". ` +
+        `[Rudder ORM Drizzle] withAggregate: no table schema registered for "${js.relatedTable}". ` +
         `Pass tables: { ${js.relatedTable}: ... } in drizzle() config.`,
       )
     }
@@ -1412,7 +1412,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       const Pivot = this.resolveTable(js.through.pivotTable)
       if (!Pivot) {
         throw new Error(
-          `[RudderJS ORM Drizzle] withAggregate: no table schema registered for pivot "${js.through.pivotTable}".`,
+          `[Rudder ORM Drizzle] withAggregate: no table schema registered for pivot "${js.through.pivotTable}".`,
         )
       }
       const pivotForeignCol = this.colOf(Pivot,   js.through.foreignPivotKey)
@@ -1778,7 +1778,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     if (this._vectorClause !== null) {
       throw new Error(
-        '[RudderJS ORM] count() with .whereVectorSimilarTo() is not supported in B7 — ' +
+        '[Rudder ORM] count() with .whereVectorSimilarTo() is not supported in B7 — ' +
         'vector queries route through raw SQL with an implicit ORDER BY similarity.',
       )
     }
@@ -1813,12 +1813,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     if (this._aggregates.length > 0) {
       throw new Error(
-        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
+        '[Rudder ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
       )
     }
     if (this._orders.length > 0) {
       throw new Error(
-        '[RudderJS ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
+        '[Rudder ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
       )
     }
 
@@ -1942,7 +1942,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const jsonWrites = new Map<string, Array<{ segments: JsonPathSegment[]; value: unknown }>>()
     const conflict = (column: string): never => {
       throw new Error(
-        `[RudderJS ORM Drizzle] update() payload writes both the whole column "${column}" and a JSON ` +
+        `[Rudder ORM Drizzle] update() payload writes both the whole column "${column}" and a JSON ` +
         `path inside it — the two assignments would race (last-one-wins per dialect). Use one or the other.`,
       )
     }
@@ -1963,7 +1963,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     for (const [column, writes] of jsonWrites) {
       const col = this.col(column)
       if (col === undefined) {
-        throw new Error(`[RudderJS ORM Drizzle] Unknown column "${column}" in JSON-path update — not in the table schema.`)
+        throw new Error(`[Rudder ORM Drizzle] Unknown column "${column}" in JSON-path update — not in the table schema.`)
       }
       if (this.dialect === 'pg') {
         // jsonb_set takes a single text[] path — nest one wrap per write.
@@ -1992,7 +1992,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private async _mysqlReselect(id: number | string, label: string): Promise<T> {
     const pkCol = this.col(this.primaryKey) as Column
     const rows = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1), this.split.tag)
-    if (!rows[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() could not re-select the written row.`)
+    if (!rows[0]) throw new Error(`[Rudder ORM Drizzle] ${label}() could not re-select the written row.`)
     return rows[0]
   }
 
@@ -2016,7 +2016,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       return this._mysqlReselect(id, 'create')
     }
     const result = await this._run<T[]>(insert.returning(), this.split.tag)
-    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] create() returned no rows.')
+    if (!result[0]) throw new Error('[Rudder ORM Drizzle] create() returned no rows.')
     return result[0]
   }
 
@@ -2030,7 +2030,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       return this._mysqlReselect(id, 'update')
     }
     const result = await this._run<T[]>(upd.returning(), this.split.tag)
-    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] update() returned no rows.')
+    if (!result[0]) throw new Error('[Rudder ORM Drizzle] update() returned no rows.')
     return result[0]
   }
 
@@ -2164,7 +2164,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       // after the no-RETURNING update — a replica may not have it yet; mirrors
       // the native engine's `_reselect`).
       const after = await this._run<T[]>(this.db.select().from(this.table).where(eq(pkCol, id)).limit(1), this.split.tag)
-      if (!after[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() target row not found.`)
+      if (!after[0]) throw new Error(`[Rudder ORM Drizzle] ${label}() target row not found.`)
       return after[0]
     }
 
@@ -2173,7 +2173,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .set({ [column]: delta, ...extra })
       .where(eq(pkCol, id))
       .returning(), this.split.tag)
-    if (!result[0]) throw new Error(`[RudderJS ORM Drizzle] ${label}() returned no rows.`)
+    if (!result[0]) throw new Error(`[Rudder ORM Drizzle] ${label}() returned no rows.`)
     return result[0]
   }
 
@@ -2248,7 +2248,7 @@ class DrizzleJoinClause implements JoinClause {
   /** @internal — fold the collected conditions into one ON expression. */
   build(): SQL {
     if (this.parts.length === 0) {
-      throw new Error('[RudderJS ORM Drizzle] join callback added no ON conditions — call on()/where() inside it.')
+      throw new Error('[Rudder ORM Drizzle] join callback added no ON conditions — call on()/where() inside it.')
     }
     let result = this.parts[0]!.expr
     for (let i = 1; i < this.parts.length; i++) {
@@ -2454,7 +2454,7 @@ export class DrizzleAdapter implements OrmAdapter {
 
     if (db && readUrls.length > 0) {
       throw new Error(
-        '[RudderJS ORM Drizzle] Read replicas (readUrls) require url-based config — a pre-built ' +
+        '[Rudder ORM Drizzle] Read replicas (readUrls) require url-based config — a pre-built ' +
           '`client:` owns its connection lifecycle, so the adapter cannot open replica clients for it.',
       )
     }
@@ -2491,7 +2491,7 @@ export class DrizzleAdapter implements OrmAdapter {
       }
     }
 
-    if (!db) throw new Error('[RudderJS ORM Drizzle] Failed to initialize database client.')
+    if (!db) throw new Error('[Rudder ORM Drizzle] Failed to initialize database client.')
     // When the user supplies `client:` without `dialect:`, default to 'pg'.
     // Postgres is the most common pre-built Drizzle setup and the `.returning()`
     // code paths work on both Postgres and SQLite — the explicit dialect knob
@@ -2508,7 +2508,7 @@ export class DrizzleAdapter implements OrmAdapter {
     const schema = this.tables[table] ?? DrizzleTableRegistry.get(table)
     if (!schema) {
       throw new Error(
-        `[RudderJS ORM Drizzle] No table schema registered for "${table}". ` +
+        `[Rudder ORM Drizzle] No table schema registered for "${table}". ` +
         `Pass tables: { ${table}: myTable } in drizzle() config or call ` +
         `DrizzleTableRegistry.register("${table}", myTable).`
       )
@@ -2567,13 +2567,13 @@ export class DrizzleAdapter implements OrmAdapter {
     const run = this.db.transaction
     if (typeof run !== 'function') {
       throw new Error(
-        '[RudderJS ORM Drizzle] This Drizzle driver does not support transaction() — ' +
+        '[Rudder ORM Drizzle] This Drizzle driver does not support transaction() — ' +
           'db.transaction() is unavailable on the configured client.',
       )
     }
     if (opts?.isolationLevel && this.dialect === 'sqlite') {
       throw new Error(
-        '[RudderJS ORM Drizzle] SQLite does not support transaction isolation levels — ' +
+        '[Rudder ORM Drizzle] SQLite does not support transaction isolation levels — ' +
           'drop the isolationLevel option, or use the pg/mysql Drizzle driver.',
       )
     }
@@ -2639,7 +2639,7 @@ export class DrizzleAdapter implements OrmAdapter {
     const exec = picked.db.execute
     if (typeof exec !== 'function') {
       throw new Error(
-        '[RudderJS DB] db.execute() is not available on this Drizzle driver — ' +
+        '[Rudder DB] db.execute() is not available on this Drizzle driver — ' +
           'raw DB.select() requires a driver that supports execute() (postgres-js, pg, neon, or libsql).',
       )
     }
@@ -2667,7 +2667,7 @@ export class DrizzleAdapter implements OrmAdapter {
     const exec = this.db.execute
     if (typeof exec !== 'function') {
       throw new Error(
-        '[RudderJS DB] db.execute() is not available on this Drizzle driver — ' +
+        '[Rudder DB] db.execute() is not available on this Drizzle driver — ' +
           'raw DB writes require a driver that supports execute() (postgres-js, pg, neon, or libsql).',
       )
     }

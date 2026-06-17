@@ -48,7 +48,7 @@ export async function serveTemporaryUrls(
   const adapter = StorageRegistry.get(opts.disk)
   if (!(adapter instanceof LocalAdapter)) {
     throw new Error(
-      `[RudderJS Storage] serveTemporaryUrls: disk "${opts.disk}" is not a LocalAdapter ` +
+      `[Rudder Storage] serveTemporaryUrls: disk "${opts.disk}" is not a LocalAdapter ` +
       `(got ${adapter.constructor.name}). S3 + other remote drivers sign their own URLs.`,
     )
   }
@@ -59,7 +59,7 @@ export async function serveTemporaryUrls(
   const prefix = opts.routePath.replace(/(?::path)?\*+$/, '')
   if (!prefix.endsWith('/')) {
     throw new Error(
-      `[RudderJS Storage] serveTemporaryUrls: routePath must end in "/*" or "/:path*" — got "${opts.routePath}".`,
+      `[Rudder Storage] serveTemporaryUrls: routePath must end in "/*" or "/:path*" — got "${opts.routePath}".`,
     )
   }
   adapter.serveAt(prefix)

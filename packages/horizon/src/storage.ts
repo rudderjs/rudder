@@ -123,7 +123,7 @@ export class SqliteStorage implements HorizonStorage {
     if (!this.db) {
       const Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
       if (!Database) {
-        throw new Error('[RudderJS Horizon] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3')
+        throw new Error('[Rudder Horizon] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3')
       }
       this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(this.dbPath)
       this.migrate()

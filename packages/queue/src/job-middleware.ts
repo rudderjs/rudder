@@ -84,7 +84,7 @@ export class RateLimited implements JobMiddleware {
 
     if (count > this._maxAttempts) {
       throw new Error(
-        `[RudderJS Queue] Job rate limit exceeded for "${this._key}" (${this._maxAttempts}/${this._decaySeconds}s). Releasing back to queue.`
+        `[Rudder Queue] Job rate limit exceeded for "${this._key}" (${this._maxAttempts}/${this._decaySeconds}s). Releasing back to queue.`
       )
     }
 
@@ -116,7 +116,7 @@ export class WithoutOverlapping implements JobMiddleware {
     const cache = await _getCacheAdapter()
     if (!cache) {
       throw new Error(
-        '[RudderJS Queue] WithoutOverlapping requires a cache adapter. Install @rudderjs/cache and add CacheProvider.'
+        '[Rudder Queue] WithoutOverlapping requires a cache adapter. Install @rudderjs/cache and add CacheProvider.'
       )
     }
 
@@ -128,7 +128,7 @@ export class WithoutOverlapping implements JobMiddleware {
     })
     if (!ran && result === false) {
       throw new Error(
-        `[RudderJS Queue] Job "${this._key}" is already running. Releasing back to queue.`
+        `[Rudder Queue] Job "${this._key}" is already running. Releasing back to queue.`
       )
     }
   }
@@ -164,7 +164,7 @@ export class ThrottlesExceptions implements JobMiddleware {
 
       if (count >= this._maxExceptions) {
         throw new Error(
-          `[RudderJS Queue] Job "${job.constructor.name}" throttled — ${this._maxExceptions} exceptions in ${this._decayMinutes}m.`
+          `[Rudder Queue] Job "${job.constructor.name}" throttled — ${this._maxExceptions} exceptions in ${this._decayMinutes}m.`
         )
       }
 

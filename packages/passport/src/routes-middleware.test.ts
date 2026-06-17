@@ -817,7 +817,7 @@ describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
       assert.match((reported[0] as Error).message, /synthetic boom/)
     } finally {
       // Restore default reporter so trailing tests don't capture stray errors.
-      setExceptionReporter((e) => { console.error('[RudderJS]', e) })
+      setExceptionReporter((e) => { console.error('[Rudder]', e) })
     }
     Passport.reset()
   })

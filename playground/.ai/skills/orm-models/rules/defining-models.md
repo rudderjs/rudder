@@ -134,4 +134,4 @@ class OAuthClient extends Model {
 }
 ```
 
-Error: `[RudderJS ORM] Prisma has no delegate for table "oauth_clients"` means you used the SQL name by mistake.
+Error: `[Rudder ORM] Prisma has no delegate for table "oauth_clients"` means you used the SQL name by mistake.

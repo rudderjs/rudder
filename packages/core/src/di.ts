@@ -79,7 +79,7 @@ export class Container {
   private get _scopeAls(): { run<R>(store: Map<string | symbol, unknown>, fn: () => R): R; getStore(): Map<string | symbol, unknown> | undefined } {
     if (!this._scopeAlsInstance) {
       if (!_AsyncLocalStorage) {
-        throw new Error('[RudderJS] AsyncLocalStorage is not available — runScoped() and scoped bindings require Node.js (node:async_hooks).')
+        throw new Error('[Rudder] AsyncLocalStorage is not available — runScoped() and scoped bindings require Node.js (node:async_hooks).')
       }
       this._scopeAlsInstance = new _AsyncLocalStorage<Map<string | symbol, unknown>>()
     }
@@ -279,7 +279,7 @@ export class Container {
     if (this._building.has(key)) {
       const chain = [...this._building, key].map(k => this._tokenLabel(k)).join(' → ')
       throw new Error(
-        `[RudderJS] Circular dependency detected while resolving from the DI container:\n` +
+        `[Rudder] Circular dependency detected while resolving from the DI container:\n` +
         `  ${chain}\n` +
         `  Break the cycle with a deferred provider, a factory binding, or a setter dependency.`
       )
@@ -294,7 +294,7 @@ export class Container {
           const scope = this._scopeAls.getStore()
           if (!scope) {
             throw new Error(
-              `[RudderJS] Cannot resolve scoped binding outside of a request scope.\n` +
+              `[Rudder] Cannot resolve scoped binding outside of a request scope.\n` +
               `  Wrap the call in container.runScoped() or add ScopeMiddleware().`
             )
           }
@@ -330,7 +330,7 @@ export class Container {
 
       const label = this._tokenLabel(key)
       throw new Error(
-        `[RudderJS] Cannot resolve ${label} from the DI container.\n` +
+        `[Rudder] Cannot resolve ${label} from the DI container.\n` +
         `  Did you forget to add @Injectable() to the class, or register it in a ServiceProvider?`
       )
     } finally {
@@ -387,7 +387,7 @@ export class Container {
   private autoResolve<T>(target: Constructor<T>): T {
     if (typeof Reflect === 'undefined' || typeof Reflect.getMetadata !== 'function') {
       throw new Error(
-        `[RudderJS] reflect-metadata is not loaded.\n` +
+        `[Rudder] reflect-metadata is not loaded.\n` +
         `  Add: import 'reflect-metadata' at the top of your bootstrap/app.ts`
       )
     }
@@ -395,7 +395,7 @@ export class Container {
     const isInjectable = Reflect.getMetadata(INJECTABLE_METADATA, target)
     if (!isInjectable) {
       throw new Error(
-        `[RudderJS] "${target.name}" is not decorated with @Injectable().\n` +
+        `[Rudder] "${target.name}" is not decorated with @Injectable().\n` +
         `  Add @Injectable() above the class declaration to enable auto-resolution.`
       )
     }

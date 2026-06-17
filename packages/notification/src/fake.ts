@@ -49,7 +49,7 @@ export class NotificationFake {
     const matching = this._matchingFor(notifiable, notificationClass, predicate)
     assert.ok(
       matching.length > 0,
-      `[RudderJS Notification] Expected notification "${notificationClass.name}" to be sent to notifiable "${notifiable.id}", but it was not.`,
+      `[Rudder Notification] Expected notification "${notificationClass.name}" to be sent to notifiable "${notifiable.id}", but it was not.`,
     )
   }
 
@@ -62,7 +62,7 @@ export class NotificationFake {
     assert.strictEqual(
       matching.length,
       0,
-      `[RudderJS Notification] Expected notification "${notificationClass.name}" not to be sent to notifiable "${notifiable.id}", but it was sent ${matching.length} time(s).`,
+      `[Rudder Notification] Expected notification "${notificationClass.name}" not to be sent to notifiable "${notifiable.id}", but it was sent ${matching.length} time(s).`,
     )
   }
 
@@ -76,7 +76,7 @@ export class NotificationFake {
     assert.strictEqual(
       matching.length,
       count,
-      `[RudderJS Notification] Expected notification "${notificationClass.name}" to be sent to notifiable "${notifiable.id}" ${count} time(s), but it was sent ${matching.length} time(s).`,
+      `[Rudder Notification] Expected notification "${notificationClass.name}" to be sent to notifiable "${notifiable.id}" ${count} time(s), but it was sent ${matching.length} time(s).`,
     )
   }
 
@@ -85,7 +85,7 @@ export class NotificationFake {
     assert.strictEqual(
       this._sent.length,
       0,
-      `[RudderJS Notification] Expected no notifications to be sent, but ${this._sent.length} were sent.`,
+      `[Rudder Notification] Expected no notifications to be sent, but ${this._sent.length} were sent.`,
     )
   }
 
@@ -94,7 +94,7 @@ export class NotificationFake {
     assert.strictEqual(
       this._sent.length,
       count,
-      `[RudderJS Notification] Expected ${count} notification(s) to be sent, but ${this._sent.length} were sent.`,
+      `[Rudder Notification] Expected ${count} notification(s) to be sent, but ${this._sent.length} were sent.`,
     )
   }
 

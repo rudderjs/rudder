@@ -88,7 +88,7 @@ export function hasPrismaSeedConfig(cwd: string = process.cwd()): boolean {
 export function assertSafeName(name: string): string {
   if (!/^[A-Za-z0-9._-]+$/.test(name)) {
     throw new Error(
-      `[RudderJS ORM] Invalid migration name ${JSON.stringify(name)}. ` +
+      `[Rudder ORM] Invalid migration name ${JSON.stringify(name)}. ` +
       `Use only letters, digits, dots, dashes, and underscores (no spaces or shell metacharacters).`,
     )
   }
@@ -175,13 +175,13 @@ export interface VectorMigrationResult {
 export function buildVectorMigrationSql(opts: VectorMigrationOptions): string {
   const { table, column, dimensions, metric = 'cosine' } = opts
   if (!isValidIdentifier(table)) {
-    throw new Error(`[RudderJS ORM] make:migration --vector: invalid table name "${table}".`)
+    throw new Error(`[Rudder ORM] make:migration --vector: invalid table name "${table}".`)
   }
   if (!isValidIdentifier(column)) {
-    throw new Error(`[RudderJS ORM] make:migration --vector: invalid column name "${column}".`)
+    throw new Error(`[Rudder ORM] make:migration --vector: invalid column name "${column}".`)
   }
   if (!Number.isInteger(dimensions) || dimensions <= 0) {
-    throw new Error(`[RudderJS ORM] make:migration --vector: dimensions must be a positive integer; got ${String(dimensions)}.`)
+    throw new Error(`[Rudder ORM] make:migration --vector: dimensions must be a positive integer; got ${String(dimensions)}.`)
   }
   const opsClass =
     metric === 'l2'            ? 'vector_l2_ops' :
@@ -294,11 +294,11 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
   const column = args[i + 2]
   const dimStr = args[i + 3]
   if (!table || !column || !dimStr) {
-    throw new Error('[RudderJS ORM] make:migration --vector requires <table> <column> <dimensions>; e.g. `--vector documents embedding 1536`.')
+    throw new Error('[Rudder ORM] make:migration --vector requires <table> <column> <dimensions>; e.g. `--vector documents embedding 1536`.')
   }
   const dimensions = Number(dimStr)
   if (!Number.isInteger(dimensions) || dimensions <= 0) {
-    throw new Error(`[RudderJS ORM] make:migration --vector: dimensions must be a positive integer; got "${dimStr}".`)
+    throw new Error(`[Rudder ORM] make:migration --vector: dimensions must be a positive integer; got "${dimStr}".`)
   }
 
   const mIdx = args.indexOf('--metric')
@@ -306,7 +306,7 @@ export function parseVectorFlag(args: readonly string[]): { table: string; colum
   if (mIdx !== -1) {
     const v = args[mIdx + 1]
     if (v !== 'cosine' && v !== 'l2' && v !== 'inner-product') {
-      throw new Error(`[RudderJS ORM] make:migration --metric must be one of cosine|l2|inner-product; got "${v ?? ''}".`)
+      throw new Error(`[Rudder ORM] make:migration --metric must be one of cosine|l2|inner-product; got "${v ?? ''}".`)
     }
     metric = v
   }
@@ -1009,7 +1009,7 @@ export async function runSeeder(cwd: string = process.cwd()): Promise<void> {
     const mod: unknown = await import(pathToFileURL(seederFile).href)
     const exported = (mod as { default?: unknown }).default
     if (!exported) {
-      throw new Error(`[RudderJS] ${seederFile} has no default export. Export a Seeder subclass or an async function.`)
+      throw new Error(`[Rudder] ${seederFile} has no default export. Export a Seeder subclass or an async function.`)
     }
     if (typeof exported === 'function') {
       // Class constructor → instantiate + run(); or plain function → invoke
@@ -1022,7 +1022,7 @@ export async function runSeeder(cwd: string = process.cwd()): Promise<void> {
         await (exported as () => void | Promise<void>)()
       }
     } else {
-      throw new Error(`[RudderJS] ${seederFile} default export must be a Seeder class or function.`)
+      throw new Error(`[Rudder] ${seederFile} default export must be a Seeder class or function.`)
     }
     console.log('  Seeding complete.')
     return
@@ -1038,7 +1038,7 @@ export async function runSeeder(cwd: string = process.cwd()): Promise<void> {
   }
 
   throw new Error(
-    '[RudderJS] No seeder found. Create database/seeders/DatabaseSeeder.ts:\n\n' +
+    '[Rudder] No seeder found. Create database/seeders/DatabaseSeeder.ts:\n\n' +
     '  import { Seeder } from \'@rudderjs/orm\'\n' +
     '  export default class DatabaseSeeder extends Seeder {\n' +
     '    async run() { /* seed your data */ }\n' +

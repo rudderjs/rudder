@@ -46,14 +46,14 @@ export class AuthManager {
     const guardName = name ?? this.config.defaults.guard
 
     const guardConfig = this.config.guards[guardName]
-    if (!guardConfig) throw new Error(`[RudderJS Auth] Guard "${guardName}" is not defined.`)
+    if (!guardConfig) throw new Error(`[Rudder Auth] Guard "${guardName}" is not defined.`)
 
     if (guardConfig.driver === 'session') {
       const provider = this.createProvider(guardConfig.provider)
       return new SessionGuard(provider, this.getSession())
     }
 
-    throw new Error(`[RudderJS Auth] Guard driver "${guardConfig.driver}" is not supported.`)
+    throw new Error(`[Rudder Auth] Guard driver "${guardConfig.driver}" is not supported.`)
   }
 
   // Default-guard convenience methods — match Laravel's AuthManager, which
@@ -109,12 +109,12 @@ export class AuthManager {
     const providerName = name ?? this.config.guards[this.config.defaults.guard]?.provider
     if (!providerName) {
       throw new Error(
-        `[RudderJS Auth] Cannot resolve a default provider — set "auth.guards.${this.config.defaults.guard}.provider" or pass an explicit name.`,
+        `[Rudder Auth] Cannot resolve a default provider — set "auth.guards.${this.config.defaults.guard}.provider" or pass an explicit name.`,
       )
     }
 
     const providerConfig = this.config.providers[providerName]
-    if (!providerConfig) throw new Error(`[RudderJS Auth] User provider "${providerName}" is not defined.`)
+    if (!providerConfig) throw new Error(`[Rudder Auth] User provider "${providerName}" is not defined.`)
 
     if (providerConfig.driver === 'eloquent') {
       return new EloquentUserProvider(
@@ -124,7 +124,7 @@ export class AuthManager {
       )
     }
 
-    throw new Error(`[RudderJS Auth] Provider driver "${providerConfig.driver}" is not supported.`)
+    throw new Error(`[Rudder Auth] Provider driver "${providerConfig.driver}" is not supported.`)
   }
 }
 
@@ -184,7 +184,7 @@ export function currentAuth(): AuthManager {
   const m = _als.getStore()
   if (!m) {
     throw new Error(
-      '[RudderJS Auth] auth() has no request context. AuthMiddleware runs only ' +
+      '[Rudder Auth] auth() has no request context. AuthMiddleware runs only ' +
       'on the "web" route group — for API routes, use RequireBearer() + req.user ' +
       '(see @rudderjs/passport). For queue jobs and CLI commands, pass the user ' +
       'id explicitly.',

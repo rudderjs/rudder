@@ -96,7 +96,7 @@ export class PostgresDriver extends PgScope implements Driver {
       factory = mod.default ?? (mod as unknown as PgFactory)
     } catch (err) {
       throw new NativeDriverError(
-        `[RudderJS ORM native] Failed to load "postgres". It is an optional peer of ` +
+        `[Rudder ORM native] Failed to load "postgres". It is an optional peer of ` +
         `@rudderjs/orm — install it with \`pnpm add postgres\` to use the native Postgres engine.`,
         { cause: err },
       )
@@ -164,7 +164,7 @@ export class PostgresDriver extends PgScope implements Driver {
       await sql.end({ timeout: 1 }).catch(() => { /* best effort */ })
       const msg = err instanceof Error ? err.message : String(err)
       throw new NativeDriverError(
-        `[RudderJS ORM native] Could not connect to Postgres at the configured URL: ${msg}`,
+        `[Rudder ORM native] Could not connect to Postgres at the configured URL: ${msg}`,
         { cause: err },
       )
     }

@@ -61,7 +61,7 @@ export class DoctorRegistry {
 
   register(check: DoctorCheck): void {
     if (this._checks.has(check.id)) {
-      console.warn(`[RudderJS] doctor check '${check.id}' was already registered; the later definition overrides the earlier one.`)
+      console.warn(`[Rudder] doctor check '${check.id}' was already registered; the later definition overrides the earlier one.`)
     }
     this._checks.set(check.id, check)
   }

@@ -135,7 +135,7 @@ export class MysqlDriver implements Driver, AffectingExecutor {
       mod = await import('mysql2/promise') as unknown as Mysql2Module
     } catch (err) {
       throw new NativeDriverError(
-        `[RudderJS ORM native] Failed to load "mysql2". It is an optional peer of ` +
+        `[Rudder ORM native] Failed to load "mysql2". It is an optional peer of ` +
         `@rudderjs/orm — install it with \`pnpm add mysql2\` to use the native MySQL engine.`,
         { cause: err },
       )
@@ -164,7 +164,7 @@ export class MysqlDriver implements Driver, AffectingExecutor {
       await pool.end().catch(() => { /* best effort */ })
       const msg = err instanceof Error ? err.message : String(err)
       throw new NativeDriverError(
-        `[RudderJS ORM native] Could not connect to MySQL at the configured URL: ${msg}`,
+        `[Rudder ORM native] Could not connect to MySQL at the configured URL: ${msg}`,
         { cause: err },
       )
     }

@@ -36,7 +36,7 @@ export class StorageRegistry {
   static get(name?: string): StorageAdapter {
     const key = name ?? _store.defaultDisk
     const a   = _store.adapters.get(key)
-    if (!a) throw new Error(`[RudderJS Storage] Disk "${key}" not found. Check your storage config.`)
+    if (!a) throw new Error(`[Rudder Storage] Disk "${key}" not found. Check your storage config.`)
     return a
   }
 

@@ -68,7 +68,7 @@ export class HashRegistry {
 export class Hash {
   private static driver(): HashDriver {
     const d = HashRegistry.get()
-    if (!d) throw new Error('[RudderJS Hash] No hash driver registered. Add hash() to providers.')
+    if (!d) throw new Error('[Rudder Hash] No hash driver registered. Add hash() to providers.')
     return d
   }
 
@@ -95,7 +95,7 @@ export class Hash {
   static makeSync(value: string): string {
     const d = this.driver()
     if (typeof d.makeSync !== 'function') {
-      throw new Error('[RudderJS Hash] The active hash driver does not support synchronous hashing. Use Hash.make() (async) or switch to the bcrypt driver.')
+      throw new Error('[Rudder Hash] The active hash driver does not support synchronous hashing. Use Hash.make() (async) or switch to the bcrypt driver.')
     }
     return d.makeSync(value)
   }
@@ -180,7 +180,7 @@ export class Argon2Driver implements HashDriver {
   makeSync(_value: string): string {
     // argon2 is a native addon with no synchronous API. Sync call sites (the
     // ORM `hashed` cast) must use the bcrypt driver or hash via an async mutator.
-    throw new Error('[RudderJS Hash] The argon2 driver has no synchronous hashing API. Use Hash.make() (async), switch to the bcrypt driver, or hash via an async mutator.')
+    throw new Error('[Rudder Hash] The argon2 driver has no synchronous hashing API. Use Hash.make() (async), switch to the bcrypt driver, or hash via an async mutator.')
   }
 
   async check(value: string, hashed: string): Promise<boolean> {
@@ -238,7 +238,7 @@ export class HashProvider extends ServiceProvider {
     } else if (cfg.driver === 'argon2') {
       driver = new Argon2Driver(cfg.argon2)
     } else {
-      throw new Error(`[RudderJS Hash] Unknown driver "${cfg.driver as string}". Available: bcrypt, argon2`)
+      throw new Error(`[Rudder Hash] Unknown driver "${cfg.driver as string}". Available: bcrypt, argon2`)
     }
 
     HashRegistry.set(driver)

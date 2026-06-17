@@ -24,7 +24,7 @@ function requireValues(kind: 'enum' | 'set', values: string[]): string[] {
   if (!Array.isArray(values) || values.length === 0) {
     throw new NativeOrmError(
       'NATIVE_DDL_EMPTY_ENUM',
-      `[RudderJS ORM native] ${kind}() requires a non-empty list of allowed values.`,
+      `[Rudder ORM native] ${kind}() requires a non-empty list of allowed values.`,
     )
   }
   return values

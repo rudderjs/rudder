@@ -57,7 +57,7 @@ export class FailoverAdapter implements MailAdapter {
     }
 
     throw new Error(
-      `[RudderJS Mail] All mailers failed.\n` +
+      `[Rudder Mail] All mailers failed.\n` +
       errors.map((e, i) => `  Mailer ${i}: ${e.message}`).join('\n')
     )
   }

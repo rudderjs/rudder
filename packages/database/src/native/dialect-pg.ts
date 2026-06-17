@@ -208,12 +208,12 @@ export class PgDialect implements Dialect {
       case 'set':
         throw new NativeOrmError(
           'NATIVE_DDL_UNSUPPORTED_TYPE',
-          `[RudderJS ORM native] Postgres has no SET column type ("${column.name}"). Use enum(), a json column, or a join table.`,
+          `[Rudder ORM native] Postgres has no SET column type ("${column.name}"). Use enum(), a json column, or a join table.`,
         )
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type
-        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[RudderJS ORM native] No Postgres type mapping for column type ${JSON.stringify(unreachable)}.`)
+        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[Rudder ORM native] No Postgres type mapping for column type ${JSON.stringify(unreachable)}.`)
       }
     }
   }

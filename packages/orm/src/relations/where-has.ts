@@ -182,7 +182,7 @@ export function captureConstraints(
       const rejection = RECORDER_REJECTIONS[name]
       if (rejection !== undefined) {
         return (): ConstraintQueryBuilder => {
-          throw new Error(`[RudderJS ORM] ${name}() inside a whereHas constrain callback is not supported — ${rejection}`)
+          throw new Error(`[Rudder ORM] ${name}() inside a whereHas constrain callback is not supported — ${rejection}`)
         }
       }
       if (RECORDER_NOOP_METHODS.has(name)) {
@@ -193,7 +193,7 @@ export function captureConstraints(
       // catch-all is exactly how dropped constraints went unnoticed.
       return (): ConstraintQueryBuilder => {
         throw new Error(
-          `[RudderJS ORM] ${name}() is not available inside a whereHas constrain callback. ` +
+          `[Rudder ORM] ${name}() is not available inside a whereHas constrain callback. ` +
           `Supported: where, whereIn/whereNotIn, whereNull/whereNotNull, whereBetween, when/unless, ` +
           `whereHas/whereDoesntHave (plus ignored ordering/limiting methods).`,
         )
@@ -224,12 +224,12 @@ function buildChildPredicate(
   const def = Owner.relations[relation]
   if (!def) {
     throw new Error(
-      `[RudderJS ORM] Relation "${relation}" is not defined on ${Owner.name} (nested whereHas inside a constrain callback).`,
+      `[Rudder ORM] Relation "${relation}" is not defined on ${Owner.name} (nested whereHas inside a constrain callback).`,
     )
   }
   if (def.type === 'morphTo') {
     throw new Error(
-      `[RudderJS ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
+      `[Rudder ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
       `Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
     )
   }
@@ -272,9 +272,9 @@ export function resolveBelongsToFor(
 ): HasOrBelongsToDef {
   if (relation !== undefined) {
     const def = Self.relations[relation]
-    if (!def) throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Self.name}.`)
+    if (!def) throw new Error(`[Rudder ORM] Relation "${relation}" is not defined on ${Self.name}.`)
     if (def.type !== 'belongsTo') {
-      throw new Error(`[RudderJS ORM] Relation "${relation}" on ${Self.name} is "${def.type}", not "belongsTo".`)
+      throw new Error(`[Rudder ORM] Relation "${relation}" on ${Self.name} is "${def.type}", not "belongsTo".`)
     }
     return def as HasOrBelongsToDef
   }
@@ -286,14 +286,14 @@ export function resolveBelongsToFor(
   }
   if (candidates.length === 0) {
     throw new Error(
-      `[RudderJS ORM] whereBelongsTo: ${Self.name} has no belongsTo relation pointing at ${ParentCtor.name}. ` +
+      `[Rudder ORM] whereBelongsTo: ${Self.name} has no belongsTo relation pointing at ${ParentCtor.name}. ` +
       `Pass a relation name explicitly.`,
     )
   }
   if (candidates.length > 1) {
     const names = candidates.map(([n]) => n).join(', ')
     throw new Error(
-      `[RudderJS ORM] whereBelongsTo: ${Self.name} has multiple belongsTo relations pointing at ${ParentCtor.name} (${names}). ` +
+      `[Rudder ORM] whereBelongsTo: ${Self.name} has multiple belongsTo relations pointing at ${ParentCtor.name} (${names}). ` +
       `Pass the relation name explicitly.`,
     )
   }
@@ -469,7 +469,7 @@ export function buildNestedRelationPredicate(
 ): RelationExistencePredicate {
   const names = path.split('.')
   if (names.some(n => n.length === 0)) {
-    throw new Error(`[RudderJS ORM] Malformed nested relation path "${path}" — empty segment.`)
+    throw new Error(`[Rudder ORM] Malformed nested relation path "${path}" — empty segment.`)
   }
 
   // Resolve every level first (clear errors before any predicate is built).
@@ -478,11 +478,11 @@ export function buildNestedRelationPredicate(
   for (const name of names) {
     const def = Owner.relations[name]
     if (!def) {
-      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${Owner.name} (nested path "${path}").`)
+      throw new Error(`[Rudder ORM] Relation "${name}" is not defined on ${Owner.name} (nested path "${path}").`)
     }
     if (def.type === 'morphTo') {
       throw new Error(
-        `[RudderJS ORM] morphTo "${name}" cannot appear in a nested whereHas path ("${path}") — the related ` +
+        `[Rudder ORM] morphTo "${name}" cannot appear in a nested whereHas path ("${path}") — the related ` +
         `table is dynamic. Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
       )
     }
@@ -530,7 +530,7 @@ export function buildNestedRelationPredicate(
 function assertNestedRelationSupport(q: unknown, path: string): void {
   if ((q as { supportsNestedRelationPredicates?: unknown }).supportsNestedRelationPredicates) return
   throw new Error(
-    `[RudderJS ORM] Nested whereHas ("${path}") is not supported on this adapter — it needs the native ` +
+    `[Rudder ORM] Nested whereHas ("${path}") is not supported on this adapter — it needs the native ` +
     `engine's correlated-EXISTS chain. Filter one hop with whereHas and the rest in app code, or use DB.select(...).`,
   )
 }
@@ -573,11 +573,11 @@ export function attachWhereHas<TQ>(
 
   const def = Parent.relations[relation]
   if (!def) {
-    throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
+    throw new Error(`[Rudder ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
   }
   if (def.type === 'morphTo') {
     throw new Error(
-      `[RudderJS ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
+      `[Rudder ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
       `Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
     )
   }
@@ -654,7 +654,7 @@ export function attachWhereBelongsTo<TQ>(
   const parentVal  = (parent as unknown as Record<string, unknown>)[ParentCtor.primaryKey]
   if (parentVal === undefined || parentVal === null) {
     throw new Error(
-      `[RudderJS ORM] whereBelongsTo: parent.${ParentCtor.primaryKey} is unset on ${ParentCtor.name}.`,
+      `[Rudder ORM] whereBelongsTo: parent.${ParentCtor.primaryKey} is unset on ${ParentCtor.name}.`,
     )
   }
   return q.where(localCol, parentVal)

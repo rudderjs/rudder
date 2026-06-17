@@ -411,7 +411,7 @@ export default {
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME',    'RudderJS'),
+    name:    Env.get('MAIL_FROM_NAME',    'Rudder'),
   },
 
   mailers: {

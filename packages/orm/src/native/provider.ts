@@ -79,7 +79,7 @@ function validateDriver(driver: string, connection: string): NativeDriverName {
   const KNOWN: readonly NativeDriverName[] = ['sqlite', 'pg', 'mysql']
   if (!KNOWN.includes(driver as NativeDriverName)) {
     throw new Error(
-      `[RudderJS ORM native] Unknown native driver \`${driver}\` (connection '${connection}') — supported drivers ` +
+      `[Rudder ORM native] Unknown native driver \`${driver}\` (connection '${connection}') — supported drivers ` +
       `are ${KNOWN.map((d) => `\`${d}\``).join(', ')}. (Postgres uses \`pg\`, MySQL uses \`mysql\`.)`,
     )
   }

@@ -31,7 +31,7 @@ export class VectorDimensionMismatchError extends Error {
 
   constructor(column: string, expected: number, actual: number) {
     super(
-      `[RudderJS ORM] Vector column "${column}" expected ${expected} dimensions, got ${actual}.`,
+      `[Rudder ORM] Vector column "${column}" expected ${expected} dimensions, got ${actual}.`,
     )
     this.name = 'VectorDimensionMismatchError'
     this.column   = column
@@ -61,7 +61,7 @@ export class VectorStorageUnsupportedError extends Error {
 
   constructor(adapter: string, hint?: string) {
     super(
-      `[RudderJS ORM] Vector storage is not supported on the "${adapter}" adapter in this phase.${hint ? ` ${hint}` : ''}`,
+      `[Rudder ORM] Vector storage is not supported on the "${adapter}" adapter in this phase.${hint ? ` ${hint}` : ''}`,
     )
     this.name = 'VectorStorageUnsupportedError'
     this.adapter = adapter
@@ -89,7 +89,7 @@ export class MissingEmbedderError extends Error {
 
   constructor(column: string) {
     super(
-      `[RudderJS ORM] whereVectorSimilarTo("${column}", "<string>") requires opts.embedWith to be set ` +
+      `[Rudder ORM] whereVectorSimilarTo("${column}", "<string>") requires opts.embedWith to be set ` +
       `(e.g. "openai/text-embedding-3-small"). Pass an embedded number[] directly to skip auto-embedding.`,
     )
     this.name = 'MissingEmbedderError'

@@ -65,7 +65,7 @@ describe('Model.toResource()', () => {
     const user = UnboundUser.hydrate({ id: 3, name: 'Grace' }) as UnboundUser
     assert.throws(
       () => user.toResource(),
-      (e: Error) => e.message === '[RudderJS ORM] UnboundUser has no resourceClass — set `static resourceClass = UnboundUserResource` or pass the class: `unboundUser.toResource(UnboundUserResource)`.',
+      (e: Error) => e.message === '[Rudder ORM] UnboundUser has no resourceClass — set `static resourceClass = UnboundUserResource` or pass the class: `unboundUser.toResource(UnboundUserResource)`.',
     )
   })
 
@@ -97,7 +97,7 @@ describe('ModelCollection.toResourceCollection()', () => {
     const items = [UnboundUser.hydrate({ id: 3, name: 'Grace' }) as UnboundUser]
     assert.throws(
       () => ModelCollection.wrap(items).toResourceCollection(),
-      (e: Error) => e.message === '[RudderJS ORM] UnboundUser has no resourceClass — set `static resourceClass = UnboundUserResource` or pass the class: `unboundUsers.toResourceCollection(UnboundUserResource)`.',
+      (e: Error) => e.message === '[Rudder ORM] UnboundUser has no resourceClass — set `static resourceClass = UnboundUserResource` or pass the class: `unboundUsers.toResourceCollection(UnboundUserResource)`.',
     )
   })
 

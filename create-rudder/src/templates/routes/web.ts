@@ -63,7 +63,7 @@ const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: stri
 
 // Welcome page — delete this route and ${welcomeFile} to replace it.
 Route.get('/', async () => view('welcome', {
-  appName:       config<string>('app.name', 'RudderJS'),
+  appName:       config<string>('app.name', 'Rudder'),
   rudderVersion: rudderCorePkg.version,
   nodeVersion:   process.version.replace(/^v/, ''),
   env:           config<string>('app.env', 'development'),

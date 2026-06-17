@@ -190,18 +190,18 @@ export class MailChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toMail) {
       throw new Error(
-        `[RudderJS Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
+        `[Rudder Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
       )
     }
 
     const adapter = MailRegistry.get()
     if (!adapter) {
-      throw new Error('[RudderJS Notification] No mail adapter registered. Add mail() to providers.')
+      throw new Error('[Rudder Notification] No mail adapter registered. Add mail() to providers.')
     }
 
     if (!notifiable.email) {
       throw new Error(
-        `[RudderJS Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
+        `[Rudder Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
       )
     }
 
@@ -224,7 +224,7 @@ export class DatabaseChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toDatabase) {
       throw new Error(
-        `[RudderJS Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
+        `[Rudder Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
       )
     }
 
@@ -253,7 +253,7 @@ export class BroadcastChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toBroadcast) {
       throw new Error(
-        `[RudderJS Notification] ${notification.constructor.name} uses 'broadcast' but does not implement toBroadcast().`
+        `[Rudder Notification] ${notification.constructor.name} uses 'broadcast' but does not implement toBroadcast().`
       )
     }
 
@@ -267,7 +267,7 @@ export class BroadcastChannel implements NotificationChannel {
       broadcastFn = mod.broadcast
     } catch {
       throw new Error(
-        '[RudderJS Notification] Broadcast channel requires @rudderjs/broadcast. Install it with: pnpm add @rudderjs/broadcast'
+        '[Rudder Notification] Broadcast channel requires @rudderjs/broadcast. Install it with: pnpm add @rudderjs/broadcast'
       )
     }
 
@@ -319,7 +319,7 @@ export class Notifier {
           const channel = ChannelRegistry.get(channelName)
           if (!channel) {
             throw new Error(
-              `[RudderJS Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
+              `[Rudder Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
             )
           }
           await channel.send(notifiable, notification)
@@ -343,13 +343,13 @@ export class Notifier {
       QueueRegistry = mod.QueueRegistry
     } catch {
       throw new Error(
-        '[RudderJS Notification] Queued notifications require @rudderjs/queue. Install it with: pnpm add @rudderjs/queue'
+        '[Rudder Notification] Queued notifications require @rudderjs/queue. Install it with: pnpm add @rudderjs/queue'
       )
     }
 
     const adapter = QueueRegistry.get()
     if (!adapter) {
-      throw new Error('[RudderJS Notification] No queue adapter registered. Add queue() to providers.')
+      throw new Error('[Rudder Notification] No queue adapter registered. Add queue() to providers.')
     }
 
     const job = {

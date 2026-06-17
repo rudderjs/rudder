@@ -227,7 +227,7 @@ export class ModelCollection<T extends object> {
       Rc = ctor.resourceClass
       if (Rc === undefined) {
         throw new Error(
-          `[RudderJS ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
+          `[Rudder ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
           `or pass the class: \`${camelHead(ctor.name)}s.toResourceCollection(${ctor.name}Resource)\`.`,
         )
       }

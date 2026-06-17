@@ -88,7 +88,7 @@ export class TelescopeRegistry {
 export class Telescope {
   private static store(): TelescopeStorage {
     const s = TelescopeRegistry.get()
-    if (!s) throw new Error('[RudderJS Telescope] No storage registered. Add telescope() to providers.')
+    if (!s) throw new Error('[Rudder Telescope] No storage registered. Add telescope() to providers.')
     return s
   }
 

@@ -43,7 +43,7 @@ function topoSort(entries: ProviderEntry[], all: Map<string, ProviderEntry>): Pr
     if (visited.has(entry.package)) return
     if (visiting.has(entry.package)) {
       const cycle = [...path, entry.package].join(' → ')
-      throw new Error(`[RudderJS] Circular provider dependency: ${cycle}`)
+      throw new Error(`[Rudder] Circular provider dependency: ${cycle}`)
     }
     visiting.add(entry.package)
     for (const dep of entry.depends ?? []) {

@@ -184,7 +184,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
       orm = await resolveOptionalPeer<{ ModelRegistry: { getAdapter(): OrmAdapterLike } }>('@rudderjs/orm')
     } catch {
       throw new Error(
-        '[RudderJS Queue] The "database" driver requires @rudderjs/orm (the native ' +
+        '[Rudder Queue] The "database" driver requires @rudderjs/orm (the native ' +
         'engine). Install it and either register a native database connection, or set ' +
         '`engine`/`url` on the queue connection for a dedicated queue database.',
       )
@@ -255,7 +255,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
     process.on('SIGINT', onSignal)
 
     console.log(
-      `[RudderJS Queue:database] worker ready — queues: "${names.join(', ')}", ` +
+      `[Rudder Queue:database] worker ready — queues: "${names.join(', ')}", ` +
       `retry_after: ${this.retryAfter}s`,
     )
 
@@ -269,7 +269,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
           // A transient reservation error (e.g. SQLITE_BUSY when multiple worker
           // processes contend on one SQLite file, or a brief connection blip)
           // must not kill the worker. Log, back off, retry — the row is untouched.
-          console.error('[RudderJS Queue:database] reservation failed, backing off:', err)
+          console.error('[Rudder Queue:database] reservation failed, backing off:', err)
           if (options.stopWhenEmpty) break
           await sleep(sleepMs)
           continue
@@ -287,7 +287,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
           // write that records the failure itself failed). Keep the worker alive —
           // the row stays reserved and `retry_after` reclaims it — rather than
           // crashing the loop and stalling the whole queue.
-          console.error(`[RudderJS Queue:database] unexpected error processing job ${String(reserved.row['id'])}:`, err)
+          console.error(`[Rudder Queue:database] unexpected error processing job ${String(reserved.row['id'])}:`, err)
         }
         processed++
         if (options.once) break
@@ -388,7 +388,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
 
     if (!JobClass) {
       const err = new Error(
-        `[RudderJS Queue:database] Unknown job "${parsed.job}". ` +
+        `[Rudder Queue:database] Unknown job "${parsed.job}". ` +
         `Add it to the jobs[] array in config/queue.ts.`,
       )
       await this._moveToFailed(row, queue, err)
@@ -421,7 +421,7 @@ export class DatabaseQueueAdapter implements QueueAdapter {
         await adapter.query(this.table).where('id', row['id']).deleteAll()
         try { await instance.failed?.(err) }
         catch (hookErr) {
-          console.error(`[RudderJS Queue:database] failed() hook threw for "${parsed.job}":`, hookErr)
+          console.error(`[Rudder Queue:database] failed() hook threw for "${parsed.job}":`, hookErr)
         }
       } else {
         // Release for retry. On a SOFT timeout the original handler is STILL
@@ -567,7 +567,7 @@ function withTimeout<T>(p: Promise<T>, timeoutSec?: number): Promise<T> {
   if (!timeoutSec || timeoutSec <= 0) return p
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new JobTimeoutError(`[RudderJS Queue:database] job timed out after ${timeoutSec}s`)),
+      () => reject(new JobTimeoutError(`[Rudder Queue:database] job timed out after ${timeoutSec}s`)),
       timeoutSec * 1000,
     )
     p.then(

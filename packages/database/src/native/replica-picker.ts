@@ -51,7 +51,7 @@ export function makeReplicaPicker(
       const i = picker(count)
       if (!Number.isInteger(i) || i < 0 || i >= count) {
         throw new Error(
-          `[RudderJS DB] Custom read picker returned ${String(i)} — ` +
+          `[Rudder DB] Custom read picker returned ${String(i)} — ` +
             `expected an integer replica index in [0, ${count - 1}].`,
         )
       }
@@ -63,16 +63,16 @@ export function makeReplicaPicker(
   const weights = picker
   if (weights.length !== count) {
     throw new Error(
-      `[RudderJS DB] Read picker weights list has ${weights.length} entr${weights.length === 1 ? 'y' : 'ies'} ` +
+      `[Rudder DB] Read picker weights list has ${weights.length} entr${weights.length === 1 ? 'y' : 'ies'} ` +
         `for ${count} replica(s) — provide one weight per read.url entry.`,
     )
   }
   if (weights.some((w) => typeof w !== 'number' || !Number.isFinite(w) || w < 0)) {
-    throw new Error('[RudderJS DB] Read picker weights must be finite numbers >= 0.')
+    throw new Error('[Rudder DB] Read picker weights must be finite numbers >= 0.')
   }
   const total = weights.reduce((sum, w) => sum + w, 0)
   if (total <= 0) {
-    throw new Error('[RudderJS DB] Read picker weights must sum to more than 0.')
+    throw new Error('[Rudder DB] Read picker weights must sum to more than 0.')
   }
   return () => {
     let roll = rng() * total

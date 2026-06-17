@@ -2,7 +2,7 @@ export function configApp(): string {
   return `import { Env } from '@rudderjs/support'
 
 export default {
-  name:  Env.get('APP_NAME',  'RudderJS'),
+  name:  Env.get('APP_NAME',  'Rudder'),
   env:   Env.get('APP_ENV',   'development'),
   debug: Env.getBool('APP_DEBUG', false),
   url:   Env.get('APP_URL', 'http://localhost:3000'),

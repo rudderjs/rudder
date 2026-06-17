@@ -326,7 +326,7 @@ export class RouteBuilder<
   private _guardMutation(method: string): void {
     if (this._router._isMounted(this.definition)) {
       throw new Error(
-        `[RudderJS Router] .${method}() called on already-mounted route ${this.definition.method} ${this.definition.path} — ` +
+        `[Rudder Router] .${method}() called on already-mounted route ${this.definition.method} ${this.definition.path} — ` +
         `define this before router.mount(), or wrap runtime registration in Route.lateRegister(() => Route.<verb>(...).${method}(...)).`
       )
     }
@@ -388,7 +388,7 @@ export class RouteBuilder<
     }
 
     if (!matched) {
-      throw new Error(`[RudderJS Router] where("${param}", ...) — route path "${path}" has no :${param} segment.`)
+      throw new Error(`[Rudder Router] where("${param}", ...) — route path "${path}" has no :${param} segment.`)
     }
     this.definition.path = out
     return this
@@ -419,7 +419,7 @@ export class RouteBuilder<
    */
   whereIn(param: string, values: readonly (string | number)[]): this {
     if (values.length === 0) {
-      throw new Error(`[RudderJS Router] whereIn("${param}", []) — values must be non-empty.`)
+      throw new Error(`[Rudder Router] whereIn("${param}", []) — values must be non-empty.`)
     }
     const escaped = values.map(v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     return this.where(param, `(?:${escaped.join('|')})`)
@@ -646,7 +646,7 @@ export class Router {
   private _ensureRegisterAllowed(method: string): void {
     if (this._mounted && this._inLateRegister === 0) {
       throw new Error(
-        `[RudderJS Router] ${method}() called after router.mount() outside of Route.lateRegister(). ` +
+        `[Rudder Router] ${method}() called after router.mount() outside of Route.lateRegister(). ` +
         `Register routes during module load (routes/web.ts / routes/api.ts) or wrap runtime registration: ` +
         `Route.lateRegister(() => Route.${method.toLowerCase()}(...))`
       )
@@ -1027,7 +1027,7 @@ export class Router {
   lateRegister(fn: () => void): void {
     if (!this._mounted || !this._adapter) {
       throw new Error(
-        `[RudderJS Router] lateRegister() called before mount() — the router has no adapter to register routes against. ` +
+        `[Rudder Router] lateRegister() called before mount() — the router has no adapter to register routes against. ` +
         `Call lateRegister() after the app has booted (e.g. from a request-time hook or a dynamic provider's boot()).`
       )
     }
@@ -1246,7 +1246,7 @@ export const Route = router
 export function route<N extends string>(name: N, params?: ParamsForName<N>): string
 export function route(name: string, params: Record<string, string | number> = {}): string {
   const path = router.getNamedRoute(name)
-  if (path === undefined) throw new Error(`[RudderJS] Named route "${name}" is not defined.`)
+  if (path === undefined) throw new Error(`[Rudder] Named route "${name}" is not defined.`)
 
   const used = new Set<string>()
 
@@ -1263,7 +1263,7 @@ export function route(name: string, params: Record<string, string | number> = {}
       return encodeURIComponent(String(params[key]))
     }
     if (optional) return ''
-    throw new Error(`[RudderJS] Missing required parameter "${key}" for route "${name}".`)
+    throw new Error(`[Rudder] Missing required parameter "${key}" for route "${name}".`)
   })
 
   // Remove duplicate slashes that may appear when optional params are omitted

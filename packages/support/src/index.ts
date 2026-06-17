@@ -461,7 +461,7 @@ export function defineEnv<T extends z.ZodRawShape>(
     const lines = parsed.error.issues
       .map(i => `  ${i.path.join('.')}: ${i.message}`)
       .join('\n')
-    throw new Error(`[RudderJS] Invalid environment configuration:\n${lines}`)
+    throw new Error(`[Rudder] Invalid environment configuration:\n${lines}`)
   }
   return parsed.data
 }
@@ -504,7 +504,7 @@ export function resolveIoredisClass<R = unknown>(mod: unknown): new (...args: an
     return (m.default as { Redis: new (...args: unknown[]) => R }).Redis
   }
   throw new Error(
-    '[RudderJS] Unable to resolve `Redis` class from `ioredis` — unexpected export shape. ' +
+    '[Rudder] Unable to resolve `Redis` class from `ioredis` — unexpected export shape. ' +
     'This usually means an ioredis upgrade changed its module shape; please file an issue.',
   )
 }

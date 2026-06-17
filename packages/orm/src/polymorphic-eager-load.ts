@@ -204,7 +204,7 @@ async function attachMorphTo(
   const targets = def.types()
   if (targets.length === 0) {
     throw new Error(
-      `[RudderJS ORM] morphTo "${name}" on ${ParentClass.name}: ` +
+      `[Rudder ORM] morphTo "${name}" on ${ParentClass.name}: ` +
       "`types: () => [...]` is empty — declare at least one allowed target class.",
     )
   }
@@ -227,7 +227,7 @@ async function attachMorphTo(
     const Target = targets.find(C => (C.morphAlias ?? C.name) === typeKey)
     if (!Target) {
       throw new Error(
-        `[RudderJS ORM] morphTo "${name}" on ${ParentClass.name}: ` +
+        `[Rudder ORM] morphTo "${name}" on ${ParentClass.name}: ` +
         `unknown ${typeCol} = ${JSON.stringify(typeKey)}. ` +
         `Allowed: ${targets.map(C => C.morphAlias ?? C.name).join(', ')}`,
       )

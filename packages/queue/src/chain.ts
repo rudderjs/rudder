@@ -65,7 +65,7 @@ export class Chain {
 
   async dispatch(): Promise<void> {
     const adapter = QueueRegistry.get()
-    if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
+    if (!adapter) throw new Error('[Rudder Queue] No queue adapter registered')
 
     // Native chain support overrides the capability flag — a driver might
     // not support the default closure-wrapped chain runner yet still expose
@@ -78,7 +78,7 @@ export class Chain {
 
     if (!adapter.supportsChain) {
       throw new Error(
-        `[RudderJS Queue] Chain.of([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
+        `[Rudder Queue] Chain.of([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
         `the default runner wraps the job array in a closure, and the function reference is dropped when the ` +
         `payload is serialised onto the wire. ` +
         `Dispatch the jobs individually (with each one calling the next on completion), or switch the queue driver ` +

@@ -194,7 +194,7 @@ export function Billable<T extends abstract new (...args: any[]) => any>(
           } catch (err) {
             const code = paddleErrorCode(err)
             throw new BillablePaddleError(
-              `[RudderJS Cashier] Failed to create Paddle customer for ${email || '<no email>'}${code ? ` (${code})` : ''}.`,
+              `[Rudder Cashier] Failed to create Paddle customer for ${email || '<no email>'}${code ? ` (${code})` : ''}.`,
               err,
               code,
             )

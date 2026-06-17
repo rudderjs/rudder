@@ -288,7 +288,7 @@ export function normalizeToolTranscript(messages: AiMessage[]): AiMessage[] {
           out.push({
             role:       'tool',
             toolCallId: tc.id,
-            content:    '[RudderJS] tool result missing — synthesized to satisfy the OpenAI tool-call/tool-result protocol.',
+            content:    '[Rudder] tool result missing — synthesized to satisfy the OpenAI tool-call/tool-result protocol.',
           })
         }
       }
@@ -460,7 +460,7 @@ class OpenAIEmbeddingAdapter implements EmbeddingAdapter {
       body: JSON.stringify({ model: this.model, input: inputs }),
     })
 
-    if (!res.ok) throw new Error(`[RudderJS AI] OpenAI embeddings error: ${res.status} ${await res.text()}`)
+    if (!res.ok) throw new Error(`[Rudder AI] OpenAI embeddings error: ${res.status} ${await res.text()}`)
 
     const data = await res.json() as {
       data: { embedding: number[] }[]
@@ -782,7 +782,7 @@ class OpenAIVectorStoreAdapter implements VectorStoreAdapter {
       }
       if (Date.now() > deadline) {
         throw new Error(
-          `[RudderJS AI] vector-store file ingestion timed out after ${pollTimeout}ms ` +
+          `[Rudder AI] vector-store file ingestion timed out after ${pollTimeout}ms ` +
           `(store=${storeId}, file=${fileId}, status=${info.status}). ` +
           'Increase pollTimeout or set wait: false for fire-and-forget.',
         )
@@ -825,7 +825,7 @@ class OpenAIVectorStoreAdapter implements VectorStoreAdapter {
       return uploaded.id
     }
     throw new Error(
-      '[RudderJS AI] addFile requires fileId, filePath, or fileBuffer. ' +
+      '[Rudder AI] addFile requires fileId, filePath, or fileBuffer. ' +
       'Pass an existing OpenAI file id via { fileId } or a local source via { filePath }.',
     )
   }

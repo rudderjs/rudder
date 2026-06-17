@@ -133,7 +133,7 @@ function scanNodeModules(nodeModules: string): ProviderEntry[] {
         // hard-throws at load time (`mod[undefined]` is never a function).
         if (!field.provider) {
           console.warn(
-            `[RudderJS] ${pkgJson.name} has a "rudderjs" field but no "provider" — skipping discovery.\n` +
+            `[Rudder] ${pkgJson.name} has a "rudderjs" field but no "provider" — skipping discovery.\n` +
             `  Add "rudderjs.provider" (the exported provider class name), or set "rudderjs.autoDiscover": false to silence this.`,
           )
           continue

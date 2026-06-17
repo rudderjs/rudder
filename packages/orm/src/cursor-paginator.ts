@@ -92,12 +92,12 @@ export function decodeCursor(cursor: string): Record<string, unknown> {
     parsed = JSON.parse(fromBase64Url(cursor))
   } catch {
     throw new Error(
-      '[RudderJS ORM] cursorPaginate(): malformed cursor — expected a base64-encoded JSON object produced by a previous cursorPaginate() call.',
+      '[Rudder ORM] cursorPaginate(): malformed cursor — expected a base64-encoded JSON object produced by a previous cursorPaginate() call.',
     )
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(
-      '[RudderJS ORM] cursorPaginate(): malformed cursor — decoded value is not an object.',
+      '[Rudder ORM] cursorPaginate(): malformed cursor — decoded value is not an object.',
     )
   }
   return parsed as Record<string, unknown>
@@ -131,7 +131,7 @@ export function resolveCursorOrders(
 ): { orders: CursorOrder[]; appendedPrimaryKey: boolean } {
   if (recorded.length === 0) {
     throw new Error(
-      '[RudderJS ORM] cursorPaginate() requires at least one orderBy() — keyset pagination needs a deterministic sort. Add e.g. .orderBy(\'id\') before cursorPaginate().',
+      '[Rudder ORM] cursorPaginate() requires at least one orderBy() — keyset pagination needs a deterministic sort. Add e.g. .orderBy(\'id\') before cursorPaginate().',
     )
   }
   const orders = recorded.map((o) => ({ ...o }))

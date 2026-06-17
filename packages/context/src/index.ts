@@ -28,7 +28,7 @@ function requireStore(): ContextStore {
   const s = store()
   if (!s) {
     throw new Error(
-      '[RudderJS Context] No context scope active.\n' +
+      '[Rudder Context] No context scope active.\n' +
       '  Wrap the call in runWithContext() or add ContextMiddleware().'
     )
   }

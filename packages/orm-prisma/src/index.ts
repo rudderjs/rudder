@@ -250,7 +250,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _assertNotSubBuilder(): void {
     if (this._isSubBuilder) {
       throw new Error(
-        '[RudderJS ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
+        '[Rudder ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
       )
     }
   }
@@ -307,7 +307,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   // under the hood). The native engine and Drizzle support these directly.
   private _rawUnsupported(method: string): never {
     throw new Error(
-      `[RudderJS ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client can't splice raw SQL. Run the raw query via the DB facade: DB.select(sql, bindings) / DB.statement(sql, bindings).`,
+      `[Rudder ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client can't splice raw SQL. Run the raw query via the DB facade: DB.select(sql, bindings) / DB.statement(sql, bindings).`,
     )
   }
   /** Plain whereHas/whereDoesntHave work on Prisma via `some`/`none`; the count
@@ -316,12 +316,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _assertPlainRelationPredicate(p: RelationExistencePredicate): void {
     if (p.count) {
       throw new Error(
-        `[RudderJS ORM Prisma] has("${p.relation}", …) count comparison is not supported — Prisma relation filters (some/none/every) can't express a count operator. Use whereHas() for existence, or DB.select(...) with a COUNT(*) subquery.`,
+        `[Rudder ORM Prisma] has("${p.relation}", …) count comparison is not supported — Prisma relation filters (some/none/every) can't express a count operator. Use whereHas() for existence, or DB.select(...) with a COUNT(*) subquery.`,
       )
     }
     if (p.boolean === 'OR') {
       throw new Error(
-        `[RudderJS ORM Prisma] orWhereHas("${p.relation}") (OR-rooted relation existence) is not supported on the Prisma adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
+        `[Rudder ORM Prisma] orWhereHas("${p.relation}") (OR-rooted relation existence) is not supported on the Prisma adapter. Use whereHas() (AND), or split into two queries and merge in app code.`,
       )
     }
   }
@@ -339,7 +339,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   // a pointer to the native engine / DB facade rather than silently dropping them.
   private _builderUnsupported(method: string): never {
     throw new Error(
-      `[RudderJS ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client has no SQL join/projection builder. ` +
+      `[Rudder ORM Prisma] ${method} is not supported on the Prisma adapter — its structured client has no SQL join/projection builder. ` +
         `Use the native engine (@rudderjs/orm/native) for joins, or run the query via the DB facade: DB.select(sql, bindings).`,
     )
   }
@@ -363,14 +363,14 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   // correctness bug for job-queue-style reservations).
   lockForUpdate(): this {
     throw new Error(
-      '[RudderJS ORM Prisma] lockForUpdate() is not supported on the Prisma adapter — its query API has no FOR UPDATE clause. ' +
+      '[Rudder ORM Prisma] lockForUpdate() is not supported on the Prisma adapter — its query API has no FOR UPDATE clause. ' +
         'Run the locking read raw inside a transaction: DB.transaction(() => DB.select("SELECT ... FOR UPDATE", bindings)), or use the native engine.',
     )
   }
 
   sharedLock(): this {
     throw new Error(
-      '[RudderJS ORM Prisma] sharedLock() is not supported on the Prisma adapter — its query API has no FOR SHARE clause. ' +
+      '[Rudder ORM Prisma] sharedLock() is not supported on the Prisma adapter — its query API has no FOR SHARE clause. ' +
         'Run the locking read raw inside a transaction: DB.transaction(() => DB.select("SELECT ... FOR SHARE", bindings)), or use the native engine.',
     )
   }
@@ -437,7 +437,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _childRelationLeg(c: RelationExistencePredicate): Record<string, unknown> {
     if (c.extraEquals !== undefined || c.through !== undefined) {
       throw new Error(
-        `[RudderJS ORM Prisma] Nested whereHas: relation "${c.relation}" is a pivot/polymorphic/through ` +
+        `[Rudder ORM Prisma] Nested whereHas: relation "${c.relation}" is a pivot/polymorphic/through ` +
         `relation below the top level of the chain — Prisma's relation filters can't express it, and the ` +
         `deferred 2-step lookup only supports a non-direct relation at the OUTERMOST position. ` +
         `Restructure the chain, filter in app code, or use the native engine / Drizzle (both support mixed chains).`,
@@ -506,12 +506,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       return n > 0
     }
     if (column === undefined) {
-      throw new Error(`[RudderJS ORM Prisma] _aggregate("${fn}") requires a column.`)
+      throw new Error(`[Rudder ORM Prisma] _aggregate("${fn}") requires a column.`)
     }
     const args: Record<string, unknown> = { where }
     args[`_${fn}`] = { [column]: true }
     if (!this.delegate.aggregate) {
-      throw new Error(`[RudderJS ORM Prisma] delegate "${this.table}" has no aggregate() method.`)
+      throw new Error(`[Rudder ORM Prisma] delegate "${this.table}" has no aggregate() method.`)
     }
     const raw = await this.delegate.aggregate(args) as Record<string, Record<string, unknown> | undefined>
     return raw[`_${fn}`]?.[column] ?? null
@@ -557,24 +557,24 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     if (this._andGroups.length > 0 || this._orGroups.length > 0 ||
         this._relationFilters.length > 0) {
       throw new Error(
-        '[RudderJS ORM] whereGroup() / orWhereGroup() / direct whereHas() with .whereVectorSimilarTo() ' +
+        '[Rudder ORM] whereGroup() / orWhereGroup() / direct whereHas() with .whereVectorSimilarTo() ' +
         'is not yet supported — use flat .where(col, op, val) / .orWhere() chains for now. ' +
         'Polymorphic / pivot relations route through whereHas internally and DO work since they pre-resolve to IN clauses.',
       )
     }
     if (this._withs.length > 0 || this._withConstrained.length > 0) {
       throw new Error(
-        '[RudderJS ORM] Eager loading via .with() alongside .whereVectorSimilarTo() is not yet supported.',
+        '[Rudder ORM] Eager loading via .with() alongside .whereVectorSimilarTo() is not yet supported.',
       )
     }
     if (this._aggregates.length > 0) {
       throw new Error(
-        '[RudderJS ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
+        '[Rudder ORM] withCount/withSum/etc. alongside .whereVectorSimilarTo() is not yet supported.',
       )
     }
     if (this._orders.length > 0) {
       throw new Error(
-        '[RudderJS ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
+        '[Rudder ORM] orderBy() alongside .whereVectorSimilarTo() is redundant — vector queries order by similarity.',
       )
     }
 
@@ -748,7 +748,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     const key = resolveDelegateKey(this.prisma, table)
     const d = key === undefined ? undefined : this.prisma[key]
     if (!d) throw new Error(
-      `[RudderJS ORM] Prisma has no delegate for table "${table}", and no model ` +
+      `[Rudder ORM] Prisma has no delegate for table "${table}", and no model ` +
       `in the client's datamodel maps to it (checked @@map names too). ` +
       `Set \`static table\` to the SQL table name (or the camelCase delegate name) ` +
       `and run "prisma generate" after adding the model to your schema.`,
@@ -1043,7 +1043,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
         groupArgs[`_${req.fn}`] = { [req.column!]: true }
       }
       if (!relatedDelegate.groupBy) {
-        throw new Error(`[RudderJS ORM Prisma] delegate "${js.relatedTable}" has no groupBy() method.`)
+        throw new Error(`[Rudder ORM Prisma] delegate "${js.relatedTable}" has no groupBy() method.`)
       }
       const groups = await relatedDelegate.groupBy(groupArgs) as Array<Record<string, unknown>>
 
@@ -1297,7 +1297,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     this._assertNotSubBuilder()
     if (this._vectorClause) {
       throw new Error(
-        '[RudderJS ORM] count() with .whereVectorSimilarTo() is not supported in B7 Phase 1 — ' +
+        '[Rudder ORM] count() with .whereVectorSimilarTo() is not supported in B7 Phase 1 — ' +
         'similarity-bounded counts add complexity for marginal value. Call get() and check .length.',
       )
     }
@@ -1345,7 +1345,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     if (rows.length === 0) return 0
     const delegateUpsert = this.delegate.upsert
     if (typeof delegateUpsert !== 'function') {
-      throw new Error('[RudderJS ORM Prisma] The Prisma client delegate has no upsert() — cannot perform Model.upsert().')
+      throw new Error('[Rudder ORM Prisma] The Prisma client delegate has no upsert() — cannot perform Model.upsert().')
     }
     // Prisma has no portable bulk ON CONFLICT, so map each row to a single-row
     // upsert. `where` is a unique selector: one column → `{ col: val }`; a
@@ -1545,7 +1545,7 @@ class PrismaAdapter implements OrmAdapter {
         mod = await import('@prisma/client')
       } catch (err) {
         throw new Error(
-          `[RudderJS ORM] Could not load @prisma/client. ` +
+          `[Rudder ORM] Could not load @prisma/client. ` +
           `If you're using Prisma's new "prisma-client" generator, pass ` +
           `\`PrismaClient\` via the database config:\n\n` +
           `  import { PrismaClient } from './prisma/generated/prisma/client.js'\n` +
@@ -1607,7 +1607,7 @@ class PrismaAdapter implements OrmAdapter {
     if (this.txScoped) {
       if (opts?.isolationLevel) {
         throw new Error(
-          '[RudderJS ORM Prisma] isolationLevel cannot be set on a nested transaction — ' +
+          '[Rudder ORM Prisma] isolationLevel cannot be set on a nested transaction — ' +
           'the nested call maps to a SAVEPOINT inside the open transaction, whose ' +
           'isolation level is already fixed. Set it on the outermost transaction() call.',
         )
@@ -1625,7 +1625,7 @@ class PrismaAdapter implements OrmAdapter {
         // Unreachable for typed callers; guards untyped JS — a silent
         // `isolationLevel: undefined` would make Prisma ignore the option.
         throw new Error(
-          `[RudderJS ORM Prisma] Unknown transaction isolation level ${JSON.stringify(opts.isolationLevel)} — ` +
+          `[Rudder ORM Prisma] Unknown transaction isolation level ${JSON.stringify(opts.isolationLevel)} — ` +
           `expected 'read uncommitted', 'read committed', 'repeatable read', or 'serializable'.`,
         )
       }
@@ -1783,7 +1783,7 @@ export class DatabaseProvider extends ServiceProvider {
         // writer, so fail loudly at boot.
         if (conn.read !== undefined || conn.write !== undefined) {
           throw new Error(
-            `[RudderJS ORM] Connection '${name}': read/write splitting is not supported on the ` +
+            `[Rudder ORM] Connection '${name}': read/write splitting is not supported on the ` +
               `Prisma adapter — use @prisma/extension-read-replicas on your PrismaClient, or the ` +
               `native engine (engine: 'native'), which supports read/write/sticky natively.`,
           )
@@ -1858,7 +1858,7 @@ function vectorLiteral(vec: readonly number[]): string {
 async function resolveAutoEmbed(pending: { text: string; embedWith: string } | undefined): Promise<number[]> {
   if (!pending) {
     throw new Error(
-      '[RudderJS ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
+      '[Rudder ORM] Vector clause has neither a number[] query nor a deferred embed. ' +
       'This is a bug — please report it.',
     )
   }
@@ -1870,7 +1870,7 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(
-      '[RudderJS ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
+      '[Rudder ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
       'Run `pnpm add @rudderjs/ai`, or pre-embed via your own embedder and pass number[] instead. ' +
       `Original: ${msg}`,
       { cause: err },
@@ -1881,7 +1881,7 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
   const vec = result.embeddings[0]
   if (!vec || vec.length === 0) {
     throw new Error(
-      `[RudderJS ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
+      `[Rudder ORM] AI.embed("${pending.text}", { model: "${pending.embedWith}" }) returned no embedding.`,
     )
   }
   return vec

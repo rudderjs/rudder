@@ -65,7 +65,7 @@ export function deferredQuery<T>(
         const fn = (qb as unknown as Record<PropertyKey, unknown>)[method]
         if (typeof fn !== 'function') {
           throw new Error(
-            `[RudderJS ORM] ${String(method)}() was queued against a deferred connection, but ` +
+            `[Rudder ORM] ${String(method)}() was queued against a deferred connection, but ` +
               `${adapter.constructor?.name ?? 'the adapter'} for this connection does not implement it.`,
           )
         }
@@ -107,7 +107,7 @@ export function deferredQuery<T>(
           if (typeof terminal !== 'function') {
             // Optional contract members (e.g. `upsert`) the adapter omits.
             throw new Error(
-              `[RudderJS ORM] ${String(prop)}() is not implemented by this connection's adapter.`,
+              `[Rudder ORM] ${String(prop)}() is not implemented by this connection's adapter.`,
             )
           }
           return (terminal as (...a: unknown[]) => unknown).apply(qb, args)

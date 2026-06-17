@@ -262,7 +262,7 @@ export abstract class JsonResource<T extends object = Record<string, unknown>> {
     const result = this.toArray()
     if (result instanceof Promise) {
       throw new Error(
-        `[RudderJS] ${this.constructor.name}.toJSON() does not support an async toArray() — ` +
+        `[Rudder] ${this.constructor.name}.toJSON() does not support an async toArray() — ` +
         `async work in resources must be awaited explicitly. ` +
         `Replace \`res.json(resource)\` with \`res.json(await resource.toArray())\` for this resource.`,
       )

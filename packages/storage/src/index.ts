@@ -168,7 +168,7 @@ export class StorageProvider extends ServiceProvider {
       } else if (driver === 's3') {
         adapter = new S3Adapter(diskConfig as unknown as S3DiskConfig)
       } else {
-        throw new Error(`[RudderJS Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
+        throw new Error(`[Rudder Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
       }
 
       StorageRegistry.set(name, adapter)

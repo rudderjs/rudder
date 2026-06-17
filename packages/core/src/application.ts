@@ -57,7 +57,7 @@ export class Application {
 
   private constructor(config: BootConfig = {}) {
     this.container = container
-    this.name  = config.name  ?? Env.get('APP_NAME',  'RudderJS')
+    this.name  = config.name  ?? Env.get('APP_NAME',  'Rudder')
     this.env   = config.env   ?? Env.get('APP_ENV',   'production')
     this.debug = config.debug ?? Env.getBool('APP_DEBUG', false)
 
@@ -115,7 +115,7 @@ export class Application {
     const g = globalThis as Record<string, unknown>
     const inst = (g['__rudderjs_app__'] ?? Application.instance) as Application | undefined
     if (!inst) {
-      throw new Error('[RudderJS] Application has not been created yet. Call Application.create() first.')
+      throw new Error('[Rudder] Application has not been created yet. Call Application.create() first.')
     }
     return inst
   }
@@ -191,7 +191,7 @@ export class Application {
         const name  = instance.constructor.name || Provider.name || 'AnonymousProvider'
         const cause = err instanceof Error ? err.message : String(err)
         throw new Error(
-          `[RudderJS] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          `[Rudder] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
           { cause: err },
         )
       }
@@ -214,7 +214,7 @@ export class Application {
         // the provider author's intent, not at a confusing late-resolve site.
         if (provider.boot && _isAsyncFunction(provider.boot)) {
           throw new Error(
-            `[RudderJS] Deferred provider "${provider.constructor.name}" has an async boot() — ` +
+            `[Rudder] Deferred provider "${provider.constructor.name}" has an async boot() — ` +
             `provides() requires synchronous boot because lazy resolution can't await across container.make(). ` +
             `Move async work into the bound services themselves (lazy-init pattern), or drop provides() if eager boot is acceptable.`,
           )
@@ -256,7 +256,7 @@ export class Application {
         if (!key) return
         if (_resolving.has(key)) {
           throw new Error(
-            `[RudderJS] Circular deferred resolution: "${key}" requires itself during register/boot. ` +
+            `[Rudder] Circular deferred resolution: "${key}" requires itself during register/boot. ` +
             `Break the cycle by lazy-resolving via app().make("${key}") inside a method body instead of at register/boot time.`,
           )
         }
@@ -306,7 +306,7 @@ export class Application {
         const name  = provider.constructor.name
         const cause = err instanceof Error ? err.message : String(err)
         throw new Error(
-          `[RudderJS] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          `[Rudder] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
           { cause: err },
         )
       }

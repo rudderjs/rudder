@@ -134,7 +134,7 @@ export class LoggerMiddleware extends Middleware {
     const start = Date.now()
     await next()
     const ms = Date.now() - start
-    console.log(`[RudderJS] ${req.method} ${req.path} — ${ms}ms`)
+    console.log(`[Rudder] ${req.method} ${req.path} — ${ms}ms`)
   }
 }
 
@@ -409,7 +409,7 @@ function _warnNoIpOnce(): void {
   if (_warnedNoIp) return
   _warnedNoIp = true
   console.warn(
-    '[RudderJS Middleware] An IP-keyed rate limiter saw req.ip undefined — ' +
+    '[Rudder Middleware] An IP-keyed rate limiter saw req.ip undefined — ' +
     'ALL clients share one rate-limit bucket. Behind a reverse proxy, set ' +
     'TRUST_PROXY=true so the client IP is read from x-forwarded-for.',
   )
@@ -439,7 +439,7 @@ function _warnNoCacheOnce(): void {
   if (_warnedNoCache) return
   _warnedNoCache = true
   console.warn(
-    '[RudderJS Middleware] RateLimit installed but no cache provider is registered — ' +
+    '[Rudder Middleware] RateLimit installed but no cache provider is registered — ' +
     'limits are NOT being enforced. Register @rudderjs/cache (or another cache adapter) ' +
     'to enable.',
   )

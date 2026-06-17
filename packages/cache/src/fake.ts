@@ -70,7 +70,7 @@ export class FakeCacheAdapter implements CacheAdapter {
     // them slip through to a prod Redis that would reject the same input.
     if (!Number.isInteger(by)) {
       throw new TypeError(
-        `[RudderJS Cache] increment(by) must be an integer, got ${by}.`,
+        `[Rudder Cache] increment(by) must be an integer, got ${by}.`,
       )
     }
     this._operations.push({ type: 'increment', key, value: by, ttl: ttlSeconds })
@@ -135,11 +135,11 @@ export class FakeCacheAdapter implements CacheAdapter {
   /** Assert that `set` was called for the given key. Optionally check the stored value with a predicate. */
   assertSet(key: string, predicate?: (value: unknown) => boolean): void {
     const op = this._operations.find(o => o.type === 'set' && o.key === key)
-    assert.ok(op, `[RudderJS Cache] Expected key "${key}" to be set, but it was not.`)
+    assert.ok(op, `[Rudder Cache] Expected key "${key}" to be set, but it was not.`)
     if (predicate) {
       assert.ok(
         predicate(op.value),
-        `[RudderJS Cache] Key "${key}" was set, but the value did not match the predicate.`,
+        `[Rudder Cache] Key "${key}" was set, but the value did not match the predicate.`,
       )
     }
   }
@@ -147,45 +147,45 @@ export class FakeCacheAdapter implements CacheAdapter {
   /** Assert that `get` was called for the given key. */
   assertGet(key: string): void {
     const op = this._operations.find(o => o.type === 'get' && o.key === key)
-    assert.ok(op, `[RudderJS Cache] Expected key "${key}" to be retrieved, but it was not.`)
+    assert.ok(op, `[Rudder Cache] Expected key "${key}" to be retrieved, but it was not.`)
   }
 
   /** Assert that `forget` was called for the given key. */
   assertForgotten(key: string): void {
     const op = this._operations.find(o => o.type === 'forget' && o.key === key)
-    assert.ok(op, `[RudderJS Cache] Expected key "${key}" to be forgotten, but it was not.`)
+    assert.ok(op, `[Rudder Cache] Expected key "${key}" to be forgotten, but it was not.`)
   }
 
   /** Assert that `flush` was called at least once. */
   assertFlushed(): void {
     const op = this._operations.find(o => o.type === 'flush')
-    assert.ok(op, '[RudderJS Cache] Expected cache to be flushed, but it was not.')
+    assert.ok(op, '[Rudder Cache] Expected cache to be flushed, but it was not.')
   }
 
   /** Assert that a key is NOT currently in the store. */
   assertMissing(key: string): void {
     const entry = this._store.get(key)
     const exists = entry && (entry.expiresAt === null || Date.now() <= entry.expiresAt)
-    assert.ok(!exists, `[RudderJS Cache] Expected key "${key}" to be missing, but it exists in the store.`)
+    assert.ok(!exists, `[Rudder Cache] Expected key "${key}" to be missing, but it exists in the store.`)
   }
 
   /** Assert that a key IS currently in the store (and not expired). */
   assertHas(key: string): void {
     const entry = this._store.get(key)
     const exists = entry && (entry.expiresAt === null || Date.now() <= entry.expiresAt)
-    assert.ok(exists, `[RudderJS Cache] Expected key "${key}" to exist in the store, but it does not.`)
+    assert.ok(exists, `[Rudder Cache] Expected key "${key}" to exist in the store, but it does not.`)
   }
 
   /** Assert that a lock with this name was acquired at least once. */
   assertLockAcquired(name: string): void {
     const op = this._operations.find(o => o.type === 'lock-acquire' && o.key === name)
-    assert.ok(op, `[RudderJS Cache] Expected lock "${name}" to be acquired, but it was not.`)
+    assert.ok(op, `[Rudder Cache] Expected lock "${name}" to be acquired, but it was not.`)
   }
 
   /** Assert that a lock with this name was released at least once. */
   assertLockReleased(name: string): void {
     const op = this._operations.find(o => (o.type === 'lock-release' || o.type === 'lock-force-release') && o.key === name)
-    assert.ok(op, `[RudderJS Cache] Expected lock "${name}" to be released, but it was not.`)
+    assert.ok(op, `[Rudder Cache] Expected lock "${name}" to be released, but it was not.`)
   }
 
   // ─── Access ─────────────────────────────────────────────

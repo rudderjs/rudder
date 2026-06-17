@@ -39,7 +39,7 @@ export class FakeAdapter extends BaseAdapter {
 
   async readStream(p: string): Promise<Readable> {
     const buf = this.files.get(p)
-    if (!buf) throw new Error(`[RudderJS Storage] FakeAdapter.readStream: "${p}" not found.`)
+    if (!buf) throw new Error(`[Rudder Storage] FakeAdapter.readStream: "${p}" not found.`)
     return Readable.from(buf)
   }
   async writeStream(p: string, stream: Readable): Promise<void> {
@@ -60,7 +60,7 @@ export class FakeAdapter extends BaseAdapter {
 
   async copy(from: string, to: string): Promise<void> {
     const buf = this.files.get(from)
-    if (!buf) throw new Error(`[RudderJS Storage] FakeAdapter.copy: "${from}" not found.`)
+    if (!buf) throw new Error(`[Rudder Storage] FakeAdapter.copy: "${from}" not found.`)
     this.files.set(to, Buffer.from(buf))
   }
 

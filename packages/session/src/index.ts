@@ -213,7 +213,7 @@ export class Session {
     const s = _als.getStore()
     if (!s) {
       throw new Error(
-        '[RudderJS Session] Session.current() called with no session in context. ' +
+        '[Rudder Session] Session.current() called with no session in context. ' +
         'sessionMiddleware auto-installs only on the "web" route group — API routes ' +
         'are stateless. Use Session.maybeCurrent() for a non-throwing read, or mount ' +
         'sessionMiddleware() per-route on the api side if you really need it.',
@@ -583,7 +583,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
       if (!_duplicateInstallWarned) {
         _duplicateInstallWarned = true
         console.warn(
-          '[RudderJS] sessionMiddleware is installed more than once on this request pipeline. ' +
+          '[Rudder] sessionMiddleware is installed more than once on this request pipeline. ' +
           '@rudderjs/session auto-installs it on the `web` group — remove the redundant install ' +
           '(usually a global `m.use(sessionMiddleware(...))` in bootstrap/app.ts). ' +
           'The inner instance passed through; one session and one Set-Cookie were used.',
@@ -625,7 +625,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
       // handler exception is re-thrown below — never masked by a redis blip.
       if (!nextErrored) {
         console.error(
-          '[RudderJS] session.save() failed; the response is preserved without a refreshed session cookie.',
+          '[Rudder] session.save() failed; the response is preserved without a refreshed session cookie.',
           saveErr,
         )
       }

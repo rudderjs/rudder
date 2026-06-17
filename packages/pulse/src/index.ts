@@ -44,7 +44,7 @@ export class PulseRegistry {
 export class Pulse {
   private static store(): PulseStorage {
     const s = PulseRegistry.get()
-    if (!s) throw new Error('[RudderJS Pulse] No storage registered. Add pulse() to providers.')
+    if (!s) throw new Error('[Rudder Pulse] No storage registered. Add pulse() to providers.')
     return s
   }
 

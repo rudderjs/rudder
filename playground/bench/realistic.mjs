@@ -15,7 +15,7 @@
 //   BENCH_MIXED_N       default 5000  — total requests in Phase 2
 //   BENCH_CONCURRENCY   default 8     — concurrency for Phase 2
 //   BENCH_WARMUP        default 20    — warm-up requests against /api/health
-//   BENCH_READY_TIMEOUT default 30000 — ms to wait for [RudderJS] ready
+//   BENCH_READY_TIMEOUT default 30000 — ms to wait for [Rudder] ready
 //   BENCH_SAVE          set to 1 (or pass --save) to persist results/ + REPORT.md
 //
 // The spawned server runs with RUDDER_BENCH=1 so the playground skips its
@@ -279,7 +279,7 @@ async function waitForReady(child, timeoutMs) {
       const s = chunk.toString()
       stdout += s
       process.stdout.write(s)
-      if (s.includes('[RudderJS] ready') || s.includes('Listening on')) {
+      if (s.includes('[Rudder] ready') || s.includes('Listening on')) {
         child.stdout.off('data', onData)
         resolveP()
       }
@@ -288,7 +288,7 @@ async function waitForReady(child, timeoutMs) {
     child.stderr.on('data', (c) => process.stderr.write(c.toString()))
     setTimeout(() => {
       child.stdout.off('data', onData)
-      rejectP(new Error(`Timed out waiting for [RudderJS] ready after ${timeoutMs}ms.\n--- stdout ---\n${stdout}`))
+      rejectP(new Error(`Timed out waiting for [Rudder] ready after ${timeoutMs}ms.\n--- stdout ---\n${stdout}`))
     }, timeoutMs)
   })
 }

@@ -94,7 +94,7 @@ export class ConnectionManager {
     if (!entry) {
       const known = ConnectionManager.names()
       throw new Error(
-        `[RudderJS ORM] Unknown database connection '${name}'. ` +
+        `[Rudder ORM] Unknown database connection '${name}'. ` +
           (known.length > 0
             ? `Configured connections: ${known.map((n) => `'${n}'`).join(', ')}. `
             : 'No connections are registered — did a database provider boot? ') +

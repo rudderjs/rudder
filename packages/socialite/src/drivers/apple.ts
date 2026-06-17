@@ -105,7 +105,7 @@ export class AppleProvider extends SocialiteDriver {
       ? codeOrRequest
       : (codeOrRequest.query['code'] ?? (codeOrRequest.body as Record<string, string> | undefined)?.['code'])
 
-    if (!code) throw new Error('[RudderJS Socialite] Missing authorization code.')
+    if (!code) throw new Error('[Rudder Socialite] Missing authorization code.')
 
     const { accessToken, refreshToken, idToken } = await this._exchange(code)
     const claims = await this._verifyIdToken(idToken)
@@ -162,10 +162,10 @@ export class AppleProvider extends SocialiteDriver {
     const idToken      = data['id_token']
 
     if (typeof accessToken !== 'string' || accessToken.length === 0) {
-      throw new Error('[RudderJS Socialite] Apple token-exchange response missing access_token.')
+      throw new Error('[Rudder Socialite] Apple token-exchange response missing access_token.')
     }
     if (typeof idToken !== 'string' || idToken.length === 0) {
-      throw new Error('[RudderJS Socialite] Apple token-exchange response missing id_token.')
+      throw new Error('[Rudder Socialite] Apple token-exchange response missing id_token.')
     }
 
     return {
@@ -187,7 +187,7 @@ export class AppleProvider extends SocialiteDriver {
     const cfg = this.config as AppleSocialiteConfig
     if (!cfg.teamId || !cfg.keyId || !cfg.privateKey) {
       throw new Error(
-        '[RudderJS Socialite] Apple requires `teamId`, `keyId`, and `privateKey` ' +
+        '[Rudder Socialite] Apple requires `teamId`, `keyId`, and `privateKey` ' +
         'in config to sign the client_secret JWT. See https://developer.apple.com/sign-in-with-apple/.',
       )
     }
@@ -215,14 +215,14 @@ export class AppleProvider extends SocialiteDriver {
       key = createPrivateKey({ key: cfg.privateKey, format: 'pem' })
     } catch (err) {
       throw new Error(
-        '[RudderJS Socialite] Apple `privateKey` is not a valid PEM-encoded EC private key. ' +
+        '[Rudder Socialite] Apple `privateKey` is not a valid PEM-encoded EC private key. ' +
         '(See `.p8` file from Apple Developer portal.)',
         { cause: err },
       )
     }
     if (key.asymmetricKeyType !== 'ec') {
       throw new Error(
-        `[RudderJS Socialite] Apple expects an EC P-256 private key; got ${key.asymmetricKeyType ?? 'unknown'}.`,
+        `[Rudder Socialite] Apple expects an EC P-256 private key; got ${key.asymmetricKeyType ?? 'unknown'}.`,
       )
     }
 
@@ -243,7 +243,7 @@ export class AppleProvider extends SocialiteDriver {
   private async _verifyIdToken(idToken: string): Promise<AppleIdTokenClaims> {
     const parts = idToken.split('.')
     if (parts.length !== 3) {
-      throw new Error('[RudderJS Socialite] Apple id_token: malformed (expected 3 segments).')
+      throw new Error('[Rudder Socialite] Apple id_token: malformed (expected 3 segments).')
     }
     const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
 
@@ -251,19 +251,19 @@ export class AppleProvider extends SocialiteDriver {
     try {
       header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
     } catch {
-      throw new Error('[RudderJS Socialite] Apple id_token: header is not valid JSON.')
+      throw new Error('[Rudder Socialite] Apple id_token: header is not valid JSON.')
     }
 
     if (header.alg !== 'RS256') {
-      throw new Error(`[RudderJS Socialite] Apple id_token: unexpected alg "${header.alg ?? ''}" (expected RS256).`)
+      throw new Error(`[Rudder Socialite] Apple id_token: unexpected alg "${header.alg ?? ''}" (expected RS256).`)
     }
     if (typeof header.kid !== 'string' || header.kid.length === 0) {
-      throw new Error('[RudderJS Socialite] Apple id_token: header missing `kid`.')
+      throw new Error('[Rudder Socialite] Apple id_token: header missing `kid`.')
     }
 
     const jwk = await this._resolveAppleJwk(header.kid)
     if (!jwk) {
-      throw new Error(`[RudderJS Socialite] Apple id_token: no signing key for kid "${header.kid}".`)
+      throw new Error(`[Rudder Socialite] Apple id_token: no signing key for kid "${header.kid}".`)
     }
 
     const { createPublicKey, createVerify } = await import('node:crypto')
@@ -275,24 +275,24 @@ export class AppleProvider extends SocialiteDriver {
       // `as never` (bottom type, assignable to the parameter's expected type).
       publicKey = createPublicKey({ key: jwk as never, format: 'jwk' })
     } catch (err) {
-      throw new Error('[RudderJS Socialite] Apple id_token: failed to import JWKS public key.', { cause: err })
+      throw new Error('[Rudder Socialite] Apple id_token: failed to import JWKS public key.', { cause: err })
     }
 
     const verifier = createVerify('SHA256')
     verifier.update(`${headerB64}.${payloadB64}`)
     if (!verifier.verify(publicKey, signatureB64, 'base64url')) {
-      throw new Error('[RudderJS Socialite] Apple id_token: signature verification failed.')
+      throw new Error('[Rudder Socialite] Apple id_token: signature verification failed.')
     }
 
     let claims: AppleIdTokenClaims
     try {
       claims = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as AppleIdTokenClaims
     } catch {
-      throw new Error('[RudderJS Socialite] Apple id_token: payload is not valid JSON.')
+      throw new Error('[Rudder Socialite] Apple id_token: payload is not valid JSON.')
     }
 
     if (claims.iss !== APPLE_ISSUER) {
-      throw new Error(`[RudderJS Socialite] Apple id_token: iss "${claims.iss ?? ''}" does not match "${APPLE_ISSUER}".`)
+      throw new Error(`[Rudder Socialite] Apple id_token: iss "${claims.iss ?? ''}" does not match "${APPLE_ISSUER}".`)
     }
 
     const expectedAud = this.config.clientId
@@ -300,15 +300,15 @@ export class AppleProvider extends SocialiteDriver {
       ? claims.aud.includes(expectedAud)
       : claims.aud === expectedAud
     if (!audMatches) {
-      throw new Error('[RudderJS Socialite] Apple id_token: aud does not match clientId.')
+      throw new Error('[Rudder Socialite] Apple id_token: aud does not match clientId.')
     }
 
     if (typeof claims.exp !== 'number' || claims.exp * 1000 <= Date.now()) {
-      throw new Error('[RudderJS Socialite] Apple id_token: token expired or missing exp.')
+      throw new Error('[Rudder Socialite] Apple id_token: token expired or missing exp.')
     }
 
     if (typeof claims.sub !== 'string' || claims.sub.length === 0) {
-      throw new Error('[RudderJS Socialite] Apple id_token: missing sub.')
+      throw new Error('[Rudder Socialite] Apple id_token: missing sub.')
     }
 
     return claims

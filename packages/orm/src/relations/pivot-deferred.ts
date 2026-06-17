@@ -65,7 +65,7 @@ export function morphParentQuery(
   const localVal = (self as unknown as Record<string, unknown>)[localCol]
   const typeVal  = def.morphType ?? ctor.morphAlias ?? ctor.name
   if (localVal === undefined || localVal === null) {
-    throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+    throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
   }
   return Related.where(idCol, localVal).where(typeCol, typeVal) as QueryBuilder<Model>
 }
@@ -215,7 +215,7 @@ function makeDeferredProxy(
       if (name === 'withPivot') {
         return (...cols: string[]) => {
           if (cols.length === 0) {
-            throw new Error('[RudderJS ORM] withPivot() requires at least one column name.')
+            throw new Error('[Rudder ORM] withPivot() requires at least one column name.')
           }
           hooks.onWithPivot?.(cols)
           return proxy
@@ -244,7 +244,7 @@ function makeDeferredProxy(
       if (UNSUPPORTED_TERMINALS.has(name)) {
         return () => {
           throw new Error(
-            `[RudderJS ORM] "${name}" is not supported on a ${relationKind} lazy-fetch query. ` +
+            `[Rudder ORM] "${name}" is not supported on a ${relationKind} lazy-fetch query. ` +
             `Use Model.${relationKind}(parent, name) for pivot mutations or call methods on the related Model directly.`,
           )
         }
@@ -252,7 +252,7 @@ function makeDeferredProxy(
       if (looksLikeUnsupportedChainMethod(name)) {
         return () => {
           throw new Error(
-            `[RudderJS ORM] "${name}()" is not supported on a ${relationKind} lazy-fetch query — ` +
+            `[Rudder ORM] "${name}()" is not supported on a ${relationKind} lazy-fetch query — ` +
             `the deferred proxy can only record the chain methods it knows about (` +
             `${[...CHAIN_METHODS].join(', ')}). ` +
             `To filter the related rows, terminate first (e.g. \`await parent.related(...).get()\`) ` +

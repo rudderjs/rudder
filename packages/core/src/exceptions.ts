@@ -68,7 +68,7 @@ export function abort_unless(condition: boolean, status: number, message?: strin
 type ReporterFn = (err: unknown) => void
 
 let _reporter: ReporterFn = (err: unknown): void => {
-  console.error('[RudderJS]', err)
+  console.error('[Rudder]', err)
 }
 
 /**

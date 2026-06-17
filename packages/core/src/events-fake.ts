@@ -44,7 +44,7 @@ export class EventFake {
     const matching = this._matching(event, predicate)
     assert.ok(
       matching.length > 0,
-      `[RudderJS Event] Expected event "${event}" to be dispatched, but it was not.`,
+      `[Rudder Event] Expected event "${event}" to be dispatched, but it was not.`,
     )
   }
 
@@ -54,7 +54,7 @@ export class EventFake {
     assert.strictEqual(
       matching.length,
       count,
-      `[RudderJS Event] Expected event "${event}" to be dispatched ${count} time(s), but it was dispatched ${matching.length} time(s).`,
+      `[Rudder Event] Expected event "${event}" to be dispatched ${count} time(s), but it was dispatched ${matching.length} time(s).`,
     )
   }
 
@@ -64,7 +64,7 @@ export class EventFake {
     assert.strictEqual(
       matching.length,
       0,
-      `[RudderJS Event] Expected event "${event}" not to be dispatched, but it was dispatched ${matching.length} time(s).`,
+      `[Rudder Event] Expected event "${event}" not to be dispatched, but it was dispatched ${matching.length} time(s).`,
     )
   }
 
@@ -73,7 +73,7 @@ export class EventFake {
     assert.strictEqual(
       this._dispatched.length,
       0,
-      `[RudderJS Event] Expected no events to be dispatched, but ${this._dispatched.length} were dispatched.`,
+      `[Rudder Event] Expected no events to be dispatched, but ${this._dispatched.length} were dispatched.`,
     )
   }
 

@@ -27,7 +27,7 @@ function active(): SchemaBuilder {
   if (!current) {
     throw new NativeOrmError(
       'NATIVE_SCHEMA_UNBOUND',
-      `[RudderJS ORM native] Schema is not bound to a connection. ` +
+      `[Rudder ORM native] Schema is not bound to a connection. ` +
       `Schema methods may only be called from a migration's up()/down() run by the migrator.`,
     )
   }
@@ -76,7 +76,7 @@ export const Schema = {
     if (pretending) {
       throw new NativeOrmError(
         'NATIVE_SCHEMA_PRETEND_CONNECTION',
-        `[RudderJS ORM native] Schema.connection("${name}") is not supported under --pretend — ` +
+        `[Rudder ORM native] Schema.connection("${name}") is not supported under --pretend — ` +
         `the dry run records the bound connection only; DDL on a second connection would execute for real.`,
       )
     }
@@ -85,7 +85,7 @@ export const Schema = {
       if (typeof adapter.schemaBuilder !== 'function') {
         throw new NativeOrmError(
           'NATIVE_SCHEMA_CONNECTION_ENGINE',
-          `[RudderJS ORM native] Connection "${name}" does not use the native engine — ` +
+          `[Rudder ORM native] Connection "${name}" does not use the native engine — ` +
           `Schema.connection() needs an \`engine: 'native'\` connection (prisma/drizzle manage schema with their own tooling).`,
         )
       }

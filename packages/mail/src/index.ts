@@ -100,7 +100,7 @@ export class MailPendingSend {
 
   async send(mailable: Mailable): Promise<void> {
     const adapter = MailRegistry.get()
-    if (!adapter) throw new Error('[RudderJS Mail] No mail adapter registered. Add mail() to providers.')
+    if (!adapter) throw new Error('[Rudder Mail] No mail adapter registered. Add mail() to providers.')
     const from = MailRegistry.getFrom()
     await adapter.send(mailable, { to: this._to, from, cc: this._cc, bcc: this._bcc })
   }
@@ -162,13 +162,13 @@ export class LogAdapter implements MailAdapter {
   async send(mailable: Mailable, options: SendOptions): Promise<void> {
     const msg  = await mailable.compile()
     const line = '─'.repeat(50)
-    console.log(`\n[RudderJS Mail] ${line}`)
-    console.log(`[RudderJS Mail]  To:      ${options.to.join(', ')}`)
-    console.log(`[RudderJS Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
-    console.log(`[RudderJS Mail]  Subject: ${msg.subject}`)
-    if (msg.html) console.log(`[RudderJS Mail]  HTML:    ${stripHtmlTags(msg.html).slice(0, 120)}`)
-    if (msg.text) console.log(`[RudderJS Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
-    console.log(`[RudderJS Mail] ${line}\n`)
+    console.log(`\n[Rudder Mail] ${line}`)
+    console.log(`[Rudder Mail]  To:      ${options.to.join(', ')}`)
+    console.log(`[Rudder Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
+    console.log(`[Rudder Mail]  Subject: ${msg.subject}`)
+    if (msg.html) console.log(`[Rudder Mail]  HTML:    ${stripHtmlTags(msg.html).slice(0, 120)}`)
+    if (msg.text) console.log(`[Rudder Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
+    console.log(`[Rudder Mail] ${line}\n`)
   }
 }
 
@@ -201,7 +201,7 @@ export class MailProvider extends ServiceProvider {
       adapter = new LogAdapter()
     } else if (driver === 'smtp') {
       if (!isNodemailerConfig(mailerConfig)) {
-        throw new Error('[RudderJS Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
+        throw new Error('[Rudder Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
       }
       adapter = nodemailer(mailerConfig, cfg.from).create()
     } else if (driver === 'failover') {
@@ -217,11 +217,11 @@ export class MailProvider extends ServiceProvider {
           adapters.push(nodemailer(mc, cfg.from).create())
         }
       }
-      if (adapters.length === 0) throw new Error('[RudderJS Mail] Failover driver has no valid mailers configured.')
+      if (adapters.length === 0) throw new Error('[Rudder Mail] Failover driver has no valid mailers configured.')
       const { FailoverAdapter } = await import('./failover.js')
       adapter = new FailoverAdapter(adapters, retryAfter)
     } else {
-      throw new Error(`[RudderJS Mail] Unknown driver "${driver}". Available: log, smtp, failover`)
+      throw new Error(`[Rudder Mail] Unknown driver "${driver}". Available: log, smtp, failover`)
     }
 
     MailRegistry.set(adapter)

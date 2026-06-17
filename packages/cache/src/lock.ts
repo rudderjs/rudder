@@ -46,7 +46,7 @@ export class LockTimeoutError extends Error {
     public readonly lockName: string,
     public readonly waitedSeconds: number,
   ) {
-    super(`[RudderJS Cache] Could not acquire lock "${lockName}" within ${waitedSeconds}s.`)
+    super(`[Rudder Cache] Could not acquire lock "${lockName}" within ${waitedSeconds}s.`)
     this.name = 'LockTimeoutError'
   }
 }
@@ -114,7 +114,7 @@ export abstract class BaseLock implements Lock {
     // non-negative budget up front.
     if (!Number.isFinite(seconds) || seconds < 0) {
       throw new RangeError(
-        `[RudderJS Cache] block() wait seconds must be a finite, non-negative number, got ${seconds}.`,
+        `[Rudder Cache] block() wait seconds must be a finite, non-negative number, got ${seconds}.`,
       )
     }
     const deadline = Date.now() + seconds * 1_000

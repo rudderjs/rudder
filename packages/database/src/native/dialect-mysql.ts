@@ -215,7 +215,7 @@ export class MysqlDialect implements Dialect {
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type
-        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[RudderJS ORM native] No MySQL type mapping for column type ${JSON.stringify(unreachable)}.`)
+        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[Rudder ORM native] No MySQL type mapping for column type ${JSON.stringify(unreachable)}.`)
       }
     }
   }

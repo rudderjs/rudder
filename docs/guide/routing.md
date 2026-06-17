@@ -304,7 +304,7 @@ The router also exposes a programmatic API: `router.list()` returns every `Route
 Routes are normally declared in `routes/web.ts` / `routes/api.ts` (or via decorator controllers) at module load. The framework then mounts them onto the server adapter once during boot — and after that point the router is **frozen**: every mutator (`.query`, `.body`, `.name`, `.where`, `.domain`, `.missing`) and every registration entry point (`.get`, `.post`, `.add`, `.use`, `.bind`, `.registerController`, `.resource`, `.fallback`) throws if it's called outside a `Route.lateRegister(...)` callback:
 
 ```
-[RudderJS Router] .query() called on already-mounted route GET /users —
+[Rudder Router] .query() called on already-mounted route GET /users —
 define this before router.mount(), or wrap runtime registration in
 Route.lateRegister(() => Route.<verb>(...).query(...)).
 ```

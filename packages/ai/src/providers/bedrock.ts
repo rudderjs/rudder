@@ -80,7 +80,7 @@ class BedrockAdapter implements ProviderAdapter {
   ) {
     if (!isAnthropicOnBedrock(model)) {
       throw new Error(
-        `[RudderJS AI] Bedrock model "${model}" is not yet supported. v1 only supports Anthropic Claude models on Bedrock ` +
+        `[Rudder AI] Bedrock model "${model}" is not yet supported. v1 only supports Anthropic Claude models on Bedrock ` +
         `(model id starts with "anthropic."). File an issue at https://github.com/rudderjs/rudder/issues if you need another family.`,
       )
     }

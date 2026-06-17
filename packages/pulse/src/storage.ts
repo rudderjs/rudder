@@ -129,7 +129,7 @@ export class SqliteStorage implements PulseStorage {
           Database = req('better-sqlite3') as typeof import('better-sqlite3')
         } catch (err) {
           throw new Error(
-            '[RudderJS Pulse] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3 ' +
+            '[Rudder Pulse] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3 ' +
             `(load error: ${err instanceof Error ? err.message : String(err)})`,
             { cause: err },
           )

@@ -42,7 +42,7 @@ function clampRetries(jobName: string, raw: unknown): InngestRetries {
   const n = Number(raw ?? 3)
   if (!Number.isInteger(n) || n < 0 || n > 20) {
     console.warn(
-      `[RudderJS Queue/Inngest] retries=${String(raw)} on job "${jobName}" is invalid ` +
+      `[Rudder Queue/Inngest] retries=${String(raw)} on job "${jobName}" is invalid ` +
       `(must be integer in [0, 20]); clamping to ${Math.max(0, Math.min(20, Math.floor(Number.isFinite(n) ? n : 3)))}.`,
     )
   }

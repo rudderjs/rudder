@@ -144,7 +144,7 @@ export class BroadcastingProvider extends ServiceProvider {
     // so operators aren't silently misled into expecting a cluster-wide roster.
     if (driver !== undefined) {
       console.warn(
-        '[RudderJS Broadcast] A cross-instance driver is configured. Presence channel ' +
+        '[Rudder Broadcast] A cross-instance driver is configured. Presence channel ' +
         'rosters and presence.joined/left events are per-instance only — they do not fan ' +
         'across the cluster. Pin presence clients to one instance (sticky sessions) or ' +
         'aggregate roster state yourself. Regular broadcast() / client-event traffic is cluster-wide.'

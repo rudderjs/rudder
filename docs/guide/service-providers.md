@@ -103,10 +103,10 @@ export default { driver: 'prisma' }
 
 ### Dev-mode boot log
 
-When the app boots in development and `defaultProviders()` was used, Rudder prints the loaded providers grouped by stage right before `[RudderJS] ready`:
+When the app boots in development and `defaultProviders()` was used, Rudder prints the loaded providers grouped by stage right before `[Rudder] ready`:
 
 ```
-[RudderJS] 19 providers booted
+[Rudder] 19 providers booted
   ├─ foundation      log
   ├─ infrastructure  session, hash, auth, cache, orm-prisma
   ├─ feature         ai, broadcast, sync, mail, queue, storage
