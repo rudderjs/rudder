@@ -61,4 +61,21 @@ export interface Guard {
   attempt(credentials: Record<string, unknown>, remember?: boolean): Promise<boolean>
   login(user: Authenticatable, remember?: boolean): Promise<void>
   logout(): Promise<void>
+  /** Look up a user by primary key and log them in. Returns false when not found. */
+  loginUsingId(id: string | number, remember?: boolean): Promise<boolean>
+  /**
+   * Validate credentials and authenticate for this request only (no session
+   * write). The result is observable ONLY on this guard instance: hold the
+   * reference and read it back through the same object
+   * (`const g = auth().guard(); if (await g.once(creds)) await g.user()`).
+   * A fresh `auth().user()` / `Auth.user()` resolves a new guard from the
+   * (unwritten) session and will not see it. Returns false on bad credentials.
+   */
+  once(credentials: Record<string, unknown>): Promise<boolean>
+  /**
+   * Look up a user by primary key and authenticate for this request only (no
+   * session write). Same single-instance semantics as {@link once}: read the
+   * result back through the same guard reference, not a fresh `auth()` call.
+   */
+  onceUsingId(id: string | number): Promise<boolean>
 }

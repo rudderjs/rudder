@@ -142,4 +142,30 @@ export class SessionGuard implements Guard {
     await this.session.regenerate()
     this._user = null
   }
+
+  async loginUsingId(id: string | number, remember?: boolean): Promise<boolean> {
+    const user = await this.provider.retrieveById(String(id))
+    if (!user) return false
+    await this.login(user, remember)
+    return true
+  }
+
+  async once(credentials: Record<string, unknown>): Promise<boolean> {
+    const user = await this.provider.retrieveByCredentials(credentials)
+    if (!user) {
+      await this.provider.fakeValidateCredentials?.(credentials)
+      return false
+    }
+    const valid = await this.provider.validateCredentials(user, credentials)
+    if (!valid) return false
+    this._user = user
+    return true
+  }
+
+  async onceUsingId(id: string | number): Promise<boolean> {
+    const user = await this.provider.retrieveById(String(id))
+    if (!user) return false
+    this._user = user
+    return true
+  }
 }
