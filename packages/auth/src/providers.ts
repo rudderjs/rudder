@@ -114,7 +114,11 @@ export function toAuthenticatable(record: Record<string, unknown>): Authenticata
   return {
     ...record,
     getAuthIdentifier: () => String(record['id'] ?? ''),
-    getAuthPassword:   () => String(record['password'] ?? ''),
+    // null/undefined column → null (account has no usable password). Coercing
+    // to '' here would erase the "no password set" signal and let a caller
+    // that checks `hashed.length > 0` proceed to a verify against an empty
+    // hash. A genuine non-empty string passes through unchanged.
+    getAuthPassword:   () => { const p = record['password']; return p == null ? null : String(p) },
     getRememberToken:  () => (record['rememberToken'] as string | null) ?? null,
     setRememberToken:  (token: string) => { record['rememberToken'] = token },
   }
