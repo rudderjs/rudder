@@ -24,9 +24,10 @@ export interface Router {
 export type PassportRouteGroup =
   | 'authorize'   // GET/POST/DELETE /oauth/authorize
   | 'token'       // POST /oauth/token
-  | 'revoke'      // DELETE /oauth/tokens/:id
-  | 'revocation'  // POST /oauth/revoke (RFC 7009)
-  | 'scopes'      // GET /oauth/scopes
+  | 'revoke'        // DELETE /oauth/tokens/:id
+  | 'revocation'    // POST /oauth/revoke (RFC 7009)
+  | 'introspection' // POST /oauth/token/introspect (RFC 7662)
+  | 'scopes'        // GET /oauth/scopes
   | 'device'      // POST /oauth/device/code + /oauth/device/approve
 
 export interface PassportRouteOptions {
