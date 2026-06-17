@@ -193,6 +193,59 @@ describe('AuthMiddleware try/finally — req.user stays consistent on throw', ()
   })
 })
 
+// ─── AuthMiddleware — test-user header production backstop (#1236) ──
+
+describe('AuthMiddleware — x-testing-user is refused on a production runtime (#1236)', () => {
+  let sess: ReturnType<typeof fakeSession>
+  const savedAppEnv  = process.env.APP_ENV
+  const savedNodeEnv = process.env.NODE_ENV
+
+  // A synthetic admin the caller tries to impersonate via the header.
+  const adminHeader = JSON.stringify({ id: '999', name: 'Admin', email: 'admin@x.com' })
+
+  beforeEach(() => {
+    Application.resetForTesting()
+    Application.create()
+    sess = fakeSession()
+    // No auth_user_id in the session — so the only way req.user could become the
+    // admin is via the test-user header bypass.
+    const manager = new AuthManager(makeConfig(fakeModel([fakeUser()])), async () => true, () => sess.instance)
+    Application.getInstance().instance('auth.manager', manager)
+    process.env.APP_ENV = 'testing'
+  })
+
+  afterEach(() => {
+    Application.resetForTesting()
+    if (savedAppEnv  === undefined) delete process.env.APP_ENV;  else process.env.APP_ENV  = savedAppEnv
+    if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv
+  })
+
+  it('honors x-testing-user when NODE_ENV is not production', async () => {
+    delete process.env.NODE_ENV
+    const { res } = makeRes()
+    const req = makeReq(sess, { headers: { 'x-testing-user': adminHeader } })
+
+    await AuthMiddleware()(req, res, async () => {})
+
+    const reqUser = (req as unknown as { user?: { id?: string } }).user
+    assert.ok(reqUser, 'the synthetic user must be installed in test mode')
+    assert.strictEqual(reqUser.id, '999')
+  })
+
+  it('REFUSES x-testing-user when NODE_ENV is production, even with APP_ENV=testing', async () => {
+    process.env.NODE_ENV = 'production'
+    const { res } = makeRes()
+    const req = makeReq(sess, { headers: { 'x-testing-user': adminHeader } })
+
+    await AuthMiddleware()(req, res, async () => {})
+
+    // The header must NOT impersonate the admin; the request falls through to
+    // the normal (session) flow, which has no authenticated user.
+    const reqUser = (req as unknown as { user?: unknown }).user
+    assert.strictEqual(reqUser, undefined, 'a production runtime must never honor the test-user header')
+  })
+})
+
 // ─── EnsureEmailIsVerified — Phase 5 ───────────────────────
 
 describe('EnsureEmailIsVerified — typed snapshot check + live guard re-resolve', () => {
