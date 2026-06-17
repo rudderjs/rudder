@@ -4,7 +4,6 @@ import assert from 'node:assert/strict'
 
 import {
   Passport,
-  OAuthError,
   hashClientSecret,
   hashOpaqueToken,
   registerPassportRoutes,
