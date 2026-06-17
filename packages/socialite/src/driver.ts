@@ -30,7 +30,7 @@ export interface SocialiteHttpErrorCause {
  */
 export class InvalidStateException extends Error {
   constructor(message = 'OAuth state mismatch — possible CSRF attack.') {
-    super(`[RudderJS Socialite] ${message}`)
+    super(`[Rudder Socialite] ${message}`)
     this.name = 'InvalidStateException'
   }
 }
@@ -182,7 +182,7 @@ export abstract class SocialiteDriver {
     const rawExpiresIn  = data['expires_in']    ?? data['expiresIn']
 
     if (typeof rawToken !== 'string' || rawToken.length === 0) {
-      throw new Error('[RudderJS Socialite] No access_token in token-exchange response.')
+      throw new Error('[Rudder Socialite] No access_token in token-exchange response.')
     }
 
     const refreshToken = typeof rawRefresh   === 'string' && rawRefresh.length > 0 ? rawRefresh   : null
@@ -201,7 +201,7 @@ export abstract class SocialiteDriver {
       ? codeOrRequest
       : codeOrRequest.query['code']
 
-    if (!code) throw new Error('[RudderJS Socialite] Missing authorization code.')
+    if (!code) throw new Error('[Rudder Socialite] Missing authorization code.')
 
     const { accessToken, refreshToken } = await this.getAccessToken(code)
     return this.getUserByToken(accessToken, refreshToken)
@@ -238,7 +238,7 @@ export abstract class SocialiteDriver {
   private generateAndStoreState(): string {
     if (!Session.active()) {
       throw new Error(
-        '[RudderJS Socialite] Cannot generate OAuth state: no session in context. ' +
+        '[Rudder Socialite] Cannot generate OAuth state: no session in context. ' +
         'Register session middleware (auto-installed on the web group), or call ' +
         '`.stateless()` on the driver if state validation is intentionally skipped.',
       )
@@ -307,6 +307,6 @@ export abstract class SocialiteDriver {
   protected async httpError(prefix: string, res: Response): Promise<Error> {
     const body = await res.text().catch(() => '')
     const cause: SocialiteHttpErrorCause = { status: res.status, body }
-    return new Error(`[RudderJS Socialite] ${prefix}: ${res.status} ${res.statusText}`.trimEnd(), { cause })
+    return new Error(`[Rudder Socialite] ${prefix}: ${res.status} ${res.statusText}`.trimEnd(), { cause })
   }
 }

@@ -99,7 +99,7 @@ export class PendingBatch {
   /** Dispatch all jobs and return the batch tracker. */
   async dispatch(): Promise<Batch> {
     const adapter = QueueRegistry.get()
-    if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
+    if (!adapter) throw new Error('[Rudder Queue] No queue adapter registered')
 
     const batchId = `batch_${++_batchIdCounter}_${Date.now()}`
     const batch   = new Batch(batchId, this._jobs.length)
@@ -121,7 +121,7 @@ export class PendingBatch {
 
     if (!adapter.supportsBatch) {
       throw new Error(
-        `[RudderJS Queue] Bus.batch([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
+        `[Rudder Queue] Bus.batch([...]).dispatch() is not supported by the "${adapter.constructor.name}" driver — ` +
         `the default runner wraps each job in a tracking closure, and the function reference is dropped when ` +
         `the payload is serialised onto the wire. ` +
         `Dispatch the jobs individually (and track success/failure yourself), or switch the queue driver to ` +
@@ -200,7 +200,7 @@ async function _runBatchDefault(
     // recorded inside wrappers that swallowed them (allowFailures: true).
     const err = firstError
       ? firstError.reason
-      : new Error(`[RudderJS Queue] Batch "${batch.id}" had ${batch.failedJobs} failed job(s)`)
+      : new Error(`[Rudder Queue] Batch "${batch.id}" had ${batch.failedJobs} failed job(s)`)
     await catchFn(err, batch)
   }
 

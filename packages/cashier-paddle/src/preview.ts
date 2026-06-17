@@ -52,7 +52,7 @@ export async function previewPrices(priceIds: string[], opts: PreviewOptions = {
   const client = await paddle()
   const fn = client.pricingPreview['preview']
     ?? (client as unknown as { previews?: Record<string, (...a: unknown[]) => Promise<unknown>> }).previews?.['create']
-  if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `pricingPreview.preview` method.')
+  if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `pricingPreview.preview` method.')
 
   const result = await fn.call(client.pricingPreview, {
     items:        priceIds.map((id) => ({ priceId: id, quantity: 1 })),

@@ -186,7 +186,7 @@ export class ContinuationValidationError extends Error {
   readonly code: ContinuationRejectionCode
   readonly index: number | undefined
   constructor(result: ContinuationValidationResult) {
-    super(`[RudderJS AI] Rejected continuation: ${result.reason ?? result.code ?? 'invalid'}`)
+    super(`[Rudder AI] Rejected continuation: ${result.reason ?? result.code ?? 'invalid'}`)
     this.name = 'ContinuationValidationError'
     this.code = result.code ?? 'not-a-prefix'
     this.index = result.index

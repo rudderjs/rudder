@@ -51,7 +51,7 @@ export class AggregateConstraintBuilder {
    */
   orWhere(_column: string, _valueOrOperator: unknown, _maybeValue?: unknown): this {
     throw new Error(
-      '[RudderJS ORM] orWhere is not supported inside a withCount/withSum/withExists constraint — ' +
+      '[Rudder ORM] orWhere is not supported inside a withCount/withSum/withExists constraint — ' +
       'aggregate predicates compose with AND. Split into separate aggregates with distinct .as(...) ' +
       'aliases and combine in app code.'
     )
@@ -281,17 +281,17 @@ function _resolveDef(
 ): Exclude<RelationDefinition, { type: 'morphTo' | 'belongsTo' }> {
   const def = Parent.relations[relation]
   if (!def) {
-    throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
+    throw new Error(`[Rudder ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
   }
   if (def.type === 'morphTo') {
     throw new Error(
-      `[RudderJS ORM] withCount() on morphTo "${relation}" is not supported — the related table is dynamic. ` +
+      `[Rudder ORM] withCount() on morphTo "${relation}" is not supported — the related table is dynamic. ` +
       `Aggregate per-target by querying each target class separately.`,
     )
   }
   if (def.type === 'belongsTo') {
     throw new Error(
-      `[RudderJS ORM] withCount on belongsTo "${relation}" is ambiguous — every parent matches exactly one. ` +
+      `[Rudder ORM] withCount on belongsTo "${relation}" is ambiguous — every parent matches exactly one. ` +
       `Use withExists("${relation}") to test presence or query the inverse hasMany side.`,
     )
   }
@@ -366,7 +366,7 @@ export function normalizeWithNumericAggregate(
 ): AggregateRequest[] {
   if (typeof arg1 === 'string') {
     if (arg2 === undefined) {
-      throw new Error(`[RudderJS ORM] with${capitalize(fn)}("${arg1}") requires a column argument.`)
+      throw new Error(`[Rudder ORM] with${capitalize(fn)}("${arg1}") requires a column argument.`)
     }
     return [_buildRequest(Parent, arg1, fn, arg2, undefined)]
   }
@@ -385,11 +385,11 @@ export function normalizeWithNumericAggregate(
 function _relatedClassFor(Parent: typeof Model, relation: string): typeof Model {
   const def = Parent.relations[relation]
   if (!def) {
-    throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
+    throw new Error(`[Rudder ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
   }
   if (def.type === 'morphTo') {
     throw new Error(
-      `[RudderJS ORM] loadCount() on morphTo "${relation}" is not supported — the related table is dynamic.`,
+      `[Rudder ORM] loadCount() on morphTo "${relation}" is not supported — the related table is dynamic.`,
     )
   }
   return def.model() as typeof Model

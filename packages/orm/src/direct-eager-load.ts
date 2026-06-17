@@ -49,7 +49,7 @@ export async function attachDirectRelations(
     const def = ParentClass.relations[name]
     if (!def) {
       throw new Error(
-        `[RudderJS ORM] Cannot eager-load "${name}" on ${ParentClass.name} — ` +
+        `[Rudder ORM] Cannot eager-load "${name}" on ${ParentClass.name} — ` +
         `no relation named "${name}" is declared on static relations. ` +
         `(Nested eager loads like 'a.b' are not supported yet — load the ` +
         `intermediate relation, then the next level.)`,
@@ -76,7 +76,7 @@ export async function attachDirectRelations(
         // Polymorphic types are routed to attachPolymorphicRelations by the
         // partition, so they should never arrive here.
         throw new Error(
-          `[RudderJS ORM] Eager-loading relation type "${def.type}" ("${name}" ` +
+          `[Rudder ORM] Eager-loading relation type "${def.type}" ("${name}" ` +
           `on ${ParentClass.name}) is not supported by the model-layer loader.`,
         )
     }

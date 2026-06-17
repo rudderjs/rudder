@@ -51,14 +51,14 @@ export async function rebuildTable(executor: Executor, dialect: Dialect, bluepri
   if (others.length || blueprint.droppedColumns.length || blueprint.renamedColumns.length || blueprint.indexes.length || blueprint.droppedIndexes.length) {
     throw new NativeOrmError(
       'NATIVE_DDL_CHANGE_COMBINED',
-      `[RudderJS ORM native] change() must be the only operation in a Schema.table('${table}', …) call (v1). ` +
+      `[Rudder ORM native] change() must be the only operation in a Schema.table('${table}', …) call (v1). ` +
       `Move adds / drops / renames / index changes into a separate table() call.`,
     )
   }
 
   const current = await readColumns(executor, dialect, table)
   if (current.length === 0) {
-    throw new NativeOrmError('NATIVE_DDL_NO_TABLE', `[RudderJS ORM native] Cannot alter "${table}" — it has no columns or does not exist.`)
+    throw new NativeOrmError('NATIVE_DDL_NO_TABLE', `[Rudder ORM native] Cannot alter "${table}" — it has no columns or does not exist.`)
   }
 
   // CHECK constraints live inside the CREATE TABLE body and aren't surfaced by
@@ -70,7 +70,7 @@ export async function rebuildTable(executor: Executor, dialect: Dialect, bluepri
   if (/\bCHECK\s*\(/i.test(await readTableSql(executor, table))) {
     throw new NativeOrmError(
       'NATIVE_DDL_CHANGE_CHECK',
-      `[RudderJS ORM native] Cannot rebuild "${table}" for change(): it has a CHECK constraint, ` +
+      `[Rudder ORM native] Cannot rebuild "${table}" for change(): it has a CHECK constraint, ` +
       `which the SQLite table rebuild can't yet preserve and would silently drop. Recreate the table ` +
       `(or drop and re-add the CHECK) manually, or run this change on Postgres/MySQL where ALTER is in-place.`,
     )
@@ -82,13 +82,13 @@ export async function rebuildTable(executor: Executor, dialect: Dialect, bluepri
   for (const def of changes) {
     const existing = byName.get(def.name)
     if (!existing) {
-      throw new NativeOrmError('NATIVE_DDL_CHANGE_MISSING', `[RudderJS ORM native] Cannot change column "${def.name}" — no such column on "${table}".`)
+      throw new NativeOrmError('NATIVE_DDL_CHANGE_MISSING', `[Rudder ORM native] Cannot change column "${def.name}" — no such column on "${table}".`)
     }
     if (existing.pk > 0) {
-      throw new NativeOrmError('NATIVE_DDL_CHANGE_PK', `[RudderJS ORM native] Changing a primary-key column ("${def.name}") is not supported.`)
+      throw new NativeOrmError('NATIVE_DDL_CHANGE_PK', `[Rudder ORM native] Changing a primary-key column ("${def.name}") is not supported.`)
     }
     if (def.primary || def.autoIncrement) {
-      throw new NativeOrmError('NATIVE_DDL_CHANGE_TO_PK', `[RudderJS ORM native] change() cannot turn "${def.name}" into a primary key.`)
+      throw new NativeOrmError('NATIVE_DDL_CHANGE_TO_PK', `[Rudder ORM native] change() cannot turn "${def.name}" into a primary key.`)
     }
     changeByName.set(def.name, def)
   }

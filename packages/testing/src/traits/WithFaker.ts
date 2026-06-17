@@ -21,7 +21,7 @@ export class WithFaker {
       ;(testCase as any).faker = faker
     } catch (err) {
       throw new Error(
-        '[RudderJS Testing] WithFaker requires @faker-js/faker. Install it: pnpm add -D @faker-js/faker',
+        '[Rudder Testing] WithFaker requires @faker-js/faker. Install it: pnpm add -D @faker-js/faker',
         { cause: err },
       )
     }

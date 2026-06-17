@@ -76,7 +76,7 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
   const dimensions = opts.dimensions
   if (!Number.isInteger(dimensions) || dimensions < 1) {
     throw new Error(
-      `[RudderJS ORM] vector({ dimensions }) requires a positive integer; got ${String(dimensions)}`,
+      `[Rudder ORM] vector({ dimensions }) requires a positive integer; got ${String(dimensions)}`,
     )
   }
 
@@ -97,7 +97,7 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           throw new Error(
-            `[RudderJS ORM] Vector cast on column "${key}" failed to parse stored value (${msg}). ` +
+            `[Rudder ORM] Vector cast on column "${key}" failed to parse stored value (${msg}). ` +
             `The DB returned "${value.slice(0, 80)}…" which isn't pgvector text format ([1,2,3]). ` +
             `Verify the column type is \`vector(N)\` in your schema.`,
             { cause: err },
@@ -111,7 +111,7 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
       if (value === null || value === undefined) return value
       if (!Array.isArray(value)) {
         throw new Error(
-          `[RudderJS ORM] Vector column "${key}" expected number[], got ${typeof value}. ` +
+          `[Rudder ORM] Vector column "${key}" expected number[], got ${typeof value}. ` +
           `If you have a pgvector text string from a raw query, parse it via JSON.parse() before assignment; ` +
           `otherwise check the cast declaration (\`static casts = { ${key}: vector({ dimensions: N }) }\`).`,
         )
@@ -126,7 +126,7 @@ export function vector(opts: { dimensions: number }): new () => CastUsing {
         const n = value[i]
         if (typeof n !== 'number' || !Number.isFinite(n)) {
           throw new Error(
-            `[RudderJS ORM] Vector column "${key}" element ${i} must be a finite number, got ${String(n)}`,
+            `[Rudder ORM] Vector column "${key}" element ${i} must be a finite number, got ${String(n)}`,
           )
         }
       }
@@ -217,7 +217,7 @@ function _parseJson(key: string, value: string): unknown {
     return JSON.parse(value) as unknown
   } catch {
     throw new Error(
-      `[RudderJS ORM] Invalid JSON in cast column "${key}": ${value.slice(0, 80)}… ` +
+      `[Rudder ORM] Invalid JSON in cast column "${key}": ${value.slice(0, 80)}… ` +
       `Verify the column stores serialized JSON; if it stores raw strings, change the cast to "string" or remove it.`,
     )
   }
@@ -234,11 +234,11 @@ function _parseJson(key: string, value: string): unknown {
 function _decimalCast(type: string, key: string, value: unknown): string {
   const places = parseInt(type.slice('decimal:'.length), 10)
   if (!Number.isInteger(places) || places < 0) {
-    throw new Error(`[RudderJS ORM] Invalid decimal cast "${type}" on column "${key}" — expected \`decimal:N\` with N a non-negative integer.`)
+    throw new Error(`[Rudder ORM] Invalid decimal cast "${type}" on column "${key}" — expected \`decimal:N\` with N a non-negative integer.`)
   }
   const num = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(num)) {
-    throw new Error(`[RudderJS ORM] decimal cast on column "${key}" got a non-numeric value (${String(value)}).`)
+    throw new Error(`[Rudder ORM] decimal cast on column "${key}" got a non-numeric value (${String(value)}).`)
   }
   return num.toFixed(places)
 }
@@ -275,7 +275,7 @@ function _enumCast(key: string, enumObj: EnumLike, value: unknown): string | num
   const values = _enumValues(enumObj)
   if (!values.has(value as string | number)) {
     const allowed = [...values].map(v => JSON.stringify(v)).join(', ')
-    throw new Error(`[RudderJS ORM] Invalid enum value for column "${key}": ${JSON.stringify(value)}. Allowed: ${allowed}.`)
+    throw new Error(`[Rudder ORM] Invalid enum value for column "${key}": ${JSON.stringify(value)}. Allowed: ${allowed}.`)
   }
   return value as string | number
 }
@@ -311,13 +311,13 @@ const _HASHED_RE = /^\$(2[aby]?|argon2(id|i|d))\$/
 function _hash(key: string, value: unknown): string {
   const driver = _getHashDriver()
   if (!driver) {
-    throw new Error(`[RudderJS ORM] The "hashed" cast on column "${key}" requires @rudderjs/hash. Install it and register a hash driver (add hash() to your providers).`)
+    throw new Error(`[Rudder ORM] The "hashed" cast on column "${key}" requires @rudderjs/hash. Install it and register a hash driver (add hash() to your providers).`)
   }
   const str = String(value)
   const already = typeof driver.isHashed === 'function' ? driver.isHashed(str) : _HASHED_RE.test(str)
   if (already) return str
   if (typeof driver.makeSync !== 'function') {
-    throw new Error(`[RudderJS ORM] The registered hash driver has no synchronous hashing API (e.g. argon2), which the "hashed" cast on column "${key}" needs. Use the bcrypt driver, or hash via an async mutator instead.`)
+    throw new Error(`[Rudder ORM] The registered hash driver has no synchronous hashing API (e.g. argon2), which the "hashed" cast on column "${key}" needs. Use the bcrypt driver, or hash via an async mutator instead.`)
   }
   return driver.makeSync(str)
 }
@@ -345,7 +345,7 @@ function _encrypt(castType: string, value: unknown): string {
   const crypt = _getCrypt()
   if (!crypt) {
     throw new Error(
-      `[RudderJS ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
+      `[Rudder ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
     )
   }
   const serialized = castType === 'encrypted' ? String(value) : JSON.stringify(value)
@@ -356,7 +356,7 @@ function _decrypt(castType: string, value: unknown): unknown {
   const crypt = _getCrypt()
   if (!crypt) {
     throw new Error(
-      `[RudderJS ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
+      `[Rudder ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
     )
   }
   const decrypted = crypt.decrypt(String(value))

@@ -26,7 +26,7 @@ export function isolationLevelSql(level: TransactionIsolationLevel): string {
   const sql = ISOLATION_SQL[level]
   if (!sql) {
     throw new Error(
-      `[RudderJS ORM native] Unknown transaction isolation level ${JSON.stringify(level)} — ` +
+      `[Rudder ORM native] Unknown transaction isolation level ${JSON.stringify(level)} — ` +
       `expected 'read uncommitted', 'read committed', 'repeatable read', or 'serializable'.`,
     )
   }
@@ -38,7 +38,7 @@ export function isolationLevelSql(level: TransactionIsolationLevel): string {
  *  isolation is already fixed. */
 export function nestedIsolationError(): Error {
   return new Error(
-    '[RudderJS ORM native] isolationLevel cannot be set on a nested transaction — ' +
+    '[Rudder ORM native] isolationLevel cannot be set on a nested transaction — ' +
     'a nested call maps to a SAVEPOINT inside the open transaction, whose isolation ' +
     'level is already fixed. Set it on the outermost transaction() call.',
   )

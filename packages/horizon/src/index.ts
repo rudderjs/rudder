@@ -36,7 +36,7 @@ export class HorizonRegistry {
 export class Horizon {
   private static store(): HorizonStorage {
     const s = HorizonRegistry.get()
-    if (!s) throw new Error('[RudderJS Horizon] No storage registered. Add horizon() to providers.')
+    if (!s) throw new Error('[Rudder Horizon] No storage registered. Add horizon() to providers.')
     return s
   }
 

@@ -514,7 +514,7 @@ async function onMessage(
         let authError: unknown
         const result = await authFn(authReq, channel).catch((err: unknown) => {
           authError = err
-          console.error('[RudderJS Broadcast] Auth callback error:', err)
+          console.error('[Rudder Broadcast] Auth callback error:', err)
           return false as const
         })
         const authMs  = Date.now() - authStart
@@ -731,7 +731,7 @@ export function getUpgradeHandler(
     } else if (!state.warnedOpenOrigin) {
       state.warnedOpenOrigin = true
       console.warn(
-        '[RudderJS Broadcast] No allowedOrigins configured — accepting cross-origin WebSocket ' +
+        '[Rudder Broadcast] No allowedOrigins configured — accepting cross-origin WebSocket ' +
         'connections. Set `broadcast.allowedOrigins` in production to close the CSRF window.'
       )
     }
@@ -763,7 +763,7 @@ export function getUpgradeHandler(
       // run the auth and complete-or-reject inside the promise.
       void connAuth(authReq)
         .catch((err: unknown) => {
-          console.error('[RudderJS Broadcast] Connection auth callback threw:', err)
+          console.error('[Rudder Broadcast] Connection auth callback threw:', err)
           return false
         })
         .then((allowed) => {

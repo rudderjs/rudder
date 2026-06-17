@@ -293,7 +293,7 @@ function compileRaw(frag: RawFragment, b: Bindings): string {
   const holes = parts.length - 1
   if (holes !== frag.bindings.length) {
     throw new Error(
-      `[RudderJS ORM native] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${frag.bindings.length}: ${frag.sql}`,
+      `[Rudder ORM native] Raw SQL expects ${holes} binding(s) for its '?' placeholders but got ${frag.bindings.length}: ${frag.sql}`,
     )
   }
   let out = parts[0] ?? ''
@@ -322,7 +322,7 @@ function compileComparison(lhs: string, operator: WhereOperator, value: unknown,
   // `where(col, op, raw('NOW()'))` — splice the expression verbatim, no binding.
   if (value instanceof Expression) {
     const op = OPERATOR_SQL[operator]
-    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
+    if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(operator)}`)
     return `${lhs} ${op} ${value.getValue()}`
   }
 
@@ -349,7 +349,7 @@ function compileComparison(lhs: string, operator: WhereOperator, value: unknown,
   if (!op) {
     // Unreachable for a well-typed WhereOperator; guard keeps the compiler
     // honest if the contract grows an operator the native engine hasn't mapped.
-    throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
+    throw new Error(`[Rudder ORM native] Unsupported operator: ${String(operator)}`)
   }
   return `${lhs} ${op} ${b.add(value)}`
 }
@@ -405,14 +405,14 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
       // per dialect; nothing is bound. This is exactly why whereColumn can't
       // ride on whereRaw, which leaves identifiers un-quoted.
       const op = OPERATOR_SQL[node.operator]
-      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.quoteId(node.left)} ${op} ${dialect.quoteId(node.right)}`
     } else if (node.kind === 'date') {
       // Date-component predicate (`whereDate`/`whereTime`/`whereDay`/…) — the
       // column is quoted then run through the dialect's extraction seam; the
       // value binds through the shared positional Bindings like any clause.
       const op = OPERATOR_SQL[node.operator]
-      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.dateExtract(node.part, dialect.quoteId(node.column))} ${op} ${b.add(node.value)}`
     } else if (node.kind === 'json') {
       // JSON arrow-path comparison (`where('meta->prefs->lang', …)`) — shared
@@ -428,7 +428,7 @@ function compileNodes(nodes: ConditionNode[], dialect: Dialect, b: Bindings): st
     } else if (node.kind === 'jsonLength') {
       // whereJsonLength — array length via the dialect seam, the count binds.
       const op = OPERATOR_SQL[node.operator]
-      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(node.operator)}`)
+      if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(node.operator)}`)
       frag = `${dialect.jsonLength(dialect.quoteId(node.column), node.segments)} ${op} ${b.add(node.value)}`
     } else if (node.kind === 'exists') {
       // whereExists / whereNotExists — an arbitrary [NOT] EXISTS subquery.
@@ -533,7 +533,7 @@ function compileJoinConditions(conditions: JoinCondition[], dialect: Dialect, b:
     let frag: string
     if (c.kind === 'on') {
       const op = OPERATOR_SQL[c.operator]
-      if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(c.operator)}`)
+      if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(c.operator)}`)
       frag = `${dialect.quoteId(c.left)} ${op} ${dialect.quoteId(c.right)}`
     } else {
       frag = compileClause(c.clause, dialect, b)
@@ -557,7 +557,7 @@ function compileJoins(joins: JoinNode[], dialect: Dialect, b: Bindings): string 
       if (j.type === 'cross') return `${keyword} ${table}`
       const on = compileJoinConditions(j.conditions, dialect, b)
       if (on === '') {
-        throw new Error(`[RudderJS ORM native] ${keyword} ${j.table} requires at least one ON condition.`)
+        throw new Error(`[Rudder ORM native] ${keyword} ${j.table} requires at least one ON condition.`)
       }
       return `${keyword} ${table} ON ${on}`
     })
@@ -841,7 +841,7 @@ export function compileInsert(
   opts: { returning?: boolean; upsert?: { uniqueBy: readonly string[]; update: readonly string[] } } = {},
 ): CompiledQuery {
   if (rows.length === 0) {
-    throw new Error('[RudderJS ORM native] compileInsert called with no rows.')
+    throw new Error('[Rudder ORM native] compileInsert called with no rows.')
   }
   const table = dialect.quoteId(state.table)
   // Conflict suffix (before RETURNING) for an upsert. Identifiers only — quoted
@@ -936,7 +936,7 @@ function compileJsonSetClause(
   const conflict = (column: string): never => {
     throw new NativeOrmError(
       'NATIVE_JSON_SET_CONFLICT',
-      `[RudderJS ORM native] Update payload writes both the whole column "${column}" and a JSON path inside it — ` +
+      `[Rudder ORM native] Update payload writes both the whole column "${column}" and a JSON path inside it — ` +
       `pick one (the two assignments would conflict in a single SET).`,
     )
   }
@@ -986,7 +986,7 @@ export function compileUpdate(
 ): CompiledQuery {
   const entries = definedEntries(data)
   if (entries.length === 0) {
-    throw new Error('[RudderJS ORM native] compileUpdate called with no columns to set.')
+    throw new Error('[Rudder ORM native] compileUpdate called with no columns to set.')
   }
   const b = new Bindings(dialect)
   const table = dialect.quoteId(state.table)
@@ -1074,7 +1074,7 @@ function compileWhereWithExtra(
  *  we inline — but only after `Number.isInteger` + clamp, never user strings. */
 function asInt(n: number): number {
   if (!Number.isInteger(n) || n < -1) {
-    throw new Error(`[RudderJS ORM native] LIMIT/OFFSET must be a non-negative integer, got ${String(n)}.`)
+    throw new Error(`[Rudder ORM native] LIMIT/OFFSET must be a non-negative integer, got ${String(n)}.`)
   }
   return n
 }
@@ -1124,7 +1124,7 @@ function compileClauseOn(table: string, clause: WhereClause, dialect: Dialect, b
     return `${col} IS ${operator === '=' ? '' : 'NOT '}NULL`
   }
   const op = OPERATOR_SQL[operator]
-  if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(operator)}`)
+  if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(operator)}`)
   return `${col} ${op} ${b.add(value)}`
 }
 
@@ -1177,7 +1177,7 @@ export function compileExists(
   // through: the nested-EXISTS shape below is already fan-out-correct.
   if (predicate.count && predicate.through?.fanOut) {
     const op = OPERATOR_SQL[predicate.count.operator]
-    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
+    if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
     const pivot  = predicate.through.pivotTable
     const joined = [
       `${qcol(pivot, predicate.through.foreignPivotKey, dialect)} = ${qcol(outerTable, predicate.parentColumn, dialect)}`,
@@ -1239,7 +1239,7 @@ export function compileExists(
   // the surrounding WHERE's positional bindings.
   if (predicate.count) {
     const op = OPERATOR_SQL[predicate.count.operator]
-    if (!op) throw new Error(`[RudderJS ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
+    if (!op) throw new Error(`[Rudder ORM native] Unsupported operator: ${String(predicate.count.operator)}`)
     return `(SELECT COUNT(*) FROM ${dialect.quoteId(fromTable)} WHERE ${whereBody}) ${op} ${asInt(predicate.count.value)}`
   }
 
@@ -1276,7 +1276,7 @@ function aggregateFnSql(req: AggregateRequest, relatedTable: string, dialect: Di
  *  contract boundary instead of a bare `!`. */
 function requireColumn(fn: string, column: string | undefined): string {
   if (column === undefined) {
-    throw new Error(`[RudderJS ORM native] Aggregate "${fn}" requires a column.`)
+    throw new Error(`[Rudder ORM native] Aggregate "${fn}" requires a column.`)
   }
   return column
 }

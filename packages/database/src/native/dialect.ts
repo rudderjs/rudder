@@ -299,14 +299,14 @@ export function parseJsonPath(path: string): { column: string; segments: JsonPat
   if (!column || rawSegments.length === 0 || rawSegments.some(s => s.length === 0)) {
     throw new NativeOrmError(
       'NATIVE_JSON_PATH_INVALID',
-      `[RudderJS ORM native] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
+      `[Rudder ORM native] Malformed JSON path "${path}" — expected column->key[->key…] with non-empty segments.`,
     )
   }
   const segments = rawSegments.map((seg): JsonPathSegment => {
     if (JSON_SEGMENT_REJECT.test(seg)) {
       throw new NativeOrmError(
         'NATIVE_JSON_PATH_SEGMENT',
-        `[RudderJS ORM native] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, backslash, backtick, or control character — not allowed (path segments are spliced into SQL text).`,
+        `[Rudder ORM native] JSON path segment ${JSON.stringify(seg)} in "${path}" contains a quote, backslash, backtick, or control character — not allowed (path segments are spliced into SQL text).`,
       )
     }
     return /^\d+$/.test(seg) ? Number(seg) : seg
@@ -392,7 +392,7 @@ export class SqliteDialect implements Dialect {
       if (v !== null && typeof v === 'object') {
         throw new NativeOrmError(
           'NATIVE_JSON_CONTAINS_UNSUPPORTED',
-          '[RudderJS ORM native] whereJsonContains on SQLite supports scalar values (and arrays of scalars) only — object containment has no json_each equality form. Use whereRaw(...) for structural checks.',
+          '[Rudder ORM native] whereJsonContains on SQLite supports scalar values (and arrays of scalars) only — object containment has no json_each equality form. Use whereRaw(...) for structural checks.',
         )
       }
       // json null elements surface as SQL NULL in json_each.value — match on
@@ -492,12 +492,12 @@ export class SqliteDialect implements Dialect {
       case 'set':
         throw new NativeOrmError(
           'NATIVE_DDL_UNSUPPORTED_TYPE',
-          `[RudderJS ORM native] SQLite has no SET column type ("${column.name}"). Use enum(), a json column, or a pivot table.`,
+          `[Rudder ORM native] SQLite has no SET column type ("${column.name}"). Use enum(), a json column, or a pivot table.`,
         )
       default: {
         // Exhaustiveness guard — a new ColumnType must extend this switch.
         const unreachable: never = column.type
-        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[RudderJS ORM native] No SQLite type mapping for column type ${JSON.stringify(unreachable)}.`)
+        throw new NativeOrmError('NATIVE_DDL_UNKNOWN_TYPE', `[Rudder ORM native] No SQLite type mapping for column type ${JSON.stringify(unreachable)}.`)
       }
     }
   }

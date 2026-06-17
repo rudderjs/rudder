@@ -65,7 +65,7 @@ function extractJson(text: string): unknown {
     return JSON.parse(stripped)
   } catch (err) {
     throw new Error(
-      `[RudderJS AI] Failed to parse JSON from model output: ${err instanceof Error ? err.message : String(err)}`,
+      `[Rudder AI] Failed to parse JSON from model output: ${err instanceof Error ? err.message : String(err)}`,
       { cause: err },
     )
   }

@@ -148,14 +148,14 @@ describe('NodemailerAdapter.send() — SMTP wire shape', () => {
   })
 
   it('formats from as "Name <addr>" when name is provided', async () => {
-    const adapter = nodemailer(baseConfig, { address: 'noreply@example.com', name: 'RudderJS' }).create()
+    const adapter = nodemailer(baseConfig, { address: 'noreply@example.com', name: 'Rudder' }).create()
 
     await adapter.send(new SimpleMail(), {
       to:   ['user@example.com'],
-      from: { address: 'noreply@example.com', name: 'RudderJS' },
+      from: { address: 'noreply@example.com', name: 'Rudder' },
     })
 
-    assert.equal(sendMailCalls[0]!.from, 'RudderJS <noreply@example.com>')
+    assert.equal(sendMailCalls[0]!.from, 'Rudder <noreply@example.com>')
   })
 
   it('formats from as bare address when name is omitted', async () => {

@@ -170,7 +170,7 @@ Logs `METHOD path — Nms` to the console after each request:
 import { LoggerMiddleware, fromClass } from '@rudderjs/middleware'
 
 m.use(fromClass(LoggerMiddleware))
-// → [RudderJS] GET /api/users — 12ms
+// → [Rudder] GET /api/users — 12ms
 ```
 
 ### `ThrottleMiddleware`

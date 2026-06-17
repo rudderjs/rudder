@@ -18,7 +18,7 @@ import { app } from './application.js'
  *
  * Dev only: in production there's no Vike banner and logs go to files /
  * aggregators, so the message is printed plain (no arrow, no ANSI) to stay
- * parseable — mirroring how the framework prints `[RudderJS] ready` in prod.
+ * parseable — mirroring how the framework prints `[Rudder] ready` in prod.
  * Safe to call before the app has fully booted (treated as non-dev).
  */
 export function bootLine(message: string): void {

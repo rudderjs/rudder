@@ -11,7 +11,7 @@ Shared utility primitives — `Env`, `config()`, `Collection`, `dump`/`dd` debug
 ```ts
 import { Env } from '@rudderjs/core'
 
-Env.get('APP_NAME', 'RudderJS')        // throws if missing AND no fallback
+Env.get('APP_NAME', 'Rudder')        // throws if missing AND no fallback
 Env.getNumber('PORT', 3000)            // parses to number, throws on NaN
 Env.getBool('DEBUG', false)            // accepts 'true'/'false'/'1'/'0'
 ```

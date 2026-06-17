@@ -67,7 +67,7 @@ export async function pruneModels(opts: PruneOptions = {}): Promise<PruneReport[
           if (typeof ModelClass.pruning === 'function') {
             try { await ModelClass.pruning(row) }
             catch (err) {
-              console.error(`[RudderJS prune] ${name} pruning() failed: ${(err as Error).message}`)
+              console.error(`[Rudder prune] ${name} pruning() failed: ${(err as Error).message}`)
               continue
             }
           }

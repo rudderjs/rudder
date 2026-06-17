@@ -20,7 +20,7 @@ let _urlKey = ''
 
 function _getSigningKey(): string {
   const key = _urlKey || process.env['APP_KEY'] || ''
-  if (!key) throw new Error('[RudderJS] No signing key configured. Set APP_KEY in your .env or call Url.setKey().')
+  if (!key) throw new Error('[Rudder] No signing key configured. Set APP_KEY in your .env or call Url.setKey().')
   return key
 }
 
@@ -37,7 +37,7 @@ function _computeSignature(pathname: string, params: URLSearchParams): string {
       .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
   )
   const toSign = sorted.size > 0 ? `${pathname}?${sorted.toString()}` : pathname
-  if (!_crypto) throw new Error('[RudderJS Router] node:crypto not available — Url signing requires a server environment.')
+  if (!_crypto) throw new Error('[Rudder Router] node:crypto not available — Url signing requires a server environment.')
   return _crypto.createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
 }
 

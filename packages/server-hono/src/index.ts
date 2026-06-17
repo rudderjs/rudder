@@ -1041,7 +1041,7 @@ class HonoAdapter implements ServerAdapter {
   listen(port: number, callback?: () => void): void {
     serve({ fetch: this.app.fetch, port: port }, () => {
       callback?.()
-      console.log(`[RudderJS] Server running on http://localhost:${port}`)
+      console.log(`[Rudder] Server running on http://localhost:${port}`)
     })
     // The WebSocket upgrade handler is attached automatically via the
     // http.createServer monkey-patch at the top of this file. Attaching it

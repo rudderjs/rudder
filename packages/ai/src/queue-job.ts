@@ -161,7 +161,7 @@ async function defaultLoadDispatch(): Promise<DispatchFn> {
     return mod['dispatch'] as DispatchFn
   } catch {
     throw new Error(
-      '[RudderJS AI] @rudderjs/queue is required for agent.queue(). Install it: pnpm add @rudderjs/queue',
+      '[Rudder AI] @rudderjs/queue is required for agent.queue(). Install it: pnpm add @rudderjs/queue',
     )
   }
 }
@@ -209,12 +209,12 @@ async function runStreamingAndBroadcast(
   const broadcastFn = await loadBroadcast()
   if (broadcastFn === null) {
     throw new Error(
-      '[RudderJS AI] @rudderjs/broadcast is required for .broadcast(). Install it: pnpm add @rudderjs/broadcast',
+      '[Rudder AI] @rudderjs/broadcast is required for .broadcast(). Install it: pnpm add @rudderjs/broadcast',
     )
   }
   if (typeof agentRef.stream !== 'function') {
     throw new Error(
-      '[RudderJS AI] .broadcast() requires an agent with .stream(); the wrapper passed to QueuedPromptBuilder is missing it.',
+      '[Rudder AI] .broadcast() requires an agent with .stream(); the wrapper passed to QueuedPromptBuilder is missing it.',
     )
   }
 

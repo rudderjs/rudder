@@ -44,7 +44,7 @@ export class FakeQueueAdapter implements QueueAdapter {
     const matching = this._matching(jobClass, predicate)
     assert.ok(
       matching.length > 0,
-      `[RudderJS Queue] Expected job "${jobClass.name}" to be pushed, but it was not.`,
+      `[Rudder Queue] Expected job "${jobClass.name}" to be pushed, but it was not.`,
     )
   }
 
@@ -60,7 +60,7 @@ export class FakeQueueAdapter implements QueueAdapter {
     )
     assert.ok(
       matching.length > 0,
-      `[RudderJS Queue] Expected job "${jobClass.name}" to be pushed on queue "${queue}", but it was not.`,
+      `[Rudder Queue] Expected job "${jobClass.name}" to be pushed on queue "${queue}", but it was not.`,
     )
   }
 
@@ -73,7 +73,7 @@ export class FakeQueueAdapter implements QueueAdapter {
     assert.strictEqual(
       matching.length,
       count,
-      `[RudderJS Queue] Expected job "${jobClass.name}" to be pushed ${count} time(s), but it was pushed ${matching.length} time(s).`,
+      `[Rudder Queue] Expected job "${jobClass.name}" to be pushed ${count} time(s), but it was pushed ${matching.length} time(s).`,
     )
   }
 
@@ -83,7 +83,7 @@ export class FakeQueueAdapter implements QueueAdapter {
     assert.strictEqual(
       matching.length,
       0,
-      `[RudderJS Queue] Expected job "${jobClass.name}" not to be pushed, but it was pushed ${matching.length} time(s).`,
+      `[Rudder Queue] Expected job "${jobClass.name}" not to be pushed, but it was pushed ${matching.length} time(s).`,
     )
   }
 
@@ -92,7 +92,7 @@ export class FakeQueueAdapter implements QueueAdapter {
     assert.strictEqual(
       this._jobs.length,
       0,
-      `[RudderJS Queue] Expected no jobs to be pushed, but ${this._jobs.length} were pushed.`,
+      `[Rudder Queue] Expected no jobs to be pushed, but ${this._jobs.length} were pushed.`,
     )
   }
 

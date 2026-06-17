@@ -76,7 +76,7 @@ class NodemailerAdapter implements MailAdapter {
         try {
           nodemailer = await resolveOptionalPeer<NodemailerModule>('nodemailer')
         } catch {
-          throw new Error('[RudderJS Mail] SMTP driver requires "nodemailer". Install it with: pnpm add nodemailer')
+          throw new Error('[Rudder Mail] SMTP driver requires "nodemailer". Install it with: pnpm add nodemailer')
         }
 
         const secure = this.config.encryption === 'ssl'

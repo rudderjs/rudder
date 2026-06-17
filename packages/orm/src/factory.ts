@@ -155,7 +155,7 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
   state(name: string): this {
     const c = this._clone()
     const fn = this.states()[name]
-    if (!fn) throw new Error(`[RudderJS] Factory state "${name}" is not defined on ${this.constructor.name}.`)
+    if (!fn) throw new Error(`[Rudder] Factory state "${name}" is not defined on ${this.constructor.name}.`)
     c._stateOverrides.push(fn)
     return c
   }
@@ -366,9 +366,9 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
       'belongsTo',
     )
     const def = this.modelClass.relations[name]
-    if (!def) throw new Error(`[RudderJS ORM] Factory.for(): relation "${name}" is not defined on ${this.modelClass.name}.`)
+    if (!def) throw new Error(`[Rudder ORM] Factory.for(): relation "${name}" is not defined on ${this.modelClass.name}.`)
     if (def.type !== 'belongsTo') {
-      throw new Error(`[RudderJS ORM] Factory.for(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "belongsTo".`)
+      throw new Error(`[Rudder ORM] Factory.for(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "belongsTo".`)
     }
     const related = def.model() as unknown as FactoryModelClass
     const fk = def.foreignKey ?? `${camelHead(related.name)}Id`
@@ -388,12 +388,12 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
       'hasMany/hasOne',
     )
     const def = this.modelClass.relations[name]
-    if (!def) throw new Error(`[RudderJS ORM] Factory.has(): relation "${name}" is not defined on ${this.modelClass.name}.`)
+    if (!def) throw new Error(`[Rudder ORM] Factory.has(): relation "${name}" is not defined on ${this.modelClass.name}.`)
     if (def.type !== 'hasMany' && def.type !== 'hasOne') {
       const hint = def.type === 'morphMany' || def.type === 'morphOne'
         ? ' Polymorphic relations are not supported by has() yet — set the morph columns via .with().'
         : ''
-      throw new Error(`[RudderJS ORM] Factory.has(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "hasMany" or "hasOne".${hint}`)
+      throw new Error(`[Rudder ORM] Factory.has(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "hasMany" or "hasOne".${hint}`)
     }
     const fk = def.foreignKey ?? `${camelHead(this.modelClass.name)}Id`
     const localKey = def.localKey ?? this.modelClass.primaryKey
@@ -408,12 +408,12 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
       'belongsToMany',
     )
     const def = this.modelClass.relations[name]
-    if (!def) throw new Error(`[RudderJS ORM] Factory.hasAttached(): relation "${name}" is not defined on ${this.modelClass.name}.`)
+    if (!def) throw new Error(`[Rudder ORM] Factory.hasAttached(): relation "${name}" is not defined on ${this.modelClass.name}.`)
     if (def.type !== 'belongsToMany') {
       const hint = def.type === 'morphToMany' || def.type === 'morphedByMany'
         ? ' Polymorphic pivots are not supported by hasAttached() yet.'
         : ''
-      throw new Error(`[RudderJS ORM] Factory.hasAttached(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "belongsToMany".${hint}`)
+      throw new Error(`[Rudder ORM] Factory.hasAttached(): relation "${name}" on ${this.modelClass.name} is "${def.type}", expected "belongsToMany".${hint}`)
     }
     const related = def.model() as unknown as FactoryModelClass
     const relatedKey = def.relatedKey ?? related.primaryKey
@@ -436,10 +436,10 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
       predicate(def) && 'model' in def && (def.model() as unknown) === target,
     )
     if (matches.length === 0) {
-      throw new Error(`[RudderJS ORM] No ${kindLabel} relation on ${this.modelClass.name} points at ${other.modelClass.name}. Pass an explicit relation name.`)
+      throw new Error(`[Rudder ORM] No ${kindLabel} relation on ${this.modelClass.name} points at ${other.modelClass.name}. Pass an explicit relation name.`)
     }
     if (matches.length > 1) {
-      throw new Error(`[RudderJS ORM] Ambiguous ${kindLabel} relation on ${this.modelClass.name} → ${other.modelClass.name} (${matches.map(([n]) => n).join(', ')}). Pass an explicit relation name.`)
+      throw new Error(`[Rudder ORM] Ambiguous ${kindLabel} relation on ${this.modelClass.name} → ${other.modelClass.name} (${matches.map(([n]) => n).join(', ')}). Pass an explicit relation name.`)
     }
     return matches[0]![0]
   }

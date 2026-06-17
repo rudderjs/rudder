@@ -264,7 +264,7 @@ export async function transaction<T>(
     : ModelRegistry.getAdapter()
   if (typeof adapter.transaction !== 'function') {
     throw new Error(
-      '[RudderJS ORM] The active database adapter does not support transactions. ' +
+      '[Rudder ORM] The active database adapter does not support transactions. ' +
       'The native engine (@rudderjs/orm/native) implements them; the Prisma/Drizzle ' +
       'adapters do not expose `transaction()` yet.',
     )
@@ -277,7 +277,7 @@ export async function transaction<T>(
   // ones whose driver can't detect nesting) fails the same clear way.
   if (opts?.isolationLevel !== undefined && storage.getStore()?.has(key)) {
     throw new Error(
-      '[RudderJS ORM] isolationLevel cannot be set on a nested transaction — the ' +
+      '[Rudder ORM] isolationLevel cannot be set on a nested transaction — the ' +
       'nested call maps to a SAVEPOINT inside the open transaction, whose isolation ' +
       'level is already fixed. Set it on the outermost transaction() call.',
     )
@@ -461,13 +461,13 @@ export class ModelRegistry {
       const opened = ConnectionManager.peek(name)
       if (opened) return opened
       throw new Error(
-        `[RudderJS ORM] Database connection '${name}' is not open. Open it first ` +
+        `[Rudder ORM] Database connection '${name}' is not open. Open it first ` +
           `(e.g. \`await DB.connection('${name}').select(...)\` or ` +
           `\`await ConnectionManager.ensure('${name}')\`).`,
       )
     }
     if (!_store.adapter) {
-      throw new Error('[RudderJS ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
+      throw new Error('[Rudder ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
     }
     return _store.adapter
   }
@@ -559,8 +559,8 @@ export class ModelNotFoundError extends Error {
 
   constructor(model: string, id?: string | number) {
     super(id !== undefined
-      ? `[RudderJS ORM] No ${model} found for id ${String(id)}.`
-      : `[RudderJS ORM] No ${model} found.`)
+      ? `[Rudder ORM] No ${model} found for id ${String(id)}.`
+      : `[Rudder ORM] No ${model} found.`)
     this.name = 'ModelNotFoundError'
     this.model = model
     if (id !== undefined) this.id = id
@@ -591,7 +591,7 @@ export class OptimisticLockError extends Error {
 
   constructor(model: string, id: string | number, expectedVersion: number, actualVersion?: number) {
     super(
-      `[RudderJS ORM] Optimistic lock failed on ${model} ${String(id)}: expected version ${expectedVersion}` +
+      `[Rudder ORM] Optimistic lock failed on ${model} ${String(id)}: expected version ${expectedVersion}` +
       (actualVersion !== undefined ? `, found ${actualVersion}` : '') +
       '. The row was modified by another writer — re-read it and retry the update.',
     )
@@ -931,7 +931,7 @@ const FORWARDED_QB_METHODS = new Set([
  *  `... is not a function` TypeError. */
 function adapterMethodUnsupported(method: string): Error {
   return new Error(
-    `[RudderJS ORM] ${method}() is not supported on this adapter — ` +
+    `[Rudder ORM] ${method}() is not supported on this adapter — ` +
       'use whereRaw(...) or DB.select(...) instead.',
   )
 }
@@ -953,7 +953,7 @@ function assertJsonPathUpdates(qb: unknown, data: Record<string, unknown>): void
   if (arrowKey === undefined) return
   if ((qb as { supportsJsonPathUpdates?: unknown }).supportsJsonPathUpdates) return
   throw new Error(
-    `[RudderJS ORM] JSON-path update key "${arrowKey}" is not supported on this adapter — ` +
+    `[Rudder ORM] JSON-path update key "${arrowKey}" is not supported on this adapter — ` +
       'write the whole JSON column instead (e.g. update(id, { meta: { ... } })), or use the native engine.',
   )
 }
@@ -1570,7 +1570,7 @@ export abstract class Model {
   static factory<T extends typeof Model>(this: T): ModelFactory<Record<string, unknown>> {
     const Fc = (this as typeof Model).factoryClass
     if (!Fc) {
-      throw new Error(`[RudderJS ORM] No factory linked to ${this.name}. Add \`static factoryClass = ${this.name}Factory\` to the model, or call ${this.name}Factory.new() directly.`)
+      throw new Error(`[Rudder ORM] No factory linked to ${this.name}. Add \`static factoryClass = ${this.name}Factory\` to the model, or call ${this.name}Factory.new() directly.`)
     }
     return new Fc()
   }
@@ -1996,7 +1996,7 @@ export abstract class Model {
         // requested eager load would be a correctness trap — fail loud instead.
         if (polymorphicWiths.length > 0 || directWiths.length > 0 || relationDefaults.length > 0) {
           throw new Error(
-            '[RudderJS ORM] .lean() returns plain records and cannot be combined with eager loading ' +
+            '[Rudder ORM] .lean() returns plain records and cannot be combined with eager loading ' +
               '(.with(...) / withCount / withDefault). Drop .lean(), or load relations from the hydrated rows.',
           )
         }
@@ -2074,7 +2074,7 @@ export abstract class Model {
                 const boundary = decodeCursor(cursor)
                 for (const o of orders) {
                   if (!(o.column in boundary)) {
-                    throw new Error(`[RudderJS ORM] cursorPaginate(): cursor is missing order column "${o.column}" — it was generated for a different orderBy() set.`)
+                    throw new Error(`[Rudder ORM] cursorPaginate(): cursor is missing order column "${o.column}" — it was generated for a different orderBy() set.`)
                   }
                 }
                 applyKeysetFilter(target as unknown as KeysetBuilder, orders, boundary)
@@ -2299,7 +2299,7 @@ export abstract class Model {
             callback: (rows: InstanceType<T>[]) => void | boolean | Promise<void | boolean>,
           ): Promise<boolean> => {
             if (!Number.isInteger(size) || size <= 0) {
-              throw new Error('[RudderJS ORM] chunk(size, callback): size must be a positive integer.')
+              throw new Error('[Rudder ORM] chunk(size, callback): size must be a positive integer.')
             }
             let offset = 0
             for (;;) {
@@ -2317,7 +2317,7 @@ export abstract class Model {
         if (prop === 'lazy') {
           return (size = 1000): AsyncGenerator<InstanceType<T>, void, undefined> => {
             if (!Number.isInteger(size) || size <= 0) {
-              throw new Error('[RudderJS ORM] lazy(size): size must be a positive integer.')
+              throw new Error('[Rudder ORM] lazy(size): size must be a positive integer.')
             }
             async function* generate(): AsyncGenerator<InstanceType<T>, void, undefined> {
               let offset = 0
@@ -2478,7 +2478,7 @@ export abstract class Model {
       const enhanced = q as any
       enhanced.scope = (name: string, ...args: unknown[]) => {
         const scopeFn = localScopes[name]
-        if (!scopeFn) throw new Error(`[RudderJS ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
+        if (!scopeFn) throw new Error(`[Rudder ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
         return scopeFn(enhanced, ...args)
       }
       enhanced.withoutGlobalScope = (name: string) => {
@@ -3084,7 +3084,7 @@ export abstract class Model {
 
     const q = Model._q(this) as QueryBuilder<InstanceType<T>>
     if (typeof q.upsert !== 'function') {
-      throw new Error(`[RudderJS ORM] The active adapter does not support upsert() (called on ${self.name}).`)
+      throw new Error(`[Rudder ORM] The active adapter does not support upsert() (called on ${self.name}).`)
     }
     return q.upsert(prepared as Partial<InstanceType<T>>[], keys, updateCols)
   }
@@ -3258,11 +3258,11 @@ export abstract class Model {
     payload = await self._ensureTimestamps(payload, 'create')
 
     const creatingResult = await self._fireEvent('creating', payload)
-    if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
+    if (creatingResult === false) throw new Error(`[Rudder ORM] Create cancelled by observer on ${self.name}.`)
     if (creatingResult && typeof creatingResult === 'object') payload = creatingResult as Record<string, unknown>
 
     const savingResult = await self._fireEvent('saving', payload)
-    if (savingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by saving observer on ${self.name}.`)
+    if (savingResult === false) throw new Error(`[Rudder ORM] Create cancelled by saving observer on ${self.name}.`)
     if (savingResult && typeof savingResult === 'object') payload = savingResult as Record<string, unknown>
 
     const record = await Model._q(this).create(payload as Partial<InstanceType<T>>)
@@ -3299,11 +3299,11 @@ export abstract class Model {
     payload = await self._ensureTimestamps(payload, 'update', forceTimestamp)
 
     const updatingResult = await self._fireEvent('updating', id, payload)
-    if (updatingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
+    if (updatingResult === false) throw new Error(`[Rudder ORM] Update cancelled by observer on ${self.name}.`)
     if (updatingResult && typeof updatingResult === 'object') payload = updatingResult as Record<string, unknown>
 
     const savingResult = await self._fireEvent('saving', payload)
-    if (savingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by saving observer on ${self.name}.`)
+    if (savingResult === false) throw new Error(`[Rudder ORM] Update cancelled by saving observer on ${self.name}.`)
     if (savingResult && typeof savingResult === 'object') payload = savingResult as Record<string, unknown>
 
     const versionCol = self._versionColumn()
@@ -3353,7 +3353,7 @@ export abstract class Model {
     const expected = Number(expectedRaw)
     if (!Number.isInteger(expected)) {
       throw new Error(
-        `[RudderJS ORM] ${self.name}.${versionCol} must be an integer for optimistic locking — got ${JSON.stringify(expectedRaw)}. ` +
+        `[Rudder ORM] ${self.name}.${versionCol} must be an integer for optimistic locking — got ${JSON.stringify(expectedRaw)}. ` +
         `Declare the column as an integer defaulting to 1 (or let create() stamp it).`,
       )
     }
@@ -3378,7 +3378,7 @@ export abstract class Model {
   static async delete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
-    if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[Rudder ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).delete(id)
     await self._fireEvent('deleted', id)
@@ -3387,7 +3387,7 @@ export abstract class Model {
   static async restore<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T>> {
     const self = this as typeof Model
     const result = await self._fireEvent('restoring', id)
-    if (result === false) throw new Error(`[RudderJS ORM] Restore cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[Rudder ORM] Restore cancelled by observer on ${self.name}.`)
 
     const record = await Model._q(this).restore(id)
     await self._fireEvent('restored', record as Record<string, unknown>)
@@ -3397,7 +3397,7 @@ export abstract class Model {
   static async forceDelete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
-    if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[Rudder ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).forceDelete(id)
     await self._fireEvent('deleted', id)
@@ -3570,7 +3570,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot refresh a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
+      throw new Error(`[Rudder ORM] Cannot refresh a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const fresh = await (ctor as typeof Model & { find(i: string | number): Promise<Model | null> }).find(id)
     if (!fresh) throw new ModelNotFoundError(ctor.name, id)
@@ -3595,7 +3595,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
+      throw new Error(`[Rudder ORM] Cannot delete a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
     if (ctor.softDeletes) {
@@ -3613,7 +3613,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot restore a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
+      throw new Error(`[Rudder ORM] Cannot restore a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const restored = await (ctor as typeof Model & {
       restore(i: string | number): Promise<Model>
@@ -3658,7 +3658,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot increment a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
+      throw new Error(`[Rudder ORM] Cannot increment a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const updated = await (ctor as typeof Model & {
       increment(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
@@ -3743,7 +3743,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const id = this._getKey()
     if (id === undefined) {
-      throw new Error(`[RudderJS ORM] Cannot decrement a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
+      throw new Error(`[Rudder ORM] Cannot decrement a ${ctor.name} without a primary key. Call .save() / Model.create() first so a primary key is assigned.`)
     }
     const updated = await (ctor as typeof Model & {
       decrement(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
@@ -3891,7 +3891,7 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const def = ctor.relations[name]
     if (!def) {
-      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+      throw new Error(`[Rudder ORM] Relation "${name}" is not defined on ${ctor.name}.`)
     }
 
     if (def.type === 'morphTo') {
@@ -3900,11 +3900,11 @@ export abstract class Model {
       const idVal   = readField(this, idCol)
       const typeVal = readField(this, typeCol)
       if (idVal === undefined || idVal === null || typeVal === undefined || typeVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} is null/undefined. Save the morph host first, or assign both columns before calling .related().`)
+        throw new Error(`[Rudder ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} is null/undefined. Save the morph host first, or assign both columns before calling .related().`)
       }
       const targets = def.types()
       if (targets.length === 0) {
-        throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: \`types: () => [...]\` is empty — declare at least one allowed target class.`)
+        throw new Error(`[Rudder ORM] morphTo "${name}" on ${ctor.name}: \`types: () => [...]\` is empty — declare at least one allowed target class.`)
       }
       if (typeof process !== 'undefined' && process.env?.['NODE_ENV'] !== 'production') {
         const seen = new Map<string, string>()
@@ -3912,14 +3912,14 @@ export abstract class Model {
           const key = C.morphAlias ?? C.name
           const prev = seen.get(key)
           if (prev) {
-            throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: duplicate discriminator "${key}" — both ${prev} and ${C.name} resolve to the same value. Set a distinct \`static morphAlias\` on one.`)
+            throw new Error(`[Rudder ORM] morphTo "${name}" on ${ctor.name}: duplicate discriminator "${key}" — both ${prev} and ${C.name} resolve to the same value. Set a distinct \`static morphAlias\` on one.`)
           }
           seen.set(key, C.name)
         }
       }
       const Target = targets.find(C => (C.morphAlias ?? C.name) === String(typeVal))
       if (!Target) {
-        throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: unknown ${typeCol} = ${JSON.stringify(typeVal)}. Allowed: ${targets.map(C => C.morphAlias ?? C.name).join(', ')}`)
+        throw new Error(`[Rudder ORM] morphTo "${name}" on ${ctor.name}: unknown ${typeCol} = ${JSON.stringify(typeVal)}. Allowed: ${targets.map(C => C.morphAlias ?? C.name).join(', ')}`)
       }
       return Target.where(Target.primaryKey, idVal) as QueryBuilder<Model>
     }
@@ -3941,7 +3941,7 @@ export abstract class Model {
       const meta = resolveBelongsToManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+        throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return belongsToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -3950,7 +3950,7 @@ export abstract class Model {
       const meta = resolveMorphToManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+        throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return morphToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -3959,7 +3959,7 @@ export abstract class Model {
       const meta = resolveMorphedByManyMeta(ctor, Related, def)
       const parentVal = readField(this, meta.parentKey)
       if (parentVal === undefined || parentVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+        throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return morphedByManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
     }
@@ -3968,7 +3968,7 @@ export abstract class Model {
       const meta = resolveHasThroughMeta(ctor, def)
       const localVal = readField(this, meta.localKey)
       if (localVal === undefined || localVal === null) {
-        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.localKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+        throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.localKey} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       return hasThroughDeferredQb(meta, localVal)
     }
@@ -3982,7 +3982,7 @@ export abstract class Model {
       // the query yields nothing and the default takes over. `undefined` still
       // throws: it means the column wasn't loaded, a usage error either way.
       if (localVal === undefined || (localVal === null && def.withDefault === undefined)) {
-        throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+        throw new Error(`[Rudder ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
       }
       const base = Related.where(Related.primaryKey, localVal) as QueryBuilder<Model>
       return def.withDefault === undefined
@@ -3998,7 +3998,7 @@ export abstract class Model {
     const localCol = simpleDef.localKey   ?? ctor.primaryKey
     const localVal = readField(this, localCol)
     if (localVal === undefined || localVal === null) {
-      throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
+      throw new Error(`[Rudder ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is null/undefined. Either save the parent first, or include that column in your select() list when reading the parent.`)
     }
     const base = Related.where(fk, localVal) as QueryBuilder<Model>
     // `withDefault` only applies to the single-result `hasOne`; `hasMany`
@@ -4031,16 +4031,16 @@ export abstract class Model {
     const ctor = parent.constructor as typeof Model
     const def = ctor.relations[name]
     if (!def) {
-      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+      throw new Error(`[Rudder ORM] Relation "${name}" is not defined on ${ctor.name}.`)
     }
     if (def.type !== 'belongsToMany') {
-      throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "belongsToMany".`)
+      throw new Error(`[Rudder ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "belongsToMany".`)
     }
     const Related = def.model() as typeof Model
     const meta = resolveBelongsToManyMeta(ctor, Related, def)
     const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
-      throw new Error(`[RudderJS ORM] Cannot use belongsToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+      throw new Error(`[Rudder ORM] Cannot use belongsToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
     // Belt-and-suspenders: make sure the auto-method is installed even
     // for instances constructed before any query against this class.
@@ -4066,16 +4066,16 @@ export abstract class Model {
     const ctor = parent.constructor as typeof Model
     const def = ctor.relations[name]
     if (!def) {
-      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+      throw new Error(`[Rudder ORM] Relation "${name}" is not defined on ${ctor.name}.`)
     }
     if (def.type !== 'morphToMany') {
-      throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphToMany".`)
+      throw new Error(`[Rudder ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphToMany".`)
     }
     const Related = def.model() as typeof Model
     const meta = resolveMorphToManyMeta(ctor, Related, def)
     const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
-      throw new Error(`[RudderJS ORM] Cannot use morphToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+      throw new Error(`[Rudder ORM] Cannot use morphToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
     installMorphPivotMethods(ctor)
     return makeMorphToManyAccessor(ctor, Related, def, parentVal)
@@ -4100,16 +4100,16 @@ export abstract class Model {
     const ctor = parent.constructor as typeof Model
     const def = ctor.relations[name]
     if (!def) {
-      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+      throw new Error(`[Rudder ORM] Relation "${name}" is not defined on ${ctor.name}.`)
     }
     if (def.type !== 'morphedByMany') {
-      throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphedByMany".`)
+      throw new Error(`[Rudder ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "morphedByMany".`)
     }
     const Related = def.model() as typeof Model
     const meta = resolveMorphedByManyMeta(ctor, Related, def)
     const parentVal = readField(parent, meta.parentKey)
     if (parentVal === undefined || parentVal === null) {
-      throw new Error(`[RudderJS ORM] Cannot use morphedByMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+      throw new Error(`[Rudder ORM] Cannot use morphedByMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
     }
     installMorphPivotMethods(ctor)
     return makeMorphedByManyAccessor(ctor, Related, def, parentVal)
@@ -4132,7 +4132,7 @@ export abstract class Model {
     const ctor = parent.constructor as typeof Model
     const pk   = readField(parent, ctor.primaryKey)
     if (pk === undefined || pk === null) {
-      throw new Error(`[RudderJS ORM] Model.morph("${name}", parent): parent.${ctor.primaryKey} is unset — save the parent first.`)
+      throw new Error(`[Rudder ORM] Model.morph("${name}", parent): parent.${ctor.primaryKey} is unset — save the parent first.`)
     }
     return {
       [`${name}Id`]:   pk,
@@ -4244,7 +4244,7 @@ export abstract class Model {
     const Rc = resourceClass ?? ctor.resourceClass
     if (!Rc) {
       throw new Error(
-        `[RudderJS ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
+        `[Rudder ORM] ${ctor.name} has no resourceClass — set \`static resourceClass = ${ctor.name}Resource\` ` +
         `or pass the class: \`${camelHead(ctor.name)}.toResource(${ctor.name}Resource)\`.`,
       )
     }

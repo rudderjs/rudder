@@ -66,7 +66,7 @@ export class DispatchBuilder<T extends Job> {
 
   async send(): Promise<void> {
     const adapter = QueueRegistry.get()
-    if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
+    if (!adapter) throw new Error('[Rudder Queue] No queue adapter registered')
 
     // ShouldBeUnique: acquire the dispatch lock atomically. If another
     // dispatcher already won the race, silently skip enqueueing — Laravel
@@ -423,7 +423,7 @@ export class QueueProvider extends ServiceProvider {
         const { bullmq } = await resolveOptionalPeer<{ bullmq: (c: unknown) => QueueAdapterProvider }>('@rudderjs/queue-bullmq')
         adapter = bullmq(connectionConfig).create()
       } else {
-        throw new Error(`[RudderJS Queue] Unknown driver "${driver}". Available: sync, database, inngest, bullmq`)
+        throw new Error(`[Rudder Queue] Unknown driver "${driver}". Available: sync, database, inngest, bullmq`)
       }
 
       QueueRegistry.set(adapter)
@@ -438,7 +438,7 @@ export class QueueProvider extends ServiceProvider {
       // via `QueueRegistry.set(...)` work end-to-end with no boot re-run.
       const currentAdapter = (): QueueAdapter => {
         const a = QueueRegistry.get()
-        if (!a) throw new Error('[RudderJS Queue] No queue adapter registered')
+        if (!a) throw new Error('[Rudder Queue] No queue adapter registered')
         return a
       }
       const driverName = (): string => driver
@@ -446,7 +446,7 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:work', async (args) => {
         const a = currentAdapter()
         if (typeof a.work !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support workers. Switch to "bullmq" or "database" in config/queue.ts.`)
+          throw new Error(`[Rudder Queue] Driver "${driverName()}" does not support workers. Switch to "bullmq" or "database" in config/queue.ts.`)
         }
         const { queues, options } = parseWorkerArgs(args)
         await a.work(queues, options)
@@ -466,7 +466,7 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:status', async (args) => {
         const a = currentAdapter()
         if (typeof a.status !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:status.`)
+          throw new Error(`[Rudder Queue] Driver "${driverName()}" does not support queue:status.`)
         }
         const queueName = args[0] ?? 'default'
         const stats = await a.status(queueName)
@@ -485,7 +485,7 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:clear', async (args) => {
         const a = currentAdapter()
         if (typeof a.flush !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:clear.`)
+          throw new Error(`[Rudder Queue] Driver "${driverName()}" does not support queue:clear.`)
         }
         const queueName = args[0] ?? 'default'
         await a.flush(queueName)
@@ -496,7 +496,7 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:failed', async (args) => {
         const a = currentAdapter()
         if (typeof a.failures !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:failed.`)
+          throw new Error(`[Rudder Queue] Driver "${driverName()}" does not support queue:failed.`)
         }
         const queueName = args[0] ?? 'default'
         const jobs = await a.failures(queueName)
@@ -519,7 +519,7 @@ export class QueueProvider extends ServiceProvider {
       rudder.command('queue:retry', async (args) => {
         const a = currentAdapter()
         if (typeof a.retryFailed !== 'function') {
-          throw new Error(`[RudderJS Queue] Driver "${driverName()}" does not support queue:retry.`)
+          throw new Error(`[Rudder Queue] Driver "${driverName()}" does not support queue:retry.`)
         }
         const queueName = args[0] ?? 'default'
         const count = await a.retryFailed(queueName)

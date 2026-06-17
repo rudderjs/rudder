@@ -60,7 +60,7 @@ export function normalizeForeignKeyAction(input: string): ForeignKeyAction {
   if (!action) {
     throw new NativeOrmError(
       'NATIVE_DDL_BAD_FK_ACTION',
-      `[RudderJS ORM native] Invalid foreign-key action ${JSON.stringify(input)}. ` +
+      `[Rudder ORM native] Invalid foreign-key action ${JSON.stringify(input)}. ` +
       `Use one of: cascade, restrict, set null (setNull), no action (noAction).`,
     )
   }

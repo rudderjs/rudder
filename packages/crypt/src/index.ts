@@ -14,7 +14,7 @@ export class CryptRegistry {
   }
 
   static getKey(): Buffer {
-    if (!this.key) throw new Error('[RudderJS Crypt] No encryption key set. Add crypt() to providers and set APP_KEY.')
+    if (!this.key) throw new Error('[Rudder Crypt] No encryption key set. Add crypt() to providers and set APP_KEY.')
     return this.key
   }
 
@@ -77,7 +77,7 @@ function decryptRaw(key: Buffer, payload: EncryptedPayload): Buffer {
   const expectedBuffer = Buffer.from(expectedMac, 'hex')
 
   if (macBuffer.length !== expectedBuffer.length || !timingSafeEqual(macBuffer, expectedBuffer)) {
-    throw new Error('[RudderJS Crypt] MAC verification failed — payload may have been tampered with.')
+    throw new Error('[Rudder Crypt] MAC verification failed — payload may have been tampered with.')
   }
 
   const iv = Buffer.from(payload.iv, 'hex')
@@ -93,7 +93,7 @@ function tryDecryptWithKeys(keys: Buffer[], payload: EncryptedPayload): Buffer {
       // try next key
     }
   }
-  throw new Error('[RudderJS Crypt] Decryption failed — no matching key found.')
+  throw new Error('[Rudder Crypt] Decryption failed — no matching key found.')
 }
 
 // ─── Crypt Facade ─────────────────────────────────────────
@@ -110,7 +110,7 @@ export class Crypt {
     // an opaque node TypeError. Fail with a clear message instead.
     const json = JSON.stringify(value)
     if (json === undefined) {
-      throw new Error('[RudderJS Crypt] Cannot encrypt a value that serializes to undefined (undefined, function, or symbol).')
+      throw new Error('[Rudder Crypt] Cannot encrypt a value that serializes to undefined (undefined, function, or symbol).')
     }
     const data = Buffer.from(json, 'utf8')
     const payload = encryptRaw(key, data)
@@ -126,14 +126,14 @@ export class Crypt {
     try {
       payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
     } catch {
-      throw new Error('[RudderJS Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+      throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
     }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     const decrypted = tryDecryptWithKeys(keys, payload)
     try {
       return JSON.parse(decrypted.toString('utf8')) as T
     } catch {
-      throw new Error('[RudderJS Crypt] Decrypted payload is not valid JSON.')
+      throw new Error('[Rudder Crypt] Decrypted payload is not valid JSON.')
     }
   }
 
@@ -155,7 +155,7 @@ export class Crypt {
     try {
       payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
     } catch {
-      throw new Error('[RudderJS Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+      throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
     }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     return tryDecryptWithKeys(keys, payload).toString('utf8')
@@ -207,12 +207,12 @@ export class CryptProvider extends ServiceProvider {
     const cfg = config<CryptConfig>('crypt')
 
     if (!cfg.key) {
-      throw new Error('[RudderJS Crypt] APP_KEY is not set. Run `Crypt.generateKey()` and add it to .env.')
+      throw new Error('[Rudder Crypt] APP_KEY is not set. Run `Crypt.generateKey()` and add it to .env.')
     }
 
     const key = parseKey(cfg.key)
     if (key.length !== 32) {
-      throw new Error(`[RudderJS Crypt] APP_KEY must be 32 bytes for AES-256. Got ${key.length} bytes.`)
+      throw new Error(`[Rudder Crypt] APP_KEY must be 32 bytes for AES-256. Got ${key.length} bytes.`)
     }
 
     // Validate rotation keys with the same 32-byte rule as the primary key.
@@ -222,7 +222,7 @@ export class CryptProvider extends ServiceProvider {
     const previousKeys = (cfg.previousKeys ?? []).map((raw, i) => {
       const k = parseKey(raw)
       if (k.length !== 32) {
-        throw new Error(`[RudderJS Crypt] previousKeys[${i}] must be 32 bytes for AES-256. Got ${k.length} bytes.`)
+        throw new Error(`[Rudder Crypt] previousKeys[${i}] must be 32 bytes for AES-256. Got ${k.length} bytes.`)
       }
       return k
     })

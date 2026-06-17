@@ -514,8 +514,8 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
         const extraDirs: string[] = []
         for (const entry of watchEntries) {
           const dir = resolveWatchDir(entry, cwd)
-          if (dir) { extraDirs.push(dir); console.log(`[RudderJS] watching package source: ${path.relative(cwd, dir) || dir}`) }
-          else console.warn(`[RudderJS] watch: could not resolve "${entry}" — skipped.`)
+          if (dir) { extraDirs.push(dir); console.log(`[Rudder] watching package source: ${path.relative(cwd, dir) || dir}`) }
+          else console.warn(`[Rudder] watch: could not resolve "${entry}" — skipped.`)
         }
         const allWatchDirs = [...watchDirs, ...extraDirs]
 

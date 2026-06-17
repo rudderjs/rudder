@@ -68,7 +68,7 @@ class HttpResponse implements HttpResponseData {
       return JSON.parse(this.body) as T
     } catch (err) {
       throw new Error(
-        `[RudderJS HTTP] Response body is not valid JSON (status ${this.status}): ${this.body.slice(0, 120)}`,
+        `[Rudder HTTP] Response body is not valid JSON (status ${this.status}): ${this.body.slice(0, 120)}`,
         { cause: err },
       )
     }
@@ -259,7 +259,7 @@ export class PendingRequest {
         return res
       }
       if (pending._fake._preventStray) {
-        throw new Error(`[RudderJS/Http] No fake registered for ${method} ${fullUrl}`)
+        throw new Error(`[Rudder/Http] No fake registered for ${method} ${fullUrl}`)
       }
     }
 
@@ -340,7 +340,7 @@ export class PendingRequest {
       return new HttpResponse(res.status, body, headers)
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`[RudderJS/Http] Request timed out after ${this._timeout}ms`, { cause: err })
+        throw new Error(`[Rudder/Http] Request timed out after ${this._timeout}ms`, { cause: err })
       }
       throw err
     } finally {
@@ -488,7 +488,7 @@ export class Sequence {
     if (next) return next
     if (this._whenEmpty) return this._whenEmpty
     throw new Error(
-      `[RudderJS/Http] Fake sequence is empty — request to "${url}" has no queued response. ` +
+      `[Rudder/Http] Fake sequence is empty — request to "${url}" has no queued response. ` +
       `Add more .push(...) calls, or set a fallback via .whenEmpty(response).`,
     )
   }
@@ -570,14 +570,14 @@ export class FakeManager {
   /** Assert that a request matching the predicate was sent. */
   assertSent(fn: (req: RecordedRequest) => boolean): void {
     if (!this._recorded.some(fn)) {
-      throw new Error('[RudderJS/Http] Expected request was not sent.')
+      throw new Error('[Rudder/Http] Expected request was not sent.')
     }
   }
 
   /** Assert that no request matching the predicate was sent. */
   assertNotSent(fn: (req: RecordedRequest) => boolean): void {
     if (this._recorded.some(fn)) {
-      throw new Error('[RudderJS/Http] Unexpected request was sent.')
+      throw new Error('[Rudder/Http] Unexpected request was sent.')
     }
   }
 
@@ -585,7 +585,7 @@ export class FakeManager {
   assertSentCount(count: number): void {
     if (this._recorded.length !== count) {
       throw new Error(
-        `[RudderJS/Http] Expected ${count} request(s), got ${this._recorded.length}.`,
+        `[Rudder/Http] Expected ${count} request(s), got ${this._recorded.length}.`,
       )
     }
   }

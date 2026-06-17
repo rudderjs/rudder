@@ -82,7 +82,7 @@ export function resolveEditor(envValue: string | undefined = process.env['APP_ED
   if (!_warnedUnknown.has(envValue)) {
     _warnedUnknown.add(envValue)
     console.warn(
-      `[RudderJS] Unknown APP_EDITOR="${envValue}". Falling back to "vscode". ` +
+      `[Rudder] Unknown APP_EDITOR="${envValue}". Falling back to "vscode". ` +
       `Supported: ${Object.keys(URL_TEMPLATES).join(', ')}, none.`,
     )
   }

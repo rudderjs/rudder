@@ -395,7 +395,7 @@ export class TestCase {
   ): Promise<TestResponse> {
     if (!this._handler) {
       throw new Error(
-        '[RudderJS Testing] No fetch handler available. ' +
+        '[Rudder Testing] No fetch handler available. ' +
         'Ensure your TestCase registers a server adapter provider, ' +
         'or bind a "fetchHandler" in the container.',
       )
@@ -553,7 +553,7 @@ export class TestCase {
     const table = ctor.table
     if (!table) {
       throw new Error(
-        '[RudderJS Testing] Model has no static `table` — pass a Model instance, ' +
+        '[Rudder Testing] Model has no static `table` — pass a Model instance, ' +
         'or use assertDatabaseHas(table, …) for raw-table assertions.',
       )
     }
@@ -561,7 +561,7 @@ export class TestCase {
     const pkValue = (model as Record<string, unknown>)[pk]
     if (pkValue == null) {
       throw new Error(
-        `[RudderJS Testing] Model has no value for primary key "${pk}" — has it been saved?`,
+        `[Rudder Testing] Model has no value for primary key "${pk}" — has it been saved?`,
       )
     }
     const label = `${ctor.name ?? table}#${String(pkValue)}`
@@ -580,7 +580,7 @@ export class TestCase {
       return await q.first()
     } catch (err) {
       throw new Error(
-        `[RudderJS Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
+        `[Rudder Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
         { cause: err },
       )
     }
@@ -594,7 +594,7 @@ export class TestCase {
       return await orm.query(table).get()
     } catch (err) {
       throw new Error(
-        `[RudderJS Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
+        `[Rudder Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
         { cause: err },
       )
     }

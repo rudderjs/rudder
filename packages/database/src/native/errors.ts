@@ -31,7 +31,7 @@ export class NativeNotImplementedError extends NativeOrmError {
   constructor(method: string, phase: string) {
     super(
       'NATIVE_NOT_IMPLEMENTED',
-      `[RudderJS ORM native] "${method}" is not implemented yet — it lands in ${phase}. ` +
+      `[Rudder ORM native] "${method}" is not implemented yet — it lands in ${phase}. ` +
       `Phase 1 of the native engine ships the read path only ` +
       `(first/find/get/all/count/paginate). Use @rudderjs/orm-prisma or ` +
       `@rudderjs/orm-drizzle for the full surface until then.`,
@@ -54,7 +54,7 @@ export class NativeIdentifierError extends NativeOrmError {
   constructor(identifier: string) {
     super(
       'NATIVE_INVALID_IDENTIFIER',
-      `[RudderJS ORM native] Invalid SQL identifier ${JSON.stringify(identifier)}. ` +
+      `[Rudder ORM native] Invalid SQL identifier ${JSON.stringify(identifier)}. ` +
       `Identifiers may contain only letters, digits, underscores, and dots, and ` +
       `must not start with a digit. Values are always bound as parameters; only ` +
       `column/table names flow through this check.`,

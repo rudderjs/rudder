@@ -73,10 +73,10 @@ export class RedisDriver implements BroadcastDriver {
     })
 
     this.sub.on('error', (err: unknown) => {
-      console.error('[RudderJS Broadcast/Redis] subscriber connection error', err)
+      console.error('[Rudder Broadcast/Redis] subscriber connection error', err)
     })
     this.pub.on('error', (err: unknown) => {
-      console.error('[RudderJS Broadcast/Redis] publisher connection error', err)
+      console.error('[Rudder Broadcast/Redis] publisher connection error', err)
     })
   }
 
@@ -97,7 +97,7 @@ export class RedisDriver implements BroadcastDriver {
       await this.pub.publish(this.fanoutKey, JSON.stringify(envelope))
     } catch (err) {
       // Broadcasts must never block the caller on transport failure.
-      console.error('[RudderJS Broadcast/Redis] publish failed', err)
+      console.error('[Rudder Broadcast/Redis] publish failed', err)
     }
   }
 
@@ -108,7 +108,7 @@ export class RedisDriver implements BroadcastDriver {
     if (!this.subscribed) {
       this.subscribed = true
       void this.sub.subscribe(this.fanoutKey).catch((err: unknown) => {
-        console.error('[RudderJS Broadcast/Redis] subscribe failed', err)
+        console.error('[Rudder Broadcast/Redis] subscribe failed', err)
       })
     }
     // Filter-replace (not splice) so a handler that self-unsubscribes mid-
@@ -137,7 +137,7 @@ export class RedisDriver implements BroadcastDriver {
     try {
       envelope = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf8')) as RedisChannelMessage
     } catch (err) {
-      console.error('[RudderJS Broadcast/Redis] dropped malformed pub/sub payload', err)
+      console.error('[Rudder Broadcast/Redis] dropped malformed pub/sub payload', err)
       return
     }
     // Strip `excludeConnectionId` for messages that did NOT originate on

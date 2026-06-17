@@ -96,7 +96,7 @@ async function loadNamespace(locale: string, namespace: string): Promise<Transla
 			LocalizationRegistry.setCached(locale, namespace, data)
 			return data
 		} catch (err) {
-			console.error(`[RudderJS Localization] Failed to parse ${filePath}:`, err)
+			console.error(`[Rudder Localization] Failed to parse ${filePath}:`, err)
 			return {}
 		}
 	} catch {

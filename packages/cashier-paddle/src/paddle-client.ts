@@ -25,7 +25,7 @@ export async function paddle(): Promise<PaddleClient> {
   const apiKey = Cashier.apiKey()
   if (!apiKey) {
     throw new Error(
-      '[RudderJS Cashier] PADDLE_API_KEY not configured. Set it in `config/cashier.ts` or via the `PADDLE_API_KEY` env var.',
+      '[Rudder Cashier] PADDLE_API_KEY not configured. Set it in `config/cashier.ts` or via the `PADDLE_API_KEY` env var.',
     )
   }
 
@@ -34,13 +34,13 @@ export async function paddle(): Promise<PaddleClient> {
     mod = await import('@paddle/paddle-node-sdk') as unknown as typeof mod
   } catch {
     throw new Error(
-      '[RudderJS Cashier] `@paddle/paddle-node-sdk` is not installed. Run:\n' +
+      '[Rudder Cashier] `@paddle/paddle-node-sdk` is not installed. Run:\n' +
       '  pnpm add @paddle/paddle-node-sdk',
     )
   }
 
   if (!mod.Paddle) {
-    throw new Error('[RudderJS Cashier] `@paddle/paddle-node-sdk` did not export `Paddle`. Check the SDK version.')
+    throw new Error('[Rudder Cashier] `@paddle/paddle-node-sdk` did not export `Paddle`. Check the SDK version.')
   }
 
   const environment = Cashier.sandbox() ? mod.Environment?.sandbox : mod.Environment?.production

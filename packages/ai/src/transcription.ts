@@ -70,7 +70,7 @@ export class Transcription {
 
       if (!factory.createStt) {
         throw new Error(
-          `[RudderJS AI] Provider "${providerName}" does not support speech-to-text. ` +
+          `[Rudder AI] Provider "${providerName}" does not support speech-to-text. ` +
           `Use a provider that implements createStt() (e.g. openai).`,
         )
       }

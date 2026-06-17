@@ -68,7 +68,7 @@ export async function executeJob<T extends Job>(
       try { await instance.failed?.(err) }
       catch (hookErr) {
         console.error(
-          `[RudderJS Queue] job.failed() hook threw for "${instance.constructor.name}":`,
+          `[Rudder Queue] job.failed() hook threw for "${instance.constructor.name}":`,
           hookErr,
         )
       }

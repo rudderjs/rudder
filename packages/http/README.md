@@ -98,7 +98,7 @@ await Http.retry(3, 200).get('/api/data')
 ```ts
 // Abort after 5 seconds
 await Http.timeout(5000).get('/api/slow')
-// Throws: [RudderJS/Http] Request timed out after 5000ms
+// Throws: [Rudder/Http] Request timed out after 5000ms
 ```
 
 ---

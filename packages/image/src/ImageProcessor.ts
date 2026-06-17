@@ -12,7 +12,7 @@ async function loadSharp(): Promise<Sharp> {
     return _sharp
   } catch (err) {
     throw new Error(
-      '[RudderJS Image] sharp is required but not installed.\n  Install it: pnpm add sharp',
+      '[Rudder Image] sharp is required but not installed.\n  Install it: pnpm add sharp',
       { cause: err },
     )
   }
@@ -183,7 +183,7 @@ export class ImageProcessor {
    */
   async generateToStorage(disk: string, directory: string): Promise<ConversionResult[]> {
     if (!this._conversions?.length) {
-      throw new Error('[RudderJS Image] No conversions defined. Call .conversions([...]) first.')
+      throw new Error('[Rudder Image] No conversions defined. Call .conversions([...]) first.')
     }
 
     const { Storage } = await this._loadStorage()
@@ -306,7 +306,7 @@ export class ImageProcessor {
       return await import('@rudderjs/storage') as { Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }
     } catch (err) {
       throw new Error(
-        '[RudderJS Image] toStorage() requires @rudderjs/storage.\n  Install it: pnpm add @rudderjs/storage',
+        '[Rudder Image] toStorage() requires @rudderjs/storage.\n  Install it: pnpm add @rudderjs/storage',
         { cause: err },
       )
     }

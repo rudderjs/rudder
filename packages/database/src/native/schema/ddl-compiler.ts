@@ -37,14 +37,14 @@ function defaultLiteral(value: unknown, dialect: Dialect): string {
     case 'bigint':  return value.toString()
     case 'number':
       if (!Number.isFinite(value)) {
-        throw new NativeOrmError('NATIVE_DDL_BAD_DEFAULT', `[RudderJS ORM native] Non-finite numeric default ${String(value)} is not a valid column default.`)
+        throw new NativeOrmError('NATIVE_DDL_BAD_DEFAULT', `[Rudder ORM native] Non-finite numeric default ${String(value)} is not a valid column default.`)
       }
       return String(value)
     case 'string': return `'${value.replace(/'/g, "''")}'`
     default:
       throw new NativeOrmError(
         'NATIVE_DDL_BAD_DEFAULT',
-        `[RudderJS ORM native] Unsupported column default of type "${typeof value}". ` +
+        `[Rudder ORM native] Unsupported column default of type "${typeof value}". ` +
         `Column defaults must be a string, number, bigint, boolean, or null ` +
         `(use \`useCurrent()\` for a timestamp default).`,
       )
@@ -145,14 +145,14 @@ function compileForeignKey(table: string, fk: ForeignKeyDefinition, dialect: Dia
   if (!fk.on) {
     throw new NativeOrmError(
       'NATIVE_DDL_FK_NO_TABLE',
-      `[RudderJS ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" is missing its ` +
+      `[Rudder ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" is missing its ` +
       `referenced table — call \`.on('<table>')\` or use \`.constrained()\`.`,
     )
   }
   if (fk.references.length === 0) {
     throw new NativeOrmError(
       'NATIVE_DDL_FK_NO_REFERENCES',
-      `[RudderJS ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" references no ` +
+      `[Rudder ORM native] Foreign key on (${fk.columns.join(', ')}) in "${table}" references no ` +
       `columns — call \`.references('<column>')\` (defaults to "id" via \`.constrained()\`).`,
     )
   }
@@ -183,7 +183,7 @@ function compileCreateIndex(table: string, idx: IndexDefinition, dialect: Dialec
  */
 export function compileCreateTable(blueprint: Blueprint, dialect: Dialect): CompiledQuery[] {
   if (blueprint.columns.length === 0) {
-    throw new NativeOrmError('NATIVE_DDL_EMPTY_TABLE', `[RudderJS ORM native] Cannot create table "${blueprint.table}" with no columns.`)
+    throw new NativeOrmError('NATIVE_DDL_EMPTY_TABLE', `[Rudder ORM native] Cannot create table "${blueprint.table}" with no columns.`)
   }
 
   // Resolve the primary key. An explicit composite PK (Blueprint.primary) wins
@@ -293,7 +293,7 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
     if (col.autoIncrement || col.primary) {
       throw new NativeOrmError(
         'NATIVE_DDL_CHANGE_PRIMARY',
-        `[RudderJS ORM native] Cannot change() "${col.name}" into a primary-key/auto-increment column — recreate the table instead.`,
+        `[Rudder ORM native] Cannot change() "${col.name}" into a primary-key/auto-increment column — recreate the table instead.`,
       )
     }
     if (dialect.name === 'mysql') {
@@ -329,10 +329,10 @@ export function compileAlterTable(blueprint: AlterBlueprint, dialect: Dialect): 
   for (const col of blueprint.columns) {
     if (col.change) continue
     if (col.autoIncrement || col.primary) {
-      throw new NativeOrmError('NATIVE_DDL_ADD_PRIMARY', `[RudderJS ORM native] Cannot ADD a primary-key column ("${col.name}") to an existing table on SQLite. Create the table with its primary key, or rebuild it.`)
+      throw new NativeOrmError('NATIVE_DDL_ADD_PRIMARY', `[Rudder ORM native] Cannot ADD a primary-key column ("${col.name}") to an existing table on SQLite. Create the table with its primary key, or rebuild it.`)
     }
     if (!col.nullable && !col.hasDefault && !col.useCurrent) {
-      throw new NativeOrmError('NATIVE_DDL_ADD_NOT_NULL', `[RudderJS ORM native] Adding a NOT NULL column ("${col.name}") to an existing table requires a default — chain \`.default(...)\` or \`.nullable()\`.`)
+      throw new NativeOrmError('NATIVE_DDL_ADD_NOT_NULL', `[Rudder ORM native] Adding a NOT NULL column ("${col.name}") to an existing table requires a default — chain \`.default(...)\` or \`.nullable()\`.`)
     }
     let addSql = `ALTER TABLE ${t} ADD COLUMN ${compileColumn(col, dialect, false)}`
     // Positional ADD (MySQL only): FIRST wins over AFTER. pg/sqlite have no

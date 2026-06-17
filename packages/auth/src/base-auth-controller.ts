@@ -300,6 +300,6 @@ export abstract class BaseAuthController {
   protected async sendResetEmail(email: string, token: string): Promise<void> {
     const baseUrl = process.env['APP_URL'] ?? 'http://localhost:3000'
     const url     = `${baseUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`
-    console.log(`[RudderJS Auth] Password reset for ${email}: ${url}`)
+    console.log(`[Rudder Auth] Password reset for ${email}: ${url}`)
   }
 }

@@ -73,9 +73,9 @@ export class SubscriptionResource {
   async incrementQuantity(count = 1, priceId?: string): Promise<SubscriptionResource> {
     const items = await this.itemsForUpdate()
     const target = priceId ? items.findIndex((i) => i.priceId === priceId) : 0
-    if (target === -1) throw new Error(`[RudderJS Cashier] No subscription item for priceId "${priceId}"`)
+    if (target === -1) throw new Error(`[Rudder Cashier] No subscription item for priceId "${priceId}"`)
     const item = items[target]
-    if (!item) throw new Error(`[RudderJS Cashier] Subscription has no item at index ${target}`)
+    if (!item) throw new Error(`[Rudder Cashier] Subscription has no item at index ${target}`)
     item.quantity += count
     return this.callUpdate({ items })
   }
@@ -87,9 +87,9 @@ export class SubscriptionResource {
   async updateQuantity(count: number, priceId?: string): Promise<SubscriptionResource> {
     const items = await this.itemsForUpdate()
     const target = priceId ? items.findIndex((i) => i.priceId === priceId) : 0
-    if (target === -1) throw new Error(`[RudderJS Cashier] No subscription item for priceId "${priceId}"`)
+    if (target === -1) throw new Error(`[Rudder Cashier] No subscription item for priceId "${priceId}"`)
     const item = items[target]
-    if (!item) throw new Error(`[RudderJS Cashier] Subscription has no item at index ${target}`)
+    if (!item) throw new Error(`[Rudder Cashier] Subscription has no item at index ${target}`)
     item.quantity = count
     return this.callUpdate({ items })
   }
@@ -105,7 +105,7 @@ export class SubscriptionResource {
   async charge(items: Array<{ priceId: string; quantity?: number }>): Promise<TransactionResource> {
     const client = await paddle()
     const fn = client.subscriptions['createOneTimeCharge'] ?? client.transactions['create']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.createOneTimeCharge` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.createOneTimeCharge` method.')
     const result = await fn.call(client.subscriptions, this.record.paddleId, {
       items: items.map((i) => ({ priceId: i.priceId, quantity: i.quantity ?? 1 })),
     }) as { id: string; total?: string; tax?: string; currency?: string }
@@ -135,7 +135,7 @@ export class SubscriptionResource {
   async resume(): Promise<SubscriptionResource> {
     const client = await paddle()
     const fn = client.subscriptions['resume']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.resume` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.resume` method.')
     const updated = await fn.call(client.subscriptions, this.record.paddleId, { effectiveFrom: 'immediately' }) as Record<string, unknown>
     return await this.refresh(updated)
   }
@@ -162,7 +162,7 @@ export class SubscriptionResource {
   async activate(): Promise<SubscriptionResource> {
     const client = await paddle()
     const fn = client.subscriptions['activate']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.activate` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.activate` method.')
     const updated = await fn.call(client.subscriptions, this.record.paddleId) as Record<string, unknown>
     return await this.refresh(updated)
   }
@@ -186,7 +186,7 @@ export class SubscriptionResource {
   async nextPayment(): Promise<{ date: Date; amount: string; currency: string } | null> {
     const client = await paddle()
     const fn = client.subscriptions['get']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.get` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.get` method.')
     const live = await fn.call(client.subscriptions, this.record.paddleId) as { nextBilledAt?: string; nextTransaction?: { details?: { totals?: { total: string; currencyCode: string } } } }
     const date = live.nextBilledAt ? new Date(live.nextBilledAt) : null
     const total = live.nextTransaction?.details?.totals?.total
@@ -199,10 +199,10 @@ export class SubscriptionResource {
   async redirectToUpdatePaymentMethod(): Promise<string> {
     const client = await paddle()
     const fn = client.subscriptions['get']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.get` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.get` method.')
     const live = await fn.call(client.subscriptions, this.record.paddleId) as { managementUrls?: { updatePaymentMethod?: string } }
     const url = live.managementUrls?.updatePaymentMethod
-    if (!url) throw new Error('[RudderJS Cashier] Paddle did not return an updatePaymentMethod URL.')
+    if (!url) throw new Error('[Rudder Cashier] Paddle did not return an updatePaymentMethod URL.')
     return url
   }
 
@@ -216,7 +216,7 @@ export class SubscriptionResource {
   private async callUpdate(payload: Record<string, unknown>): Promise<SubscriptionResource> {
     const client = await paddle()
     const fn = client.subscriptions['update']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.update` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.update` method.')
     const updated = await fn.call(client.subscriptions, this.record.paddleId, this.applyKnobs(payload)) as Record<string, unknown>
     return await this.refresh(updated)
   }
@@ -224,7 +224,7 @@ export class SubscriptionResource {
   private async callPause(payload: Record<string, unknown>): Promise<SubscriptionResource> {
     const client = await paddle()
     const fn = client.subscriptions['pause']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.pause` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.pause` method.')
     const updated = await fn.call(client.subscriptions, this.record.paddleId, payload) as Record<string, unknown>
     return await this.refresh(updated)
   }
@@ -232,7 +232,7 @@ export class SubscriptionResource {
   private async callCancel(payload: Record<string, unknown>): Promise<SubscriptionResource> {
     const client = await paddle()
     const fn = client.subscriptions['cancel']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.cancel` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `subscriptions.cancel` method.')
     const updated = await fn.call(client.subscriptions, this.record.paddleId, payload) as Record<string, unknown>
     return await this.refresh(updated)
   }

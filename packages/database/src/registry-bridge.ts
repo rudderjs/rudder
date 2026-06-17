@@ -71,7 +71,7 @@ export function registerAdapterResolver(fn: () => OrmAdapter): void {
 export function resolveAdapter(): OrmAdapter {
   if (!resolver) {
     throw new Error(
-      '[RudderJS DB] No ORM adapter is available. The DB facade resolves the ' +
+      '[Rudder DB] No ORM adapter is available. The DB facade resolves the ' +
         'active adapter from @rudderjs/orm — make sure a database provider is ' +
         'registered (and @rudderjs/orm installed) before calling DB.*',
     )
@@ -96,7 +96,7 @@ export function registerTransactionRunner(fn: TransactionRunner): void {
 export function resolveTransactionRunner(): TransactionRunner {
   if (!txRunner) {
     throw new Error(
-      '[RudderJS DB] No transaction runner is available. DB.transaction() runs ' +
+      '[Rudder DB] No transaction runner is available. DB.transaction() runs ' +
         'through @rudderjs/orm — make sure a database provider is registered (and ' +
         '@rudderjs/orm installed) before calling DB.transaction().',
     )
@@ -121,7 +121,7 @@ export function registerConnectionResolver(fn: ConnectionResolver): void {
 export function resolveConnectionResolver(): ConnectionResolver {
   if (!connectionResolver) {
     throw new Error(
-      '[RudderJS DB] No connection resolver is available. DB.connection(name) ' +
+      '[Rudder DB] No connection resolver is available. DB.connection(name) ' +
         'resolves named connections through @rudderjs/orm — make sure a database ' +
         'provider is registered (and @rudderjs/orm installed) before calling ' +
         'DB.connection().',
@@ -144,7 +144,7 @@ export function registerNamedTransactionRunner(fn: NamedTransactionRunner): void
 export function resolveNamedTransactionRunner(): NamedTransactionRunner {
   if (!namedTxRunner) {
     throw new Error(
-      '[RudderJS DB] No named transaction runner is available. ' +
+      '[Rudder DB] No named transaction runner is available. ' +
         'DB.connection(name).transaction() runs through @rudderjs/orm — make sure ' +
         'a database provider is registered (and @rudderjs/orm installed) first.',
     )
@@ -166,7 +166,7 @@ export function registerAfterCommitRunner(fn: AfterCommitRunner): void {
 export function resolveAfterCommitRunner(): AfterCommitRunner {
   if (!afterCommitRunner) {
     throw new Error(
-      '[RudderJS DB] No after-commit runner is available. DB.afterCommit() runs ' +
+      '[Rudder DB] No after-commit runner is available. DB.afterCommit() runs ' +
         'through @rudderjs/orm — make sure a database provider is registered (and ' +
         '@rudderjs/orm installed) before calling DB.afterCommit().',
     )

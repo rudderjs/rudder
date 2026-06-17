@@ -8,7 +8,7 @@ Fluent image processing for RudderJS — resize, crop, convert, optimize. Thin w
 pnpm add @rudderjs/image sharp
 ```
 
-`sharp` is an **optional peer dependency** — install it separately. Without it, the first call throws `[RudderJS Image] sharp is required but not installed`.
+`sharp` is an **optional peer dependency** — install it separately. Without it, the first call throws `[Rudder Image] sharp is required but not installed`.
 
 ## Quick Start
 
@@ -151,7 +151,7 @@ await image(upload)
 pnpm add @rudderjs/storage
 ```
 
-Without it, both methods throw `[RudderJS Image] toStorage() requires @rudderjs/storage`. Use `toBuffer()` or `toFile()` if you're not using the storage facade.
+Without it, both methods throw `[Rudder Image] toStorage() requires @rudderjs/storage`. Use `toBuffer()` or `toFile()` if you're not using the storage facade.
 
 ## Common Pitfalls
 

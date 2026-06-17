@@ -139,7 +139,7 @@ export class S3Adapter extends BaseAdapter {
   }
 
   path(_filePath: string): string {
-    throw new Error('[RudderJS Storage] path() is not available for S3 disks.')
+    throw new Error('[Rudder Storage] path() is not available for S3 disks.')
   }
 
   // ─── Visibility (S3 ACL) ───
@@ -175,7 +175,7 @@ export class S3Adapter extends BaseAdapter {
     const res = await client.send(new (this.cmds().GetObjectCommand)({
       Bucket: this.bucket, Key: filePath,
     })) as S3GetObjectResult
-    if (!res.Body) throw new Error(`[RudderJS Storage] readStream: ${filePath} not found.`)
+    if (!res.Body) throw new Error(`[Rudder Storage] readStream: ${filePath} not found.`)
     return res.Body
   }
 
@@ -202,7 +202,7 @@ export class S3Adapter extends BaseAdapter {
 
   override async temporaryUrl(filePath: string, expiresAt: Date, opts?: TemporaryUrlOptions): Promise<string> {
     if (expiresAt.getTime() <= Date.now()) {
-      throw new Error('[RudderJS Storage] temporaryUrl: expiresAt must be in the future.')
+      throw new Error('[Rudder Storage] temporaryUrl: expiresAt must be in the future.')
     }
     const client = await this.getClient()
     const { GetObjectCommand } = this.cmds()
@@ -220,7 +220,7 @@ export class S3Adapter extends BaseAdapter {
 
   override async temporaryUploadUrl(filePath: string, expiresAt: Date, opts?: TemporaryUploadUrlOptions): Promise<TemporaryUploadUrl> {
     if (expiresAt.getTime() <= Date.now()) {
-      throw new Error('[RudderJS Storage] temporaryUploadUrl: expiresAt must be in the future.')
+      throw new Error('[Rudder Storage] temporaryUploadUrl: expiresAt must be in the future.')
     }
     const client = await this.getClient()
     const { PutObjectCommand } = this.cmds()

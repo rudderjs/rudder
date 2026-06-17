@@ -195,7 +195,7 @@ export class Migrator {
     if (!this.adapter.pretendSchemaBuilder) {
       throw new NativeOrmError(
         'NATIVE_PRETEND_UNSUPPORTED',
-        `[RudderJS ORM native] --pretend is not supported by this adapter (no pretendSchemaBuilder()).`,
+        `[Rudder ORM native] --pretend is not supported by this adapter (no pretendSchemaBuilder()).`,
       )
     }
     const done = new Set(await this.ran())
@@ -300,7 +300,7 @@ export class Migrator {
         if (!migration) {
           throw new NativeOrmError(
             'NATIVE_BAD_MIGRATION',
-            `[RudderJS ORM native] Cannot roll back "${row.migration}": its migration file ` +
+            `[Rudder ORM native] Cannot roll back "${row.migration}": its migration file ` +
             `was not found in database/migrations. Restore the file or remove its row from the migrations table.`,
           )
         }
@@ -353,7 +353,7 @@ export async function discoverMigrations(dir: string): Promise<LoadedMigration[]
     if (typeof Cls !== 'function' || !(Cls.prototype instanceof Migration)) {
       throw new NativeOrmError(
         'NATIVE_BAD_MIGRATION',
-        `[RudderJS ORM native] ${file} must default-export a class extending Migration.`,
+        `[Rudder ORM native] ${file} must default-export a class extending Migration.`,
       )
     }
     loaded.push({ name, migration: new (Cls as new () => Migration)() })

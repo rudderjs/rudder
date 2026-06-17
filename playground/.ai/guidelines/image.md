@@ -115,7 +115,7 @@ Conversions run in parallel via `Promise.all`. One failing conversion rejects th
 pnpm add @rudderjs/storage
 ```
 
-Without `@rudderjs/storage`, those methods throw `[RudderJS Image] toStorage() requires @rudderjs/storage`. Use `toBuffer()` + your own writer if you're skipping storage.
+Without `@rudderjs/storage`, those methods throw `[Rudder Image] toStorage() requires @rudderjs/storage`. Use `toBuffer()` + your own writer if you're skipping storage.
 
 ## Common Pitfalls
 

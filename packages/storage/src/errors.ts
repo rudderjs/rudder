@@ -7,7 +7,7 @@
  */
 export class StorageNotSupportedError extends Error {
   constructor(driver: string, op: string) {
-    super(`[RudderJS Storage] ${driver} adapter does not support "${op}". See docs/storage.md for alternatives.`)
+    super(`[Rudder Storage] ${driver} adapter does not support "${op}". See docs/storage.md for alternatives.`)
     this.name = 'StorageNotSupportedError'
   }
 }
@@ -21,7 +21,7 @@ export class StorageNotSupportedError extends Error {
  */
 export class StoragePathTraversalError extends Error {
   constructor(filePath: string) {
-    super(`[RudderJS Storage] path "${filePath}" resolves outside the disk root and was rejected.`)
+    super(`[Rudder Storage] path "${filePath}" resolves outside the disk root and was rejected.`)
     this.name = 'StoragePathTraversalError'
   }
 }

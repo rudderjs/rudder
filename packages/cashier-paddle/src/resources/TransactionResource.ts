@@ -43,7 +43,7 @@ export class TransactionResource {
     const client = await paddle()
     const fn = client.transactions['createAdjustment']
       ?? (client as unknown as { adjustments?: Record<string, (...a: unknown[]) => Promise<unknown>> }).adjustments?.['create']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no adjustments/refund endpoint.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no adjustments/refund endpoint.')
 
     const result = await fn.call(client, {
       action:        'refund',
@@ -63,7 +63,7 @@ export class TransactionResource {
   async credit(reason: string, priceId: string): Promise<TransactionResource> {
     const client = await paddle()
     const fn = (client as unknown as { adjustments?: Record<string, (...a: unknown[]) => Promise<unknown>> }).adjustments?.['create']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `adjustments.create` method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no `adjustments.create` method.')
 
     const result = await fn.call(client, {
       action:        'credit',
@@ -78,9 +78,9 @@ export class TransactionResource {
   async redirectToInvoicePdf(): Promise<string> {
     const client = await paddle()
     const fn = client.transactions['getInvoicePdf'] ?? client.transactions['invoicePdf']
-    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no transactions.getInvoicePdf method.')
+    if (!fn) throw new Error('[Rudder Cashier] Paddle SDK has no transactions.getInvoicePdf method.')
     const result = await fn.call(client.transactions, this.record.paddleId) as { url?: string }
-    if (!result.url) throw new Error('[RudderJS Cashier] Paddle did not return an invoice PDF URL.')
+    if (!result.url) throw new Error('[Rudder Cashier] Paddle did not return an invoice PDF URL.')
     return result.url
   }
 

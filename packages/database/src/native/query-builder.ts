@@ -131,7 +131,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   private _assertNotSubBuilder(): void {
     if (this._isSubBuilder) {
       throw new Error(
-        '[RudderJS ORM native] Sub-builder is for where* chaining only — call the terminal on the parent builder.',
+        '[Rudder ORM native] Sub-builder is for where* chaining only — call the terminal on the parent builder.',
       )
     }
   }
@@ -352,7 +352,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     const operator = (value === undefined ? '=' : operatorOrValue) as WhereOperator
     const count    = value === undefined ? (operatorOrValue as number) : value
     if (!Number.isInteger(count)) {
-      throw new Error(`[RudderJS ORM native] whereJsonLength expects an integer length, got ${String(count)}.`)
+      throw new Error(`[Rudder ORM native] whereJsonLength expects an integer length, got ${String(count)}.`)
     }
     const target = this._jsonTarget(column)
     this._conditions.push({ kind: 'jsonLength', boolean, ...target, operator, value: count })
@@ -438,10 +438,10 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     // Runtime gates (JS callers bypass the TS union): the function name and
     // each direction are SPLICED into SQL, never bound.
     if (!isWindowFunction(fn)) {
-      throw new Error(`[RudderJS ORM native] selectWindow(): unknown window function '${String(fn)}'.`)
+      throw new Error(`[Rudder ORM native] selectWindow(): unknown window function '${String(fn)}'.`)
     }
     if (typeof opts?.as !== 'string' || opts.as.length === 0) {
-      throw new Error(`[RudderJS ORM native] selectWindow() requires a non-empty 'as' alias.`)
+      throw new Error(`[Rudder ORM native] selectWindow() requires a non-empty 'as' alias.`)
     }
     const partitionBy = opts.partitionBy === undefined
       ? []
@@ -452,7 +452,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     const orderBy = orderInputs.map((o) => {
       const entry = typeof o === 'string' ? { column: o, direction: 'asc' as const } : { column: o.column, direction: o.direction ?? 'asc' }
       if (entry.direction !== 'asc' && entry.direction !== 'desc') {
-        throw new Error(`[RudderJS ORM native] selectWindow(): order direction must be 'asc' or 'desc', got '${String(entry.direction)}'.`)
+        throw new Error(`[Rudder ORM native] selectWindow(): order direction must be 'asc' or 'desc', got '${String(entry.direction)}'.`)
       }
       return entry
     })
@@ -593,7 +593,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     const target = (other as unknown as Record<symbol, unknown>)[QB_TARGET] ?? other
     if (!(target instanceof NativeQueryBuilder)) {
       throw new Error(
-        '[RudderJS ORM native] union()/unionAll() requires another native query builder — pass a Model.query() of a native-engine model.',
+        '[Rudder ORM native] union()/unionAll() requires another native query builder — pass a Model.query() of a native-engine model.',
       )
     }
     this._unions.push({ all, state: (target as NativeQueryBuilder<T>)._state() })
@@ -685,13 +685,13 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     }
     if (bindings !== undefined) {
       throw new Error(
-        `[RudderJS ORM native] ${method}() bindings are only valid with a raw-SQL body — a query-builder body carries its own.`,
+        `[Rudder ORM native] ${method}() bindings are only valid with a raw-SQL body — a query-builder body carries its own.`,
       )
     }
     const target = (query as unknown as Record<symbol, unknown>)[QB_TARGET] ?? query
     if (!(target instanceof NativeQueryBuilder)) {
       throw new Error(
-        `[RudderJS ORM native] ${method}() requires a native query builder or a raw SQL string body.`,
+        `[Rudder ORM native] ${method}() requires a native query builder or a raw SQL string body.`,
       )
     }
     return { kind: 'state', state: (target as NativeQueryBuilder<unknown>)._state() }
@@ -729,7 +729,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     if (!opts) return null
     if (opts.skipLocked && opts.noWait) {
       throw new Error(
-        `[RudderJS ORM native] ${method}() options skipLocked and noWait are mutually ` +
+        `[Rudder ORM native] ${method}() options skipLocked and noWait are mutually ` +
         'exclusive — skip conflicting rows OR fail fast on them, not both. Pass at most one.',
       )
     }
@@ -832,7 +832,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
         if (_warnedWith.has(rel)) continue
         _warnedWith.add(rel)
         console.warn(
-          `[RudderJS ORM native] adapter-level with("${rel}") is a no-op — the row is returned ` +
+          `[Rudder ORM native] adapter-level with("${rel}") is a no-op — the row is returned ` +
           `without "${rel}" populated. Constrained eager-load (withWhereHas) isn't supported on ` +
           `the native engine: chain .whereHas(...) for the filter plus .with("${rel}") for the ` +
           `(unconstrained) load, or use instance.related("${rel}").`,
@@ -881,7 +881,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     const ex = this.executor as Partial<AffectingExecutor>
     if (typeof ex.affectingExecute !== 'function') {
       throw new Error(
-        '[RudderJS ORM native] The active driver cannot run writes without RETURNING ' +
+        '[Rudder ORM native] The active driver cannot run writes without RETURNING ' +
         '(no affectingExecute). Every non-RETURNING dialect driver must implement AffectingExecutor.',
       )
     }
@@ -903,7 +903,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
         this._state(), this.dialect, [data as Record<string, unknown>], { returning: true },
       )
       const rows = await this.executor.execute(sql, bindings)
-      if (!rows[0]) throw new Error('[RudderJS ORM native] create() returned no rows.')
+      if (!rows[0]) throw new Error('[Rudder ORM native] create() returned no rows.')
       return rows[0] as T
     }
     // No RETURNING (MySQL): INSERT, then re-SELECT by primary key — same as the
@@ -923,7 +923,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       return { ...(data as Record<string, unknown>) } as T
     }
     const row = await this._reselect(id)
-    if (!row) throw new Error('[RudderJS ORM native] create() could not re-select the inserted row.')
+    if (!row) throw new Error('[Rudder ORM native] create() could not re-select the inserted row.')
     return row
   }
 
@@ -935,7 +935,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
         { extraConditions: this._pkCondition(id), returning: true },
       )
       const rows = await this.executor.execute(sql, bindings)
-      if (!rows[0]) throw new Error('[RudderJS ORM native] update() returned no rows.')
+      if (!rows[0]) throw new Error('[Rudder ORM native] update() returned no rows.')
       return rows[0] as T
     }
     // No RETURNING (MySQL): UPDATE, then re-SELECT the row by primary key.
@@ -945,7 +945,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     )
     await this.executor.execute(sql, bindings)
     const row = await this._reselect(id)
-    if (!row) throw new Error('[RudderJS ORM native] update() target row not found.')
+    if (!row) throw new Error('[Rudder ORM native] update() target row not found.')
     return row
   }
 
@@ -1102,7 +1102,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
         { extraConditions: this._pkCondition(id), returning: true },
       )
       const rows = await this.executor.execute(sql, bindings)
-      if (!rows[0]) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
+      if (!rows[0]) throw new Error('[Rudder ORM native] increment/decrement target row not found.')
       return rows[0] as T
     }
     // No RETURNING (MySQL): atomic UPDATE, then re-SELECT the updated row.
@@ -1112,7 +1112,7 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     )
     await this.executor.execute(sql, bindings)
     const row = await this._reselect(id)
-    if (!row) throw new Error('[RudderJS ORM native] increment/decrement target row not found.')
+    if (!row) throw new Error('[Rudder ORM native] increment/decrement target row not found.')
     return row
   }
 

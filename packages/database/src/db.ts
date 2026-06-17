@@ -28,7 +28,7 @@ function adapterName(adapter: OrmAdapter): string {
 function requireSelectRaw(adapter: OrmAdapter): NonNullable<OrmAdapter['selectRaw']> {
   if (typeof adapter.selectRaw !== 'function') {
     throw new Error(
-      `[RudderJS DB] ${adapterName(adapter)} does not implement selectRaw() — ` +
+      `[Rudder DB] ${adapterName(adapter)} does not implement selectRaw() — ` +
         'this adapter cannot run raw DB.select() queries.',
     )
   }
@@ -38,7 +38,7 @@ function requireSelectRaw(adapter: OrmAdapter): NonNullable<OrmAdapter['selectRa
 function requireAffecting(adapter: OrmAdapter): NonNullable<OrmAdapter['affectingStatement']> {
   if (typeof adapter.affectingStatement !== 'function') {
     throw new Error(
-      `[RudderJS DB] ${adapterName(adapter)} does not implement affectingStatement() — ` +
+      `[Rudder DB] ${adapterName(adapter)} does not implement affectingStatement() — ` +
         'this adapter cannot run raw DB.insert()/update()/delete()/statement() calls.',
     )
   }
@@ -48,7 +48,7 @@ function requireAffecting(adapter: OrmAdapter): NonNullable<OrmAdapter['affectin
 function requireOnQuery(adapter: OrmAdapter): NonNullable<OrmAdapter['onQuery']> {
   if (typeof adapter.onQuery !== 'function') {
     throw new Error(
-      `[RudderJS DB] ${adapterName(adapter)} does not implement onQuery() — ` +
+      `[Rudder DB] ${adapterName(adapter)} does not implement onQuery() — ` +
         'this adapter does not support query listening, so DB.listen() has nothing to hook into.',
     )
   }

@@ -415,7 +415,7 @@ export function sanctum(
         manager = this.app.make<AuthManager>('auth.manager')
       } catch {
         throw new Error(
-          '[RudderJS Sanctum] No auth manager found. Register auth() provider before sanctum().',
+          '[Rudder Sanctum] No auth manager found. Register auth() provider before sanctum().',
         )
       }
 

@@ -158,7 +158,7 @@ export function resolveRememberSecret(override?: string): string {
   if (envSecret) return envSecret
   if (process.env['NODE_ENV'] === 'production') {
     throw new Error(
-      '[RudderJS Auth] "remember me" requires AUTH_SECRET in production so the ' +
+      '[Rudder Auth] "remember me" requires AUTH_SECRET in production so the ' +
       'remember cookie can be signed. Set AUTH_SECRET (>= 32 chars) in .env.',
     )
   }

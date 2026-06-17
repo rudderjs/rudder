@@ -23,7 +23,7 @@ const TAG = '__rj'
 // engine's stack limit yet far above any legitimate job payload.
 const MAX_DEPTH = 256
 const DEPTH_MSG =
-  `[RudderJS Queue] payload nesting exceeds ${MAX_DEPTH} levels — refusing to ` +
+  `[Rudder Queue] payload nesting exceeds ${MAX_DEPTH} levels — refusing to ` +
   `(de)serialise a pathologically deep job payload`
 
 type Tagged =

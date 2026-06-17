@@ -340,7 +340,7 @@ describe('@rudderjs/log', () => {
       // User app calls `extendLog('sentry', ...)` (entry.mjs bundle);
       // `LogProvider.boot()` resolves channels from a node_modules-loaded
       // copy of @rudderjs/log — without globalThis, the read-side map is
-      // empty and the channel falls back to "[RudderJS Log] Unknown driver".
+      // empty and the channel falls back to "[Rudder Log] Unknown driver".
       extendLog('globalthis-pin-test', () => new CollectorAdapter())
       const map = (globalThis as Record<string, unknown>)['__rudderjs_log_custom_drivers__']
       assert.ok(map instanceof Map)

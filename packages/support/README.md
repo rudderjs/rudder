@@ -19,7 +19,7 @@ Read values from the application's `ConfigRepository` using dot-notation keys. T
 ```ts
 import { config } from '@rudderjs/core'
 
-config('app.name')           // → 'RudderJS'
+config('app.name')           // → 'Rudder'
 config('app.debug')          // → false
 config('cache.ttl', 60)      // → number (with fallback)
 ```
@@ -71,7 +71,7 @@ Read a string environment variable.
 ```ts
 import { env } from '@rudderjs/support'
 
-env('APP_NAME', 'RudderJS')   // → 'RudderJS'
+env('APP_NAME', 'Rudder')   // → 'Rudder'
 env('APP_ENV')                // throws if missing and no fallback
 ```
 
@@ -84,7 +84,7 @@ Type-safe access to `process.env`.
 ```ts
 import { Env } from '@rudderjs/support'
 
-Env.get('APP_NAME', 'RudderJS')       // string  (throws if missing and no fallback)
+Env.get('APP_NAME', 'Rudder')       // string  (throws if missing and no fallback)
 Env.getNumber('PORT', 3000)           // number
 Env.getBool('APP_DEBUG', false)       // boolean — case-insensitive 'true' | '1' → true
 Env.has('REDIS_URL')                  // boolean

@@ -347,7 +347,7 @@ function discover(viewsRoot: string, pagesRoot: string, framework: Framework): D
       return true
     }
     console.warn(
-      `[RudderJS] Skipping view "${view.importPath}" — its filename or "export const route" ` +
+      `[Rudder] Skipping view "${view.importPath}" — its filename or "export const route" ` +
       `value contains characters (quotes, backslash, newline, or control codes) that are unsafe ` +
       `to generate into a page module. Rename the file / fix the route to use plain path characters.`,
     )

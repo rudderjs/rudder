@@ -1,7 +1,7 @@
 import { parentPort } from 'node:worker_threads'
 
 if (!parentPort) {
-  throw new Error('[RudderJS Concurrency] worker-entry.ts must be run inside a Worker thread.')
+  throw new Error('[Rudder Concurrency] worker-entry.ts must be run inside a Worker thread.')
 }
 
 parentPort.on('message', async (msg: { id: number; fnSource: string }) => {

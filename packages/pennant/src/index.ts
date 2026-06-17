@@ -131,7 +131,7 @@ class PennantManager {
     const resolver = this.definitions.get(name)
     if (!resolver) {
       throw new Error(
-        `[RudderJS Pennant] Feature "${name}" is not defined.\n` +
+        `[Rudder Pennant] Feature "${name}" is not defined.\n` +
         `  Call Feature.define('${name}', resolver) first.`
       )
     }
@@ -232,7 +232,7 @@ class PennantRegistry {
   static get(): PennantManager {
     if (!_store.manager) {
       throw new Error(
-        '[RudderJS Pennant] Not registered.\n' +
+        '[Rudder Pennant] Not registered.\n' +
         '  Add pennant() to your providers in bootstrap/providers.ts'
       )
     }

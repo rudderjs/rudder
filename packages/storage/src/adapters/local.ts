@@ -198,11 +198,11 @@ export class LocalAdapter extends BaseAdapter {
 
   override async temporaryUrl(filePath: string, expiresAt: Date, _opts?: TemporaryUrlOptions): Promise<string> {
     if (expiresAt.getTime() <= Date.now()) {
-      throw new Error('[RudderJS Storage] temporaryUrl: expiresAt must be in the future.')
+      throw new Error('[Rudder Storage] temporaryUrl: expiresAt must be in the future.')
     }
     if (!this._tempUrlConfig) {
       throw new Error(
-        '[RudderJS Storage] LocalAdapter.temporaryUrl requires a route. ' +
+        '[Rudder Storage] LocalAdapter.temporaryUrl requires a route. ' +
         'Call serveTemporaryUrls(router, { disk: "<name>", routePath: "/storage/temp/*" }) in your bootstrap.',
       )
     }

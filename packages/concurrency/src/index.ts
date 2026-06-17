@@ -106,7 +106,7 @@ class WorkerDriver implements ConcurrencyDriver {
             const exitHandler = (code: number) => {
               cleanup()
               poisoned = true
-              reject(new Error(`[RudderJS Concurrency] Worker exited (code ${code}) before the task completed`))
+              reject(new Error(`[Rudder Concurrency] Worker exited (code ${code}) before the task completed`))
             }
             worker.on('message', handler)
             worker.on('error', errorHandler)
@@ -125,7 +125,7 @@ class WorkerDriver implements ConcurrencyDriver {
   defer(task: Task<void>): void {
     // Fire and forget — run in background, log errors
     void this.run([task]).catch(err => {
-      console.error('[RudderJS Concurrency] Deferred task error:', err)
+      console.error('[Rudder Concurrency] Deferred task error:', err)
     })
   }
 
@@ -134,7 +134,7 @@ class WorkerDriver implements ConcurrencyDriver {
     // forever once the pool is gone.
     const waiters = this.waiting.splice(0)
     for (const w of waiters) {
-      w.reject(new Error('[RudderJS Concurrency] Driver terminated while waiting for a worker'))
+      w.reject(new Error('[Rudder Concurrency] Driver terminated while waiting for a worker'))
     }
     await Promise.all(this.pool.map(w => w.terminate()))
     this.pool = []
@@ -155,7 +155,7 @@ class SyncDriver implements ConcurrencyDriver {
 
   defer(task: Task<void>): void {
     void Promise.resolve().then(task).catch(err => {
-      console.error('[RudderJS Concurrency] Deferred task error:', err)
+      console.error('[Rudder Concurrency] Deferred task error:', err)
     })
   }
 }

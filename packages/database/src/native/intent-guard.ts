@@ -30,7 +30,7 @@ export function isIntentReplayActive(): boolean {
 export function refuseIntentReplayStatement(): never {
   throw new NativeOrmError(
     'NATIVE_INTENT_REPLAY',
-    `[RudderJS ORM native] A database statement was attempted during blueprint-intent replay. ` +
+    `[Rudder ORM native] A database statement was attempted during blueprint-intent replay. ` +
     `Migration up() bodies are re-run (against a recording schema only) to recover declared column ` +
     `types for schema:types — runtime statements (DB.*, Model queries) are never re-executed. ` +
     `This migration's remaining intent is skipped; its columns keep their introspected types.`,

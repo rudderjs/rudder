@@ -21,5 +21,5 @@ export async function onError(error: unknown, pageContext: PageContext): Promise
   } catch {
     // fall through to console
   }
-  console.error('[RudderJS] Vike SSR error:', error)
+  console.error('[Rudder] Vike SSR error:', error)
 }

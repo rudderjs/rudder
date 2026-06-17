@@ -160,7 +160,7 @@ export function writeFieldValue(
   const norm = normalizeBinding(binding)
   if (norm.type === 'text') {
     throw new Error(
-      `[RudderJS sync] writeFieldValue cannot replace the 'text' field "${field}" — ` +
+      `[Rudder sync] writeFieldValue cannot replace the 'text' field "${field}" — ` +
         `collaborative strings merge per-keystroke and must bind through an editor (useCollabSeedText).`,
     )
   }

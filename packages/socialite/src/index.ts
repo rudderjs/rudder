@@ -41,10 +41,10 @@ export class Socialite {
     if (existing) return existing
 
     const config = this._config[name]
-    if (!config) throw new Error(`[RudderJS Socialite] Provider "${name}" is not configured.`)
+    if (!config) throw new Error(`[Rudder Socialite] Provider "${name}" is not configured.`)
 
     const factory = this._custom.get(name) ?? builtInDrivers[name]
-    if (!factory) throw new Error(`[RudderJS Socialite] Unknown provider "${name}". Use Socialite.extend() to register custom drivers.`)
+    if (!factory) throw new Error(`[Rudder Socialite] Unknown provider "${name}". Use Socialite.extend() to register custom drivers.`)
 
     const instance = factory(config)
     this._instances.set(name, instance)

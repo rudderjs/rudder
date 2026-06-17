@@ -158,7 +158,7 @@ export function warnIfDuplicateSessionMiddleware(handlers: MiddlewareHandler[]):
   if (!_duplicateSessionWarned) {
     _duplicateSessionWarned = true
     console.warn(
-      `[RudderJS] sessionMiddleware is installed ${installs} times on the request pipeline ` +
+      `[Rudder] sessionMiddleware is installed ${installs} times on the request pipeline ` +
       '(global + web group). @rudderjs/session auto-installs it on the `web` group — remove ' +
       'the redundant install (usually a global `m.use(sessionMiddleware(...))` in bootstrap/app.ts). ' +
       'Duplicate session middleware double-appends Set-Cookie and can clobber the authenticated ' +
@@ -338,7 +338,7 @@ export class AppBuilder {
     if (process.env['RUDDER_HMR_TRACE'] === '1') {
       const n = ((g['__rudderjs_instance_ctor_count__'] as number) ?? 0) + 1
       g['__rudderjs_instance_ctor_count__'] = n
-      console.log(`[hmr] RudderJS construct #${n}`)
+      console.log(`[hmr] Rudder construct #${n}`)
     }
 
     const app = Application.create({
@@ -394,7 +394,7 @@ export class RudderJS {
         } catch { /* not installed — handled below */ }
         if (typeof mod?.hono !== 'function') {
           throw new Error(
-            '[RudderJS] No server adapter configured and @rudderjs/server-hono is not installed. ' +
+            '[Rudder] No server adapter configured and @rudderjs/server-hono is not installed. ' +
             'Install @rudderjs/server-hono, or pass an explicit adapter: ' +
             'Application.configure({ server: hono(config.server), ... }).',
           )
@@ -515,7 +515,7 @@ export class RudderJS {
     // parseable bracket prefix.
     // Active line (like Vike's `➜ Local`): bright green arrow, bold "App".
     if (this._app.isDevelopment()) console.log(`  \x1b[32m➜\x1b[39m  \x1b[1mApp\x1b[22m is ready`)
-    else console.log('[RudderJS] ready')
+    else console.log('[Rudder] ready')
     // Flush collected boot notices as a trailing footnote AFTER the ready line,
     // so non-fatal notices sit at the bottom of the boot output rather than
     // wedged above it. Always printed so warnings aren't lost; empty input
@@ -696,7 +696,7 @@ export class RudderJS {
     if (latest && latest !== this._providerBoot) {
       try { await latest } catch { /* the newer boot owns its own failure */ }
     }
-    if (!this._handler) throw new Error('[RudderJS] Request handler not initialized.')
+    if (!this._handler) throw new Error('[Rudder] Request handler not initialized.')
     // Production: byte-identical fast path — no drain bookkeeping (single boot).
     if (!this._app.isDevelopment()) return this._handler(request, env, ctx)
     // Dev: count this render as in-flight so a concurrent re-boot drains it

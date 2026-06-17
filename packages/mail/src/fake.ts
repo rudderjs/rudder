@@ -54,7 +54,7 @@ export class FakeMailAdapter implements MailAdapter {
     const matching = this._matchingSent(mailableClass, predicate)
     assert.ok(
       matching.length > 0,
-      `[RudderJS Mail] Expected "${mailableClass.name}" to be sent, but it was not.`,
+      `[Rudder Mail] Expected "${mailableClass.name}" to be sent, but it was not.`,
     )
   }
 
@@ -63,7 +63,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       this._sent.length,
       count,
-      `[RudderJS Mail] Expected ${count} mail(s) to be sent, but ${this._sent.length} were sent.`,
+      `[Rudder Mail] Expected ${count} mail(s) to be sent, but ${this._sent.length} were sent.`,
     )
   }
 
@@ -73,7 +73,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       matching.length,
       0,
-      `[RudderJS Mail] Expected "${mailableClass.name}" not to be sent, but it was sent ${matching.length} time(s).`,
+      `[Rudder Mail] Expected "${mailableClass.name}" not to be sent, but it was sent ${matching.length} time(s).`,
     )
   }
 
@@ -82,7 +82,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       this._sent.length,
       0,
-      `[RudderJS Mail] Expected no mail to be sent, but ${this._sent.length} were sent.`,
+      `[Rudder Mail] Expected no mail to be sent, but ${this._sent.length} were sent.`,
     )
   }
 
@@ -96,7 +96,7 @@ export class FakeMailAdapter implements MailAdapter {
     const matching = this._matchingQueued(mailableClass, predicate)
     assert.ok(
       matching.length > 0,
-      `[RudderJS Mail] Expected "${mailableClass.name}" to be queued, but it was not.`,
+      `[Rudder Mail] Expected "${mailableClass.name}" to be queued, but it was not.`,
     )
   }
 
@@ -106,7 +106,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       matching.length,
       0,
-      `[RudderJS Mail] Expected "${mailableClass.name}" not to be queued, but it was queued ${matching.length} time(s).`,
+      `[Rudder Mail] Expected "${mailableClass.name}" not to be queued, but it was queued ${matching.length} time(s).`,
     )
   }
 
@@ -115,7 +115,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       this._queued.length,
       0,
-      `[RudderJS Mail] Expected no mail to be queued, but ${this._queued.length} were queued.`,
+      `[Rudder Mail] Expected no mail to be queued, but ${this._queued.length} were queued.`,
     )
   }
 
@@ -130,7 +130,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       matching.length,
       count,
-      `[RudderJS Mail] Expected "${mailableClass.name}" to be sent ${count} time(s), but it was sent ${matching.length} time(s).`,
+      `[Rudder Mail] Expected "${mailableClass.name}" to be sent ${count} time(s), but it was sent ${matching.length} time(s).`,
     )
   }
 
@@ -143,7 +143,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       matching.length,
       count,
-      `[RudderJS Mail] Expected "${mailableClass.name}" to be queued ${count} time(s), but it was queued ${matching.length} time(s).`,
+      `[Rudder Mail] Expected "${mailableClass.name}" to be queued ${count} time(s), but it was queued ${matching.length} time(s).`,
     )
   }
 
@@ -159,7 +159,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       total,
       count,
-      `[RudderJS Mail] Expected ${count} outgoing mail(s) (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
+      `[Rudder Mail] Expected ${count} outgoing mail(s) (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
     )
   }
 
@@ -169,7 +169,7 @@ export class FakeMailAdapter implements MailAdapter {
     assert.strictEqual(
       total,
       0,
-      `[RudderJS Mail] Expected no outgoing mail (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
+      `[Rudder Mail] Expected no outgoing mail (sent + queued), but ${total} went out (${this._sent.length} sent, ${this._queued.length} queued).`,
     )
   }
 
@@ -188,7 +188,7 @@ export class FakeMailAdapter implements MailAdapter {
     ]
     assert.ok(
       matching.length > 0,
-      `[RudderJS Mail] Expected "${mailableClass.name}" to be sent or queued, but it was neither.`,
+      `[Rudder Mail] Expected "${mailableClass.name}" to be sent or queued, but it was neither.`,
     )
   }
 

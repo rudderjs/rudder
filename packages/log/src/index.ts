@@ -158,7 +158,7 @@ export class DailyAdapter implements LogAdapter {
       this.lastDate = date
       this.currentAdapter = new FileAdapter(this.buildPath(date), this.formatter)
       this.cleanup().catch((err: unknown) => {
-        console.error('[RudderJS Log] DailyAdapter cleanup error:', err)
+        console.error('[Rudder Log] DailyAdapter cleanup error:', err)
       })
     }
     await this.currentAdapter!.log(entry)
@@ -298,7 +298,7 @@ export class LogRegistry {
 
   static channel(name: string): Channel {
     const ch = _store.channels.get(name)
-    if (!ch) throw new Error(`[RudderJS Log] Channel "${name}" is not registered.`)
+    if (!ch) throw new Error(`[Rudder Log] Channel "${name}" is not registered.`)
     return ch
   }
 
@@ -600,7 +600,7 @@ export function logger(message?: string, context?: Record<string, unknown>): typ
 // survives bundle splits — user app calls `extendLog('sentry', ...)` in
 // `bootstrap/app.ts` (entry.mjs), `LogProvider.boot()` resolves channels via a
 // node_modules-loaded copy of `@rudderjs/log` → reading from a fresh Map →
-// "[RudderJS Log] Unknown log driver" on every channel using the custom
+// "[Rudder Log] Unknown log driver" on every channel using the custom
 // driver. Same pattern as the static-state-singleton audit.
 
 type DriverFactory = (config: LogChannelConfig) => LogAdapter
@@ -624,11 +624,11 @@ function resolveAdapter(config: LogChannelConfig, allChannels: Record<string, Lo
       return new ConsoleAdapter(fmt)
 
     case 'single':
-      if (!config.path) throw new Error('[RudderJS Log] "single" driver requires a "path" option.')
+      if (!config.path) throw new Error('[Rudder Log] "single" driver requires a "path" option.')
       return new FileAdapter(config.path, fmt)
 
     case 'daily':
-      if (!config.path) throw new Error('[RudderJS Log] "daily" driver requires a "path" option.')
+      if (!config.path) throw new Error('[Rudder Log] "daily" driver requires a "path" option.')
       return new DailyAdapter(config.path, fmt, config.days ?? 14)
 
     case 'stack': {
@@ -636,7 +636,7 @@ function resolveAdapter(config: LogChannelConfig, allChannels: Record<string, Lo
       const adapters: LogAdapter[] = []
       for (const name of names) {
         const chConfig = allChannels[name]
-        if (!chConfig) throw new Error(`[RudderJS Log] Stack references unknown channel "${name}".`)
+        if (!chConfig) throw new Error(`[Rudder Log] Stack references unknown channel "${name}".`)
         adapters.push(resolveAdapter(chConfig, allChannels))
       }
       return new StackAdapter(adapters, config.ignoreExceptions ?? false)
@@ -648,7 +648,7 @@ function resolveAdapter(config: LogChannelConfig, allChannels: Record<string, Lo
     default: {
       const factory = customDrivers.get(config.driver)
       if (factory) return factory(config)
-      throw new Error(`[RudderJS Log] Unknown driver "${config.driver}". Available: console, single, daily, stack, null`)
+      throw new Error(`[Rudder Log] Unknown driver "${config.driver}". Available: console, single, daily, stack, null`)
     }
   }
 }

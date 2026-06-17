@@ -597,7 +597,7 @@ async function openDriver(
     }
     default: {
       const _exhaustive: never = driverName
-      throw new Error(`[RudderJS ORM native] Unknown driver: ${String(_exhaustive)}`)
+      throw new Error(`[Rudder ORM native] Unknown driver: ${String(_exhaustive)}`)
     }
   }
 }

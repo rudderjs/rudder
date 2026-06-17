@@ -105,7 +105,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
           // v3 fingerprint warns.
           if (manifest.version >= 3) {
             console.warn(
-              '[RudderJS] provider manifest is stale (dependencies changed since it was generated). ' +
+              '[Rudder] provider manifest is stale (dependencies changed since it was generated). ' +
               'Using it anyway — run `rudder providers:discover` in your build step to refresh.',
             )
           }
@@ -114,7 +114,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
           if (scanned.length > 0) {
             entries = scanned
             try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
-            console.log('[RudderJS] provider manifest regenerated (dependencies changed)')
+            console.log('[Rudder] provider manifest regenerated (dependencies changed)')
           }
         }
       }
@@ -130,11 +130,11 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
         try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
         if (isProduction) {
           console.warn(
-            '[RudderJS] no provider manifest found — scanned node_modules at boot. ' +
+            '[Rudder] no provider manifest found — scanned node_modules at boot. ' +
             'Run `rudder providers:discover` in your build step to bake bootstrap/cache/providers.json.',
           )
         } else {
-          console.log('[RudderJS] provider manifest generated (bootstrap/cache/providers.json)')
+          console.log('[Rudder] provider manifest generated (bootstrap/cache/providers.json)')
         }
       }
     } catch {
@@ -168,7 +168,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
     } catch {
       if (!entry.optional) {
         console.warn(
-          `[RudderJS] ${entry.package} listed in the provider manifest but not installed. ` +
+          `[Rudder] ${entry.package} listed in the provider manifest but not installed. ` +
           `Run \`pnpm rudder providers:discover\` after installing or removing packages.`,
         )
       }
@@ -178,7 +178,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
     const ProviderClass = mod[entry.provider]
     if (typeof ProviderClass !== 'function') {
       throw new Error(
-        `[RudderJS] ${entry.package} declared provider "${entry.provider}" in package.json ` +
+        `[Rudder] ${entry.package} declared provider "${entry.provider}" in package.json ` +
         `but no such class is exported from its main entry.`,
       )
     }
@@ -217,7 +217,7 @@ export function resolveMultiDriver(
     winner = drivers.find(d => d.package.includes(chosen))
     if (!winner) {
       throw new Error(
-        `[RudderJS] Multiple ${prefix}* drivers installed but the selected driver "${chosen}" ` +
+        `[Rudder] Multiple ${prefix}* drivers installed but the selected driver "${chosen}" ` +
         `(from ${envKey} env or config('${configKey}')) doesn't match any of: ` +
         `${drivers.map(d => d.package).join(', ')}.`,
       )

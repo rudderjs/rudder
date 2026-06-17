@@ -24,7 +24,7 @@ export class CohereProvider implements ProviderFactory {
   }
 
   create(_model: string): ProviderAdapter {
-    throw new Error('[RudderJS AI] Cohere does not support text generation. Use it for reranking and embeddings.')
+    throw new Error('[Rudder AI] Cohere does not support text generation. Use it for reranking and embeddings.')
   }
 
   createEmbedding(model: string): EmbeddingAdapter {

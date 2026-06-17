@@ -394,7 +394,7 @@ export function filterToGeminiString(filter: FileSearchFilter): string {
     case 'or': {
       if (filter.filters.length === 0) {
         throw new Error(
-          `[RudderJS AI] Gemini metadataFilter: ${filter.type.toUpperCase()} requires at least one sub-filter.`,
+          `[Rudder AI] Gemini metadataFilter: ${filter.type.toUpperCase()} requires at least one sub-filter.`,
         )
       }
       const joiner = filter.type === 'and' ? ' AND ' : ' OR '
@@ -538,7 +538,7 @@ class GoogleImageAdapter implements ImageGenerationAdapter {
     })
 
     if (!res.ok) {
-      throw new Error(`[RudderJS AI] Google image generation error: ${res.status} ${await res.text()}`)
+      throw new Error(`[Rudder AI] Google image generation error: ${res.status} ${await res.text()}`)
     }
 
     const data = await res.json() as {
@@ -656,13 +656,13 @@ class GoogleVectorStoreAdapter implements VectorStoreAdapter {
   async create(opts: VectorStoreCreateOptions): Promise<VectorStoreInfo> {
     if (opts.metadata) {
       throw new Error(
-        '[RudderJS AI] Gemini FileSearchStores does not support store-level metadata. ' +
+        '[Rudder AI] Gemini FileSearchStores does not support store-level metadata. ' +
         'Attach searchable metadata per-document via addFile({ attributes }).',
       )
     }
     if (opts.expiresAfter) {
       throw new Error(
-        '[RudderJS AI] Gemini FileSearchStores does not support expiresAfter. ' +
+        '[Rudder AI] Gemini FileSearchStores does not support expiresAfter. ' +
         'Stores persist until explicitly deleted via VectorStores.delete().',
       )
     }
@@ -743,7 +743,7 @@ class GoogleVectorStoreAdapter implements VectorStoreAdapter {
     }
 
     throw new Error(
-      '[RudderJS AI] addFile requires fileId, filePath, or fileBuffer. ' +
+      '[Rudder AI] addFile requires fileId, filePath, or fileBuffer. ' +
       'Pass an existing Gemini Files API id via { fileId } (e.g. `files/abc-123`) or ' +
       'a local source via { filePath } / { fileBuffer }.',
     )
@@ -808,7 +808,7 @@ async function finishVectorStoreOperation(
   while (!current?.done) {
     if (Date.now() > deadline) {
       throw new Error(
-        `[RudderJS AI] Gemini FileSearchStore ingestion timed out after ${pollTimeout}ms ` +
+        `[Rudder AI] Gemini FileSearchStore ingestion timed out after ${pollTimeout}ms ` +
         `(store=${storeId}). Increase pollTimeout or set wait: false for fire-and-forget.`,
       )
     }

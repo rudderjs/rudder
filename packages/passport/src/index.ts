@@ -133,7 +133,7 @@ export function checkOAuthKeysAtBoot(opts: {
     `Run \`rudder passport:keys\` to generate one`
   if (opts.requireKeys) {
     throw new Error(
-      `[RudderJS] @rudderjs/passport: ${base}. ` +
+      `[Rudder] @rudderjs/passport: ${base}. ` +
       `config('passport').requireKeys is set, so the app refuses to boot without OAuth signing keys.`,
     )
   }

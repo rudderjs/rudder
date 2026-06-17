@@ -180,7 +180,7 @@ export function scanRouteFiles(routesDir: string): DiscoveredNamedRoute[] {
         // currently overwrite; we follow runtime semantics by keeping the
         // first occurrence in the scan order).
         console.warn(
-          `[RudderJS] Named route "${name}" registered with conflicting paths: ` +
+          `[Rudder] Named route "${name}" registered with conflicting paths: ` +
           `"${existing.path}" (${existing.source}) vs "${pathPattern}" (${relSource}). ` +
           `Keeping the first; rename one of them to fix.`,
         )

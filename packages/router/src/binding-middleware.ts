@@ -48,7 +48,7 @@ export class RouteModelNotFoundError extends Error {
   readonly httpStatus = 404
 
   constructor(model: string, param: string, value: string) {
-    super(`[RudderJS] No ${model} matched route parameter "${param}" with value "${value}".`)
+    super(`[Rudder] No ${model} matched route parameter "${param}" with value "${value}".`)
     this.name = 'RouteModelNotFoundError'
     this.model = model
     this.param = param
