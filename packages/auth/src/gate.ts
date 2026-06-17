@@ -95,6 +95,60 @@ function resolvePolicyMethod(
   return null
 }
 
+/**
+ * Resolve the policy registered for a model instance. Tries a direct
+ * constructor match first, then walks the registry with `instanceof` so a
+ * policy registered against a base class also governs subclass instances.
+ *
+ * Shared by both `Gate._check` (static) and `GateForUser._check` so the two
+ * paths can never diverge — `GateForUser` previously inlined only the direct
+ * lookup and silently denied subclass instances of a policied base class
+ * (#1245).
+ */
+function findPolicy(model: unknown, policies: Map<ModelClass, PolicyClass>): PolicyClass | undefined {
+  if (!model || typeof model !== 'object') return undefined
+  const constructor = (model as unknown as { constructor?: ModelClass }).constructor
+  if (!constructor) return undefined
+
+  // Direct match
+  const direct = policies.get(constructor)
+  if (direct) return direct
+
+  // Check prototype chain
+  for (const [modelClass, policyClass] of policies) {
+    if (model instanceof modelClass) return policyClass
+  }
+
+  return undefined
+}
+
+/**
+ * Instantiate a policy, run its optional `before` hook, then dispatch to the
+ * ability method (own/prototype method only — never an inherited
+ * `Object.prototype` member, which would fail-open to "allowed"). Shared by
+ * both gate check paths so the resolution logic stays in one place.
+ */
+async function callPolicy(
+  PolicyCtor: PolicyClass,
+  user: Authenticatable,
+  ability: string,
+  args: unknown[],
+): Promise<CheckResult> {
+  const policy = new PolicyCtor()
+
+  // Policy.before short-circuits the specific method.
+  if (policy.before) {
+    const result = await policy.before(user)
+    if (result === true)  return { allowed: true,  resolvedVia: 'policy', policy: PolicyCtor.name }
+    if (result === false) return { allowed: false, resolvedVia: 'policy', policy: PolicyCtor.name }
+  }
+
+  const method = resolvePolicyMethod(policy, ability)
+  if (!method) return { allowed: false, resolvedVia: 'policy', policy: PolicyCtor.name }
+  const allowed = await method.call(policy, user, ...args)
+  return { allowed, resolvedVia: 'policy', policy: PolicyCtor.name }
+}
+
 // ─── Gate ─────────────────────────────────────────────────
 
 /**
@@ -215,10 +269,9 @@ export class Gate {
     // Check if the first arg is a model instance with a registered policy
     const model = args[0]
     if (model && typeof model === 'object') {
-      const policyClass = this.findPolicy(model)
+      const policyClass = findPolicy(model, _store.policies)
       if (policyClass) {
-        const allowed = await this.callPolicy(policyClass, user, ability, ...args)
-        return { allowed, resolvedVia: 'policy', policy: policyClass.name }
+        return callPolicy(policyClass, user, ability, args)
       }
     }
 
@@ -226,45 +279,6 @@ export class Gate {
     const callback = _store.abilities.get(ability)
     if (!callback) return { allowed: false, resolvedVia: 'default' }
     return { allowed: await callback(user, ...args), resolvedVia: 'ability' }
-  }
-
-  private static findPolicy(model: unknown): PolicyClass | undefined {
-    if (!model || typeof model !== 'object') return undefined
-    const constructor = (model as unknown as { constructor?: ModelClass }).constructor
-    if (!constructor) return undefined
-
-    // Direct match
-    const direct = _store.policies.get(constructor)
-    if (direct) return direct
-
-    // Check prototype chain
-    for (const [modelClass, policyClass] of _store.policies) {
-      if (model instanceof modelClass) return policyClass
-    }
-
-    return undefined
-  }
-
-  private static async callPolicy(
-    PolicyCtor: PolicyClass,
-    user: Authenticatable,
-    ability: string,
-    ...args: unknown[]
-  ): Promise<boolean> {
-    const policy = new PolicyCtor()
-
-    // Policy.before
-    if (policy.before) {
-      const result = await policy.before(user)
-      if (result === true) return true
-      if (result === false) return false
-    }
-
-    // Call the specific method (own/prototype method only — never an inherited
-    // Object.prototype member, which would fail-open to "allowed").
-    const method = resolvePolicyMethod(policy, ability)
-    if (!method) return false
-    return method.call(policy, user, ...args)
   }
 
   /** Emit an observation event to the gate observer registry (if present). */
@@ -346,26 +360,13 @@ class GateForUser {
       if (result === false) return { allowed: false, resolvedVia: 'before' }
     }
 
-    // Policy check
+    // Policy check — direct match then `instanceof` walk, shared with Gate so
+    // a policy registered against a base class also governs subclasses (#1245).
     const model = args[0]
     if (model && typeof model === 'object') {
-      const constructor = (model as unknown as { constructor?: ModelClass }).constructor
-      if (constructor) {
-        const PolicyCtor = this.policies.get(constructor)
-        if (PolicyCtor) {
-          const policy = new PolicyCtor()
-          if (policy.before) {
-            const result = await policy.before(this.user)
-            if (result === true)  return { allowed: true,  resolvedVia: 'before' }
-            if (result === false) return { allowed: false, resolvedVia: 'before' }
-          }
-          const method = resolvePolicyMethod(policy, ability)
-          if (!method) {
-            return { allowed: false, resolvedVia: 'policy', policy: PolicyCtor.name }
-          }
-          const allowed = await method.call(policy, this.user, ...args)
-          return { allowed, resolvedVia: 'policy', policy: PolicyCtor.name }
-        }
+      const policyClass = findPolicy(model, this.policies)
+      if (policyClass) {
+        return callPolicy(policyClass, this.user, ability, args)
       }
     }
 
