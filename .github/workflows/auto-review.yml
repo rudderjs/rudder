@@ -1,0 +1,102 @@
+name: auto-review
+
+# Advisory reviewer: when Rudder Bot opens a fix PR (or a human adds the `bot:review` label to ANY
+# PR), run Claude Code headless as the Rudder Bot GitHub App to adversarially review the diff and
+# post findings as ONE comment. Logic lives in .github/auto-review-prompt.md.
+#
+# It is ADVISORY ONLY: it never approves, never posts a blocking (request-changes) review, and never
+# merges. The human stays the decision-maker; this is a pre-filter, not a gate.
+#
+# Two ways to start it:
+#   - Automatic: a `fix/issue-*` PR authored by `rudderjs[bot]` (the fix-bot's own PRs).
+#   - Manual: add the `bot:review` label to any PR (reviews regardless of diff shape).
+#
+# Cost gating: automatic runs skip docs/changeset-only diffs (nothing to review). The manual label
+# always reviews. Prerequisite: the Rudder Bot app needs Pull requests: Read & write.
+
+on:
+  pull_request:
+    types: [opened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Auto: a fix-bot PR (authored by rudderjs[bot] from a fix/issue-* branch).
+    # Manual: the `bot:review` label added to any PR.
+    if: >-
+      ( github.event.action == 'labeled' && github.event.label.name == 'bot:review' ) ||
+      ( github.event.action == 'opened'
+        && github.event.pull_request.user.login == 'rudderjs[bot]'
+        && startsWith(github.event.pull_request.head.ref, 'fix/issue-') )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      IS_MANUAL: ${{ github.event.action == 'labeled' }}
+    steps:
+      # Mint the bot token so the review comment is authored by Rudder Bot.
+      - name: Mint Rudder Bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RUDDER_BOT_APP_ID }}
+          private-key: ${{ secrets.RUDDER_BOT_PRIVATE_KEY }}
+
+      - name: Checkout PR head (for code context)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Decide whether to review
+        id: gate
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [ "${IS_MANUAL}" = "true" ]; then
+            echo "should_review=true" >> "$GITHUB_OUTPUT"
+            echo "Manual bot:review label: reviewing regardless of diff."
+            exit 0
+          fi
+          files=$(gh pr diff "$PR_NUMBER" -R rudderjs/rudder --name-only)
+          echo "Changed files:"; echo "$files"
+          # Skip when EVERY changed file is docs / markdown / changeset: no code to review.
+          code=$(echo "$files" | grep -vE '(^docs/|\.md$|^\.changeset/)' || true)
+          if [ -z "$code" ]; then
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+            echo "Docs/changeset-only diff: skipping the deep review."
+          else
+            echo "should_review=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code
+        if: steps.gate.outputs.should_review == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run review-bot
+        if: steps.gate.outputs.should_review == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          # PR_NUMBER comes from job-level env.
+        run: |
+          claude -p "$(cat .github/auto-review-prompt.md)" \
+            --allowedTools "Bash,Read,Grep,Glob,WebSearch,WebFetch" \
+            --permission-mode bypassPermissions \
+            --max-turns 60 \
+            --model claude-sonnet-4-6 \
+            --verbose
