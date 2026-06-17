@@ -5,6 +5,7 @@ import { registerAuthorizeRoutes } from './routes/authorize.js'
 import { registerTokenRoute }     from './routes/token.js'
 import { registerRevokeRoute }    from './routes/revoke.js'
 import { registerRevocationRoute } from './routes/revocation.js'
+import { registerIntrospectionRoute } from './routes/introspect.js'
 import { registerScopesRoute }    from './routes/scopes.js'
 import { registerDeviceRoutes }   from './routes/device.js'
 
@@ -40,6 +41,9 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
   // (like /oauth/token) — share the token rate limiter, which guards the same
   // client_secret brute-force surface.
   if (!skip.has('revocation')) registerRevocationRoute (router, prefix, tokenMiddleware)
+  // RFC 7662 introspection is likewise a client-authenticated, stateless
+  // api-group endpoint — share the token rate limiter.
+  if (!skip.has('introspection')) registerIntrospectionRoute(router, prefix, tokenMiddleware)
   if (!skip.has('scopes'))     registerScopesRoute     (router, prefix)
   if (!skip.has('device'))     registerDeviceRoutes    (router, opts, prefix, deviceMiddleware)
 }
@@ -65,16 +69,17 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
  * group.
  */
 export function registerPassportWebRoutes(router: Router, opts: PassportRouteOptions = {}): void {
-  const except = new Set([...(opts.except ?? []), 'token', 'scopes', 'device', 'revocation'] as PassportRouteGroup[])
+  const except = new Set([...(opts.except ?? []), 'token', 'scopes', 'device', 'revocation', 'introspection'] as PassportRouteGroup[])
   registerPassportRoutes(router, { ...opts, except: Array.from(except) })
 }
 
 /**
  * Register the **api-group** Passport routes — `POST /oauth/token`,
- * `POST /oauth/revoke` (RFC 7009 token revocation), `POST /oauth/device/code`,
- * `POST /oauth/device/approve`, and `GET /oauth/scopes`. These endpoints are
- * stateless (machine-to-machine), so they belong on the api router alongside
- * your other JSON endpoints.
+ * `POST /oauth/revoke` (RFC 7009 token revocation), `POST
+ * /oauth/token/introspect` (RFC 7662 token introspection), `POST
+ * /oauth/device/code`, `POST /oauth/device/approve`, and `GET /oauth/scopes`.
+ * These endpoints are stateless (machine-to-machine), so they belong on the
+ * api router alongside your other JSON endpoints.
  *
  * `POST /oauth/token` is the canonical brute-force target — pass a rate
  * limiter via `tokenMiddleware`:
