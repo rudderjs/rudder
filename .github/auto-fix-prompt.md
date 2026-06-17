@@ -18,17 +18,35 @@ That freedom comes with discipline:
   the fix when feasible.
 - A change is only ready if build + typecheck + the affected package's tests pass (see step 5).
 
-Defer (comment on the issue explaining why, then STOP, do NOT push) when:
+### Multi-part issues: SPLIT, do not fix
+If the issue bundles several distinct changes (e.g. "N gaps", a checklist, multiple separate
+features/fixes) AND it does NOT already carry the `bot:split` label, do not write code. Instead:
+1. Decompose it into the distinct single changes (each should be a focused, `size:s`-scale piece).
+2. For EACH part, create a child issue with `gh issue create`: a specific title, a body describing
+   just that one change plus a line `Part of #<parent>`, and labels `area:<pkg>` and `size:s`.
+   Do NOT add `bot:fix` to the children, the human picks which ones to run.
+3. Add the `bot:split` label to the parent (so it is never re-split), remove `bot:fix` from the
+   parent, and post a comment on the parent listing the child issue links.
+4. STOP. (Do not open any PR.)
+
+If the issue already carries `bot:split`, it has been split already: do nothing and STOP.
+
+### Defer (comment explaining why, then STOP, do NOT push) when:
 - The issue is not actionable as a code change (a question, a discussion, needs a product/design
   decision, or is too vague to fix safely).
-- The fix would be large, sprawling, or architectural, or you cannot get a clean, minimal,
-  test-passing change. A skipped issue is fine; a wrong or sprawling PR is not.
+- The issue is a SINGLE change but `size:m` or larger (`size:m` / `size:l`, or clearly a multi-day
+  / large / architectural change even if unlabeled) and cannot be decomposed. Too big for one safe
+  autonomous change, hand it to a human.
+- You cannot get a clean, minimal, test-passing change. A skipped issue is fine; a wrong PR is not.
+
+Only open a PR when the issue is a single, focused, `size:s`-scale change.
 
 ## Steps
 1. `gh issue view "$ISSUE_NUMBER" -R rudderjs/rudder --json number,title,body,labels` and read it.
-2. Decide if it is a fixable code change (see the "Scope" defer rules). If it is not actionable as
-   code, defer with a comment and STOP. Note the `area:<pkg>` label if present, that is the package
-   you will work in; if there is none, infer the package from the issue body.
+2. Classify it against the "Scope" section: if it is multi-part, SPLIT into child issues and STOP;
+   if it is a single `size:m`+ change or not actionable, DEFER and STOP. Only continue for a single
+   focused `size:s` change. Note the `area:<pkg>` label if present, that is the package you will
+   work in; if there is none, infer the package from the issue body.
 3. Create a branch off the current main: `fix/issue-<N>-<short-kebab-slug>`.
 4. Implement the SMALLEST correct fix for ONLY this issue. Match the surrounding code's style,
    naming, and comment density. Touch only files relevant to this one issue.
