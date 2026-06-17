@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 
 import {
   Passport,
+  scope,
   scopeAny,
   validateAuthorizationRequest,
   validateScopes,
@@ -965,6 +966,83 @@ describe('scopeAny() — E13 OR-semantic scope guard', () => {
     // shouldn't permanently lock the route. AND-style scope() has the same
     // property because its `missing` filter is empty.
     const mw = scopeAny()
+    const { res } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['anything']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+  })
+})
+
+describe('scope() — AND-semantic scope guard', () => {
+  /**
+   * Mirrors the scopeAny() helpers above — only `req.raw.__passport_scopes`,
+   * `res.status().json()`, and `next()` are needed to exercise every branch.
+   */
+  function makeReq(tokenScopes: string[] | undefined) {
+    const raw: Record<string, unknown> = {}
+    if (tokenScopes) raw['__passport_scopes'] = tokenScopes
+    return { raw } as any
+  }
+
+  function makeRes() {
+    let statusCode: number | undefined
+    let body: unknown
+    const res: any = {
+      status(code: number) { statusCode = code; return res },
+      json(payload: unknown) { body = payload; return res },
+    }
+    return {
+      res,
+      get statusCode() { return statusCode },
+      get body() { return body },
+    }
+  }
+
+  test('passes through when token has all required scopes', async () => {
+    const mw = scope('read', 'write')
+    const { res, statusCode } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['read', 'write', 'profile']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+    assert.equal(statusCode, undefined, 'should not respond — should fall through to next()')
+  })
+
+  test('responds 403 when token has only a subset of required scopes, missing field lists the gaps', async () => {
+    const mw = scope('read', 'write', 'admin')
+    const captured = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['read']), captured.res, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(captured.statusCode, 403)
+    assert.equal((captured.body as any).error, 'insufficient_scope')
+    assert.deepEqual((captured.body as any).required, ['read', 'write', 'admin'])
+    assert.deepEqual((captured.body as any).missing, ['write', 'admin'])
+    assert.match((captured.body as any).message, /missing scope/)
+  })
+
+  test('passes through when wildcard "*" is granted regardless of listed scopes', async () => {
+    const mw = scope('admin', 'super')
+    const { res } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['*']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+  })
+
+  test('responds 403 when no bearer context is present (undefined scopes)', async () => {
+    const mw = scope('read')
+    const captured = makeRes()
+    let nextCalled = false
+    await mw(makeReq(undefined), captured.res, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(captured.statusCode, 403)
+    assert.equal((captured.body as any).error, 'insufficient_scope')
+    assert.deepEqual((captured.body as any).required, ['read'])
+  })
+
+  test('zero-arg call is a no-op (empty required list means nothing is missing)', async () => {
+    // scope() with no arguments: requiredScopes is [], missing filter always
+    // yields [], so the middleware falls through to next() unconditionally.
+    const mw = scope()
     const { res } = makeRes()
     let nextCalled = false
     await mw(makeReq(['anything']), res, async () => { nextCalled = true })
