@@ -1,8 +1,9 @@
-import { describe, it } from 'node:test'
+import { describe, it, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   Sanctum,
   TokenGuard,
+  TransientToken,
   MemoryTokenRepository,
   SanctumMiddleware,
   RequireToken,
@@ -972,5 +973,169 @@ describe('sanctum() provider', () => {
 
     const provider = instantiateSanctumProvider(app)
     await assert.rejects(provider.boot(),/User provider "users" is not defined/)
+  })
+})
+
+// ─── TransientToken ───────────────────────────────────────
+
+describe('TransientToken', () => {
+  it('implements the PersonalAccessToken shape', () => {
+    const t = new TransientToken('7')
+    assert.strictEqual(t.userId, '7')
+    assert.strictEqual(t.id, 'transient')
+    assert.strictEqual(t.token, '')
+    assert.ok(t.createdAt instanceof Date)
+  })
+
+  it('can() grants every ability when abilities is null (default)', () => {
+    const t = new TransientToken('1')
+    assert.strictEqual(t.abilities, null)
+    assert.strictEqual(t.can('anything'), true)
+    assert.strictEqual(t.can('posts:create'), true)
+  })
+
+  it('can() grants every ability for the "*" wildcard', () => {
+    const t = new TransientToken('1', ['*'])
+    assert.strictEqual(t.can('anything'), true)
+  })
+
+  it('can() honors a scoped subset', () => {
+    const t = new TransientToken('1', ['read'])
+    assert.strictEqual(t.can('read'), true)
+    assert.strictEqual(t.can('write'), false)
+  })
+
+  it('can() rejects everything for an empty abilities array', () => {
+    const t = new TransientToken('1', [])
+    assert.strictEqual(t.can('read'), false)
+  })
+})
+
+// ─── Sanctum.actingAs ─────────────────────────────────────
+
+describe('Sanctum.actingAs', () => {
+  // Acting-as state is process-global — clear it after every test so it can't
+  // leak into a later one (the same contract a test trait would enforce).
+  afterEach(() => { Sanctum.actingAsGuest() })
+
+  it('sets the acting-as state and defaults to all abilities', () => {
+    const returned = Sanctum.actingAs(fakeUser())
+    assert.strictEqual(returned.getAuthIdentifier(), '1')
+
+    const state = Sanctum.currentActingAs()
+    assert.ok(state)
+    assert.strictEqual(state.user.getAuthIdentifier(), '1')
+    assert.deepStrictEqual(state.token.abilities, ['*'])
+    assert.strictEqual(state.token.can('anything'), true)
+  })
+
+  it('wraps a plain record into an Authenticatable using id', () => {
+    Sanctum.actingAs({ id: 42, name: 'Bob' })
+    assert.strictEqual(Sanctum.currentActingAs()!.user.getAuthIdentifier(), '42')
+  })
+
+  it('passes through an already-Authenticatable user unchanged', () => {
+    const user = { id: '9', getAuthIdentifier: () => 'custom-id' } as never
+    const returned = Sanctum.actingAs(user)
+    assert.strictEqual(returned, user)
+    assert.strictEqual(Sanctum.currentActingAs()!.token.userId, 'custom-id')
+  })
+
+  it('scopes abilities when a subset is given', () => {
+    Sanctum.actingAs(fakeUser(), ['read'])
+    const token = Sanctum.currentActingAs()!.token
+    assert.strictEqual(token.can('read'), true)
+    assert.strictEqual(token.can('write'), false)
+  })
+
+  it('actingAsGuest clears the state', () => {
+    Sanctum.actingAs(fakeUser())
+    assert.ok(Sanctum.currentActingAs())
+    Sanctum.actingAsGuest()
+    assert.strictEqual(Sanctum.currentActingAs(), null)
+  })
+
+  it('currentActingAs returns null under NODE_ENV=production', () => {
+    Sanctum.actingAs(fakeUser())
+    const prev = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    try {
+      assert.strictEqual(Sanctum.currentActingAs(), null)
+    } finally {
+      if (prev === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prev
+    }
+  })
+})
+
+// ─── actingAs middleware integration ──────────────────────
+
+describe('actingAs middleware integration', () => {
+  afterEach(() => { Sanctum.actingAsGuest() })
+
+  it('SanctumMiddleware attaches the acting-as user + transient token, no header needed', async () => {
+    Sanctum.actingAs(fakeUser(), ['read'])
+    const { req, res } = fakeReqRes() // no Authorization header
+    let nextCalled = false
+    await SanctumMiddleware()(req as never, res as never, async () => { nextCalled = true })
+    assert.strictEqual(nextCalled, true)
+    assert.ok(req.token instanceof TransientToken)
+    assert.strictEqual(req.user!['id'], '1')
+  })
+
+  it('SanctumMiddleware acting-as wins over a (here invalid) Bearer header', async () => {
+    Sanctum.actingAs(fakeUser())
+    // No sanctum bound: if the acting-as branch didn't short-circuit, app().make
+    // would throw — proving the header path is never reached.
+    const { req, res } = fakeReqRes('Bearer bogus|token')
+    await SanctumMiddleware()(req as never, res as never, async () => {})
+    assert.ok(req.token instanceof TransientToken)
+  })
+
+  it('RequireToken passes when acting-as token has the ability', async () => {
+    Sanctum.actingAs(fakeUser(), ['write'])
+    const { req, res } = fakeReqRes()
+    let handlerRan = false
+    await RequireToken('write')(req as never, res as never, async () => { handlerRan = true })
+    assert.strictEqual(handlerRan, true)
+    assert.strictEqual(res.statusCode, 200)
+  })
+
+  it('RequireToken with no abilities passes for a default (all-abilities) acting-as', async () => {
+    Sanctum.actingAs(fakeUser())
+    const { req, res } = fakeReqRes()
+    let handlerRan = false
+    await RequireToken()(req as never, res as never, async () => { handlerRan = true })
+    assert.strictEqual(handlerRan, true)
+  })
+
+  it('RequireToken returns 403 when the scoped acting-as token lacks the ability', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const sanctumInstance = new Sanctum(new MemoryTokenRepository(), provider)
+
+    Sanctum.actingAs(fakeUser(), ['read'])
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes()
+      let handlerRan = false
+      await RequireToken('write')(req as never, res as never, async () => { handlerRan = true })
+      assert.strictEqual(handlerRan, false)
+      assert.strictEqual(res.statusCode, 403)
+      assert.strictEqual((res.body as { message: string }).message, 'Insufficient token permissions.')
+    })
+  })
+
+  it('RequireToken 403 shows the ability name in development', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const sanctumInstance = new Sanctum(new MemoryTokenRepository(), provider)
+
+    Sanctum.actingAs(fakeUser(), ['read'])
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes()
+      await RequireToken('write')(req as never, res as never, async () => {})
+      assert.strictEqual(res.statusCode, 403)
+      assert.strictEqual((res.body as { message: string }).message, 'Token does not have the "write" ability.')
+    }, { isDevelopment: true })
   })
 })

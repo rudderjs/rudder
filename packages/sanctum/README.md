@@ -93,6 +93,27 @@ const user = await guard.user()
 guard.tokenCan('read')  // check ability on current token
 ```
 
+## Testing
+
+`Sanctum.actingAs(user, abilities?)` authenticates a test as a user without seeding a token row or crafting a `Authorization: Bearer …` header — the equivalent of Laravel's `Sanctum::actingAs()`. It installs a `TransientToken` that `SanctumMiddleware` / `RequireToken` pick up in place of header validation, so `req.user`, `req.token`, and `tokenCan()` all resolve to the (possibly synthetic) user.
+
+```ts
+import { Sanctum } from '@rudderjs/sanctum'
+
+// All abilities (default) — passes every RequireToken() check
+Sanctum.actingAs(user)
+await client.get('/api/secret').assertOk()
+
+// Scoped token — exercises 403 paths for missing abilities
+Sanctum.actingAs(user, ['posts:read'])
+await client.delete('/api/posts/1').assertForbidden()
+
+// Clear it in teardown so the user doesn't leak into later tests
+afterEach(() => Sanctum.actingAsGuest())
+```
+
+`actingAs()` takes precedence over any Bearer header on the request. It is **test-only**: honored on a non-production runtime, ignored (and warned about) under `NODE_ENV=production`, so a stray call left in shipped code can never authenticate real traffic. The optional third `guard` argument is accepted for Laravel API compatibility but is unused — Sanctum has a single token guard.
+
 ## Config
 
 | Option | Default | Description |
