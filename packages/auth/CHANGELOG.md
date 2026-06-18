@@ -1,5 +1,62 @@
 # @rudderjs/auth
 
+## 6.8.0
+
+### Minor Changes
+
+- a238630: feat(auth): dispatch auth lifecycle events (`Attempting`, `Validated`, `Login`, `Failed`, `Logout`, `Registered`, `PasswordReset`)
+
+  Mirrors Laravel's `Illuminate\Auth\Events\*` set. The guard and auth controller now fire typed events at every lifecycle transition through the `@rudderjs/core` event bus, so apps can hook audit logging, welcome emails, device-session clearing, presence broadcasting, or Telescope/Horizon integration without monkey-patching `SessionGuard`.
+
+  Register listeners in `bootstrap/providers.ts`:
+
+  ```ts
+  import { Login, Failed, Registered } from "@rudderjs/auth";
+
+  eventsProvider({
+    Login: [LogSuccessfulLogin],
+    Failed: [LogFailedLogin],
+    Registered: [SendWelcomeEmail],
+  });
+  ```
+
+  `SessionGuard.attempt()` fires `Attempting` → `Validated` → `Login` on success, and `Attempting` → `Failed` (carrying the matched user when the password was wrong, `null` when no account matched) on failure. `login()`/`loginViaRememberCookie()` fire `Login`, `logout()` fires `Logout`, and `once()` fires `Attempting`/`Validated`/`Failed` but never `Login` (it writes no session). `BaseAuthController.signUp` fires `Registered`, and `PasswordBroker.reset()` fires `PasswordReset` on success. With no listeners registered, every dispatch is a cheap no-op.
+
+- 0928844: Add `loginUsingId()`, `once()`, and `onceUsingId()` to the `Guard` contract and `SessionGuard` (Laravel parity for stateless / single-request auth).
+
+  - `loginUsingId(id, remember?)`: look up by primary key and log in (writes the session). Exposed on the `Auth` facade / `AuthManager` too, since it persists.
+  - `once(credentials)` / `onceUsingId(id)`: authenticate for the current request only, setting the user on the guard instance without writing the session. They preserve the anti-enumeration dummy-verify on the no-user branch. These are deliberately NOT on the `Auth` facade: `guard()` returns a fresh instance each call, so a facade-level `once()` would set state on an immediately-discarded guard. Use `const g = auth().guard(); if (await g.once(creds)) await g.user()` and keep the reference.
+
+### Patch Changes
+
+- 9ff6c4d: fix(auth): `getAuthPassword()` returns `null` for an absent password column instead of coercing to `""`
+
+  `toAuthenticatable()` returned `String(record.password ?? '')`, collapsing a NULL/absent password column (OAuth-only, SSO, invited-not-yet-set accounts) into the empty string. That erased the distinction between "no password set" and "password is the empty string", so a third-party `UserProvider` checking `hashed.length > 0` instead of `!hashed` could proceed to a hash comparison against an empty stored hash and fail open. `getAuthPassword()` now returns `null` for a null/undefined column and the `Authenticatable.getAuthPassword()` contract return type widens to `string | null`. The built-in `validateCredentials` no-password guard (`!hashed`) is unchanged and already rejected this case.
+
+- f1dc021: Warn in development when `requestPasswordReset` is called on a `BaseAuthController` subclass that has no `passwordBroker` configured. Previously the handler returned `{ status: 'sent' }` with no signal, so a developer who forgot to wire `this.passwordBroker` saw the forgot-password form succeed and only discovered the gap when users reported missing reset emails.
+
+  The production path is unchanged — it keeps the constant, enumeration-safe `200` with no log — so the warning never becomes a registration oracle.
+
+- 6474035: Fix a stray `[RudderJS Auth]` prefix on the `requestPasswordReset` no-broker warning — it was missed by the framework-wide `[RudderJS]` -> `[Rudder]` rename because the two changes merged in an interleaved order. The warning now uses `[Rudder Auth]` like every other auth log line.
+- 2ecb250: fix(auth): refuse the `x-testing-user` auth bypass on a production runtime
+
+  `AuthMiddleware` honored `@rudderjs/testing`'s `x-testing-user` header whenever `APP_ENV === 'testing'`, authenticating the request as the arbitrary JSON identity it carried with no signature, session, or credential check. If `APP_ENV=testing` accidentally leaked onto a network-reachable staging/QA box, any caller could impersonate any user id (including an admin) by crafting the header. The bypass is now additionally gated on `NODE_ENV !== 'production'` — a real deploy sets `NODE_ENV=production`, so the synthetic-user header is inert there even under the misconfiguration. When the header is seen on a production runtime, the bypass is refused and a one-time warning is logged so the misconfiguration leaves an audit trail. Normal test runs (where `NODE_ENV` is `test`/unset) are unaffected.
+
+- ef27bbf: fix(auth): `Gate.forUser(user)` now resolves base-class policies for subclass instances
+
+  `GateForUser._check` only did a direct constructor lookup for a model's policy, so `Gate.forUser(user).allows('edit', subclassInstance)` silently denied when the policy was registered against a base class — even though the static `Gate.allows()` path resolved it correctly via its `instanceof` walk. The `findPolicy` (direct match + prototype-chain walk) and `callPolicy` logic is now shared by both paths, removing the divergence.
+
+- df49b95: Rebrand the framework's log and error-message prefix from `[RudderJS ...]` to `[Rudder ...]` (e.g. `[RudderJS ORM]` -> `[Rudder ORM]`, `[RudderJS]` -> `[Rudder]`), and the default brand-display strings (`APP_NAME` / `MAIL_FROM_NAME` defaults, the `.rudder/` "generated by" banner) from `RudderJS` to `Rudder`. The npm scope (`@rudderjs/*`), package names, and public APIs are unchanged.
+- Updated dependencies [df49b95]
+- Updated dependencies [cb02103]
+  - @rudderjs/console@1.4.3
+  - @rudderjs/core@1.13.2
+  - @rudderjs/hash@1.2.1
+  - @rudderjs/middleware@1.2.4
+  - @rudderjs/router@1.9.2
+  - @rudderjs/session@2.4.3
+  - @rudderjs/vite@2.11.3
+
 ## 6.7.1
 
 ### Patch Changes
