@@ -1,5 +1,5 @@
 import { Model } from '@rudderjs/orm'
-import { isExpiredAt } from './helpers.js'
+import { isExpiredAt, authCodeHelpers } from './helpers.js'
 
 export class AuthCode extends Model {
   // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
@@ -40,9 +40,7 @@ export class AuthCode extends Model {
 
   /** Parsed scopes array. */
   getScopes(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['scopes']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return authCodeHelpers.getScopes(this as never)
   }
 
   /** Whether this auth code has expired. */
