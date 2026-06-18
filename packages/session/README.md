@@ -98,6 +98,17 @@ const all = Session.allFlash()           // { success?: string, error?: string, 
 const all = req.session.allFlash()       // same, instance form
 ```
 
+#### Surviving multi-step redirects
+
+Flash data is consumed on the request that reads it, so a multi-step redirect chain (e.g. `POST /login` → `/intended` → `/dashboard`) loses it on the first hop. Re-flash it for one more request to carry it through:
+
+```ts
+Session.reflash()              // carry ALL incoming flash one more hop
+Session.keep(['error'])        // carry only the named keys
+```
+
+Laravel parity: `Session::reflash()` / `Session::keep([...])`. Both are also on the instance (`req.session.reflash()`, `req.session.keep([...])`). Re-flash promotes the data for exactly one more request — call it again on each hop that should keep forwarding it.
+
 ### Reading flash from a view
 
 When `@rudderjs/vite` is installed, `SessionProvider.boot()` registers a
@@ -138,6 +149,8 @@ await req.session.regenerate()    // new ID, same data (use after login)
 | `flash(key, value)` | Store a value readable on the *next* request via `getFlash()`. |
 | `getFlash<T>(key, fallback?)` | Read a flash value set by the *previous* request. |
 | `allFlash()` | Return a shallow copy of every flash entry set by the *previous* request. |
+| `reflash()` | Re-flash all incoming flash data so it survives one more request. |
+| `keep(keys)` | Re-flash only the named incoming flash keys for one more request. |
 | `has(key)` | Check whether a key exists. |
 | `all()` | Return a shallow copy of all session data. |
 | `id()` | Return the current session ID. |
@@ -155,6 +168,8 @@ Static proxy over `SessionInstance`, backed by `AsyncLocalStorage`. Most methods
 | `flash(key, value)` | Store a value readable on the *next* request via `getFlash()`. |
 | `getFlash<T>(key, fallback?)` | Read a flash value set by the *previous* request. |
 | `allFlash()` | Return all flash values from the previous request. Returns `{}` outside a session context (non-throwing). |
+| `reflash()` | Re-flash all incoming flash data so it survives one more request. |
+| `keep(keys)` | Re-flash only the named incoming flash keys for one more request. |
 | `has(key)` | Check whether a key exists. |
 | `all()` | Return a shallow copy of all session data. |
 | `regenerate()` | Assign a new session ID (destroys old in Redis, keeps data). |

@@ -226,6 +226,97 @@ describe('SessionInstance — flash', () => {
   })
 })
 
+// ─── reflash() / keep() ─────────────────────────────────────────────────────────
+
+describe('SessionInstance — reflash() / keep()', () => {
+  /** Chain three requests, threading the cookie through each hop. */
+  async function threeRequests(
+    fn1: (s: SessionInstance) => void | Promise<void>,
+    fn2: (s: SessionInstance) => void | Promise<void>,
+  ): Promise<SessionInstance> {
+    const { setCookie: c1 } = await runRequest('', fn1)
+    const cv1 = extractCookieValue(c1!)
+    const { setCookie: c2 } = await runRequest(`rjs_sess=${cv1}`, fn2)
+    const cv2 = extractCookieValue(c2!)
+    const { session: third } = await runRequest(`rjs_sess=${cv2}`)
+    return third
+  }
+
+  it('reflash() carries flash through an extra redirect hop', async () => {
+    // Hop 1 sets flash, hop 2 reads + reflashes, hop 3 still sees it.
+    const third = await threeRequests(
+      s => s.flash('error', 'Invalid credentials'),
+      s => { assert.strictEqual(s.getFlash('error'), 'Invalid credentials'); s.reflash() },
+    )
+    assert.strictEqual(third.getFlash('error'), 'Invalid credentials')
+  })
+
+  it('without reflash(), flash is gone by the third request', async () => {
+    // Regression guard establishing the baseline reflash() fixes.
+    const third = await threeRequests(
+      s => s.flash('error', 'Invalid credentials'),
+      () => { /* read implicitly consumes; no reflash */ },
+    )
+    assert.strictEqual(third.getFlash('error'), undefined)
+  })
+
+  it('reflash() carries every flash key', async () => {
+    const third = await threeRequests(
+      s => { s.flash('a', 1); s.flash('b', 2) },
+      s => s.reflash(),
+    )
+    assert.deepStrictEqual(third.allFlash(), { a: 1, b: 2 })
+  })
+
+  it('keep() carries only the named keys', async () => {
+    const third = await threeRequests(
+      s => { s.flash('a', 1); s.flash('b', 2); s.flash('c', 3) },
+      s => s.keep(['a', 'c']),
+    )
+    assert.deepStrictEqual(third.allFlash(), { a: 1, c: 3 })
+  })
+
+  it('keep() ignores keys not present in the current flash', async () => {
+    const third = await threeRequests(
+      s => s.flash('a', 1),
+      s => s.keep(['a', 'missing']),
+    )
+    assert.deepStrictEqual(third.allFlash(), { a: 1 })
+  })
+
+  it('keep() never promotes an inherited prototype member', async () => {
+    const third = await threeRequests(
+      s => s.flash('a', 1),
+      s => s.keep(['toString', 'constructor']),
+    )
+    assert.deepStrictEqual(third.allFlash(), {})
+  })
+
+  it('reflashed flash does not survive a further hop unless reflashed again', async () => {
+    // reflash() promotes for exactly one more request, not permanently.
+    const { setCookie: c1 } = await runRequest('', s => s.flash('msg', 'hi'))
+    const cv1 = extractCookieValue(c1!)
+    const { setCookie: c2 } = await runRequest(`rjs_sess=${cv1}`, s => s.reflash())
+    const cv2 = extractCookieValue(c2!)
+    const { session: r3, setCookie: c3 } = await runRequest(`rjs_sess=${cv2}`)
+    assert.strictEqual(r3.getFlash('msg'), 'hi')
+    const cv3 = extractCookieValue(c3!)
+    const { session: r4 } = await runRequest(`rjs_sess=${cv3}`)
+    assert.strictEqual(r4.getFlash('msg'), undefined)
+  })
+
+  it('Session facade forwards reflash() and keep()', async () => {
+    const mw = sessionMiddleware(config)
+    const { req, res } = makeReqRes('')
+    await mw(req, res, async () => {
+      readSession(req).flash('x', 1)
+      // Facade calls resolve against the same ALS-bound instance.
+      assert.doesNotThrow(() => Session.reflash())
+      assert.doesNotThrow(() => Session.keep(['x']))
+    })
+  })
+})
+
 // ─── regenerate() ──────────────────────────────────────────────────────────────
 
 describe('SessionInstance — regenerate()', () => {
