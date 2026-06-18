@@ -4,6 +4,7 @@ import { ServiceProvider, app, config, appendToGroup, bootNotice } from '@rudder
 import { reusableConnection } from '@rudderjs/support'
 import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
+import { SESSION_SECRET_PLACEHOLDER } from './constants.js'
 
 // Side-effect import — pulls in the Vike.PageContext.flash augmentation so
 // app code can read pageContext.flash with full typing.
@@ -565,12 +566,6 @@ function makeDriver(config: SessionConfig): InternalDriver {
 }
 
 // ─── Secret resolution ─────────────────────────────────────
-
-// The shipped config templates default `secret` to this literal when neither
-// SESSION_SECRET nor (historically) any fallback is set. Treat it — and an
-// empty string — as "no secret configured" so it can never become a real,
-// world-known signing key.
-const SESSION_SECRET_PLACEHOLDER = 'change-me-in-production'
 
 /**
  * Resolve the effective HMAC signing secret for the session driver.
