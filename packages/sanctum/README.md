@@ -20,6 +20,68 @@ export default [
 ]
 ```
 
+## Token Storage
+
+Sanctum needs somewhere to persist its tokens. Two repositories ship with the package:
+
+- **`MemoryTokenRepository`** (default) — an in-process store, perfect for tests and local dev. Tokens vanish on restart and aren't shared across instances, so it is **not** for production.
+- **`OrmTokenRepository`** — a durable, ORM-backed store (from the `@rudderjs/sanctum/orm` subpath). Use this in production.
+
+`OrmTokenRepository` depends on `@rudderjs/orm` (an optional peer — install it only when you use the durable store):
+
+```bash
+pnpm add @rudderjs/orm
+```
+
+Pass an instance as the second argument to `sanctum()`:
+
+```ts
+// bootstrap/providers.ts
+import { sanctum } from '@rudderjs/sanctum'
+import { OrmTokenRepository } from '@rudderjs/sanctum/orm'
+
+export default [
+  auth(configs.auth),
+  sanctum({ expiration: null }, new OrmTokenRepository()),
+]
+```
+
+Then add the migration (`database/migrations/xxxx_create_personal_access_tokens_table.ts`):
+
+```ts
+import { Migration, Schema } from '@rudderjs/orm/native'
+
+export default class extends Migration {
+  async up() {
+    await Schema.create('personal_access_tokens', (t) => {
+      t.ulid('id').primary()
+      t.string('userId').index()
+      t.string('name')
+      t.string('token').unique()       // SHA-256 hash, never the plain text
+      t.text('abilities').nullable()   // JSON-encoded string[] | null
+      t.dateTime('lastUsedAt').nullable()
+      t.dateTime('expiresAt').nullable()
+      t.dateTime('createdAt').useCurrent()
+    })
+  }
+
+  async down() {
+    await Schema.dropIfExists('personal_access_tokens')
+  }
+}
+```
+
+Run it with `pnpm rudder migrate`. The same `PersonalAccessTokenModel` runs on the native engine, Prisma, and Drizzle (string ULID primary key).
+
+To clean up expired tokens with `rudder model:prune`, register the model once at boot:
+
+```ts
+import { ModelRegistry } from '@rudderjs/orm'
+import { PersonalAccessTokenModel } from '@rudderjs/sanctum/orm'
+
+ModelRegistry.register(PersonalAccessTokenModel)
+```
+
 ## API Tokens
 
 ### Creating Tokens
