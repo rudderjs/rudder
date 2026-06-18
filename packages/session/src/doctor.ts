@@ -1,11 +1,7 @@
 // Doctor checks contributed by @rudderjs/session.
 
 import { registerDoctorCheck, type DoctorResult } from '@rudderjs/console'
-
-// Known public placeholder shipped as the config default. Treated as "no
-// secret" by the runtime's resolveSessionSecret() — mirror that here so the
-// doctor never green-checks a forgeable signing key.
-const SESSION_SECRET_PLACEHOLDER = 'change-me-in-production'
+import { SESSION_SECRET_PLACEHOLDER } from './constants.js'
 
 registerDoctorCheck({
   id:       'session:secret',
