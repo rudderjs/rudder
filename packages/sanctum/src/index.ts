@@ -58,9 +58,8 @@ export interface TokenRepository {
 /**
  * In-memory token store for development and testing only.
  * Do NOT use in production: the store is process-local (not shared across
- * instances) and provides no durability.
- *
- * @internal
+ * instances) and provides no durability — use `OrmTokenRepository` from
+ * `@rudderjs/sanctum/orm` instead.
  */
 export class MemoryTokenRepository implements TokenRepository {
   private store = new Map<string, PersonalAccessToken>()
