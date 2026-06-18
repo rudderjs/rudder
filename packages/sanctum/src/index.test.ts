@@ -532,7 +532,11 @@ function fakeReqRes(authHeader?: string): { req: FakeReq; res: FakeRes } {
  * to find. Uses a tiny ad-hoc shim to avoid the cost of bootstrapping a full
  * Application — we only need `make`.
  */
-function withGlobalSanctum<T>(instance: Sanctum, fn: () => Promise<T>): Promise<T> {
+function withGlobalSanctum<T>(
+  instance: Sanctum,
+  fn: () => Promise<T>,
+  opts: { isDevelopment?: boolean } = {},
+): Promise<T> {
   const g = globalThis as Record<string, unknown>
   const prev = g['__rudderjs_app__']
   g['__rudderjs_app__'] = {
@@ -540,6 +544,7 @@ function withGlobalSanctum<T>(instance: Sanctum, fn: () => Promise<T>): Promise<
       if (key === 'sanctum') return instance as unknown as X
       throw new Error(`[sanctum test] Unknown binding "${key}"`)
     },
+    isDevelopment: () => opts.isDevelopment ?? false,
   }
   return fn().finally(() => {
     g['__rudderjs_app__'] = prev
@@ -680,7 +685,7 @@ describe('RequireToken behavior', () => {
     })
   })
 
-  it('returns 403 when token lacks required ability', async () => {
+  it('returns 403 with generic message in production when token lacks required ability', async () => {
     const model = fakeModel([fakeUser()])
     const provider = new EloquentUserProvider(model, alwaysTrue)
     const repo = new SpyRepo()
@@ -691,7 +696,23 @@ describe('RequireToken behavior', () => {
       const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
       await RequireToken('write')(req as never, res as never, async () => {})
       assert.strictEqual(res.statusCode, 403)
+      assert.strictEqual((res.body as { message: string }).message, 'Insufficient token permissions.')
     })
+  })
+
+  it('returns 403 with ability name in development when token lacks required ability', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test', ['read'])
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      await RequireToken('write')(req as never, res as never, async () => {})
+      assert.strictEqual(res.statusCode, 403)
+      assert.strictEqual((res.body as { message: string }).message, 'Token does not have the "write" ability.')
+    }, { isDevelopment: true })
   })
 
   it('still validates when used standalone (no SanctumMiddleware ahead of it)', async () => {

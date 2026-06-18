@@ -361,7 +361,10 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
 
     for (const ability of abilities) {
       if (!sanctum.tokenCan(token, ability)) {
-        res.status(403).json({ message: `Token does not have the "${ability}" ability.` })
+        const message = app().isDevelopment()
+          ? `Token does not have the "${ability}" ability.`
+          : 'Insufficient token permissions.'
+        res.status(403).json({ message })
         return
       }
     }
