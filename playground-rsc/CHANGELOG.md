@@ -1,5 +1,12 @@
 # rudderjs-playground-rsc
 
+## 0.0.40
+
+### Patch Changes
+
+- Updated dependencies [7533695]
+  - @rudderjs/server-hono@1.10.2
+
 ## 0.0.39
 
 ### Patch Changes

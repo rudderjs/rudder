@@ -1,5 +1,13 @@
 # @rudderjs/session
 
+## 2.5.0
+
+### Minor Changes
+
+- a0f4f8c: Forward `flush()` and `id()` on the `Session` static facade. Both already existed on `SessionInstance` but were missing from the facade, so `Session.flush()` (the standard logout-flow clear) and `Session.id()` (for audit logging, CSRF binding, WS auth where `req` is out of scope) failed to type-check. Like the other mutating/required facade methods, they throw when no session is in context.
+- ce6c818: Add `reflash()` and `keep(keys)` to `SessionInstance` and the `Session` facade, matching Laravel's `Session::reflash()` / `Session::keep([...])`. Flash data is consumed on the request that reads it, so a multi-step redirect chain (`POST /login` → `/intended` → `/dashboard`) previously lost it on the first hop. `reflash()` re-flashes all incoming flash data for one more request; `keep(keys)` re-flashes only the named keys (prototype-member keys are never promoted).
+- 0cb8b1b: Add a `rejectLegacyCookies` cookie-driver option. The cookie driver signs an absolute `exp` into each payload, but an HMAC-valid cookie minted before that hardening carries no `exp` and was previously accepted unconditionally, leaving a captured copy replayable forever (the stateless cookie driver has no server-side kill switch). The new option (default `false` for a backward-compatible migration window) treats an exp-less cookie as expired once enabled, while leaving cookies that carry an `exp` unaffected so turning it on does not log anyone out. Recommended to enable a full `lifetime` after deploying the `exp` hardening. No effect on the redis driver.
+
 ## 2.4.3
 
 ### Patch Changes
