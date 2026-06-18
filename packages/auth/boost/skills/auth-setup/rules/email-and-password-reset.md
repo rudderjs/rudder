@@ -60,10 +60,10 @@ In production, implement `TokenRepository` backed by your database:
 import type { TokenRepository } from '@rudderjs/auth'
 
 class PrismaTokenRepository implements TokenRepository {
-  async create(email: string, token: string) { /* INSERT */ }
-  async findByEmailAndToken(email: string, token: string) { /* SELECT */ }
-  async delete(email: string) { /* DELETE */ }
-  async deleteExpired(thresholdMs: number) { /* DELETE WHERE created_at < ... */ }
+  async create(email: string, token: string, expiresAt: Date): Promise<void> { /* INSERT */ }
+  async find(email: string): Promise<{ token: string; createdAt: Date } | null> { /* SELECT */ }
+  async delete(email: string): Promise<void> { /* DELETE */ }
+  async deleteExpired(): Promise<void> { /* DELETE WHERE expires_at < now() */ }
 }
 ```
 
