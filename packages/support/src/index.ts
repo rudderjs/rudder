@@ -559,3 +559,25 @@ export function reusableConnection<T>(
   g[cacheKey] = { signature, promise } satisfies ReusableConnectionEntry<T>
   return promise
 }
+
+// ─── Cookie ────────────────────────────────────────────────
+
+/** Read a single named value from a raw `Cookie` request header. */
+export function parseCookie(header: string, name: string): string | undefined {
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq === -1) continue
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim()
+  }
+  return undefined
+}
+
+/** Parse all name=value pairs from a raw `Cookie` request header. */
+export function parseCookies(header: string): Record<string, string> {
+  return Object.fromEntries(
+    header.split(';')
+      .map(c => c.trim().split('='))
+      .filter(([k]) => k?.trim())
+      .map(([k, ...v]) => [(k ?? '').trim(), v.join('=')]),
+  )
+}

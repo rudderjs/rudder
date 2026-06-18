@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ServiceProvider, app, config, appendToGroup, bootNotice } from '@rudderjs/core'
-import { reusableConnection } from '@rudderjs/support'
+import { reusableConnection, parseCookie } from '@rudderjs/support'
 import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import { SESSION_SECRET_PLACEHOLDER } from './constants.js'
@@ -545,15 +545,6 @@ export class RedisDriver implements InternalDriver {
 
 // ─── Helpers ───────────────────────────────────────────────
 
-function parseCookie(header: string, name: string): string | undefined {
-  for (const part of header.split(';')) {
-    const eqIdx = part.indexOf('=')
-    if (eqIdx === -1) continue
-    const k = part.slice(0, eqIdx).trim()
-    if (k === name) return part.slice(eqIdx + 1).trim()
-  }
-  return undefined
-}
 
 function buildCookieHeader(name: string, value: string, config: SessionConfig): string {
   const parts = [
