@@ -107,6 +107,37 @@ await sanctum.revokeAllTokens(userId)    // revoke all for a user
 
 Build an account-page UI on top of these — name + creation date + revoke button is the typical shape.
 
+## Token expiration
+
+`Sanctum.isExpired(token)` checks whether a token has expired. The priority between the two expiration sources is:
+
+1. **Per-token `expiresAt`** - if the token was created with an explicit expiry date, that always wins.
+2. **Global `config.expiration`** (minutes from `createdAt`) - applies when no per-token date is set.
+3. **Neither set** - the token never expires.
+
+Use it in a token management controller to show each token's current status:
+
+```ts
+import { app } from '@rudderjs/core'
+import type { Sanctum } from '@rudderjs/sanctum'
+import { RequireToken } from '@rudderjs/sanctum'
+
+router.get('/api/tokens', RequireToken(), async (req) => {
+  const sanctum = app().make<Sanctum>('sanctum')
+  const tokens  = await sanctum.userTokens(req.user.id)
+
+  return tokens.map(token => ({
+    id:        token.id,
+    name:      token.name,
+    createdAt: token.createdAt,
+    expiresAt: token.expiresAt ?? null,
+    expired:   sanctum.isExpired(token),
+  }))
+})
+```
+
+`isExpired()` is a pure read - it does not revoke or delete the token. Expired tokens are already rejected automatically at validation (`RequireToken()` / `SanctumMiddleware()`), but they remain in the table until you remove them. See the "Expired tokens not auto-deleted" pitfall below.
+
 ## Token guard
 
 `TokenGuard` implements `@rudderjs/auth`'s `Guard` interface, so Sanctum slots into the auth manager when you want a non-default guard:
