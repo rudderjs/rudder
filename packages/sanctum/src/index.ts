@@ -35,6 +35,41 @@ export interface NewAccessToken {
   plainTextToken: string
 }
 
+// ─── Transient Token (testing) ────────────────────────────
+
+/**
+ * A fake personal access token used by {@link Sanctum.actingAs} in tests.
+ *
+ * It carries the same shape as a persisted {@link PersonalAccessToken} so it can
+ * be attached to `req.token` and read by `tokenCan()` / `RequireToken`, but it is
+ * never stored in any repository. `abilities: null` (the default) grants every
+ * ability, mirroring Laravel's `TransientToken`; pass a subset to scope it.
+ */
+export class TransientToken implements PersonalAccessToken {
+  readonly id         = 'transient'
+  readonly name       = 'transient'
+  readonly token      = ''
+  readonly lastUsedAt: Date | null = null
+  readonly expiresAt:  Date | null = null
+  readonly createdAt:  Date
+
+  constructor(
+    readonly userId: string,
+    readonly abilities: string[] | null = null,
+  ) {
+    this.createdAt = new Date()
+  }
+
+  /**
+   * Whether this transient token grants `ability`. Mirrors `Sanctum.tokenCan`:
+   * `null` abilities = all access, `'*'` = all access, `[]` = nothing.
+   */
+  can(ability: string): boolean {
+    if (!this.abilities) return true
+    return this.abilities.includes('*') || this.abilities.includes(ability)
+  }
+}
+
 // ─── Token Repository ─────────────────────────────────────
 
 export interface TokenRepository {
@@ -115,6 +150,43 @@ export class MemoryTokenRepository implements TokenRepository {
   }
 }
 
+// ─── Sanctum.actingAs state (testing) ─────────────────────
+
+interface ActingAsState {
+  user:  Authenticatable
+  token: TransientToken
+}
+
+// Process-global, set by `Sanctum.actingAs()` and cleared by
+// `Sanctum.actingAsGuest()`. Honored by `SanctumMiddleware` / `RequireToken`
+// only on a non-production runtime (see `Sanctum.currentActingAs`) — the same
+// production backstop as @rudderjs/auth's test-user bypass (#1236), so a stray
+// `actingAs()` left in shipped code can never authenticate a real request.
+let _actingAs: ActingAsState | null = null
+
+let _warnedActingAsInProd = false
+function warnActingAsInProd(): void {
+  if (_warnedActingAsInProd) return
+  _warnedActingAsInProd = true
+  console.warn(
+    '[Rudder Sanctum] Sanctum.actingAs() was called on a production runtime ' +
+    '(NODE_ENV=production). The test-only auth bypass is disabled here and the ' +
+    'call has no effect. Remove actingAs() from non-test code.',
+  )
+}
+
+/** Wrap a plain user record as an `Authenticatable` if it isn't already one. */
+function toAuthenticatable(user: Authenticatable | Record<string, unknown>): Authenticatable {
+  if (typeof (user as Authenticatable).getAuthIdentifier === 'function') {
+    return user as Authenticatable
+  }
+  const plain = user as Record<string, unknown>
+  return {
+    ...plain,
+    getAuthIdentifier: () => String(plain['id'] ?? ''),
+  } as Authenticatable
+}
+
 // ─── Sanctum ──────────────────────────────────────────────
 
 export class Sanctum {
@@ -132,6 +204,54 @@ export class Sanctum {
   /** Generate a random plain token. */
   static generateToken(): string {
     return randomBytes(32).toString('hex')
+  }
+
+  /**
+   * Authenticate as `user` for subsequent requests in a test, without seeding a
+   * token row or crafting a `Authorization: Bearer …` header. Mirrors Laravel's
+   * `Sanctum::actingAs($user, $abilities, $guard)`.
+   *
+   * Installs a {@link TransientToken} that `SanctumMiddleware` / `RequireToken`
+   * pick up in place of header validation, so `req.user`, `req.token`, and
+   * `tokenCan()` all resolve to the synthetic user — even one that doesn't exist
+   * in the database. `actingAs()` takes precedence over any Bearer header on the
+   * request.
+   *
+   * `abilities` defaults to `['*']` (all abilities); pass a subset (e.g.
+   * `['posts:create']`) to scope the token and exercise 403 paths. The `guard`
+   * argument is accepted for Laravel API compatibility but is unused — Sanctum
+   * has a single token guard.
+   *
+   * Test-only: honored on a non-production runtime, ignored (and warned about)
+   * under `NODE_ENV=production`. Clear with {@link Sanctum.actingAsGuest} — call
+   * it in your test teardown so the acting-as user doesn't leak into later tests.
+   *
+   * @returns the resolved `Authenticatable` (the same user, wrapped if needed).
+   */
+  static actingAs(
+    user: Authenticatable | Record<string, unknown>,
+    abilities: string[] = ['*'],
+    _guard?: string,
+  ): Authenticatable {
+    if (process.env.NODE_ENV === 'production') warnActingAsInProd()
+    const authUser = toAuthenticatable(user)
+    _actingAs = { user: authUser, token: new TransientToken(authUser.getAuthIdentifier(), abilities) }
+    return authUser
+  }
+
+  /** Clear the acting-as user set by {@link Sanctum.actingAs}. */
+  static actingAsGuest(): void {
+    _actingAs = null
+  }
+
+  /**
+   * The active acting-as state, or `null` when none is set. Returns `null` on a
+   * production runtime regardless of state — the security backstop that keeps a
+   * stray `actingAs()` from authenticating real traffic.
+   */
+  static currentActingAs(): ActingAsState | null {
+    if (process.env.NODE_ENV === 'production') return null
+    return _actingAs
   }
 
   /**
@@ -328,6 +448,15 @@ function attachUserAndToken(req: AppRequest, user: Authenticatable, token: Perso
  */
 export function SanctumMiddleware(): MiddlewareHandler {
   return async function SanctumMiddleware(req, res, next) {
+    // Test-mode short-circuit — `Sanctum.actingAs(user)` wins over any Bearer
+    // header and needs no token store. Inert on a production runtime.
+    const acting = Sanctum.currentActingAs()
+    if (acting) {
+      attachUserAndToken(req, acting.user, acting.token)
+      await next()
+      return
+    }
+
     const sanctum = app().make<Sanctum>('sanctum')
     const authHeader = req.headers['authorization']
     if (authHeader) {
@@ -348,6 +477,25 @@ function unauthenticated(res: Parameters<MiddlewareHandler>[1]): void {
  */
 export function RequireToken(...abilities: string[]): MiddlewareHandler {
   return async function RequireToken(req, res, next) {
+    // Test-mode short-circuit — `Sanctum.actingAs(user, abilities)` authenticates
+    // without a token store. Ability checks still run against the transient
+    // token's abilities so scoped-token 403 paths are exercisable in tests.
+    const acting = Sanctum.currentActingAs()
+    if (acting) {
+      attachUserAndToken(req, acting.user, acting.token)
+      for (const ability of abilities) {
+        if (!acting.token.can(ability)) {
+          const message = app().isDevelopment()
+            ? `Token does not have the "${ability}" ability.`
+            : 'Insufficient token permissions.'
+          res.status(403).json({ message })
+          return
+        }
+      }
+      await next()
+      return
+    }
+
     const sanctum = app().make<Sanctum>('sanctum')
     const authHeader = req.headers['authorization']
 
