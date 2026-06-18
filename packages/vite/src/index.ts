@@ -233,7 +233,7 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
  * the next request), invalidate the changed files' SSR subtrees, and tell the
  * browser to do a full reload.
  *
- * Extracted from the watcher handler so the {@link rudderjs} `rudderjs:routes`
+ * Extracted from the watcher handler so the {@link rudderjs} `rudder:routes`
  * plugin can run it once per *coalesced burst* of change events rather than
  * once per raw event — see the debounce in `configureServer`. Coalescing is the
  * primary guard against the "half-booted response" race: an atomic-write /
@@ -393,7 +393,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       // Inject x-real-ip header from the Node socket so downstream Hono
       // middleware can read the client IP. Vike's universal-middleware
       // converts the Express request to a Web Request which loses socket info.
-      name: 'rudderjs:ip',
+      name: 'rudder:ip',
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
           if (!req.headers['x-real-ip'] && !req.headers['x-forwarded-for']) {
@@ -405,7 +405,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:ws',
+      name: 'rudder:ws',
       configureServer(server) {
         // Attach the WebSocket upgrade handler to Vite's own HTTP server.
         //
@@ -477,7 +477,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:routes',
+      name: 'rudder:routes',
       configureServer(server) {
         // Dev-only: expose Vite's sourcemap-based stack rewriter on globalThis so
         // @rudderjs/server-hono's Ignition error page can remap eval'd SSR
@@ -558,7 +558,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:config',
+      name: 'rudder:config',
       configResolved(config) {
         // Suppress benign sourcemap warnings for our own @rudderjs/* packages.
         // Vite emits these via logger.warnOnce() because each package ships a

@@ -42,16 +42,16 @@ Six Vite plugins (plus Vike's own):
 
 | Plugin | Purpose |
 |--------|---------|
-| `rudderjs:config` | SSR externals, path alias, warning suppression |
-| `rudderjs:ws` | WebSocket upgrade handler via `configureServer` |
-| `rudderjs:ip` | Dev-only `x-real-ip` injection from Node socket |
-| `rudderjs:routes` | HMR watcher for `routes/` + `bootstrap/` + `app/`; invalidates SSR modules + clears `__rudderjs_instance__` and `__rudderjs_app__` globals so the next request re-bootstraps cleanly |
-| `rudderjs:views` | View scanner — generates virtual Vike pages from `app/Views/**` and seeds top-level Vike hook stubs in `pages/` |
+| `rudder:config` | SSR externals, path alias, warning suppression |
+| `rudder:ws` | WebSocket upgrade handler via `configureServer` |
+| `rudder:ip` | Dev-only `x-real-ip` injection from Node socket |
+| `rudder:routes` | HMR watcher for `routes/` + `bootstrap/` + `app/`; invalidates SSR modules + clears `__rudderjs_instance__` and `__rudderjs_app__` globals so the next request re-bootstraps cleanly |
+| `rudder:views` | View scanner — generates virtual Vike pages from `app/Views/**` and seeds top-level Vike hook stubs in `pages/` |
 | *(vike plugins)* | SSR rendering, file-based routing (auto-registered) |
 
 ### HMR notes
 
-- `rudderjs:routes` never calls `server.restart()` — doing so closes Vite's module runner and breaks in-flight SSR requests. Module invalidation + globalThis cleanup is enough to force a full re-bootstrap on the next request.
+- `rudder:routes` never calls `server.restart()` — doing so closes Vite's module runner and breaks in-flight SSR requests. Module invalidation + globalThis cleanup is enough to force a full re-bootstrap on the next request.
 - Changes under `app/` require the full cleanup (not just invalidation) because models, controllers, and resources are captured in provider closures during boot.
 
 ## Vike framework hooks

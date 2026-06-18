@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudderjs:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every Rudder app's `vite.config.ts`.
+Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudder:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every Rudder app's `vite.config.ts`.
 
 ## Key Patterns
 
@@ -40,11 +40,11 @@ Install exactly one of `vike-react` / `vike-vue` / `vike-solid` — the view sca
 
 | Plugin | Role |
 |---|---|
-| `rudderjs:config` | SSR externals, path aliases, warning suppression |
-| `rudderjs:ws` | WebSocket upgrade handler for broadcast + sync |
-| `rudderjs:ip` | Dev-only `x-real-ip` injection from the Node socket |
-| `rudderjs:routes` | HMR watcher for `routes/`, `bootstrap/`, `app/` — invalidates SSR modules + clears `__rudderjs_instance__` / `__rudderjs_app__` globals |
-| `rudderjs:views-scanner` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
+| `rudder:config` | SSR externals, path aliases, warning suppression |
+| `rudder:ws` | WebSocket upgrade handler for broadcast + sync |
+| `rudder:ip` | Dev-only `x-real-ip` injection from the Node socket |
+| `rudder:routes` | HMR watcher for `routes/`, `bootstrap/`, `app/` — invalidates SSR modules + clears `__rudderjs_instance__` / `__rudderjs_app__` globals |
+| `rudder:views-scanner` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
 
 ### SSR externals
 

@@ -110,7 +110,7 @@ export function configScannerPlugin(): Plugin {
   syncConfigFromDisk(cwd)
 
   return {
-    name: 'rudderjs:config-scanner',
+    name: 'rudder:config-scanner',
     buildStart() { syncConfigFromDisk(cwd) },
     configureServer(server) {
       // Watch the barrel itself; emit/remove as it appears or disappears. The

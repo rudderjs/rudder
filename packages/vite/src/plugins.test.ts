@@ -77,11 +77,11 @@ async function findPlugin(name: string): Promise<Plugin> {
   return p as Plugin
 }
 
-// ── rudderjs:ip ───────────────────────────────────────────
+// ── rudder:ip ───────────────────────────────────────────
 
-describe("rudderjs:ip — middleware injects x-real-ip", () => {
+describe("rudder:ip — middleware injects x-real-ip", () => {
   it('sets x-real-ip from req.socket.remoteAddress when not already set', async () => {
-    const plugin = await findPlugin('rudderjs:ip')
+    const plugin = await findPlugin('rudder:ip')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -94,7 +94,7 @@ describe("rudderjs:ip — middleware injects x-real-ip", () => {
   })
 
   it('does NOT overwrite an existing x-real-ip header', async () => {
-    const plugin = await findPlugin('rudderjs:ip')
+    const plugin = await findPlugin('rudder:ip')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -107,7 +107,7 @@ describe("rudderjs:ip — middleware injects x-real-ip", () => {
   })
 
   it('does NOT inject when x-forwarded-for is already set (proxy chain)', async () => {
-    const plugin = await findPlugin('rudderjs:ip')
+    const plugin = await findPlugin('rudder:ip')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -120,7 +120,7 @@ describe("rudderjs:ip — middleware injects x-real-ip", () => {
   })
 
   it('no-op when req has no socket info', async () => {
-    const plugin = await findPlugin('rudderjs:ip')
+    const plugin = await findPlugin('rudder:ip')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -132,9 +132,9 @@ describe("rudderjs:ip — middleware injects x-real-ip", () => {
   })
 })
 
-// ── rudderjs:routes ───────────────────────────────────────
+// ── rudder:routes ───────────────────────────────────────
 
-describe("rudderjs:routes — file watcher invalidates SSR + clears singletons", () => {
+describe("rudder:routes — file watcher invalidates SSR + clears singletons", () => {
   const cwd = process.cwd()
 
   beforeEach(() => {
@@ -150,7 +150,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 
   it('registers the three watch directories with the Vite watcher', async () => {
-    const plugin = await findPlugin('rudderjs:routes')
+    const plugin = await findPlugin('rudder:routes')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -161,7 +161,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 
   it('change in routes/ invalidates SSR + clears globalThis singletons + sends full-reload', async () => {
-    const plugin = await findPlugin('rudderjs:routes')
+    const plugin = await findPlugin('rudder:routes')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -185,7 +185,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 
   it('ignores changes outside the watched directories', async () => {
-    const plugin = await findPlugin('rudderjs:routes')
+    const plugin = await findPlugin('rudder:routes')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -203,7 +203,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 
   it('skips re-bootstrap for app/Views/** edits — Vike handles HMR natively', async () => {
-    const plugin = await findPlugin('rudderjs:routes')
+    const plugin = await findPlugin('rudder:routes')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -221,7 +221,7 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 
   it('still re-bootstraps for non-view app/ edits (models, controllers, etc.)', async () => {
-    const plugin = await findPlugin('rudderjs:routes')
+    const plugin = await findPlugin('rudder:routes')
     const server = makeServer()
     ;(plugin.configureServer as (s: unknown) => void)(server)
 
@@ -243,9 +243,9 @@ describe("rudderjs:routes — file watcher invalidates SSR + clears singletons",
   })
 })
 
-// ── rudderjs:ws ───────────────────────────────────────────
+// ── rudder:ws ───────────────────────────────────────────
 
-describe('rudderjs:ws — buffers early upgrade requests', () => {
+describe('rudder:ws — buffers early upgrade requests', () => {
   const SENTINEL = '__rudderjs_http_upgrade_patched__'
   const HANDLER  = '__rudderjs_ws_upgrade__'
 
@@ -262,7 +262,7 @@ describe('rudderjs:ws — buffers early upgrade requests', () => {
   })
 
   it('sets the dual-registration sentinel on configureServer', async () => {
-    const plugin = await findPlugin('rudderjs:ws')
+    const plugin = await findPlugin('rudder:ws')
     const httpServer = { on: () => undefined }
     const server = makeServer(httpServer)
     ;(plugin.configureServer as (s: unknown) => void)(server)
@@ -272,7 +272,7 @@ describe('rudderjs:ws — buffers early upgrade requests', () => {
   })
 
   it('early-returns when sentinel is already set (no duplicate listener)', async () => {
-    const plugin = await findPlugin('rudderjs:ws')
+    const plugin = await findPlugin('rudder:ws')
     const g = globalThis as Record<string, unknown>
     g[SENTINEL] = true
 

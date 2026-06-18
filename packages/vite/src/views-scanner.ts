@@ -118,7 +118,7 @@ function detectFramework(cwd: string): Framework {
 
   if (installed.length > 1) {
     throw new Error(
-      `[rudderjs:views-scanner] Multiple Vike renderers found (${installed.join(', ')}). ` +
+      `[rudder:views-scanner] Multiple Vike renderers found (${installed.join(', ')}). ` +
       `Install only one of vike-react, vike-react-rsc-rudder, vike-vue, vike-solid ` +
       `(vike-react and vike-react-rsc-rudder are both React renderers — pick one).`,
     )
@@ -995,7 +995,7 @@ export function viewsScannerPlugin(): Plugin {
   if (fs.existsSync(viewsRoot)) syncViewsFromDisk(cwd)
 
   return {
-    name: 'rudderjs:views-scanner',
+    name: 'rudder:views-scanner',
     enforce: 'pre',
     buildStart() {
       if (!fs.existsSync(viewsRoot)) return

@@ -309,7 +309,7 @@ export function routesScannerPlugin(opts: RoutesScannerOptions = {}): Plugin {
   sync()
 
   return {
-    name: 'rudderjs:routes-scanner',
+    name: 'rudder:routes-scanner',
     buildStart() { sync() },
     configureServer(server) {
       // Watch routes/ for adds/changes/renames and rescan.
