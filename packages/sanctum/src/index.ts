@@ -99,9 +99,10 @@ export class MemoryTokenRepository implements TokenRepository {
   }
 
   async deleteByUserId(userId: string): Promise<void> {
-    for (const [id, t] of this.store) {
-      if (t.userId === userId) this.store.delete(id)
-    }
+    const toDelete = [...this.store.entries()]
+      .filter(([, t]) => t.userId === userId)
+      .map(([id]) => id)
+    toDelete.forEach(id => this.store.delete(id))
   }
 }
 
