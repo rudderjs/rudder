@@ -13,16 +13,16 @@ pnpm add @rudderjs/vite
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [rudderjs(), tailwindcss(), react()],
+  plugins: [rudder(), tailwindcss(), react()],
 })
 ```
 
-That's it. `rudderjs()` handles:
+That's it. `rudder()` handles:
 
 - **Vike registration** — auto-detects and registers `vike/plugin` for SSR + file-based routing
 - **View scanner** — scans `app/Views/**` and generates virtual Vike pages under `pages/__view/` for `@rudderjs/view`
@@ -125,18 +125,18 @@ import { headersResponse }              from '@rudderjs/vite/hooks/headersRespon
 
 ## Framework Plugins
 
-Add your UI framework plugin separately — `rudderjs()` does not include one:
+Add your UI framework plugin separately — `rudder()` does not include one:
 
 ```ts
 // React
 import react from '@vitejs/plugin-react'
-plugins: [rudderjs(), react()]
+plugins: [rudder(), react()]
 
 // Vue
 import vue from '@vitejs/plugin-vue'
-plugins: [rudderjs(), vue()]
+plugins: [rudder(), vue()]
 
 // Solid
 import solid from 'vite-plugin-solid'
-plugins: [rudderjs(), solid()]
+plugins: [rudder(), solid()]
 ```

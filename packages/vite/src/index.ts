@@ -345,7 +345,7 @@ export function resolveWatchDir(entry: string, cwd: string): string | null {
  * `isOnlyResolvingUserConfig` flag — see vikejs/vike#3258. The supported
  * pattern is to call `vike()` synchronously in your own `vite.config.ts`.
  *
- * **Plugin order matters.** Put `rudderjs()` **before** `vike()`. The views
+ * **Plugin order matters.** Put `rudder()` **before** `vike()`. The views
  * scanner writes auto-generated stubs to `pages/__view/` during plugin
  * construction, and Vike scans `pages/` during its own construction — so the
  * stubs must exist on disk before `vike()` is called.
@@ -354,12 +354,12 @@ export function resolveWatchDir(entry: string, cwd: string): string | null {
  * // vite.config.ts
  * import { defineConfig } from 'vite'
  * import vike from 'vike/plugin'
- * import rudderjs from '@rudderjs/vite'
+ * import rudder from '@rudderjs/vite'
  * import tailwindcss from '@tailwindcss/vite'
  * import react from '@vitejs/plugin-react'
  *
  * export default defineConfig({
- *   plugins: [rudderjs(), vike(), tailwindcss(), react()],
+ *   plugins: [rudder(), vike(), tailwindcss(), react()],
  * })
  */
 export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {

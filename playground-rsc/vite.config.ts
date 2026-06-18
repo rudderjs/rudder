@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 import vike from 'vike/plugin'
 import react from '@vitejs/plugin-react'
 
@@ -9,7 +9,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [
     react(),
-    rudderjs(),
+    rudder(),
     vike(),
   ],
   server: {

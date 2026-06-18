@@ -277,11 +277,11 @@ A package consumed from source that registers routes, views, or config in a serv
 
 ```ts
 // vite.config.ts
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 
 export default defineConfig({
   plugins: [
-    rudderjs({ watch: ['@your-scope/your-package'] }), // package name(s) or absolute dir(s)
+    rudder({ watch: ['@your-scope/your-package'] }), // package name(s) or absolute dir(s)
     // ...
   ],
 })

@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 import vike from 'vike/plugin'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -7,7 +7,7 @@ import { diagAssetsManifest } from './vite-diag-assets-manifest.ts'
 
 export default defineConfig({
   plugins: [
-    rudderjs(),
+    rudder(),
     vike(),
     tailwindcss(),
     react(),
