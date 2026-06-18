@@ -625,6 +625,59 @@ describe('SanctumMiddleware behavior', () => {
       assert.strictEqual(repo.updateLastUsedCalls, 0)
     })
   })
+
+  it('is permissive (calls next, leaves req.user/req.token unset) when Authorization header is syntactically malformed', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      // "not-a-bearer-token" has no pipe separator and is not a valid format
+      const { req, res } = fakeReqRes('not-a-bearer-token')
+      let nextCalled = false
+      await SanctumMiddleware()(req as never, res as never, async () => { nextCalled = true })
+      assert.strictEqual(nextCalled, true, 'next() must be called even for malformed headers')
+      assert.strictEqual(req.user, undefined, 'req.user must remain unset')
+      assert.strictEqual(req.token, undefined, 'req.token must remain unset')
+    })
+  })
+
+  it('is permissive (calls next, leaves req.user/req.token unset) when Bearer token hash is not in the repository', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      // Token ID exists only if created; this is a well-formed but unknown token
+      const unknownToken = `999|${Sanctum.generateToken()}`
+      const { req, res } = fakeReqRes(`Bearer ${unknownToken}`)
+      let nextCalled = false
+      await SanctumMiddleware()(req as never, res as never, async () => { nextCalled = true })
+      assert.strictEqual(nextCalled, true, 'next() must be called even for an unknown token')
+      assert.strictEqual(req.user, undefined, 'req.user must remain unset')
+      assert.strictEqual(req.token, undefined, 'req.token must remain unset')
+    })
+  })
+
+  it('is permissive (calls next, leaves req.user/req.token unset) when Bearer token is expired', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const exp = new Date(Date.now() - 1000)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'expired-tok', undefined, exp)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      let nextCalled = false
+      await SanctumMiddleware()(req as never, res as never, async () => { nextCalled = true })
+      assert.strictEqual(nextCalled, true, 'next() must be called even for an expired token')
+      assert.strictEqual(req.user, undefined, 'req.user must remain unset')
+      assert.strictEqual(req.token, undefined, 'req.token must remain unset')
+    })
+  })
 })
 
 describe('RequireToken behavior', () => {
