@@ -22,6 +22,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
+import { parseCookies } from '@rudderjs/support'
 
 /** Shape of the `storage/framework/down` flag file. */
 export interface MaintenanceData {
@@ -79,14 +80,6 @@ export function up(cwd: string = process.cwd()): boolean {
 
 // ─── Middleware ────────────────────────────────────────────
 
-function parseCookies(header: string): Record<string, string> {
-  return Object.fromEntries(
-    header.split(';')
-      .map(c => c.trim().split('='))
-      .filter(([k]) => k?.trim())
-      .map(([k, ...v]) => [(k ?? '').trim(), v.join('=')]),
-  )
-}
 
 /** Path matches an allow-list entry (exact, or prefix when it ends with `*`). */
 function matches(path: string, patterns: string[]): boolean {
