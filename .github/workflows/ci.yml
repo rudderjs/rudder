@@ -705,6 +705,9 @@ jobs:
 
       - name: Install Playwright system deps (cache hit)
         if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: pnpm --filter create-rudder exec playwright install-deps chromium
 
       - name: Build packages + scaffolder
@@ -769,6 +772,9 @@ jobs:
 
       - name: Install Playwright system deps (cache hit)
         if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: pnpm --filter rudderjs-playground-rsc exec playwright install-deps chromium
 
       - name: Build packages + playground-rsc (production)
