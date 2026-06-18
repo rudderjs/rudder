@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudderjs:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every Rudder app's `vite.config.ts`.
+Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudder:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every Rudder app's `vite.config.ts`.
 
 ## Key Patterns
 
@@ -11,27 +11,27 @@ Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vi
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [rudderjs(), tailwindcss(), react()],
+  plugins: [rudder(), tailwindcss(), react()],
 })
 ```
 
-Place `rudderjs()` **first** so Vike initialises before UI-framework plugins. `rudderjs()` returns a `Promise<Plugin[]>` — Vite handles it natively, no `await` or spread needed.
+Place `rudder()` **first** so Vike initialises before UI-framework plugins. `rudder()` returns a `Promise<Plugin[]>` — Vite handles it natively, no `await` or spread needed.
 
 ### UI framework plugins
 
-Add one UI framework plugin alongside `rudderjs()`:
+Add one UI framework plugin alongside `rudder()`:
 
 ```ts
 // React — @vitejs/plugin-react
 // Vue   — @vitejs/plugin-vue
 // Solid — vike-solid/vite
 
-plugins: [rudderjs(), react()]
+plugins: [rudder(), react()]
 ```
 
 Install exactly one of `vike-react` / `vike-vue` / `vike-solid` — the view scanner probes `node_modules/vike-*/package.json` at plugin construction time to pick the matching stub.
@@ -40,11 +40,11 @@ Install exactly one of `vike-react` / `vike-vue` / `vike-solid` — the view sca
 
 | Plugin | Role |
 |---|---|
-| `rudderjs:config` | SSR externals, path aliases, warning suppression |
-| `rudderjs:ws` | WebSocket upgrade handler for broadcast + sync |
-| `rudderjs:ip` | Dev-only `x-real-ip` injection from the Node socket |
-| `rudderjs:routes` | HMR watcher for `routes/`, `bootstrap/`, `app/` — invalidates SSR modules + clears `__rudderjs_instance__` / `__rudderjs_app__` globals |
-| `rudderjs:views-scanner` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
+| `rudder:config` | SSR externals, path aliases, warning suppression |
+| `rudder:ws` | WebSocket upgrade handler for broadcast + sync |
+| `rudder:ip` | Dev-only `x-real-ip` injection from the Node socket |
+| `rudder:routes` | HMR watcher for `routes/`, `bootstrap/`, `app/` — invalidates SSR modules + clears `__rudderjs_instance__` / `__rudderjs_app__` globals |
+| `rudder:views-scanner` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
 
 ### SSR externals
 
@@ -68,7 +68,7 @@ The following packages are automatically excluded from the SSR bundle (Node-only
 
 - **Not using `@rudderjs/vite`.** Skipping the plugin in favor of a custom config breaks WebSockets in dev (no upgrade handler), breaks view scanning (no generated Vike stubs), breaks HMR (no route reload), breaks IP resolution (no dev `x-real-ip` injection), and lets server-only packages leak into the client bundle. Don't try to replicate manually.
 - **Multiple `vike-*` renderers installed.** The scanner throws "Multiple renderers installed" at boot. Install exactly one.
-- **`rudderjs()` placed after framework plugins.** Works for builds but causes subtle ordering issues with Vike's config merging. Place it first.
+- **`rudder()` placed after framework plugins.** Works for builds but causes subtle ordering issues with Vike's config merging. Place it first.
 - **Mixed frameworks via include/exclude.** Supported — each plugin scopes to its own pages via Vite's `include`/`exclude` regex. Keep the scopes non-overlapping.
 - **Top-level `node:*` imports.** Packages that import `node:fs`, `node:path`, etc. at the top of a file get externalized by Vite and crash in the browser. Always lazy-load inside functions: `const { readFile } = await import('node:fs/promises')`.
 - **Custom port 24678.** `@vitejs/plugin-vue` and others use port 24678 for HMR. The WS upgrade handler coexists with it — no port conflict.
@@ -77,7 +77,7 @@ The following packages are automatically excluded from the SSR bundle (Node-only
 
 ```ts
 // Default export — the plugin factory
-import rudderjs from '@rudderjs/vite'
+import rudder from '@rudderjs/vite'
 
 // Plugin-specific types (rarely needed in app code)
 import type { Plugin } from 'vite'

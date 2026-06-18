@@ -28,23 +28,23 @@ describe('@rudderjs/vite', () => {
     assert.ok(result.length > 0)
   })
 
-  it('includes rudderjs:ws plugin', async () => {
+  it('includes rudder:ws plugin', async () => {
     const plugins = await rudderjs()
-    const wsPlugin = plugins.find(p => p.name === 'rudderjs:ws')
-    assert.ok(wsPlugin, 'rudderjs:ws plugin should exist')
+    const wsPlugin = plugins.find(p => p.name === 'rudder:ws')
+    assert.ok(wsPlugin, 'rudder:ws plugin should exist')
     assert.equal(typeof wsPlugin.configureServer, 'function')
   })
 
-  it('includes rudderjs:config plugin', async () => {
+  it('includes rudder:config plugin', async () => {
     const plugins = await rudderjs()
-    const configPlugin = plugins.find(p => p.name === 'rudderjs:config')
-    assert.ok(configPlugin, 'rudderjs:config plugin should exist')
+    const configPlugin = plugins.find(p => p.name === 'rudder:config')
+    assert.ok(configPlugin, 'rudder:config plugin should exist')
     assert.equal(typeof configPlugin.config, 'function')
   })
 
-  it('rudderjs:config returns correct config shape', async () => {
+  it('rudder:config returns correct config shape', async () => {
     const plugins = await rudderjs()
-    const configPlugin = plugins.find(p => p.name === 'rudderjs:config')!
+    const configPlugin = plugins.find(p => p.name === 'rudder:config')!
     const config = (configPlugin.config as (c: unknown, e: { command: string; mode: string }) => Record<string, unknown>)(
       {}, { command: 'serve', mode: 'development' },
     )
@@ -366,7 +366,7 @@ describe('performReboot', () => {
   })
 })
 
-describe('rudderjs:routes — dev fix-stacktrace hook', () => {
+describe('rudder:routes — dev fix-stacktrace hook', () => {
   // configureServer registers globalThis.__rudderjs_fix_stacktrace__ so
   // @rudderjs/server-hono's Ignition error page can remap eval'd SSR
   // module-runner frames to true source positions via Vite's ssrFixStacktrace.
@@ -387,7 +387,7 @@ describe('rudderjs:routes — dev fix-stacktrace hook', () => {
     }
     const prev = g[KEY]
     try {
-      const routes = rudderjs().find(p => p.name === 'rudderjs:routes')!
+      const routes = rudderjs().find(p => p.name === 'rudder:routes')!
       ;(routes.configureServer as (s: unknown) => void)(server as never)
 
       const hook = g[KEY]
@@ -403,7 +403,7 @@ describe('rudderjs:routes — dev fix-stacktrace hook', () => {
   })
 })
 
-describe('rudderjs:routes watcher debounce', () => {
+describe('rudder:routes watcher debounce', () => {
   const cwd = process.cwd()
 
   function setup() {
@@ -422,7 +422,7 @@ describe('rudderjs:routes watcher debounce', () => {
         fileToModulesMap: new Map(),
       } } },
     }
-    const routes = rudderjs().find(p => p.name === 'rudderjs:routes')!
+    const routes = rudderjs().find(p => p.name === 'rudder:routes')!
     ;(routes.configureServer as (s: unknown) => void)(server as never)
     return { onChange: onChange!, sends }
   }
@@ -531,7 +531,7 @@ describe('resolveWatchDir', () => {
 
 describe('rudderjs({ watch }) → ssr.noExternal', () => {
   const callConfig = (plugins: Awaited<ReturnType<typeof rudderjs>>, command: 'serve' | 'build') => {
-    const cfg = plugins.find(p => p.name === 'rudderjs:config')!
+    const cfg = plugins.find(p => p.name === 'rudder:config')!
     return (cfg.config as (c: unknown, e: { command: string; mode: string }) => { ssr: { noExternal: string[] } })(
       {}, { command, mode: command === 'serve' ? 'development' : 'production' },
     )

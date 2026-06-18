@@ -10,18 +10,18 @@ export function viteConfig(ctx: TemplateContext): string {
   const imports: string[] = [
     `import { defineConfig } from 'vite'`,
     `import vike from 'vike/plugin'`,
-    `import rudderjs from '@rudderjs/vite'`,
+    `import rudder from '@rudderjs/vite'`,
   ]
   if (tailwind) imports.push(`import tailwindcss from '@tailwindcss/vite'`)
   if (hasReact)  imports.push(`import react from '@vitejs/plugin-react'`)
   if (hasVue)    imports.push(`import vue from '@vitejs/plugin-vue'`)
   if (hasSolid)  imports.push(`import solid from 'vike-solid/vite'`)
 
-  // `rudderjs()` BEFORE `vike()` — the views-scanner writes auto-generated
+  // `rudder()` BEFORE `vike()` — the views-scanner writes auto-generated
   // stubs to `pages/__view/` during plugin construction, and Vike scans
   // `pages/` during its own construction, so the stubs must exist before
   // `vike()` is called.
-  const plugins: string[] = ['rudderjs()', 'vike()']
+  const plugins: string[] = ['rudder()', 'vike()']
   if (tailwind) plugins.push('tailwindcss()')
 
   if (hasReact) {

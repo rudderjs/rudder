@@ -233,7 +233,7 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
  * the next request), invalidate the changed files' SSR subtrees, and tell the
  * browser to do a full reload.
  *
- * Extracted from the watcher handler so the {@link rudderjs} `rudderjs:routes`
+ * Extracted from the watcher handler so the {@link rudderjs} `rudder:routes`
  * plugin can run it once per *coalesced burst* of change events rather than
  * once per raw event — see the debounce in `configureServer`. Coalescing is the
  * primary guard against the "half-booted response" race: an atomic-write /
@@ -345,7 +345,7 @@ export function resolveWatchDir(entry: string, cwd: string): string | null {
  * `isOnlyResolvingUserConfig` flag — see vikejs/vike#3258. The supported
  * pattern is to call `vike()` synchronously in your own `vite.config.ts`.
  *
- * **Plugin order matters.** Put `rudderjs()` **before** `vike()`. The views
+ * **Plugin order matters.** Put `rudder()` **before** `vike()`. The views
  * scanner writes auto-generated stubs to `pages/__view/` during plugin
  * construction, and Vike scans `pages/` during its own construction — so the
  * stubs must exist on disk before `vike()` is called.
@@ -354,12 +354,12 @@ export function resolveWatchDir(entry: string, cwd: string): string | null {
  * // vite.config.ts
  * import { defineConfig } from 'vite'
  * import vike from 'vike/plugin'
- * import rudderjs from '@rudderjs/vite'
+ * import rudder from '@rudderjs/vite'
  * import tailwindcss from '@tailwindcss/vite'
  * import react from '@vitejs/plugin-react'
  *
  * export default defineConfig({
- *   plugins: [rudderjs(), vike(), tailwindcss(), react()],
+ *   plugins: [rudder(), vike(), tailwindcss(), react()],
  * })
  */
 export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
@@ -393,7 +393,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       // Inject x-real-ip header from the Node socket so downstream Hono
       // middleware can read the client IP. Vike's universal-middleware
       // converts the Express request to a Web Request which loses socket info.
-      name: 'rudderjs:ip',
+      name: 'rudder:ip',
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
           if (!req.headers['x-real-ip'] && !req.headers['x-forwarded-for']) {
@@ -405,7 +405,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:ws',
+      name: 'rudder:ws',
       configureServer(server) {
         // Attach the WebSocket upgrade handler to Vite's own HTTP server.
         //
@@ -477,7 +477,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:routes',
+      name: 'rudder:routes',
       configureServer(server) {
         // Dev-only: expose Vite's sourcemap-based stack rewriter on globalThis so
         // @rudderjs/server-hono's Ignition error page can remap eval'd SSR
@@ -558,7 +558,7 @@ export function rudderjs(opts: RudderjsOptions = {}): Plugin[] {
       },
     },
     {
-      name: 'rudderjs:config',
+      name: 'rudder:config',
       configResolved(config) {
         // Suppress benign sourcemap warnings for our own @rudderjs/* packages.
         // Vite emits these via logger.warnOnce() because each package ships a
