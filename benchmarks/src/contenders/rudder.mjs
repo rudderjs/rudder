@@ -1,4 +1,4 @@
-// ─── Contender: RudderJS native engine ───────────────────────────────────────
+// ─── Contender: Rudder native engine ───────────────────────────────────────
 // Drives @rudderjs/orm's Model layer over @rudderjs/database's native driver —
 // better-sqlite3 on SQLite, the porsager `postgres` driver on Postgres, mysql2
 // on MySQL — the exact path an app uses, minus the HTTP stack. The Model API is

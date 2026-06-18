@@ -1,6 +1,6 @@
 # @rudderjs/pulse
 
-Application performance monitoring for RudderJS — records request throughput, queue metrics, cache hit rates, exceptions, active users, slow queries, and server resource usage.
+Application performance monitoring for Rudder — records request throughput, queue metrics, cache hit rates, exceptions, active users, slow queries, and server resource usage.
 
 ## Installation
 

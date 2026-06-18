@@ -17,7 +17,7 @@ import {
 //
 // In dev, the @rudderjs/vite watcher clears __rudderjs_instance__ +
 // __rudderjs_app__ and tells the browser to full-reload. The next request
-// re-evaluates bootstrap/app.ts → a fresh RudderJS whose constructor begins an
+// re-evaluates bootstrap/app.ts → a fresh Rudder whose constructor begins an
 // async re-boot (router.reset() → provider boot → ModelRegistry.set() →
 // re-run loaders). If a SECOND re-boot is triggered (atomic-write double-fire,
 // or any concurrent trigger) it used to start a *parallel* boot that interleaved
@@ -60,7 +60,7 @@ const bootOf = (i: unknown): Promise<void> => (i as { _providerBoot: Promise<voi
 /**
  * Simulate the @rudderjs/vite watcher firing a reload: it clears ONLY the two
  * top-level singletons (it has no knowledge of core's internal boot promise),
- * so the next create() builds a fresh RudderJS + Application pair.
+ * so the next create() builds a fresh Rudder + Application pair.
  */
 function simulateWatcherClear(): void {
   delete G['__rudderjs_instance__']

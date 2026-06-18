@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fluent image processing — resize, crop, convert, optimize, batch-generate multiple sizes. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/), adding RudderJS-style chaining and `@rudderjs/storage` integration. Use for avatar uploads, thumbnail generation, Open Graph images, responsive image variants.
+Fluent image processing — resize, crop, convert, optimize, batch-generate multiple sizes. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/), adding Rudder-style chaining and `@rudderjs/storage` integration. Use for avatar uploads, thumbnail generation, Open Graph images, responsive image variants.
 
 ## Key Patterns
 

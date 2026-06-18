@@ -57,7 +57,7 @@ Route.registerController(AuthController)
     : `app/Views/Welcome.${welcomeExt(ctx.primary)}`
   const welcomeBlock = hasWelcome
     ? `
-// Read RudderJS version from @rudderjs/core's package.json at boot time.
+// Read Rudder version from @rudderjs/core's package.json at boot time.
 const _require = createRequire(import.meta.url)
 const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
 

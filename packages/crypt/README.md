@@ -1,6 +1,6 @@
 # @rudderjs/crypt
 
-Symmetric encryption for RudderJS. AES-256-CBC with HMAC-SHA256 signing. Uses only `node:crypto`.
+Symmetric encryption for Rudder. AES-256-CBC with HMAC-SHA256 signing. Uses only `node:crypto`.
 
 ## Installation
 

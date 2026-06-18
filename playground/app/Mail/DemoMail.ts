@@ -10,7 +10,7 @@ export class DemoMail extends Mailable {
   build(): this {
     return this
       .subject(this.heading)
-      .html(`<h1>${this.heading}</h1><p>Sent from the RudderJS mail demo.</p>`)
-      .text(`${this.heading}\n\nSent from the RudderJS mail demo.`)
+      .html(`<h1>${this.heading}</h1><p>Sent from the Rudder mail demo.</p>`)
+      .text(`${this.heading}\n\nSent from the Rudder mail demo.`)
   }
 }

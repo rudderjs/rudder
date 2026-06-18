@@ -1,6 +1,6 @@
 # @rudderjs/console
 
-Command registry and class-based command primitives for the RudderJS CLI.
+Command registry and class-based command primitives for the Rudder CLI.
 
 ## Installation
 

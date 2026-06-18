@@ -20,7 +20,7 @@ const config: Config = {
   onPageTransitionStart:
     "import:vike-react-rsc-rudder/__internal/integration/onPageTransitionStart:onPageTransitionStart",
 
-  // RudderJS fork change: vike >=0.4.257 requires config import strings to
+  // Rudder fork change: vike >=0.4.257 requires config import strings to
   // name the export (`:default`); the upstream 1.0.0 (built against 0.4.246)
   // omitted it, which crashes vike's dev optimizeDeps. See README.
   client: "import:vike-react-rsc-rudder/__internal/integration/client:default",

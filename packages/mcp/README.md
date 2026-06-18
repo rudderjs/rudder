@@ -1,6 +1,6 @@
 # @rudderjs/mcp
 
-MCP (Model Context Protocol) server framework for RudderJS. Build custom MCP servers that expose your application's functionality to AI agents.
+MCP (Model Context Protocol) server framework for Rudder. Build custom MCP servers that expose your application's functionality to AI agents.
 
 ## Installation
 
@@ -233,7 +233,7 @@ Template resources are automatically registered via `ListResourceTemplates`. Par
 
 ## Dependency Injection
 
-When running inside a RudderJS app, tool/resource/prompt classes are resolved via the DI container — constructor dependencies are auto-injected:
+When running inside a Rudder app, tool/resource/prompt classes are resolved via the DI container — constructor dependencies are auto-injected:
 
 ```ts
 @Injectable()

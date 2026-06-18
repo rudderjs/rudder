@@ -1,6 +1,6 @@
 # @rudderjs/cashier-paddle
 
-Paddle billing for RudderJS — Billable mixin, subscription state machine, signed webhook receiver, checkout session, refunds, pricing previews.
+Paddle billing for Rudder — Billable mixin, subscription state machine, signed webhook receiver, checkout session, refunds, pricing previews.
 
 ## Key Files
 
@@ -110,4 +110,4 @@ await sub?.cancel()
 - **`prisma db push` after install**: `cashier:install` publishes the schema fragment but doesn't run Prisma. Run `pnpm exec prisma generate && pnpm exec prisma db push` after.
 - **Decimal arithmetic on `total`/`tax`**: Paddle sends amounts as STRINGS in minor units. Never `Number()` — string math or BigInt only. `formatAmount()` is display-only.
 - **`Cashier.useBillableModel` not called**: webhook handlers can still update DB tables but won't be able to materialize the User object. Call it from `routes/web.ts` or your `AppServiceProvider.boot()`.
-- **Old `@rudderjs/orm-prisma` (no SQL-name fallback)**: a Prisma app on cashier-paddle ≥5 with an orm-prisma older than the SQL-name-fallback release queries 500 with `[RudderJS ORM] Prisma has no delegate for table "paddle_subscriptions"`. Upgrade `@rudderjs/orm-prisma` — it resolves the `@@map` SQL name to the delegate via the client's runtime datamodel.
+- **Old `@rudderjs/orm-prisma` (no SQL-name fallback)**: a Prisma app on cashier-paddle ≥5 with an orm-prisma older than the SQL-name-fallback release queries 500 with `[Rudder ORM] Prisma has no delegate for table "paddle_subscriptions"`. Upgrade `@rudderjs/orm-prisma` — it resolves the `@@map` SQL name to the delegate via the client's runtime datamodel.

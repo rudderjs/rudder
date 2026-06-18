@@ -43,7 +43,7 @@ export default function Welcome(props: WelcomeProps) {
       This is a no-frontend scaffold — every request is served by a controller in <code>routes/api.ts</code>.
     </p>
     <p>
-      <small>RudderJS v\${props.rudderVersion} &middot; Node \${props.nodeVersion} &middot; env=\${props.env}</small>
+      <small>Rudder v\${props.rudderVersion} &middot; Node \${props.nodeVersion} &middot; env=\${props.env}</small>
     </p>
   </section>
   <section>
@@ -53,7 +53,7 @@ export default function Welcome(props: WelcomeProps) {
     </ul>
   </section>
   <footer>
-    Built with RudderJS. Edit <code>app/Views/Welcome.ts</code> to customize this page,
+    Built with Rudder. Edit <code>app/Views/Welcome.ts</code> to customize this page,
     or delete it and rely on <code>/api/*</code> only.
     <br />
     <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
@@ -141,7 +141,7 @@ export default function Welcome(props: WelcomeProps) {
           <code className="inline-code">view(&apos;welcome&apos;)</code>.
         </p>
         <div className="hero-meta">
-          <span>RudderJS v{props.rudderVersion}</span>
+          <span>Rudder v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
           <span>•</span>
@@ -163,7 +163,7 @@ export default function Welcome(props: WelcomeProps) {
       <footer className="page-footer">
         <div className="footer-inner">
           <div>
-            Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
+            Built with Rudder. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
             <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
           </div>
           <div className="footer-links">
@@ -228,7 +228,7 @@ const githubUrl = props.githubUrl ?? DEFAULT_GITHUB
         <code class="inline-code">view('welcome')</code>.
       </p>
       <div class="hero-meta">
-        <span>RudderJS v{{ props.rudderVersion }}</span>
+        <span>Rudder v{{ props.rudderVersion }}</span>
         <span>•</span>
         <span>Node {{ props.nodeVersion }}</span>
         <span>•</span>
@@ -248,7 +248,7 @@ const githubUrl = props.githubUrl ?? DEFAULT_GITHUB
     <footer class="page-footer">
       <div class="footer-inner">
         <div>
-          Built with RudderJS. Edit <code>app/Views/Welcome.vue</code> to customize this page.<br />
+          Built with Rudder. Edit <code>app/Views/Welcome.vue</code> to customize this page.<br />
           <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
         </div>
         <div class="footer-links">
@@ -303,7 +303,7 @@ export default function Welcome(props: WelcomeProps) {
           <code class="inline-code">view('welcome')</code>.
         </p>
         <div class="hero-meta">
-          <span>RudderJS v{props.rudderVersion}</span>
+          <span>Rudder v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
           <span>•</span>
@@ -327,7 +327,7 @@ export default function Welcome(props: WelcomeProps) {
       <footer class="page-footer">
         <div class="footer-inner">
           <div>
-            Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
+            Built with Rudder. Edit <code>app/Views/Welcome.tsx</code> to customize this page.<br />
             <small>Something not working? Run <code>pnpm rudder doctor</code> for a green/yellow/red checkup.</small>
           </div>
           <div class="footer-links">

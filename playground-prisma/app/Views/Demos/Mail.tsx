@@ -11,7 +11,7 @@ interface MailResponse {
 
 export default function MailDemo() {
   const [to,      setTo]      = useState('user@example.com')
-  const [subject, setSubject] = useState('Hello from RudderJS')
+  const [subject, setSubject] = useState('Hello from Rudder')
   const [data,    setData]    = useState<MailResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)

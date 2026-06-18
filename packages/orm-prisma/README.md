@@ -6,7 +6,7 @@ Prisma adapter for `@rudderjs/orm`.
 pnpm add @rudderjs/orm-prisma @prisma/client prisma
 ```
 
-> Picking a generator? RudderJS supports both Prisma generator paths:
+> Picking a generator? Rudder supports both Prisma generator paths:
 >
 > | Generator | Schema declaration | When to use |
 > |---|---|---|
@@ -247,7 +247,7 @@ See the [Vector search](../orm/README.md#vector-search) section in `@rudderjs/or
 
 ## Notes
 
-- Run `pnpm exec prisma generate` after any schema change. If you forget, RudderJS throws a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
+- Run `pnpm exec prisma generate` after any schema change. If you forget, Rudder throws a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
 - The `client` option takes precedence — driver/url are ignored when a client is provided.
 - The adapter is bound in the DI container as `'db'` (OrmAdapter) and `'prisma'` (raw PrismaClient).
 - **DB connection is lazy.** `DatabaseProvider.boot()` does not call Prisma's `$connect()` — the client connects on first query. Saves ~20–40 ms cold boot. Trade-off: a database-down deploy surfaces on the first user query instead of at boot. Apps that want fail-fast at boot can call `await app.make('db').connect()` from an `AppServiceProvider.boot()` hook.

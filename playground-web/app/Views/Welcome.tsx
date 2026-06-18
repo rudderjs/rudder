@@ -87,7 +87,7 @@ export default function Welcome(props: WelcomeProps) {
       <nav className="page-nav">
         <div className="brand">
           <span className="brand-dot" />
-          RudderJS
+          Rudder
         </div>
         <div className="nav-right">
           {props.user ? (
@@ -116,7 +116,7 @@ export default function Welcome(props: WelcomeProps) {
           <code className="inline-code">view(&apos;welcome&apos;)</code>.
         </p>
         <div className="hero-meta">
-          <span>RudderJS v{props.rudderVersion}</span>
+          <span>Rudder v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
           <span>•</span>
@@ -138,7 +138,7 @@ export default function Welcome(props: WelcomeProps) {
       <footer className="page-footer">
         <div className="footer-inner">
           <div>
-            Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.
+            Built with Rudder. Edit <code>app/Views/Welcome.tsx</code> to customize this page.
           </div>
           <div className="footer-links">
             <a href={docsUrl} className="footer-link">Docs</a>

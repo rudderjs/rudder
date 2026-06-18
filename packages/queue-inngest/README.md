@@ -81,7 +81,7 @@ await SendWelcomeEmailJob.dispatch('alice@example.com', 'Alice').send()
 
 ## Event Naming
 
-RudderJS maps job class names to Inngest event names:
+Rudder maps job class names to Inngest event names:
 
 ```
 rudderjs/job.<ClassName>

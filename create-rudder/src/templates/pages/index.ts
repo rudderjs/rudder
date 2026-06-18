@@ -98,7 +98,7 @@ export function pagesIndexData(ctx: TemplateContext): string {
 }
 
 export async function data(): Promise<Data> {
-  return { message: 'Welcome to RudderJS' }
+  return { message: 'Welcome to Rudder' }
 }
 `
   }
@@ -153,7 +153,7 @@ export default function Page() {
   return (
     <div className="error-wrap">
       <h1 className="heading-lg">${ctx.name}</h1>
-      <p className="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+      <p className="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
       <div className="footer-links muted">
         <a href="/api/health" className="auth-link">API Health</a>${extraLinksStr}
@@ -188,7 +188,7 @@ export default function Page() {
   return (
     <div className="error-wrap">
       <h1 className="heading-lg">${ctx.name}</h1>
-      <p className="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+      <p className="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
       {user ? (
         <>
@@ -233,7 +233,7 @@ const data = useData<Data>()
 <template>
   <div class="error-wrap">
     <h1 class="heading-lg">${ctx.name}</h1>
-    <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <p class="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
     <div class="footer-links muted">
       <a href="/api/health" class="auth-link">API Health</a>${extraStr}
@@ -268,7 +268,7 @@ async function signOut() {
 <template>
   <div class="error-wrap">
     <h1 class="heading-lg">${ctx.name}</h1>
-    <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <p class="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
     <template v-if="user">
       <p class="nav-badge">
@@ -308,7 +308,7 @@ export default function Page() {
   return (
     <div class="error-wrap">
       <h1 class="heading-lg">${ctx.name}</h1>
-      <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+      <p class="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
       <div class="footer-links muted">
         <a href="/api/health" class="auth-link">API Health</a>${extraStr}
@@ -343,7 +343,7 @@ export default function Page() {
   return (
     <div class="error-wrap">
       <h1 class="heading-lg">${ctx.name}</h1>
-      <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+      <p class="muted">Built with Rudder — Laravel-inspired Node.js framework.</p>
 
       <Show
         when={user()}

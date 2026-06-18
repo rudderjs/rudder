@@ -2,13 +2,13 @@
 
 ## Overview
 
-`@rudderjs/core` is the foundation of a RudderJS application. It provides the Application class, a Laravel-style DI container, service provider lifecycle, event dispatching, form request validation (via Zod), exception handling, and typed configuration. It re-exports essentials from `@rudderjs/support`, `@rudderjs/contracts`, and `@rudderjs/console` so most apps only need to import from `@rudderjs/core`.
+`@rudderjs/core` is the foundation of a Rudder application. It provides the Application class, a Laravel-style DI container, service provider lifecycle, event dispatching, form request validation (via Zod), exception handling, and typed configuration. It re-exports essentials from `@rudderjs/support`, `@rudderjs/contracts`, and `@rudderjs/console` so most apps only need to import from `@rudderjs/core`.
 
 ## Key Patterns
 
 ### Application Bootstrap
 
-Every RudderJS app is wired in `bootstrap/app.ts` using the builder pattern:
+Every Rudder app is wired in `bootstrap/app.ts` using the builder pattern:
 
 ```ts
 import 'reflect-metadata'

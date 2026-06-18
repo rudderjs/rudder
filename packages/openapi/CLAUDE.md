@@ -1,6 +1,6 @@
 # @rudderjs/openapi
 
-Auto-generate an **OpenAPI 3.1** spec (+ optional Swagger UI) from RudderJS typed
+Auto-generate an **OpenAPI 3.1** spec (+ optional Swagger UI) from Rudder typed
 routes. Opt-in package (Lighthouse model) — **never pulled into the kernel**;
 auto-discovery is OFF by default so docs are never exposed unless the app asks.
 

@@ -21,7 +21,7 @@ export interface McpClientToolsHandle extends ReadonlyArray<Tool> {
 }
 
 /**
- * Connect to a remote MCP server and surface its tools as RudderJS `Tool`s.
+ * Connect to a remote MCP server and surface its tools as Rudder `Tool`s.
  *
  * Three transport shapes are accepted:
  *

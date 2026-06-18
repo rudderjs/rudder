@@ -1,6 +1,6 @@
 # @rudderjs/horizon
 
-Queue monitoring dashboard for RudderJS — tracks job lifecycle, queue metrics, and worker status with a built-in UI.
+Queue monitoring dashboard for Rudder — tracks job lifecycle, queue metrics, and worker status with a built-in UI.
 
 ## Installation
 

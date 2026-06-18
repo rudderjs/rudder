@@ -399,7 +399,7 @@ export interface DatabasePersistenceConfig {
   table?: string
   /**
    * Pass an adapter directly instead of resolving `app().make('db')`.
-   * Anything with `query(table)` returning a RudderJS-shaped QueryBuilder
+   * Anything with `query(table)` returning a Rudder-shaped QueryBuilder
    * works — useful for tests or multi-connection setups.
    */
   adapter?: unknown
@@ -448,7 +448,7 @@ function toBuffer(update: Uint8Array): Buffer {
 /**
  * Database persistence over the active ORM adapter (`app().make('db')`) —
  * the first-party option for apps on the native engine, where `syncPrisma()`
- * has no client to resolve. Works against any adapter exposing the RudderJS
+ * has no client to resolve. Works against any adapter exposing the Rudder
  * `query(table)` surface (native, Prisma, Drizzle), sharing the adapter's
  * existing connection — no second pool.
  *
@@ -492,7 +492,7 @@ export function syncDatabase(config: DatabasePersistenceConfig = {}): SyncPersis
     if (!adapter || typeof adapter.query !== 'function') {
       throw new Error(
         '[Sync] syncDatabase() resolved a "db" binding without a query(table) method — ' +
-          'the active database provider does not expose a RudderJS ORM adapter.',
+          'the active database provider does not expose a Rudder ORM adapter.',
       )
     }
     cachedAdapter = adapter

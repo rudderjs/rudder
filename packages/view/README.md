@@ -1,6 +1,6 @@
 # @rudderjs/view
 
-Laravel-style controller-returned views for RudderJS, rendered through Vike's SSR pipeline.
+Laravel-style controller-returned views for Rudder, rendered through Vike's SSR pipeline.
 
 ```ts
 import { Route } from '@rudderjs/router'
@@ -39,7 +39,7 @@ The two coexist: a single app can have `pages/index/+Page.tsx` (Vike) and `app/V
 
 ## Installation
 
-This package is part of the RudderJS monorepo and is included by default in projects scaffolded with `create-rudder`. To add it manually:
+This package is part of the Rudder monorepo and is included by default in projects scaffolded with `create-rudder`. To add it manually:
 
 ```bash
 pnpm add @rudderjs/view @rudderjs/vite vike
@@ -398,7 +398,7 @@ For SPA navigation, a separate fetch handler in `@rudderjs/server-hono` recogniz
 | Client router | Custom Inertia router | Vike's built-in router |
 | Code splitting | Runtime registry lookup | Build-time per-page chunks (Vite) |
 | Streaming SSR | No | Yes (Vike inherits) |
-| Backend coupling | Any (PHP, Rails, Node) | RudderJS + Vike + Vite specifically |
+| Backend coupling | Any (PHP, Rails, Node) | Rudder + Vike + Vite specifically |
 
 The cost of Vike + Vite coupling buys: smaller payloads, no adapter overhead, build-time code splitting, streaming SSR, automatic prefetching. The pitch in one line: **Inertia's DX, Vike's performance, Laravel's ergonomics.**
 

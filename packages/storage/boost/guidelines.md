@@ -2,7 +2,7 @@
 
 ## Overview
 
-Filesystem facade for RudderJS. Provides a `Storage` facade, named disks, and driver registry. Ships with built-in `local` and `s3` drivers. Files written to the `public` disk become directly browser-accessible via a one-time `rudder storage:link` symlink (mirrors Laravel's `php artisan storage:link`).
+Filesystem facade for Rudder. Provides a `Storage` facade, named disks, and driver registry. Ships with built-in `local` and `s3` drivers. Files written to the `public` disk become directly browser-accessible via a one-time `rudder storage:link` symlink (mirrors Laravel's `php artisan storage:link`).
 
 ## Key Patterns
 

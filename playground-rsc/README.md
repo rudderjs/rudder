@@ -1,7 +1,7 @@
 # playground-rsc
 
-**Experimental** RudderJS demo app running on **React Server Components** via
-[`vike-react-rsc-rudder`](../packages/vike-react-rsc) (a RudderJS-maintained
+**Experimental** Rudder demo app running on **React Server Components** via
+[`vike-react-rsc-rudder`](../packages/vike-react-rsc) (a Rudder-maintained
 fork of nitedani's `vike-react-rsc`), instead of the default
 whole-page-hydration `vike-react` renderer.
 
@@ -33,6 +33,6 @@ pnpm dev            # vike dev
 
 ## Status
 
-Experimental. `vike-react` remains the supported default for RudderJS apps; RSC
+Experimental. `vike-react` remains the supported default for Rudder apps; RSC
 support is opt-in and tracks a young community extension. See
 `docs/plans/2026-05-23-vike-react-rsc-integration.md`.

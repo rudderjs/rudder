@@ -328,10 +328,10 @@ describe('@Inject token override', () => {
     Reflect.defineMetadata('design:paramtypes', [String], Consumer)
 
     const c = new Container()
-    c.instance('app.name', 'RudderJS')
+    c.instance('app.name', 'Rudder')
 
     const inst = c.make(Consumer)
-    assert.strictEqual(inst.name, 'RudderJS')
+    assert.strictEqual(inst.name, 'Rudder')
   })
 
   it('resolves the parameter by a symbol token', () => {

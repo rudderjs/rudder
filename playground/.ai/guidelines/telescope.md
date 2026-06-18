@@ -2,7 +2,7 @@
 
 ## What This Package Does
 
-Telescope is a development inspector for RudderJS applications. It records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache operations, scheduled tasks, and model changes — providing a JSON API and (future) UI for introspection.
+Telescope is a development inspector for Rudder applications. It records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache operations, scheduled tasks, and model changes — providing a JSON API and (future) UI for introspection.
 
 ## Architecture
 

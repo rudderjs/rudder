@@ -2,7 +2,7 @@
 
 ## Overview
 
-Full-featured authentication and authorization package for RudderJS. Provides session-based guards, an Eloquent user provider, password reset broker, email verification, and a Laravel-style Gate/Policy authorization system. Uses `AsyncLocalStorage` for request-scoped auth context, integrates with `@rudderjs/hash` for password checking and `@rudderjs/session` for cookie-based sessions.
+Full-featured authentication and authorization package for Rudder. Provides session-based guards, an Eloquent user provider, password reset broker, email verification, and a Laravel-style Gate/Policy authorization system. Uses `AsyncLocalStorage` for request-scoped auth context, integrates with `@rudderjs/hash` for password checking and `@rudderjs/session` for cookie-based sessions.
 
 ## Key Patterns
 

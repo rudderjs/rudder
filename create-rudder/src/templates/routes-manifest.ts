@@ -35,7 +35,7 @@ export function getProfileRoutes(ctx: TemplateContext): RouteSpec[] {
   // no-frontend (vanilla welcome via @rudderjs/view's html``). Multi-framework
   // scaffolds use pages/index/+Page.* instead — same URL, different shape.
   if (ctx.frameworks.length === 1 || isApiOnly) {
-    routes.push({ path: '/', contributedBy: 'welcome', ssrMarker: 'Built with RudderJS' })
+    routes.push({ path: '/', contributedBy: 'welcome', ssrMarker: 'Built with Rudder' })
   } else if (ctx.frameworks.length > 1) {
     routes.push({ path: '/', contributedBy: 'welcome' })
   }

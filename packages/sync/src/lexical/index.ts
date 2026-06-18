@@ -1,5 +1,5 @@
 /**
- * `@rudderjs/sync/lexical` — Lexical editor adapter for the RudderJS
+ * `@rudderjs/sync/lexical` — Lexical editor adapter for the Rudder
  * sync engine.
  *
  * Lexical's `@lexical/yjs` binding represents the editor state as a

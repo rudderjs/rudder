@@ -1,6 +1,6 @@
 # @rudderjs/server-hono
 
-Hono-based HTTP server adapter for RudderJS. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, and the Vike SSR fetch handler.
+Hono-based HTTP server adapter for Rudder. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, and the Vike SSR fetch handler.
 
 ## Installation
 

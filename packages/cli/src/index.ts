@@ -76,7 +76,7 @@ async function resolveAppRoot(): Promise<string | null> {
 }
 
 /**
- * Bootstrap the RudderJS application so providers (DB, etc.) are ready before
+ * Bootstrap the Rudder application so providers (DB, etc.) are ready before
  * running any command.
  */
 async function bootApp(): Promise<void> {

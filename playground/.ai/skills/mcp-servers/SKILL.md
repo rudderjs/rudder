@@ -1,6 +1,6 @@
 ---
 name: mcp-servers
-description: Building MCP servers with tools, resources, prompts, decorators, and HTTP/stdio transports in RudderJS
+description: Building MCP servers with tools, resources, prompts, decorators, and HTTP/stdio transports in Rudder
 license: MIT
 appliesTo:
   - '@rudderjs/mcp'

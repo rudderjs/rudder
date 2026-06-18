@@ -1,6 +1,6 @@
 # rudderjs-playground-web
 
-WebContainer-bootable variant of the canonical `playground/`. Designed to run inside StackBlitz / Bolt.new without native bindings or raw TCP sockets, so we can ship a "click → running RudderJS in your browser" link from the homepage.
+WebContainer-bootable variant of the canonical `playground/`. Designed to run inside StackBlitz / Bolt.new without native bindings or raw TCP sockets, so we can ship a "click → running Rudder in your browser" link from the homepage.
 
 > See `docs/plans/2026-04-30-webcontainer-playground.md` for the full plan, Phase 0 spike results, and Prisma 7 corrections.
 

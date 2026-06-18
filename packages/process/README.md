@@ -1,6 +1,6 @@
 # @rudderjs/process
 
-Shell execution facade for RudderJS — run commands, pool parallel execution, pipe output, and fake everything for testing.
+Shell execution facade for Rudder — run commands, pool parallel execution, pipe output, and fake everything for testing.
 
 ## Installation
 

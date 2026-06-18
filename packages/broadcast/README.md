@@ -1,6 +1,6 @@
 # @rudderjs/broadcast
 
-Native WebSocket server for RudderJS — channel-based pub/sub with public, private, and presence channels. Runs on the same port as your HTTP server. No Pusher, no Echo, no external service required.
+Native WebSocket server for Rudder — channel-based pub/sub with public, private, and presence channels. Runs on the same port as your HTTP server. No Pusher, no Echo, no external service required.
 
 ## Installation
 
@@ -45,7 +45,7 @@ Broadcast.channel('presence-room.*', async (req) => {
 
 ## Channels
 
-RudderJS WebSockets are organized into three types:
+Rudder WebSockets are organized into three types:
 
 | Type | Class | Prefix | Auth |
 |---|---|---|---|

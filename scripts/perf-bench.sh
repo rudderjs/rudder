@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Performance comparison runner — RudderJS vs Next.js / Nuxt / SvelteKit.
+# Performance comparison runner — Rudder vs Next.js / Nuxt / SvelteKit.
 #
 # Usage: scripts/perf-bench.sh [<bench-root>]
 #   <bench-root> defaults to ~/perf-bench
@@ -195,7 +195,7 @@ measure_client_js_payload() {
   echo "$total"
 }
 
-# RudderJS internals — boots with RUDDER_PERF_TRACE=1, parses [perf] lines.
+# Rudder internals — boots with RUDDER_PERF_TRACE=1, parses [perf] lines.
 measure_rudderjs_internals() {
   local dir cmd
   dir=$(fw_dir rudderjs)
@@ -303,7 +303,7 @@ main() {
   done
 
   echo
-  echo "==> RudderJS internals"
+  echo "==> Rudder internals"
   local pd_med
   pd_med=$(measure_providers_discover)
   echo "  providers:discover median: ${pd_med}s"

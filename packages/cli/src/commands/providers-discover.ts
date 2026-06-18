@@ -33,7 +33,7 @@ function shortName(pkg: string): string {
 export function providersDiscoverCommand(program: Command): void {
   program
     .command('providers:discover')
-    .description('Scan node_modules for RudderJS provider packages and write the manifest')
+    .description('Scan node_modules for Rudder provider packages and write the manifest')
     .action(async () => {
       const cwd = process.cwd()
 

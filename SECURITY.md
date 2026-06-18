@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-RudderJS is in early development. Security fixes are applied to the latest `main` and the most recent published minor release. Older versions are not backported.
+Rudder is in early development. Security fixes are applied to the latest `main` and the most recent published minor release. Older versions are not backported.
 
 ## Reporting a Vulnerability
 

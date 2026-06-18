@@ -4,7 +4,7 @@
  * The built-in registry exists so a fresh dev clone can boot before the user
  * has run `pnpm rudder providers:discover` even once. It is intentionally
  * minimal — six foundation/infrastructure entries that are almost certainly
- * installed in any RudderJS app. Real apps get the full picture from the
+ * installed in any Rudder app. Real apps get the full picture from the
  * generated manifest at `bootstrap/cache/providers.json`.
  */
 

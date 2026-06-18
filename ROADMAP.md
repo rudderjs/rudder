@@ -1,4 +1,4 @@
-# RudderJS Feature Roadmap
+# Rudder Feature Roadmap
 
 > Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-06-09
 >
@@ -480,11 +480,11 @@ Continuous improvements after 1.0 graduated. Not part of plans 1–10 — these 
 | Provider-boot leak audit | Connection/listener reuse across dev re-boots swept through 10+ packages (orm adapters, cache, session, broadcast, queue-bullmq, sync, monitoring, vite enhancers) | #652–#684 | ✅ |
 | Build toolchain | Vite 8 + rolldown across the monorepo and scaffolded apps | #691 | ✅ |
 | Introspection | `event:list`, `config:show`, `route:list --verbose` | #631 | ✅ |
-| Brand | RudderJS → **Rudder** prose rebrand + orange quarter-arc logo; `create-rudder` (drop the `-app` suffix); ANSI-art installer wordmark; harmonized dev boot banner | #574, #577, #599/#600, #786–#789 | ✅ |
+| Brand | Rudder → **Rudder** prose rebrand + orange quarter-arc logo; `create-rudder` (drop the `-app` suffix); ANSI-art installer wordmark; harmonized dev boot banner | #574, #577, #599/#600, #786–#789 | ✅ |
 | Client bundles | `@rudderjs/core/client` subpath + Client Bundle Smoke CI gate (browser-safe entries enforced) | #675 | ✅ |
 | Standard Schema | `@rudderjs/router` + `@rudderjs/contracts` `.body()` / `.query()` converge on the [Standard Schema](https://standardschema.dev) spec — Zod, Valibot, ArkType, etc. all validate route input through one interface; shared `@rudderjs/json-schema` converter registry (`z.date()` → `string` + `date-time`) backs MCP + AI + OpenAPI | #997, #998, #1000, #1001 | ✅ |
 | Typed responses | `.responds(schema)` on a route declares its response shape — `TypedResponse` is checked against it at the handler, and the schema is retained for OpenAPI generation | #995 | ✅ |
 | OpenAPI | `@rudderjs/openapi` (new) — `openapi:generate` walks registered routes (`.body`/`.query`/`.responds` schemas → JSON Schema via the shared converter) and emits an OpenAPI 3.1 document; `/docs` serves a live Swagger UI | #996 | ✅ |
 | Maintenance mode | `rudder down` / `rudder up` (Laravel `artisan down`/`up`) — `storage/framework/down` flag file, kernel `503` middleware auto-installed first, `--secret` bypass cookie, `--retry`/`--message`/`--allow`, `evenInMaintenanceMode()` scheduler opt-out (3.7) | #993 | ✅ |
 | Generators | New CLI scaffolders — `make:policy`, `make:observer`, `make:cast`, `make:notification`; `make:exception --status <code>`; `-t, --with-test` on every CLI-owned `make:*` (feature test for `make:controller`, unit test otherwise) | #994, #976, #978 | ✅ |
-| Comparative ORM bench | `@rudderjs/benchmarks` (private) — query-layer head-to-head vs Prisma + Drizzle on an identical SQLite schema/dataset, 10 ops, result-parity asserted before timing, mitata runner, committed `results/REPORT.md` (RudderJS fastest on 7/10; Drizzle leads hydration-heavy reads). §14 #11; SQLite-first, Postgres follow-up | benchmarks/ | ✅ |
+| Comparative ORM bench | `@rudderjs/benchmarks` (private) — query-layer head-to-head vs Prisma + Drizzle on an identical SQLite schema/dataset, 10 ops, result-parity asserted before timing, mitata runner, committed `results/REPORT.md` (Rudder fastest on 7/10; Drizzle leads hydration-heavy reads). §14 #11; SQLite-first, Postgres follow-up | benchmarks/ | ✅ |

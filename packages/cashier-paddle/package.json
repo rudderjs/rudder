@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/cashier-paddle",
   "version": "5.1.1",
-  "description": "Paddle billing for RudderJS — port of Laravel Cashier Paddle (Billable mixin, subscriptions, webhooks, checkout).",
+  "description": "Paddle billing for Rudder — port of Laravel Cashier Paddle (Billable mixin, subscriptions, webhooks, checkout).",
   "rudderjs": {
     "provider": "CashierPaddleProvider",
     "stage": "feature",

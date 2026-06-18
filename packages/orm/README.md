@@ -1,6 +1,6 @@
 # @rudderjs/orm
 
-ORM contract, `Model` base class, and `ModelRegistry` for RudderJS applications.
+ORM contract, `Model` base class, and `ModelRegistry` for Rudder applications.
 
 ```bash
 pnpm add @rudderjs/orm

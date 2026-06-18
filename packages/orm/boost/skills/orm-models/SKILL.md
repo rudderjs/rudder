@@ -1,6 +1,6 @@
 ---
 name: orm-models
-description: Creating Eloquent-style models, queries, relationships, casts, factories, and API resources in RudderJS
+description: Creating Eloquent-style models, queries, relationships, casts, factories, and API resources in Rudder
 license: MIT
 appliesTo:
   - '@rudderjs/orm'

@@ -1,6 +1,6 @@
 # Auto-Audit Playbook
 
-The runbook for the **recurring per-package audit** of the RudderJS framework. A scheduled
+The runbook for the **recurring per-package audit** of the Rudder framework. A scheduled
 cloud agent (a `/schedule` cron routine) reads this file and the rotation tracker on every
 fire, audits exactly one package across six dimensions, and files capped, deduplicated issues.
 

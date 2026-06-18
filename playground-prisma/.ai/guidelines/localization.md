@@ -36,7 +36,7 @@ export default [LocalizationProvider]
 ```ts
 import { trans, __, preloadNamespace } from '@rudderjs/localization'
 
-await trans('messages.welcome', { app: 'RudderJS' })  // 'Welcome to RudderJS!'
+await trans('messages.welcome', { app: 'Rudder' })  // 'Welcome to Rudder!'
 await trans('messages.items',   5)                    // pluralized — pass a number for count
 
 // __() only resolves from already-loaded namespaces; preload first if you need sync access
@@ -72,7 +72,7 @@ setLocale('es')
 
 // Scoped — runs `fn` with the given locale active in the current async chain
 await runWithLocale('es', async () => {
-  return await trans('messages.welcome', { app: 'RudderJS' })  // resolves in 'es'
+  return await trans('messages.welcome', { app: 'Rudder' })  // resolves in 'es'
 })
 
 // Built-in middleware reads Accept-Language and wraps the request in runWithLocale()

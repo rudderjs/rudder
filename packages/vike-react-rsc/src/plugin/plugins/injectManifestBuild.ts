@@ -30,7 +30,7 @@ export function vikeRscManifestPluginBuild(): Plugin {
                 const chunk = output as OutputChunk;
 
                 // Check if this is a page entry.
-                // RudderJS vendor change: vike renamed this virtual id from
+                // Rudder vendor change: vike renamed this virtual id from
                 // `virtual:vike:pageConfigValuesAll:server:` to
                 // `virtual:vike:page-entry:server:` (vike >=0.4.257). Without
                 // this, the production RSC manifest is empty and rendering 500s

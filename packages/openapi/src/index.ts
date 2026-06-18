@@ -1,4 +1,4 @@
-// @rudderjs/openapi — auto-generate an OpenAPI 3.1 spec from RudderJS typed
+// @rudderjs/openapi — auto-generate an OpenAPI 3.1 spec from Rudder typed
 // routes. Opt-in (Lighthouse model): never pulled into the kernel, auto-discovery
 // off by default. See CLAUDE.md.
 

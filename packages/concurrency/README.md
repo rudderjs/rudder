@@ -1,6 +1,6 @@
 # @rudderjs/concurrency
 
-Parallel execution for RudderJS — run tasks in worker threads, defer fire-and-forget work, and switch to a sync driver for testing.
+Parallel execution for Rudder — run tasks in worker threads, defer fire-and-forget work, and switch to a sync driver for testing.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/process",
   "version": "1.2.0",
-  "description": "Shell execution facade for RudderJS — run commands, pools, pipes, timeouts, and Process.fake() for testing",
+  "description": "Shell execution facade for Rudder — run commands, pools, pipes, timeouts, and Process.fake() for testing",
   "license": "MIT",
   "repository": {
     "type": "git",

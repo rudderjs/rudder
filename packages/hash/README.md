@@ -1,6 +1,6 @@
 # @rudderjs/hash
 
-One-way password hashing for RudderJS. Built-in drivers: **bcrypt** (default) and **argon2**.
+One-way password hashing for Rudder. Built-in drivers: **bcrypt** (default) and **argon2**.
 
 ## Installation
 

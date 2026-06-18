@@ -1,6 +1,6 @@
 # Native Engine
 
-The **native engine** is RudderJS's built-in, first-party SQL query engine. It lives in **`@rudderjs/database`** — the SQL data-layer foundation `@rudderjs/orm` is built on, installed automatically as its dependency (the historical `@rudderjs/orm/native` subpath keeps working as a re-export alias) — no external ORM, no separate adapter package. It talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), brings its own Laravel-style schema builder and migration runner, and **generates your models' column types from the migrated schema** so they can't drift.
+The **native engine** is Rudder's built-in, first-party SQL query engine. It lives in **`@rudderjs/database`** — the SQL data-layer foundation `@rudderjs/orm` is built on, installed automatically as its dependency (the historical `@rudderjs/orm/native` subpath keeps working as a re-export alias) — no external ORM, no separate adapter package. It talks directly to the database driver (`better-sqlite3`, `postgres`, or `mysql2`), brings its own Laravel-style schema builder and migration runner, and **generates your models' column types from the migrated schema** so they can't drift.
 
 It's the default engine scaffolded by `create-rudder`. Pick it when you want a first-party data layer with no external ORM; reach for the [Prisma](/guide/database/prisma) or [Drizzle](/guide/database/drizzle) adapters when you want their schema tooling or ecosystem.
 

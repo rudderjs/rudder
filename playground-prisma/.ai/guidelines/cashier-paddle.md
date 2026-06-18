@@ -2,7 +2,7 @@
 
 ## Overview
 
-Paddle billing integration for RudderJS. Provides subscription management, customer records, webhook intake, checkout session creation, and pricing previews. The `Cashier` static facade is the configuration entry point; the `Billable` mixin attaches subscription / customer methods to your `User` model. Mirrors Laravel Cashier's surface.
+Paddle billing integration for Rudder. Provides subscription management, customer records, webhook intake, checkout session creation, and pricing previews. The `Cashier` static facade is the configuration entry point; the `Billable` mixin attaches subscription / customer methods to your `User` model. Mirrors Laravel Cashier's surface.
 
 ## Key Patterns
 

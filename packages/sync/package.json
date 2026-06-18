@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/sync",
   "version": "1.12.1",
-  "description": "Real-time collaborative document sync engine for RudderJS — Yjs CRDT over WebSocket, with a Lexical editor adapter under a subpath export.",
+  "description": "Real-time collaborative document sync engine for Rudder — Yjs CRDT over WebSocket, with a Lexical editor adapter under a subpath export.",
   "rudderjs": {
     "provider": "SyncProvider",
     "stage": "feature"

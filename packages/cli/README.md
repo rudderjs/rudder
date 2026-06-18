@@ -1,6 +1,6 @@
 # @rudderjs/cli
 
-RudderJS CLI — code generators, module scaffolding, and rudder command dispatch.
+Rudder CLI — code generators, module scaffolding, and rudder command dispatch.
 
 ## Installation
 
@@ -28,7 +28,7 @@ pnpm rudder make:controller User # Generate a controller
 pnpm rudder db:seed              # Run a user-defined command
 ```
 
-**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the RudderJS application before dispatching commands — all service providers, DI bindings, and database connections are available.
+**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the Rudder application before dispatching commands — all service providers, DI bindings, and database connections are available.
 
 ## How It Works
 

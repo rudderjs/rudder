@@ -40,7 +40,7 @@ export class ModelCollector implements Collector {
 
   /**
    * Safely converts a model instance to a plain object. If the value has
-   * a `toJSON()` method (e.g. RudderJS Model), use it. Otherwise try
+   * a `toJSON()` method (e.g. Rudder Model), use it. Otherwise try
    * JSON round-trip with a circular-reference guard. Falls back to
    * `String(value)` if all else fails.
    */
@@ -121,7 +121,7 @@ function safeSerialize(value: unknown): unknown {
   if (value === null || value === undefined) return value
   if (typeof value !== 'object') return value
 
-  // If the model has toJSON(), trust it — RudderJS Models strip hidden fields
+  // If the model has toJSON(), trust it — Rudder Models strip hidden fields
   if (typeof (value as Record<string, unknown>)['toJSON'] === 'function') {
     try { return (value as { toJSON(): unknown }).toJSON() } catch { /* fall through */ }
   }

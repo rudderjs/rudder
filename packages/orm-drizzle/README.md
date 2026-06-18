@@ -1,6 +1,6 @@
 # @rudderjs/orm-drizzle
 
-Drizzle ORM adapter for RudderJS. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
+Drizzle ORM adapter for Rudder. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
 
 ---
 

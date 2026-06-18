@@ -37,7 +37,7 @@ export default function DemosIndex() {
       <nav className="page-nav">
         <div className="brand">
           <span className="brand-dot" />
-          RudderJS
+          Rudder
         </div>
         <div className="nav-right">
           <a href="/" className="nav-link">Home</a>

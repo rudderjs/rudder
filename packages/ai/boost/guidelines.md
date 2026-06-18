@@ -2,7 +2,7 @@
 
 ## Overview
 
-AI engine for RudderJS providing a provider-agnostic agent framework with tool calling, streaming, middleware, attachments, conversation persistence, structured output, and queued execution. Supports Anthropic, OpenAI, Google, Ollama, DeepSeek, xAI, Groq, Mistral, and Azure OpenAI out of the box. Models are addressed via `provider/model` strings (e.g. `anthropic/claude-sonnet-4-5`), and the `AiRegistry` handles provider resolution and failover.
+AI engine for Rudder providing a provider-agnostic agent framework with tool calling, streaming, middleware, attachments, conversation persistence, structured output, and queued execution. Supports Anthropic, OpenAI, Google, Ollama, DeepSeek, xAI, Groq, Mistral, and Azure OpenAI out of the box. Models are addressed via `provider/model` strings (e.g. `anthropic/claude-sonnet-4-5`), and the `AiRegistry` handles provider resolution and failover.
 
 ## Key Patterns
 

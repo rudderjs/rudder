@@ -1,10 +1,10 @@
-# AI SDK Comparison — RudderJS vs Laravel vs Vercel vs TanStack
+# AI SDK Comparison — Rudder vs Laravel vs Vercel vs TanStack
 
 > Last updated: 2026-05-14 (post A1–A7 + B1–B10 + B8.5 shipment)
 
 ## Philosophy
 
-| | RudderJS AI | Laravel AI SDK | Vercel AI SDK | TanStack AI |
+| | Rudder AI | Laravel AI SDK | Vercel AI SDK | TanStack AI |
 |---|---|---|---|---|
 | **Language** | TypeScript (ESM, strict) | PHP (Laravel 13+) | TypeScript/JS | TypeScript/JS |
 | **Maturity** | 1.6.2 (1.0 graduated 2026-05-02; full A/B roadmap shipped 2026-05-11) | Stable (March 2026) | Stable (v6, 40M+/mo) | Alpha |
@@ -18,7 +18,7 @@
 
 ## Provider Support
 
-| Provider | RudderJS | Laravel | Vercel | TanStack |
+| Provider | Rudder | Laravel | Vercel | TanStack |
 |---|:---:|:---:|:---:|:---:|
 | Anthropic | ✅ | ✅ | ✅ | ✅ |
 | OpenAI | ✅ | ✅ | ✅ | ✅ |
@@ -43,7 +43,7 @@
 
 ## Core Capabilities
 
-| Capability | RudderJS | Laravel | Vercel | TanStack |
+| Capability | Rudder | Laravel | Vercel | TanStack |
 |---|:---:|:---:|:---:|:---:|
 | Text generation | ✅ `agent.prompt()` | ✅ `$agent->prompt()` | ✅ `generateText()` | ✅ adapter calls |
 | Streaming | ✅ `agent.stream()` + chunks | ✅ `stream: true` | ✅ `streamText()` | ✅ SSE/HTTP stream |
@@ -64,7 +64,7 @@
 
 ## Agent & Multi-Step
 
-| | RudderJS | Laravel | Vercel | TanStack |
+| | Rudder | Laravel | Vercel | TanStack |
 |---|---|---|---|---|
 | **Agent class** | ✅ `Agent` base class + `agent()` inline | ✅ PHP classes + `make:agent` | ✅ `Agent` + `ToolLoopAgent` | ✅ loop strategies |
 | **Tool loop** | ✅ auto re-prompt, configurable stops | ✅ automatic | ✅ automatic, 20-step default | ✅ `maxIterations` |
@@ -87,7 +87,7 @@
 
 ## Streaming & Protocol
 
-| | RudderJS | Laravel | Vercel | TanStack |
+| | Rudder | Laravel | Vercel | TanStack |
 |---|---|---|---|---|
 | **Chunk types** | text-delta, tool-call, tool-result, tool-update, usage, finish, pending-client-tools, pending-approval | text, tool-call, tool-result, finish | text-delta, tool-call, tool-result, finish, step-finish | text, tool, finish |
 | **Vercel protocol compat** | ✅ `toVercelDataStream()` / `toVercelResponse()` | ✅ supported | ✅ native | — |
@@ -100,7 +100,7 @@
 
 ## Middleware & Observability
 
-| | RudderJS | Laravel | Vercel | TanStack |
+| | Rudder | Laravel | Vercel | TanStack |
 |---|---|---|---|---|
 | **Middleware** | ✅ 8 hooks (config, chunk, before/after tool, usage, abort, error, sequential) | ✅ agent-level middleware classes | ✅ model wrapping middleware | — |
 | **Observer/events** | ✅ `aiObservers` globalThis registry | ✅ Laravel events (`Prompted`, `ToolCalled`, etc.) | ✅ OpenTelemetry integration | ✅ typed observability events |
@@ -112,20 +112,20 @@
 
 ## Frontend / UI Hooks
 
-| | RudderJS | Laravel | Vercel | TanStack |
+| | Rudder | Laravel | Vercel | TanStack |
 |---|---|---|---|---|
 | **Chat hook** | — (server SDK; use Vercel protocol on frontend) | — (server SDK) | ✅ `useChat()` | ✅ `useChat()` |
 | **Completion hook** | — | — | ✅ `useCompletion()` | — |
 | **Object streaming** | — | — | ✅ `useObject()` | — |
 | **Framework support** | Server-side (any Node.js) | PHP/Laravel (backend only) | React, Vue, Svelte, Angular, Expo | React, Solid, Preact |
 
-> RudderJS and Laravel are server-side SDKs. Frontend chat UI is handled by consuming the Vercel AI protocol stream or custom SSE — wire up your own UI or use any frontend chat library that speaks the protocol.
+> Rudder and Laravel are server-side SDKs. Frontend chat UI is handled by consuming the Vercel AI protocol stream or custom SSE — wire up your own UI or use any frontend chat library that speaks the protocol.
 
 ---
 
 ## Testing
 
-| | RudderJS | Laravel | Vercel | TanStack |
+| | Rudder | Laravel | Vercel | TanStack |
 |---|---|---|---|---|
 | **Text fake** | ✅ `AiFake.respondWith()` | ✅ `AgentFake::agents()` | ✅ mock model | — |
 | **Image fake** | ✅ `respondWithImage()` | ✅ `ImageFake` | — | — |
@@ -139,7 +139,7 @@
 
 ---
 
-## RudderJS-Unique Features
+## Rudder-Unique Features
 
 Features in `@rudderjs/ai` not found in the other three:
 
@@ -164,7 +164,7 @@ Features in `@rudderjs/ai` not found in the other three:
 
 ---
 
-## Remaining Gaps (RudderJS vs Field)
+## Remaining Gaps (Rudder vs Field)
 
 | Gap | Laravel | Vercel | Status | Notes |
 |---|:---:|:---:|---|---|
@@ -203,18 +203,18 @@ Features in `@rudderjs/ai` not found in the other three:
 
 | Feature | Why Not |
 |---|---|
-| **Frontend hooks** (`useChat`, etc.) | RudderJS is a server framework. Frontend consumes Vercel AI protocol via `toVercelResponse()` — bring your own chat UI. |
+| **Frontend hooks** (`useChat`, etc.) | Rudder is a server framework. Frontend consumes Vercel AI protocol via `toVercelResponse()` — bring your own chat UI. |
 | **Vector stores** | Provider-specific, low abstraction value. Users call provider SDKs directly. |
-| **Durable agents** | RudderJS agents use queue integration + conversation persistence instead. Different pattern, same outcome. |
+| **Durable agents** | Rudder agents use queue integration + conversation persistence instead. Different pattern, same outcome. |
 | **Video generation** | Niche. Can be added as a provider adapter later. |
 | **Stream resume** | Complexity vs value. SSE reconnect at the transport layer is sufficient. |
 
 ---
 
-## Architecture Difference: RudderJS vs The Field
+## Architecture Difference: Rudder vs The Field
 
 ```
-Laravel AI SDK          Vercel AI SDK           TanStack AI             RudderJS AI
+Laravel AI SDK          Vercel AI SDK           TanStack AI             Rudder AI
 ─────────────────       ─────────────────       ─────────────────       ─────────────────
 PHP classes             generateText()          openaiText()            Agent class
   + Eloquent traits       + streamText()          + anthropicText()       + agent() inline
@@ -239,4 +239,4 @@ Eloquent persistence    Platform-optional       Minimal, composable     Framewor
 Laravel events          OpenTelemetry           Typed events            globalThis observers + Telescope SSE
 ```
 
-**RudderJS's position:** Laravel's ergonomics (classes, DI, facades, testing fakes, queue) in TypeScript, with Vercel's streaming execution model, plus a layer of differentiators neither has: unified prompt caching across all three major providers, sub-agent streaming with mid-execution suspend, user memory + eval + budget enforcement as first-class APIs, and a runtime-agnostic core entry that works in browser / React Native / Electron without conditional imports. The Vercel AI protocol bridge means any Vercel-compatible frontend works without changes.
+**Rudder's position:** Laravel's ergonomics (classes, DI, facades, testing fakes, queue) in TypeScript, with Vercel's streaming execution model, plus a layer of differentiators neither has: unified prompt caching across all three major providers, sub-agent streaming with mid-execution suspend, user memory + eval + budget enforcement as first-class APIs, and a runtime-agnostic core entry that works in browser / React Native / Electron without conditional imports. The Vercel AI protocol bridge means any Vercel-compatible frontend works without changes.

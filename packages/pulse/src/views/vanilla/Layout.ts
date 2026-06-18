@@ -5,7 +5,7 @@ import { html, raw } from './_html.js'
  *
  * Vanilla mode — Alpine.js + Tailwind via CDN, no client framework
  * dependency, no build step. Self-contained so pulse can run in any
- * RudderJS app regardless of frontend stack.
+ * Rudder app regardless of frontend stack.
  */
 
 export interface LayoutProps {

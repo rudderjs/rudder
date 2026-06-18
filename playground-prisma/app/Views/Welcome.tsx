@@ -25,7 +25,7 @@ export default function Welcome(props: WelcomeProps) {
             Laravel&apos;s developer experience, Vike&apos;s performance, Node&apos;s ecosystem.
           </p>
           <div className="hero-meta">
-            <span>RudderJS v{props.rudderVersion}</span>
+            <span>Rudder v{props.rudderVersion}</span>
             <span>•</span>
             <span>Node {props.nodeVersion}</span>
             <span>•</span>

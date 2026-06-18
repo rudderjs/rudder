@@ -1,6 +1,6 @@
 # @rudderjs/boost
 
-AI developer experience layer for RudderJS. Exposes your project internals to AI coding assistants via MCP. Supports Claude Code, Cursor, GitHub Copilot, Codex CLI, Gemini CLI, and Windsurf.
+AI developer experience layer for Rudder. Exposes your project internals to AI coding assistants via MCP. Supports Claude Code, Cursor, GitHub Copilot, Codex CLI, Gemini CLI, and Windsurf.
 
 ## Installation
 

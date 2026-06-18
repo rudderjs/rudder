@@ -9,7 +9,7 @@ type RudderContainer = {
 function getContainer(): RudderContainer | undefined {
   const g = globalThis as Record<string, unknown>
   // `__rudderjs_app__` is the Application singleton (exposes `.make()`).
-  // `__rudderjs_instance__` is the RudderJS wrapper (does not).
+  // `__rudderjs_instance__` is the Rudder wrapper (does not).
   return (g['__rudderjs_app__'] as RudderContainer | undefined)
       ?? (g['__rudderjs_instance__'] as RudderContainer | undefined)
 }

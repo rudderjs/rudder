@@ -1,6 +1,6 @@
 # @rudderjs/pennant
 
-Feature flags for RudderJS — define features, check activation, scope to users/teams, and gradually roll out with Lottery.
+Feature flags for Rudder — define features, check activation, scope to users/teams, and gradually roll out with Lottery.
 
 ## Installation
 

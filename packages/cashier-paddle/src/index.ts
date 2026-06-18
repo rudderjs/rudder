@@ -79,7 +79,7 @@ import { WebhookLog }       from './models/WebhookLog.js'
 // ─── Service Provider ─────────────────────────────────────
 
 /**
- * `CashierPaddleProvider` — wires Paddle billing into a RudderJS app.
+ * `CashierPaddleProvider` — wires Paddle billing into a Rudder app.
  *
  * Boot order: `feature` stage (after auth + orm). Reads `config('cashier')`
  * and applies it to the static `Cashier` singleton.
@@ -151,6 +151,6 @@ export class CashierPaddleProvider extends ServiceProvider {
 export function cashier(_cfg?: CashierConfig): typeof CashierPaddleProvider {
   // Config is read from `config('cashier')` inside `boot()` — the factory
   // signature exists only to match the conventional `eventsProvider(...)` /
-  // `session(...)` shape RudderJS apps already use.
+  // `session(...)` shape Rudder apps already use.
   return CashierPaddleProvider
 }

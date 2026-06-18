@@ -1,4 +1,4 @@
-// RudderSocket — RudderJS WebSocket client
+// RudderSocket — Rudder WebSocket client
 // Published by: pnpm rudder vendor:publish --tag=ws-client
 // Copy this file anywhere in your frontend source (e.g. src/RudderSocket.ts)
 

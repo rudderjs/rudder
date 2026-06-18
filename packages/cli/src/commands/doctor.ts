@@ -20,7 +20,7 @@ export interface DoctorCommandDeps {
 export function doctorCommand(program: CommanderCommand, deps: DoctorCommandDeps): void {
   program
     .command('doctor')
-    .description('Diagnose common setup issues in a RudderJS app')
+    .description('Diagnose common setup issues in a Rudder app')
     .option('--deep',       'Also run checks that require booting the app (DB connect, port, …)')
     .option('--production', 'Also run prod-readiness checks (APP_DEBUG=false, DATABASE_URL not localhost, …)')
     .option('--fix',        'Auto-apply safe fixes for any failures that declare a fixer')
