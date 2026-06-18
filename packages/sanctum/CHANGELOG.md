@@ -1,5 +1,31 @@
 # @rudderjs/sanctum
 
+## 8.2.0
+
+### Minor Changes
+
+- e17461f: Add `Sanctum.actingAs(user, abilities?, guard?)` testing helper, mirroring Laravel's `Sanctum::actingAs()`. It authenticates a test as a user without seeding a token row or crafting a Bearer header by installing a `TransientToken` (also exported) that `SanctumMiddleware` and `RequireToken` pick up in place of header validation. Scoped abilities exercise 403 paths; `actingAsGuest()` clears the state. Test-only: ignored under `NODE_ENV=production`.
+- 1ad8065: Add `OrmTokenRepository`, a durable ORM-backed token store, from the new `@rudderjs/sanctum/orm` subpath. Previously only the in-memory `MemoryTokenRepository` shipped, so every production app had to write its own persistence layer before issuing real tokens.
+
+  `OrmTokenRepository` is a drop-in `TokenRepository` backed by a `PersonalAccessTokenModel` (string ULID primary key) that runs unchanged on the native engine, Prisma, and Drizzle. `@rudderjs/orm` is an optional peer dependency — install it only when you opt into durable storage. Pass an instance as the second argument to `sanctum()`:
+
+  ```ts
+  import { sanctum } from "@rudderjs/sanctum";
+  import { OrmTokenRepository } from "@rudderjs/sanctum/orm";
+
+  export default [
+    auth(configs.auth),
+    sanctum(config, new OrmTokenRepository()),
+  ];
+  ```
+
+  See the README for the matching migration.
+
+### Patch Changes
+
+- 1eb3c75: Fix timing side-channel in `MemoryTokenRepository.findByToken`: replace early-return loop with a full scan so iteration time is constant regardless of whether a match is found. Also documents `MemoryTokenRepository` as dev/testing only via `@internal` JSDoc.
+- 912af62: Return a generic 403 message from RequireToken in production to avoid leaking ability names to callers. In development mode, the specific ability name is still shown for easier debugging.
+
 ## 8.1.2
 
 ### Patch Changes
