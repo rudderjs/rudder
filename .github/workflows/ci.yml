@@ -698,17 +698,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Playwright chromium
-        # Skip the ~150MB browser download on cache hit. --with-deps still runs
-        # so system libs land even when binaries were cached.
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter create-rudder exec playwright install --with-deps chromium
-
-      - name: Install Playwright system deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
-        run: pnpm --filter create-rudder exec playwright install-deps chromium
+        run: pnpm --filter create-rudder exec playwright install --with-deps chromium
 
       - name: Build packages + scaffolder
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder'
@@ -767,15 +759,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Playwright chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter rudderjs-playground-rsc exec playwright install --with-deps chromium
-
-      - name: Install Playwright system deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
-        run: pnpm --filter rudderjs-playground-rsc exec playwright install-deps chromium
+        run: pnpm --filter rudderjs-playground-rsc exec playwright install --with-deps chromium
 
       - name: Build packages + playground-rsc (production)
         run: pnpm turbo run build --filter='./packages/*' --filter='rudderjs-playground-rsc'
