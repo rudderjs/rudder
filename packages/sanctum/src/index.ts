@@ -297,28 +297,49 @@ export class Sanctum {
 
     const unprefixed = prefix && raw.startsWith(prefix) ? raw.slice(prefix.length) : raw
 
+    let debug = false
+    try { debug = app().isDevelopment() } catch { /* no app context — skip debug logging */ }
+
     const pipeIdx = unprefixed.indexOf('|')
-    if (pipeIdx === -1) return null
+    if (pipeIdx === -1) {
+      if (debug) console.debug('[Rudder Sanctum] validateToken: malformed — no pipe delimiter')
+      return null
+    }
 
     const id    = unprefixed.slice(0, pipeIdx)
     const plain = unprefixed.slice(pipeIdx + 1)
-    if (!id || !plain) return null
+    if (!id || !plain) {
+      if (debug) console.debug('[Rudder Sanctum] validateToken: malformed — empty id or secret segment')
+      return null
+    }
 
     const hashed = Sanctum.hashToken(plain)
     const token = await this.tokens.findByToken(hashed)
-    if (!token) return null
-    if (token.id !== id) return null
+    if (!token) {
+      if (debug) console.debug('[Rudder Sanctum] validateToken: no record found for token hash')
+      return null
+    }
+    if (token.id !== id) {
+      if (debug) console.debug('[Rudder Sanctum] validateToken: id prefix mismatch')
+      return null
+    }
 
     // Check expiry. `<=` rejects a token whose expiry is exactly `now` (the
     // millisecond it expires it's no longer valid). The previous `<` allowed
     // a one-millisecond window of "expired but still accepted" use, which
     // was both technically wrong and a source of flaky millisecond-boundary
     // tests.
-    if (this.isExpired(token)) return null
+    if (this.isExpired(token)) {
+      if (debug) console.debug(`[Rudder Sanctum] validateToken: token ${token.id} is expired`)
+      return null
+    }
 
     // Resolve user
     const user = await this.users.retrieveById(token.userId)
-    if (!user) return null
+    if (!user) {
+      if (debug) console.debug(`[Rudder Sanctum] validateToken: user '${token.userId}' not found in provider`)
+      return null
+    }
 
     // Update last used
     await this.tokens.updateLastUsed(token.id, new Date())
@@ -447,6 +468,9 @@ function attachUserAndToken(req: AppRequest, user: Authenticatable, token: Perso
  * Attaches user + token to the request. Does not block unauthenticated requests.
  */
 export function SanctumMiddleware(): MiddlewareHandler {
+  // Resolved once on first real request (not per-request). Deferred past the
+  // `actingAs` short-circuit so test helpers work without a bound sanctum.
+  let sanctum: Sanctum | undefined
   return async function SanctumMiddleware(req, res, next) {
     // Test-mode short-circuit — `Sanctum.actingAs(user)` wins over any Bearer
     // header and needs no token store. Inert on a production runtime.
@@ -457,7 +481,8 @@ export function SanctumMiddleware(): MiddlewareHandler {
       return
     }
 
-    const sanctum = app().make<Sanctum>('sanctum')
+    sanctum ??= app().make<Sanctum>('sanctum')
+
     const authHeader = req.headers['authorization']
     if (authHeader) {
       const result = await sanctum.validateToken(authHeader)
@@ -476,6 +501,9 @@ function unauthenticated(res: Parameters<MiddlewareHandler>[1]): void {
  * Optionally checks for specific abilities.
  */
 export function RequireToken(...abilities: string[]): MiddlewareHandler {
+  // Same lazy-but-once pattern as SanctumMiddleware — deferred past the
+  // actingAs short-circuit so test helpers work without a bound sanctum.
+  let sanctum: Sanctum | undefined
   return async function RequireToken(req, res, next) {
     // Test-mode short-circuit — `Sanctum.actingAs(user, abilities)` authenticates
     // without a token store. Ability checks still run against the transient
@@ -496,7 +524,8 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
       return
     }
 
-    const sanctum = app().make<Sanctum>('sanctum')
+    sanctum ??= app().make<Sanctum>('sanctum')
+
     const authHeader = req.headers['authorization']
 
     if (!authHeader) {
