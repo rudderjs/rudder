@@ -89,7 +89,9 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
         clientId:  'C-PUBLIC',
         redirectUri: 'https://attacker.example.com/cb', // whitelisted on the client, but NOT what was bound at issuance
       }),
-      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /redirect_uri does not match/.test(e.errorDescription),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant'
+        && /invalid or has expired/.test(e.errorDescription)  // generic, no oracle
+        && /redirect_uri does not match/.test(e.message),     // specific reason for operators
     )
 
     Passport.reset()
@@ -117,7 +119,9 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
         clientId:  'C-PUBLIC',
         redirectUri: '',
       }),
-      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /redirect_uri is required/.test(e.errorDescription),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant'
+        && /invalid or has expired/.test(e.errorDescription)
+        && /redirect_uri is required/.test(e.message),
     )
     Passport.reset()
   })
@@ -150,8 +154,56 @@ describe('redirect_uri binding (P1) + re-validation (E3)', () => {
         redirectUri: 'https://app.example.com/callback',
         // no codeVerifier — next check after redirect_uri will throw
       }),
-      (e: any) => e instanceof OAuthError && /code_verifier required/.test(e.errorDescription),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant'
+        && /invalid or has expired/.test(e.errorDescription)
+        && /code_verifier required/.test(e.message),
     )
+    Passport.reset()
+  })
+
+  test('PKCE missing-verifier and mismatch-verifier are indistinguishable to the client (no oracle, #1231)', async () => {
+    Passport.reset()
+    const pkceCode = {
+      id: 'AC-PKCE', userId: 'U-1', clientId: 'C-PUBLIC',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: null,                       // skip the redirect_uri branch
+      codeChallenge: 'not-a-matching-hash',    // a real verifier's S256 won't equal this
+      codeChallengeMethod: 'S256',
+    }
+    const client = {
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }
+
+    async function exchangeAndCatch(extra: Record<string, unknown>): Promise<OAuthError> {
+      Passport.useAuthCodeModel(fakeAuthCodeModel(pkceCode))
+      Passport.useClientModel(fakeClientModel(client))
+      try {
+        await exchangeAuthCode({ grantType: 'authorization_code', code: 'AC-PKCE', clientId: 'C-PUBLIC', ...extra } as any)
+        throw new Error('expected exchangeAuthCode to reject')
+      } catch (e) {
+        assert.ok(e instanceof OAuthError, 'expected an OAuthError')
+        return e
+      }
+    }
+
+    const missing  = await exchangeAndCatch({})                                 // no verifier → "required"
+    const mismatch = await exchangeAndCatch({ codeVerifier: 'wrong-verifier' }) // bad hash → "does not match"
+
+    // Client-facing: identical error + description, so an interceptor can't tell
+    // a PKCE-protected code's two failure modes apart.
+    assert.equal(missing.error, 'invalid_grant')
+    assert.equal(mismatch.error, 'invalid_grant')
+    assert.equal(missing.errorDescription, mismatch.errorDescription,
+      'both PKCE failures must return an identical client-facing description')
+
+    // Server-side: the specific reason is still distinguishable for operators.
+    assert.notEqual(missing.message, mismatch.message)
+    assert.match(missing.message,  /code_verifier required/)
+    assert.match(mismatch.message, /does not match/)
+
     Passport.reset()
   })
 

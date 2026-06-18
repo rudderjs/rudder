@@ -157,6 +157,16 @@ export interface TokenExchangeRequest {
   codeVerifier?: string
 }
 
+// RFC 6749 §5.2 / RFC 7636 — every authorization-code *validity* failure
+// (not found, revoked, expired, wrong client, redirect_uri, PKCE missing /
+// mismatch) returns `invalid_grant` with ONE generic client-facing description.
+// Distinct messages let an attacker who intercepted a code probe whether it
+// existed or was PKCE-protected, narrowing a code-injection attempt — the same
+// reason Google/GitHub/Auth0 return only a generic description here. The
+// specific reason is passed as the OAuthError `logDetail` so it survives on
+// `Error.message` for server-side debugging.
+const INVALID_GRANT_MESSAGE = 'The authorization code is invalid or has expired.'
+
 /**
  * Exchange an authorization code for access + refresh tokens.
  */
@@ -194,16 +204,16 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   const codeHash = await hashOpaqueToken(params.code)
   const authCode = await AuthCodeCls.where('tokenHash', codeHash).first() as AuthCode | null
   if (!authCode) {
-    throw new OAuthError('invalid_grant', 'Authorization code not found.')
+    throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'authorization code not found')
   }
   if (authCode.revoked) {
-    throw new OAuthError('invalid_grant', 'Authorization code has been revoked.')
+    throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'authorization code has been revoked')
   }
   if (authCodeHelpers.isExpired(authCode)) {
-    throw new OAuthError('invalid_grant', 'Authorization code has expired.')
+    throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'authorization code has expired')
   }
   if (authCode.clientId !== params.clientId) {
-    throw new OAuthError('invalid_grant', 'Authorization code was not issued to this client.')
+    throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'authorization code was not issued to this client')
   }
 
   // RFC 6749 §4.1.3 — if a redirect_uri was bound at issuance, the exchange
@@ -214,17 +224,17 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   // (≤10-minute legacy compat window after the migration lands).
   if (authCode.redirectUri !== null && authCode.redirectUri !== undefined) {
     if (!params.redirectUri) {
-      throw new OAuthError('invalid_grant', 'redirect_uri is required for this authorization code.')
+      throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'redirect_uri is required for this authorization code')
     }
     if (authCode.redirectUri !== params.redirectUri) {
-      throw new OAuthError('invalid_grant', 'redirect_uri does not match the value used at authorization time.')
+      throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'redirect_uri does not match the value used at authorization time')
     }
   }
 
   // PKCE verification
   if (authCode.codeChallenge) {
     if (!params.codeVerifier) {
-      throw new OAuthError('invalid_grant', 'PKCE code_verifier required.')
+      throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'PKCE code_verifier required')
     }
 
     const { createHash } = await import('node:crypto')
@@ -244,7 +254,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     // circuits the length check first, but the equal-length common path
     // runs the full timingSafeEqual.
     if (!(await safeCompare(expected, authCode.codeChallenge))) {
-      throw new OAuthError('invalid_grant', 'PKCE code_verifier does not match.')
+      throw new OAuthError('invalid_grant', INVALID_GRANT_MESSAGE, 400, 'PKCE code_verifier does not match')
     }
   }
 
@@ -344,8 +354,17 @@ export class OAuthError extends Error {
     public readonly error: string,
     public readonly errorDescription: string,
     public readonly statusCode: number = 400,
+    /**
+     * Optional internal-only detail for server-side debugging. When provided it
+     * becomes the `Error.message` (visible in logs, stack traces, and the app's
+     * exception reporter) while `errorDescription` — the value returned to the
+     * client via {@link toJSON} — stays generic. Lets us collapse several
+     * authorization-code failures to ONE client-facing message (no oracle)
+     * without losing the specific reason for operators.
+     */
+    logDetail?: string,
   ) {
-    super(errorDescription)
+    super(logDetail ?? errorDescription)
     this.name = 'OAuthError'
   }
 
