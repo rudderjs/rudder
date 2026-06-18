@@ -74,11 +74,7 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('unsupported_response_type', 'Only response_type=code is supported.')
   }
 
-  const ClientCls = await Passport.clientModel()
-  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
-  if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.')
-  }
+  const client = await requireOAuthClient(params.clientId)
 
   if (!clientHelpers.hasRedirectUri(client, params.redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
@@ -175,18 +171,12 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=authorization_code.')
   }
 
-  const ClientCls   = await Passport.clientModel()
   const AuthCodeCls = await Passport.authCodeModel()
 
   // Validate client. RFC 6749 §5.2 — client authentication failures at
   // the token endpoint MUST return HTTP 401 with a `WWW-Authenticate`
-  // header (the latter is set in routes.ts on 401 responses). The
-  // refresh-token and client-credentials grants already return 401 here
-  // — auth-code was the inconsistent outlier.
-  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
-  if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.', 401)
-  }
+  // header (the latter is set in routes.ts on 401 responses).
+  const client = await requireOAuthClient(params.clientId, { statusCode: 401 })
 
   // Defense-in-depth: a code should only have been minted for an
   // authorization_code-grant client (enforced at issuance), but re-check here
@@ -374,4 +364,24 @@ export class OAuthError extends Error {
       error_description: this.errorDescription,
     }
   }
+}
+
+// ─── Shared Client Lookup ─────────────────────────────────
+
+/**
+ * Load an OAuth client by id, throwing `invalid_client` when it is missing
+ * or revoked. Pass `statusCode: 401` at token-endpoint call sites per
+ * RFC 6749 §5.2; the default 400 is appropriate for the authorization and
+ * device-authorization endpoints where client-credential auth is not required.
+ */
+export async function requireOAuthClient(
+  clientId: string,
+  opts?: { statusCode?: 401 },
+): Promise<OAuthClient> {
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.where('id', clientId).first() as OAuthClient | null
+  if (!client || client.revoked) {
+    throw new OAuthError('invalid_client', 'Client not found.', opts?.statusCode ?? 400)
+  }
+  return client
 }

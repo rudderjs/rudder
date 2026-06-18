@@ -3,7 +3,7 @@ import { config, report } from '@rudderjs/core'
 import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
-import { OAuthError } from '../grants/index.js'
+import { OAuthError, requireOAuthClient } from '../grants/index.js'
 import { verifyConfidentialCredentials } from '../grants/verify-client.js'
 import type { PassportRouteOptions } from './types.js'
 
@@ -23,11 +23,7 @@ export async function validateClientRedirect(clientId: unknown, redirectUri: unk
   if (typeof redirectUri !== 'string' || !redirectUri) {
     throw new OAuthError('invalid_request', 'redirect_uri is required.')
   }
-  const ClientCls = await Passport.clientModel()
-  const client = await ClientCls.where('id', clientId).first() as OAuthClient | null
-  if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.')
-  }
+  const client = await requireOAuthClient(clientId)
   if (!clientHelpers.hasRedirectUri(client, redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
   }

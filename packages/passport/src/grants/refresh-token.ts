@@ -1,12 +1,11 @@
 import { report } from '@rudderjs/core'
 import { Passport } from '../Passport.js'
-import type { OAuthClient }  from '../models/OAuthClient.js'
 import type { AccessToken }  from '../models/AccessToken.js'
 import type { RefreshToken } from '../models/RefreshToken.js'
 import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
 import { hashOpaqueToken } from '../opaque-token.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
-import { OAuthError } from './authorization-code.js'
+import { OAuthError, requireOAuthClient } from './authorization-code.js'
 import { parseScopes } from './parse-scopes.js'
 import { verifyConfidentialCredentials } from './verify-client.js'
 
@@ -27,15 +26,10 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=refresh_token.')
   }
 
-  const ClientCls       = await Passport.clientModel()
   const RefreshTokenCls = await Passport.refreshTokenModel()
   const AccessTokenCls  = await Passport.tokenModel()
 
-  // Validate client
-  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
-  if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.', 401)
-  }
+  const client = await requireOAuthClient(params.clientId, { statusCode: 401 })
 
   await verifyConfidentialCredentials(client, params.clientSecret)
 

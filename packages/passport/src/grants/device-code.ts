@@ -1,10 +1,9 @@
 import { Passport } from '../Passport.js'
-import type { OAuthClient } from '../models/OAuthClient.js'
 import type { DeviceCode }  from '../models/DeviceCode.js'
 import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { hashDeviceSecret } from '../device-code-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
-import { OAuthError, validateScopes } from './authorization-code.js'
+import { OAuthError, validateScopes, requireOAuthClient } from './authorization-code.js'
 import { parseScopes } from './parse-scopes.js'
 
 /**
@@ -37,13 +36,8 @@ export async function requestDeviceCode(params: {
   scope?:   string
   verificationUri: string
 }): Promise<DeviceAuthorizationResponse> {
-  const ClientCls     = await Passport.clientModel()
   const DeviceCodeCls = await Passport.deviceCodeModel()
-
-  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
-  if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.')
-  }
+  const client = await requireOAuthClient(params.clientId)
 
   if (!clientHelpers.hasGrantType(client, 'urn:ietf:params:oauth:grant-type:device_code')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for device authorization grant.')
