@@ -23,6 +23,21 @@ export interface SessionConfig {
   driver:   'cookie' | 'redis'
   lifetime: number    // minutes, default 120
   secret:   string
+  /**
+   * Cookie driver only — reject an HMAC-valid cookie that carries no `exp`
+   * field (minted before server-side expiry existed) instead of accepting it
+   * unconditionally. Such a cookie has no server-side expiry bound, so a
+   * captured copy replays forever (the cookie driver is stateless — there is
+   * no kill switch short of rotating the secret).
+   *
+   * Defaults to `false` for a backward-compatible migration window: legacy
+   * cookies are accepted and pick up an `exp` the next time they are
+   * re-persisted. Set to `true` once a full `lifetime` has elapsed since the
+   * `exp` hardening deployed — every still-active session will have been
+   * re-signed by then, so the only cookies left without an `exp` are stale or
+   * captured ones. No effect on the redis driver (TTL-bounded server-side).
+   */
+  rejectLegacyCookies?: boolean
   cookie: {
     name:     string  // default 'rudderjs_session'
     secure:   boolean
@@ -330,26 +345,40 @@ function parsePayload(raw: string): SessionPayload | null {
   return typeof r['id'] === 'string' ? (r as unknown as SessionPayload) : null
 }
 
-function verifyCookiePayload(cookieValue: string, secret: string): SessionPayload | null {
+function verifyCookiePayload(
+  cookieValue: string,
+  secret: string,
+  rejectLegacy: boolean,
+): SessionPayload | null {
   const b64 = verify(cookieValue, secret)
   if (b64 === null) return null
   const parsed = parsePayload(Buffer.from(b64, 'base64url').toString('utf8'))
   if (parsed === null) return null
-  // Reject an expired cookie server-side. Cookies minted before `exp` existed
-  // carry none and are accepted during the migration window (they pick up an
-  // expiry the next time they're re-persisted) — same compat posture as the
-  // redis driver's TTL and the cookie driver's prior behavior.
   const exp = (parsed as unknown as Record<string, unknown>)['exp']
-  if (typeof exp === 'number' && Date.now() > exp) return null
+  if (typeof exp === 'number') {
+    // Reject an expired cookie server-side.
+    if (Date.now() > exp) return null
+  } else if (rejectLegacy) {
+    // No `exp` and the migration window is closed — treat a cookie minted
+    // before server-side expiry existed as expired rather than replayable
+    // forever. See SessionConfig.rejectLegacyCookies.
+    return null
+  }
+  // Otherwise (no `exp`, rejectLegacy off) accept during the migration window:
+  // the cookie picks up an expiry the next time it's re-persisted — same compat
+  // posture as the redis driver's TTL and the cookie driver's prior behavior.
   return parsed
 }
 
 class CookieDriver implements InternalDriver {
-  constructor(private readonly secret: string) {}
+  constructor(
+    private readonly secret: string,
+    private readonly rejectLegacy: boolean = false,
+  ) {}
 
   async load(cookieValue: string | undefined): Promise<SessionPayload> {
     if (!cookieValue) return this.empty()
-    return verifyCookiePayload(cookieValue, this.secret) ?? this.empty()
+    return verifyCookiePayload(cookieValue, this.secret, this.rejectLegacy) ?? this.empty()
   }
 
   async persist(payload: SessionPayload, ttl: number): Promise<string> {
@@ -495,7 +524,7 @@ function buildCookieHeader(name: string, value: string, config: SessionConfig): 
 
 function makeDriver(config: SessionConfig): InternalDriver {
   if (config.driver === 'redis') return new RedisDriver(config.redis ?? {}, config.secret)
-  return new CookieDriver(config.secret)
+  return new CookieDriver(config.secret, config.rejectLegacyCookies ?? false)
 }
 
 // ─── Secret resolution ─────────────────────────────────────

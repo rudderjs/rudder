@@ -1,5 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { REQUEST_CONTEXT } from '@rudderjs/contracts'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
@@ -69,6 +70,15 @@ async function runRequest(
 function extractCookieValue(setCookieHeader: string): string {
   const match = setCookieHeader.match(/^rjs_sess=([^;]+)/)
   return match![1]!
+}
+
+/** Mint a cookie-driver value the way pre-`exp` versions did — a signed payload
+ *  with NO `exp` field — to exercise the legacy-acceptance / rejection paths. */
+function mintLegacyCookie(data: Record<string, unknown>, secret: string): string {
+  const payload = { id: 'legacy-id', data, flash_next: {} }
+  const b64  = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const hmac = createHmac('sha256', secret).update(b64).digest('base64url')
+  return `${b64}.${hmac}`
 }
 
 /** Simulate two consecutive requests, passing cookie from first to second */
@@ -358,6 +368,38 @@ describe('sessionMiddleware', () => {
     } finally {
       Date.now = realNow
     }
+  })
+
+  it('cookie driver accepts a legacy cookie (no exp) by default', async () => {
+    // Backward-compatible migration window — an HMAC-valid cookie minted before
+    // server-side expiry existed still loads its data when rejectLegacyCookies
+    // is off (the default).
+    const cookieValue = mintLegacyCookie({ user: 'alice' }, config.secret)
+    const { session } = await runRequest(`rjs_sess=${cookieValue}`)
+    assert.strictEqual(session.get('user'), 'alice')
+  })
+
+  it('rejectLegacyCookies treats an exp-less cookie as expired', async () => {
+    const cookieValue = mintLegacyCookie({ user: 'alice' }, config.secret)
+    const cfg: SessionConfig = { ...config, rejectLegacyCookies: true }
+    const mw = sessionMiddleware(cfg)
+    const { req, res } = makeReqRes(`rjs_sess=${cookieValue}`)
+    let captured!: SessionInstance
+    await mw(req, res, async () => { captured = readSession(req) })
+    assert.strictEqual(captured.get('user'), undefined, 'legacy cookie must yield a fresh session when rejected')
+  })
+
+  it('rejectLegacyCookies still accepts a normal cookie that carries exp', async () => {
+    // The reject path must only fire on a missing exp, never on a valid one —
+    // otherwise turning the flag on would log everyone out.
+    const { setCookie } = await runRequest('', s => s.put('user', 'bob'))
+    const cookieValue = extractCookieValue(setCookie!)
+    const cfg: SessionConfig = { ...config, rejectLegacyCookies: true }
+    const mw = sessionMiddleware(cfg)
+    const { req, res } = makeReqRes(`rjs_sess=${cookieValue}`)
+    let captured!: SessionInstance
+    await mw(req, res, async () => { captured = readSession(req) })
+    assert.strictEqual(captured.get('user'), 'bob')
   })
 
   it('a save() failure does not mask an otherwise-successful response', async () => {
