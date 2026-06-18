@@ -197,6 +197,21 @@ The cookie holds the HMAC-signed session ID; the data lives in Redis under `{pre
 
 If you need true post-logout invalidation, a stolen-cookie kill switch, or full session-fixation defense beyond rotating the ID on login, **use the redis driver**. The cookie driver is the right choice when statelessness is the goal and the data fits — flash messages, CSRF tokens, simple "is logged in" markers — and you can accept that revocation only happens at TTL.
 
+### Cookie expiry and `rejectLegacyCookies`
+
+The cookie driver signs an absolute expiry (`exp`) into the payload, so a captured cookie stops verifying server-side once its `lifetime` elapses — the browser's `Max-Age` is only a client-side hint an attacker can ignore by replaying the raw cookie value.
+
+Cookies minted before this `exp` hardening carry no expiry. By default they are still accepted (a backward-compatible migration window) and pick up an `exp` the next time they are re-persisted. Once a full `lifetime` has elapsed since you deployed a version with `exp`, every still-active session has been re-signed, so you can close the window:
+
+```ts
+{
+  driver: 'cookie',
+  rejectLegacyCookies: true, // treat an exp-less cookie as expired
+}
+```
+
+With this on, an HMAC-valid cookie that carries no `exp` is rejected (yielding a fresh empty session) instead of replayable forever. Cookies that do carry an `exp` are unaffected, so turning it on does not log anyone out. No effect on the redis driver, whose sessions are TTL-bounded server-side.
+
 ---
 
 ## Notes
