@@ -593,6 +593,29 @@ describe('Session facade', () => {
     assert.notStrictEqual(s.id(), oldId)
   })
 
+  it('flush() clears all data via the facade', async () => {
+    await run(async () => {
+      Session.put('a', 1)
+      Session.put('b', 2)
+      Session.flush()
+      assert.deepStrictEqual(Session.all(), {})
+    })
+  })
+
+  it('id() returns the current session ID via the facade', async () => {
+    await run(async () => {
+      const id = Session.id()
+      assert.strictEqual(typeof id, 'string')
+      assert.ok(id.length > 0)
+      assert.strictEqual(id, Session.maybeCurrent()!.id())
+    })
+  })
+
+  it('flush() and id() throw outside a session context', () => {
+    assert.throws(() => Session.flush(), /no session in context/)
+    assert.throws(() => Session.id(), /no session in context/)
+  })
+
   it('maybeCurrent() returns null outside an ALS context', () => {
     assert.strictEqual(Session.maybeCurrent(), null)
   })

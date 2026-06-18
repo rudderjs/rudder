@@ -320,6 +320,16 @@ export class Session {
   static regenerate(): Promise<void> {
     return this.current().regenerate()
   }
+
+  /** Clear all session data. Standard logout-flow call. */
+  static flush(): void {
+    this.current().flush()
+  }
+
+  /** Return the current session ID (audit logging, CSRF binding, WS auth). */
+  static id(): string {
+    return this.current().id()
+  }
 }
 
 /**
