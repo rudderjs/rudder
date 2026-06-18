@@ -55,6 +55,12 @@ export interface TokenRepository {
 
 // ─── In-Memory Token Repository (dev/testing) ─────────────
 
+/**
+ * In-memory token store for development and testing only.
+ * Do NOT use in production: the store is process-local (not shared across
+ * instances) and provides no durability — use `OrmTokenRepository` from
+ * `@rudderjs/sanctum/orm` instead.
+ */
 export class MemoryTokenRepository implements TokenRepository {
   private store = new Map<string, PersonalAccessToken>()
   private counter = 0
@@ -79,10 +85,13 @@ export class MemoryTokenRepository implements TokenRepository {
   }
 
   async findByToken(hashedToken: string): Promise<PersonalAccessToken | null> {
+    // Full scan without early return to avoid a timing side-channel that would
+    // let an attacker distinguish existing tokens from non-existing ones.
+    let found: PersonalAccessToken | null = null
     for (const t of this.store.values()) {
-      if (t.token === hashedToken) return t
+      if (t.token === hashedToken) found = t
     }
-    return null
+    return found
   }
 
   async findByUserId(userId: string): Promise<PersonalAccessToken[]> {
