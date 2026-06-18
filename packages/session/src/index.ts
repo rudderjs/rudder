@@ -145,6 +145,33 @@ export class SessionInstance {
     return { ...this._flash }
   }
 
+  /**
+   * Re-flash the current request's incoming flash data so it survives one more
+   * request (another redirect hop). Without this, flash set before a multi-step
+   * redirect chain is consumed on the first hop and arrives empty at the final
+   * destination. Laravel parity: `Session::reflash()`.
+   */
+  reflash(): void {
+    for (const key of Object.keys(this._flash)) {
+      this._flashNext[key] = this._flash[key]
+    }
+    this._dirty = true
+  }
+
+  /**
+   * Re-flash only the named incoming flash keys for one more request. Keys that
+   * are not present in the current flash bag are skipped. Laravel parity:
+   * `Session::keep(['key1', 'key2'])`.
+   */
+  keep(keys: string[]): void {
+    for (const key of keys) {
+      // `Object.hasOwn`, not `key in` — never promote an inherited
+      // Object.prototype member (e.g. keep(['toString'])) into flash_next.
+      if (Object.hasOwn(this._flash, key)) this._flashNext[key] = this._flash[key]
+    }
+    this._dirty = true
+  }
+
   has(key: string): boolean {
     return Object.hasOwn(this._data, key)
   }
@@ -255,6 +282,16 @@ export class Session {
   /** All flash values set by the previous request. Returns `{}` outside an ALS session context. */
   static allFlash(): Record<string, unknown> {
     return this.maybeCurrent()?.allFlash() ?? {}
+  }
+
+  /** Re-flash all incoming flash data so it survives one more request. */
+  static reflash(): void {
+    this.current().reflash()
+  }
+
+  /** Re-flash only the named incoming flash keys for one more request. */
+  static keep(keys: string[]): void {
+    this.current().keep(keys)
   }
 
   static has(key: string): boolean {
