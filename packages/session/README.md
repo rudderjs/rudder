@@ -172,11 +172,11 @@ Static proxy over `SessionInstance`, backed by `AsyncLocalStorage`. Most methods
 | `keep(keys)` | Re-flash only the named incoming flash keys for one more request. |
 | `has(key)` | Check whether a key exists. |
 | `all()` | Return a shallow copy of all session data. |
+| `flush()` | Clear all session data. |
+| `id()` | Return the current session ID. |
 | `regenerate()` | Assign a new session ID (destroys old in Redis, keeps data). |
 | `maybeCurrent()` | Return the active `SessionInstance`, or `null` if no session is in context (non-throwing). |
 | `active()` | Return `true` if a session is currently in context (non-throwing). |
-
-> `flush()` and `id()` are available on the instance (`req.session.flush()`, `req.session.id()`) but are not forwarded on the static facade.
 
 ---
 
