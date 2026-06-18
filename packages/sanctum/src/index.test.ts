@@ -119,6 +119,89 @@ describe('Sanctum.createToken', () => {
   })
 })
 
+// ─── Sanctum.isExpired ────────────────────────────────────
+
+describe('Sanctum.isExpired', () => {
+  // Fixed epoch used as the frozen "now" throughout this suite.
+  const NOW = 1_705_320_000_000 // 2024-01-15T12:00:00.000Z
+
+  function fakeToken(overrides: Partial<PersonalAccessToken>): PersonalAccessToken {
+    return {
+      id: '1',
+      userId: '1',
+      name: 'test',
+      token: 'hash',
+      abilities: null,
+      lastUsedAt: null,
+      expiresAt: null,
+      createdAt: new Date(NOW),
+      ...overrides,
+    }
+  }
+
+  function withFrozenNow<T>(fn: () => T): T {
+    const realNow = Date.now
+    Date.now = () => NOW
+    try {
+      return fn()
+    } finally {
+      Date.now = realNow
+    }
+  }
+
+  it('returns true when expiresAt is in the past', () => {
+    const { sanctum: s } = makeSanctum()
+    const token = fakeToken({ expiresAt: new Date(NOW - 1) })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), true) })
+  })
+
+  it('returns true when expiresAt equals now (boundary: <= is expired)', () => {
+    const { sanctum: s } = makeSanctum()
+    const token = fakeToken({ expiresAt: new Date(NOW) })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), true) })
+  })
+
+  it('returns false when expiresAt is in the future', () => {
+    const { sanctum: s } = makeSanctum()
+    const token = fakeToken({ expiresAt: new Date(NOW + 1) })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), false) })
+  })
+
+  it('returns true when no expiresAt and global expiration has fully elapsed', () => {
+    const { sanctum: s } = makeSanctum([fakeUser()], { expiration: 60 })
+    // Token was created 61 minutes ago, so it is past the 60-minute global window.
+    const token = fakeToken({ createdAt: new Date(NOW - 61 * 60_000), expiresAt: null })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), true) })
+  })
+
+  it('returns false when no expiresAt and global expiration has not yet elapsed', () => {
+    const { sanctum: s } = makeSanctum([fakeUser()], { expiration: 60 })
+    // Token was created 59 minutes ago, still inside the 60-minute global window.
+    const token = fakeToken({ createdAt: new Date(NOW - 59 * 60_000), expiresAt: null })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), false) })
+  })
+
+  it('returns false when neither expiresAt nor global expiration is set', () => {
+    const { sanctum: s } = makeSanctum() // no expiration in config
+    const token = fakeToken({ expiresAt: null })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), false) })
+  })
+
+  it('returns false when global expiration is 0 (non-positive: treated as no expiry)', () => {
+    const { sanctum: s } = makeSanctum([fakeUser()], { expiration: 0 })
+    const token = fakeToken({ expiresAt: null })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), false) })
+  })
+
+  it('per-token expiresAt wins over global config.expiration', () => {
+    // Global window is 1 minute, but the explicit per-token expiresAt is 1 hour out.
+    // The per-token value should take priority, so the token is not expired.
+    const { sanctum: s } = makeSanctum([fakeUser()], { expiration: 1 })
+    const token = fakeToken({ expiresAt: new Date(NOW + 60 * 60_000) })
+    withFrozenNow(() => { assert.strictEqual(s.isExpired(token), false) })
+  })
+})
+
 // ─── validateToken ────────────────────────────────────────
 
 describe('Sanctum.validateToken', () => {
