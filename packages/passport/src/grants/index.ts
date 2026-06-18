@@ -7,6 +7,7 @@ export {
   issueAuthCode,
   exchangeAuthCode,
   validateScopes,
+  requireOAuthClient,
   OAuthError,
 } from './authorization-code.js'
 export type {
