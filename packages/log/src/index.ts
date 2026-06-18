@@ -1,6 +1,7 @@
 import { ServiceProvider, config, setExceptionReporter } from '@rudderjs/core'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve, relative } from 'node:path'
 import { EOL } from 'node:os'
 
 // ─── Log Levels (RFC 5424) ─────────────────────────────────
@@ -71,6 +72,147 @@ export class JsonFormatter implements LogFormatter {
   }
 }
 
+function _parseFrameLocation(frame: string): { file: string; line: number } | null {
+  const m = frame.match(/\((.+?):(\d+):\d+\)$/)
+  if (!m || !m[1] || !m[2]) return null
+  const file = m[1]
+  if (file.startsWith('node:') || file.includes('node_modules')) return null
+  return { file, line: parseInt(m[2], 10) }
+}
+
+const LEVEL_BADGE_COLORS: Record<LogLevel, string> = {
+  emergency: '\x1b[41m\x1b[37m',
+  alert:     '\x1b[31m',
+  critical:  '\x1b[31m',
+  error:     '\x1b[31m',
+  warning:   '\x1b[33m',
+  notice:    '\x1b[36m',
+  info:      '\x1b[34m',
+  debug:     '\x1b[90m',
+}
+
+function _buildSnippet(file: string, targetLine: number, context = 3): string | null {
+  try {
+    const lines    = readFileSync(file, 'utf-8').split('\n')
+    const start    = Math.max(0, targetLine - context - 1)
+    const end      = Math.min(lines.length, targetLine + context)
+    const numWidth = String(end).length
+    const cols     = (process.stdout.columns || 120) - numWidth - 8  // room for prefix
+    const dim      = (s: string) => `\x1b[2m${s}\x1b[22m`
+    const red      = (s: string) => `\x1b[31m${s}\x1b[39m`
+    const trunc    = (s: string) => s.length > cols ? s.slice(0, cols - 1) + '…' : s
+    return lines.slice(start, end).map((content, i) => {
+      const lineNum = start + i + 1
+      const num     = String(lineNum).padStart(numWidth)
+      if (lineNum === targetLine) {
+        return `  ${red('▶')} ${red(num)} ${dim('│')} ${trunc(content)}`
+      }
+      return `    ${dim(num)} ${dim('│')} ${dim(trunc(content))}`
+    }).join('\n')
+  } catch {
+    return null
+  }
+}
+
+function _shortenPath(file: string, cwd: string): string {
+  const home   = process.env['HOME'] ?? ''
+  const relCwd = relative(cwd, file)
+  if (!relCwd.startsWith('..')) return relCwd
+  // Try parent dir (monorepo root) — turns ../packages/x into packages/x
+  const relRoot = relative(dirname(cwd), file)
+  if (!relRoot.startsWith('..')) return relRoot
+  return home && file.startsWith(home) ? '~' + file.slice(home.length) : file
+}
+
+interface _FrameParts { name: string; file: string }
+
+function _parseFrame(frame: string, cwd: string): _FrameParts {
+  // `at Name (/abs/path:line:col)` or `at Name (rel/path:line:col)`
+  const named = frame.match(/^at (.+?) \((.+):(\d+):\d+\)$/)
+  if (named && named[1] && named[2] && named[3]) {
+    const file = named[2].startsWith('/') ? _shortenPath(named[2], cwd) : named[2]
+    return { name: named[1], file: `${file}:${named[3]}` }
+  }
+  // `at /abs/path:line:col` — anonymous
+  const anon = frame.match(/^at (\/\S+):(\d+):\d+$/)
+  if (anon && anon[1] && anon[2]) {
+    return { name: '<anonymous>', file: `${_shortenPath(anon[1], cwd)}:${anon[2]}` }
+  }
+  return { name: frame.replace(/^at /, ''), file: '' }
+}
+
+function _formatFrameRow(name: string, file: string, cols: number): string {
+  const dim      = (s: string) => `\x1b[2m${s}\x1b[22m`
+  const indent   = '  '
+  const minDots  = 3
+  const gap      = cols - indent.length - name.length - 2 - file.length
+  const dotCount = Math.max(minDots, gap)
+  const dots     = '.'.repeat(dotCount)
+  // If name+file still exceed cols, truncate file from the left
+  if (indent.length + name.length + 2 + dotCount + file.length > cols) {
+    const maxFile = Math.max(8, cols - indent.length - name.length - 2 - dotCount)
+    const short   = file.length > maxFile ? '…' + file.slice(-(maxFile - 1)) : file
+    return `${indent}${name} ${dim(dots)} ${dim(short)}`
+  }
+  return `${indent}${name} ${dim(dots)} ${dim(file)}`
+}
+
+/** Pretty formatter for console — `HH:MM:SS [Rudder][channel] LEVEL - message` with source snippet and app frames. */
+export class ConsolePrettyFormatter implements LogFormatter {
+  format(entry: LogEntry): string {
+    const d    = entry.timestamp
+    const hh   = String(d.getHours()).padStart(2, '0')
+    const mm   = String(d.getMinutes()).padStart(2, '0')
+    const ss   = String(d.getSeconds()).padStart(2, '0')
+    const dim  = (s: string) => `\x1b[2m${s}\x1b[22m`
+    const tag  = `\x1b[1m\x1b[38;5;208m[Rudder]\x1b[39m\x1b[22m`
+    const chan  = `\x1b[1m\x1b[36m[${entry.channel}]\x1b[39m\x1b[22m`
+    const lvlColor  = LEVEL_BADGE_COLORS[entry.level] ?? ''
+    const lvlBadge  = `${lvlColor}${entry.level.toUpperCase()}\x1b[0m`
+
+    const ctx   = { ...entry.context }
+    const stack = typeof ctx['stack'] === 'string' ? ctx['stack'] : null
+    delete ctx['stack']
+    const extra = Object.keys(ctx).length ? ' ' + JSON.stringify(ctx) : ''
+
+    // Truncate message to fit terminal width
+    const cols      = process.stdout.columns || 120
+    const prefixLen = `${hh}:${mm}:${ss} [Rudder][${entry.channel}] ${entry.level.toUpperCase()} - `.length
+    const maxMsg    = Math.max(20, cols - prefixLen)
+    const message   = entry.message.length > maxMsg ? entry.message.slice(0, maxMsg - 1) + '…' : entry.message
+
+    let out = `${dim(`${hh}:${mm}:${ss}`)} ${tag}${chan} ${lvlBadge} ${message}${extra}`
+
+    if (stack) {
+      const cwd         = process.cwd()
+      const allFrames   = stack.split('\n').slice(1).map(l => l.trim()).filter(Boolean)
+      const appFrames   = allFrames.filter(l => !l.includes('node_modules') && !l.includes('node:'))
+      const vendorCount = allFrames.length - appFrames.length
+
+      const firstFrame = appFrames.find(f => _parseFrameLocation(f) !== null)
+      if (firstFrame) {
+        const loc     = _parseFrameLocation(firstFrame)!
+        const snippet = _buildSnippet(loc.file, loc.line)
+        if (snippet) {
+          const rel = relative(cwd, loc.file)
+          out += `\n\n  ${dim(rel + ':' + loc.line)}\n\n${snippet}\n`
+        }
+      }
+
+      if (appFrames.length) {
+        const frameCols = process.stdout.columns || 120
+        out += '\n' + appFrames.map(l => {
+          const { name, file } = _parseFrame(l, cwd)
+          return _formatFrameRow(name, file, frameCols)
+        }).join('\n')
+      }
+      if (vendorCount > 0) out += `\n  ${dim(`(+ ${vendorCount} vendor frames)`)}`
+    }
+
+    return out
+  }
+}
+
 // ─── Adapter Contract ──────────────────────────────────────
 
 export interface LogAdapter {
@@ -98,13 +240,22 @@ export class ConsoleAdapter implements LogAdapter {
   ) {}
 
   log(entry: LogEntry): void {
-    const line  = this.formatter.format(entry)
-    const color = LEVEL_COLORS[entry.level]
+    const output = this.formatter.format(entry)
+
+    // ConsolePrettyFormatter embeds all ANSI itself — write as-is.
+    // For other formatters, wrap the single output line in the level color.
+    let out: string
+    if (this.formatter instanceof ConsolePrettyFormatter) {
+      out = output.replace(/\n+$/, '') + EOL + EOL
+    } else {
+      const color = LEVEL_COLORS[entry.level]
+      out = `${color}${output}${RESET}${EOL}`
+    }
 
     if (LEVEL_SEVERITY[entry.level] <= LEVEL_SEVERITY['error']) {
-      process.stderr.write(`${color}${line}${RESET}${EOL}`)
+      process.stderr.write(out)
     } else {
-      process.stdout.write(`${color}${line}${RESET}${EOL}`)
+      process.stdout.write(out)
     }
   }
 }
@@ -611,13 +762,14 @@ const customDrivers: Map<string, DriverFactory> =
   (_customDriversGlobal[CUSTOM_DRIVERS_KEY] as Map<string, DriverFactory> | undefined)
   ?? (() => { const m = new Map<string, DriverFactory>(); _customDriversGlobal[CUSTOM_DRIVERS_KEY] = m; return m })()
 
-function resolveFormatter(config: LogChannelConfig): LogFormatter {
+function resolveFormatter(config: LogChannelConfig, driver?: string): LogFormatter {
   if (config.formatter === 'json') return new JsonFormatter()
+  if (driver === 'console') return new ConsolePrettyFormatter()
   return new LineFormatter()
 }
 
 function resolveAdapter(config: LogChannelConfig, allChannels: Record<string, LogChannelConfig>): LogAdapter {
-  const fmt = resolveFormatter(config)
+  const fmt = resolveFormatter(config, config.driver)
 
   switch (config.driver) {
     case 'console':

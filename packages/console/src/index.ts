@@ -1,3 +1,7 @@
+import { createRudderLogger } from '@rudderjs/support'
+
+const _log = createRudderLogger('console')
+
 // ─── Cancelled Error ───────────────────────────────────────
 
 /** Thrown when the user cancels an interactive prompt (Ctrl+C). */
@@ -67,7 +71,7 @@ export class CommandRegistry {
     // prod doesn't reset, so the crash only surfaces after deploy.
     const existing = this._commands.findIndex(c => c.name === name)
     if (existing !== -1) {
-      console.warn(`[Rudder] command '${name}' was already registered; the later definition overrides the earlier one. Remove one of the registrations to silence this warning.`)
+      _log.warn(`command '${name}' was already registered; the later definition overrides the earlier one. Remove one of the registrations to silence this warning.`)
       this._commands[existing] = cmd
     } else {
       this._commands.push(cmd)

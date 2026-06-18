@@ -404,6 +404,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@types/node':
         specifier: 20.19.35
