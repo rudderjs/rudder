@@ -29,7 +29,25 @@ jobs:
     name: Ping rudderjs.com
     runs-on: ubuntu-latest
     steps:
+      # Secrets can't be referenced in step-level `if:`, so probe the token in a
+      # run step first. When it's absent (not configured yet, or expired), skip
+      # the dispatch and pass green — the site's daily docs-sync schedule still
+      # mirrors the change. This keeps a docs merge from failing red on a
+      # missing secret while preserving the immediate trigger once it's set.
+      - name: Check for dispatch token
+        id: token
+        env:
+          SITE_DISPATCH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -n "$SITE_DISPATCH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SITE_DISPATCH_TOKEN is not set — skipping the immediate dispatch. rudderjs.com's daily docs-sync schedule will still mirror this change. Set the secret to enable the immediate trigger."
+          fi
+
       - name: Send docs-sync repository_dispatch
+        if: steps.token.outputs.present == 'true'
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.SITE_DISPATCH_TOKEN }}
