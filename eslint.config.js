@@ -13,8 +13,8 @@ export default tseslint.config(
       '**/.vitepress/dist/**',
       '**/node_modules/**',
       'playground/**',
-      // RudderJS-maintained fork of upstream vike-react-rsc (MIT; see its
-      // README). Not held to RudderJS lint rules — reformatting it would
+      // Rudder-maintained fork of upstream vike-react-rsc (MIT; see its
+      // README). Not held to Rudder lint rules — reformatting it would
       // diverge from upstream and complicate re-syncing from there.
       'packages/vike-react-rsc/**',
     ],

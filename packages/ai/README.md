@@ -1,6 +1,6 @@
 # @rudderjs/ai
 
-AI engine for RudderJS — providers, agents, tools, streaming, middleware, structured output, conversation memory, and testing fakes.
+AI engine for Rudder — providers, agents, tools, streaming, middleware, structured output, conversation memory, and testing fakes.
 
 ## Installation
 
@@ -29,7 +29,7 @@ pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
 |---|---|---|
 | `@rudderjs/ai` | Node, browser, Electron main+renderer, React Native | Agents, tools, streaming, providers — any `fetch`-capable JS runtime |
 | `@rudderjs/ai/node` | Node only | `documentFromPath()`, `imageFromPath()`, `transcribeFromPath()` (filesystem helpers) |
-| `@rudderjs/ai/server` | Node only | `AiProvider` (the RudderJS `ServiceProvider` — auto-discovered, you rarely import it) |
+| `@rudderjs/ai/server` | Node only | `AiProvider` (the Rudder `ServiceProvider` — auto-discovered, you rarely import it) |
 | `@rudderjs/ai/mcp` | Node only (in practice) | `mcpClientTools()` + `mcpServerFromAgent()` — requires `@modelcontextprotocol/sdk` |
 | `@rudderjs/ai/memory-orm` | Node only | `OrmUserMemory` + `UserMemoryRecord` — ORM-backed `UserMemory` |
 | `@rudderjs/ai/memory-embedding` | Node only | `EmbeddingUserMemory` — semantic recall via the registered embedding model |
@@ -781,7 +781,7 @@ Pass `eventPrefix` to namespace events when the channel carries other unrelated 
 // emits 'agent.chunk', 'agent.done', 'agent.error'
 ```
 
-**Process model:** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical RudderJS dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
+**Process model:** `@rudderjs/broadcast`'s `broadcast()` writes to the WS server in the same process. In the typical Rudder dev setup (single process running both web + `queue:work`) this works out of the box. Production deployments that run the queue worker as a separate process from the broadcast WS server will need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
 
 ### Conversation History
 

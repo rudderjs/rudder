@@ -109,7 +109,7 @@ function runChild(cmd: string, args: string[], cwd: string): Promise<boolean> {
 export function removeCommand(program: Command): void {
   program
     .command('remove <package>')
-    .description('Uninstall a RudderJS package — reverses `rudder add` (removes dep, config file, and unregisters)')
+    .description('Uninstall a Rudder package — reverses `rudder add` (removes dep, config file, and unregisters)')
     .option('--keep-config', 'Leave config/<name>.ts and the config/index.ts entry in place')
     .action(async (packageName: string, opts: { keepConfig?: boolean }) => {
       const cwd  = process.cwd()

@@ -1,6 +1,6 @@
 # @rudderjs/cashier-paddle
 
-Paddle billing for RudderJS apps. Mix `Billable` into your `User` model and you get checkout sessions, subscription state, refunds, pricing previews, and a signed webhook receiver — backed by typed Prisma tables.
+Paddle billing for Rudder apps. Mix `Billable` into your `User` model and you get checkout sessions, subscription state, refunds, pricing previews, and a signed webhook receiver — backed by typed Prisma tables.
 
 ```ts
 import { Model } from '@rudderjs/orm'

@@ -1,6 +1,6 @@
 # @rudderjs/testing
 
-Integration testing utilities for RudderJS applications — `TestCase` base class, fluent `TestResponse` assertions, and reusable traits.
+Integration testing utilities for Rudder applications — `TestCase` base class, fluent `TestResponse` assertions, and reusable traits.
 
 ## Installation
 

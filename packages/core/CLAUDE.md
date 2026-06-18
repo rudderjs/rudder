@@ -4,7 +4,7 @@ The framework kernel — Application lifecycle, DI container, service providers,
 
 ## Key Files
 
-- `src/application.ts` — `Application`, `AppBuilder`, `RudderJS` singleton, boot lifecycle
+- `src/application.ts` — `Application`, `AppBuilder`, `Rudder` singleton, boot lifecycle
 - `src/di.ts` — `Container`, `@Injectable`, `@Inject`, `@Tag`, `tagToken`, contextual bindings, scoped (AsyncLocalStorage), tagging (`tag`/`tagged`), `extend`, `rebinding`, conditional binding (`bindIf`/`singletonIf`/`scopedIf`)
 - `src/service-provider.ts` — `ServiceProvider` base class, `PublishGroup`, dedup guard
 - `src/events.ts` — `EventDispatcher`, `eventsProvider()`, wildcard listeners
@@ -29,7 +29,7 @@ Two subpath-exported commands the CLI registers via `tryImport` after `bootApp()
 - `commands/event-list` — `event:list`. Walks `dispatcher.inspect()` (additive to the count-only `dispatcher.list()`); registers `registerEventListCommand(rudder)`. Wildcard `*` and `<anonymous>` listener handling.
 - `commands/config-show` — `config:show [section[.key]]`. Reads `getConfigRepository().all()`, splits camelCase/snake_case/dotted keys into tokens, redacts when the final token is one of `key/secret/password/token/dsn/webhook/signing/salt/pepper/credentials`. `--raw` disables redaction with a stderr warning; `--json` round-trips through redaction.
 
-`RudderJS.middlewareSnapshot()` is consumed by `@rudderjs/router`'s `route:list --verbose` — returns `{ global, groups: { web, api } }` resolved against the current user-side `withMiddleware()` block + provider-registered `appendToGroup()` middleware. Idempotent re-construction of `MiddlewareConfigurator`; safe to call repeatedly.
+`Rudder.middlewareSnapshot()` is consumed by `@rudderjs/router`'s `route:list --verbose` — returns `{ global, groups: { web, api } }` resolved against the current user-side `withMiddleware()` block + provider-registered `appendToGroup()` middleware. Idempotent re-construction of `MiddlewareConfigurator`; safe to call repeatedly.
 
 ## Commands
 

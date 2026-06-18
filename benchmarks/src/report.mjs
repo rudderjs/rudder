@@ -2,7 +2,7 @@
 // Renders results/<engine>-<size>.json → results/REPORT.md (SQLite) or
 // results/REPORT-postgres.md (Postgres), the committed publishable artifacts.
 // Honest by construction: every op shows all three contenders and bolds the
-// fastest, win or lose for RudderJS. Engine selected via BENCH_ENGINE.
+// fastest, win or lose for Rudder. Engine selected via BENCH_ENGINE.
 
 import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -13,14 +13,14 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const RESULTS_DIR = join(HERE, '..', 'results')
 
 const ORDER = ['rudder', 'drizzle', 'prisma']
-const LABELS = { rudder: 'RudderJS', drizzle: 'Drizzle', prisma: 'Prisma' }
+const LABELS = { rudder: 'Rudder', drizzle: 'Drizzle', prisma: 'Prisma' }
 const ENGINE_NAME = IS_PG ? 'Postgres' : IS_MYSQL ? 'MySQL' : 'SQLite'
 
 const us = (ns) => (ns / 1000).toFixed(2)
 
 function sizeTable(doc) {
   const lines = []
-  lines.push(`| Operation | RudderJS | Drizzle | Prisma | Fastest |`)
+  lines.push(`| Operation | Rudder | Drizzle | Prisma | Fastest |`)
   lines.push(`|---|--:|--:|--:|---|`)
   for (const op of doc.ops) {
     const byName = Object.fromEntries(op.results.map((r) => [r.contender, r]))
@@ -54,7 +54,7 @@ function provenanceBlock(p) {
 function intro() {
   if (IS_PG) {
     return (
-      'RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an ' +
+      'Rudder native engine vs Prisma vs Drizzle, driven **directly** against an ' +
       'identical Postgres database over a local socket — no HTTP, no server, no Vike. ' +
       'rudder + Drizzle both run on **porsager `postgres`** (postgres-js), so that pair ' +
       'is a pure query-layer comparison over one driver; **Prisma runs on node-postgres** ' +
@@ -65,7 +65,7 @@ function intro() {
   }
   if (IS_MYSQL) {
     return (
-      'RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an ' +
+      'Rudder native engine vs Prisma vs Drizzle, driven **directly** against an ' +
       'identical MySQL database over a local socket — no HTTP, no server, no Vike. ' +
       'rudder + Drizzle both run on **`mysql2`**, so that pair is a pure query-layer ' +
       'comparison over one driver; **Prisma runs on the `mariadb` driver** ' +
@@ -76,7 +76,7 @@ function intro() {
     )
   }
   return (
-    'RudderJS native engine vs Prisma vs Drizzle, driven **directly** against an ' +
+    'Rudder native engine vs Prisma vs Drizzle, driven **directly** against an ' +
     'identical `better-sqlite3` file — no HTTP, no server, no Vike. Lower is ' +
     'faster; **bold** is the fastest for that op. Numbers are mean per-call ' +
     'wall time from [mitata](https://github.com/evanwashere/mitata).'
@@ -91,11 +91,11 @@ function caveat() {
       '(insert/find/list/increment/aggregate) cluster near that floor and Prisma\'s ' +
       'query engine is competitive — even ahead — there. The ORMs separate on the ' +
       'query-layer-heavy ops (bulk insert, large hydration, eager + pivot loading), ' +
-      'where RudderJS\'s leaner engine still leads. This is the contrast the SQLite ' +
+      'where Rudder\'s leaner engine still leads. This is the contrast the SQLite ' +
       'report flagged as the committed follow-up: SQLite\'s zero-latency in-process ' +
       'reads under-represent the per-statement engine cost that a socket exposes.\n' +
       '>\n' +
-      "> **Increment caveat:** RudderJS's op uses its idiomatic instance path " +
+      "> **Increment caveat:** Rudder's op uses its idiomatic instance path " +
       '(`find()` then `increment()` = two round-trips); Drizzle/Prisma issue a single ' +
       '`UPDATE … RETURNING`. On SQLite the extra round-trip is ~free; over a socket it ' +
       'roughly doubles that one op. The result value is identical (parity-gated) — only ' +
@@ -108,11 +108,11 @@ function caveat() {
       '(~80–120µs floor on a localhost socket), so single-statement ops ' +
       '(insert/find/list/increment/aggregate) cluster near that floor. The ORMs ' +
       'separate on the query-layer-heavy ops (bulk insert, large hydration, eager + ' +
-      'pivot loading), where RudderJS\'s leaner engine leads. Read alongside the ' +
+      'pivot loading), where Rudder\'s leaner engine leads. Read alongside the ' +
       'Postgres report ([`REPORT-postgres.md`](REPORT-postgres.md)) — the two socket ' +
       'engines tell the same per-statement-cost story SQLite\'s in-process reads hide.\n' +
       '>\n' +
-      "> **Increment caveat:** RudderJS's op uses its idiomatic instance path " +
+      "> **Increment caveat:** Rudder's op uses its idiomatic instance path " +
       '(`find()` then `increment()` = two round-trips). MySQL has no ' +
       '`UPDATE … RETURNING`, so Drizzle issues UPDATE-then-SELECT and Prisma does the ' +
       'equivalent internally — every contender pays two statements here, so this op is ' +

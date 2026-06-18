@@ -99,7 +99,7 @@ class InngestAdapter implements QueueAdapter {
     )
 
     // Build the Hono-compatible serve handler for GET + POST /api/inngest.
-    // The Hono Context (c) is passed directly — it IS req.raw in the RudderJS adapter.
+    // The Hono Context (c) is passed directly — it IS req.raw in the Rudder adapter.
     this.handler = serve({
       client:    this.client,
       functions,

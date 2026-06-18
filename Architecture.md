@@ -1,4 +1,4 @@
-# ⚡ RudderJS — Architecture Document
+# ⚡ Rudder — Architecture Document
 > A Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
 
 ---
@@ -223,7 +223,7 @@ cd playground && pnpm dev
 
 **Why route files need special handling:** `withRouting({ web: () => import('../routes/web.ts') })` uses lazy dynamic imports stored in closures — Vite never adds them to its SSR module graph, so changes are invisible to HMR. The `rudderjs:routes` plugin explicitly watches these directories and triggers a clean re-bootstrap.
 
-**Why `server.restart()` doesn't work:** it closes the Vite module runner, breaking any in-flight SSR request that references the old RudderJS instance. SSR module graph invalidation is the correct approach — the runner stays alive, and the next request re-executes `bootstrap/app.ts` which creates a fresh instance.
+**Why `server.restart()` doesn't work:** it closes the Vite module runner, breaking any in-flight SSR request that references the old Rudder instance. SSR module graph invalidation is the correct approach — the runner stays alive, and the next request re-executes `bootstrap/app.ts` which creates a fresh instance.
 
 **What re-bootstraps vs. what hot-reloads:**
 - **Hot-reloads via Vike (no re-bootstrap):** `app/Views/**` — view files are loaded lazily per request and never captured in provider closures, so the `rudderjs:routes` watcher skips the singleton-clear path for them. Vike's component HMR fires natively (~50 ms in-browser refresh).
@@ -314,7 +314,7 @@ my-app/
 ## Dependency Flow
 
 ```
-RudderJS Framework
+Rudder Framework
 │
 ├─── Foundation Layer (zero deps)
 │    ├── @rudderjs/contracts          Pure TypeScript types + runtime helpers

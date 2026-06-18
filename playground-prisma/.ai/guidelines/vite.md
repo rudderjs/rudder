@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vite plugin that wires RudderJS into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudderjs:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every RudderJS app's `vite.config.ts`.
+Vite plugin that wires Rudder into the build. Single call produces 5 plugins: Vike registration, view scanner (for `@rudderjs/view`), HMR route reload (`rudderjs:routes`), WebSocket upgrade handler (for `@rudderjs/broadcast` + `@rudderjs/sync`), SSR externals, `@/` + `App/` path aliases, and dev-mode `x-real-ip` injection. Required in every Rudder app's `vite.config.ts`.
 
 ## Key Patterns
 
@@ -50,7 +50,7 @@ Install exactly one of `vike-react` / `vike-vue` / `vike-solid` — the view sca
 
 The following packages are automatically excluded from the SSR bundle (Node-only, must not reach the browser):
 
-- RudderJS queue adapters: `@rudderjs/queue-inngest`, `@rudderjs/queue-bullmq`
+- Rudder queue adapters: `@rudderjs/queue-inngest`, `@rudderjs/queue-bullmq`
 - ORM adapters: `@rudderjs/orm-drizzle`, `@rudderjs/orm-prisma`
 - DB drivers: `pg`, `mysql2`, `better-sqlite3`, `@prisma/adapter-*`, `@libsql/client`
 - Redis: `ioredis`

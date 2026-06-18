@@ -106,7 +106,7 @@ export class WebSearch {
       try {
         const url = new URL('https://html.duckduckgo.com/html/')
         url.searchParams.set('q', query + (domains ? ` site:${domains.join(' OR site:')}` : ''))
-        const res = await fetch(url.toString(), { headers: { 'User-Agent': 'RudderJS/1.0' } })
+        const res = await fetch(url.toString(), { headers: { 'User-Agent': 'Rudder/1.0' } })
         const html = await res.text()
         const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000)
         return { results: text }
@@ -151,7 +151,7 @@ export class WebFetch {
     }).server(async ({ url: targetUrl }) => {
       try {
         const res = await fetch(targetUrl, {
-          headers: { 'User-Agent': 'RudderJS/1.0' },
+          headers: { 'User-Agent': 'Rudder/1.0' },
           signal: AbortSignal.timeout(10000),
         })
         const html = await res.text()

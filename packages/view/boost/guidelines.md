@@ -2,7 +2,7 @@
 
 ## Overview
 
-Laravel-style controller-returned views for RudderJS. Controllers return `view('id', props)` and the page is rendered through Vike's SSR pipeline — no Inertia adapter, no JSON envelope. The scanner in `@rudderjs/vite` discovers view files in `app/Views/**`, generates matching Vike pages under `pages/__view/`, and auto-detects the installed renderer (`vike-react`, `vike-vue`, `vike-solid`, or vanilla HTML-string mode).
+Laravel-style controller-returned views for Rudder. Controllers return `view('id', props)` and the page is rendered through Vike's SSR pipeline — no Inertia adapter, no JSON envelope. The scanner in `@rudderjs/vite` discovers view files in `app/Views/**`, generates matching Vike pages under `pages/__view/`, and auto-detects the installed renderer (`vike-react`, `vike-vue`, `vike-solid`, or vanilla HTML-string mode).
 
 ## Key Patterns
 

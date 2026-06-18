@@ -1,6 +1,6 @@
 # @rudderjs/session
 
-HTTP session support for RudderJS — signed cookie sessions (default) and Redis-backed sessions.
+HTTP session support for Rudder — signed cookie sessions (default) and Redis-backed sessions.
 
 ```bash
 pnpm add @rudderjs/session

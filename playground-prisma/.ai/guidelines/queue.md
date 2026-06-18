@@ -2,7 +2,7 @@
 
 ## Overview
 
-Queue abstraction for RudderJS. Provides a `Job` base class with `handle()` / `failed()` lifecycle, a fluent `dispatch()` builder, a driver registry (`QueueRegistry`), and rudder CLI commands (`queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry`). Ships with a built-in `sync` driver. BullMQ and Inngest are available as separate driver packages.
+Queue abstraction for Rudder. Provides a `Job` base class with `handle()` / `failed()` lifecycle, a fluent `dispatch()` builder, a driver registry (`QueueRegistry`), and rudder CLI commands (`queue:work`, `queue:status`, `queue:clear`, `queue:failed`, `queue:retry`). Ships with a built-in `sync` driver. BullMQ and Inngest are available as separate driver packages.
 
 ## Key Patterns
 

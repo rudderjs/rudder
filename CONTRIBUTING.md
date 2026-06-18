@@ -1,8 +1,8 @@
-# Contributing to RudderJS
+# Contributing to Rudder
 
 ## Package Development Guide
 
-This document covers the rules and patterns for developing packages in the RudderJS monorepo.
+This document covers the rules and patterns for developing packages in the Rudder monorepo.
 
 ---
 

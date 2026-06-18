@@ -2,7 +2,7 @@
 //
 // The fairest possible comparison applies BYTE-IDENTICAL DDL to all three ORMs:
 // one raw-SQL schema, created via better-sqlite3, then each ORM merely *maps*
-// onto the existing tables (Prisma @@map/@map, Drizzle sqliteTable, RudderJS
+// onto the existing tables (Prisma @@map/@map, Drizzle sqliteTable, Rudder
 // `static table`). No ORM owns the DDL, so no ORM gets a schema-shape advantage.
 //
 // `created_at` is TEXT (ISO string) rather than a datetime type on purpose:

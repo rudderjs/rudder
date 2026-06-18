@@ -12,7 +12,7 @@ import { buildEditorUrl, resolveEditor } from './editor-launch.js'
  *
  * Mirrors `@rudderjs/vite`'s `resolveRudderVersion()`. Reading this adapter's
  * OWN `package.json` (the previous approach) reported the *adapter* version
- * mislabeled as "RudderJS", and leaked a hard-coded `1.x` placeholder whenever
+ * mislabeled as "Rudder", and leaked a hard-coded `1.x` placeholder whenever
  * the on-disk read failed (bundled/serverless deploys). `@internal` — exposed
  * for tests; `fromDir` overrides the resolution root.
  */

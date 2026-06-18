@@ -38,7 +38,7 @@ Useful as guardrails when you add or rename tools — `assertToolCount(N)` will 
 
 ## DI-injected tools
 
-When a RudderJS DI container is available (the framework boot path), tool classes resolve through it. Constructor dependencies are auto-injected:
+When a Rudder DI container is available (the framework boot path), tool classes resolve through it. Constructor dependencies are auto-injected:
 
 ```ts
 import { McpTool, McpResponse, Description } from '@rudderjs/mcp'

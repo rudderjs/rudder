@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hono-based HTTP server adapter — the default server in every RudderJS app. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, IP extraction, the Vike SSR fetch handler, and the WebSocket upgrade bridge. You rarely touch this package directly: `Application.configure()` auto-resolves it when no `server:` option is passed, constructing it with `config('server')`.
+Hono-based HTTP server adapter — the default server in every Rudder app. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, IP extraction, the Vike SSR fetch handler, and the WebSocket upgrade bridge. You rarely touch this package directly: `Application.configure()` auto-resolves it when no `server:` option is passed, constructing it with `config('server')`.
 
 ## Key Patterns
 

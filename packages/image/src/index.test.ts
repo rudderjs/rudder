@@ -240,7 +240,7 @@ describe('@rudderjs/image', () => {
     // A JPEG carrying real EXIF so we can assert it is actually removed.
     async function createJpegWithExif(): Promise<Buffer> {
       return sharp({ create: { width: 50, height: 50, channels: 3, background: { r: 0, g: 128, b: 255 } } })
-        .withExif({ IFD0: { Copyright: 'RudderJS' } })
+        .withExif({ IFD0: { Copyright: 'Rudder' } })
         .jpeg()
         .toBuffer()
     }

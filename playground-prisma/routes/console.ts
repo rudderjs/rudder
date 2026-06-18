@@ -21,7 +21,7 @@ Rudder.command('inspire', () => {
 
 Rudder.command('dashboard', async () => {
   return terminal('dashboard', {
-    appName: 'RudderJS',
+    appName: 'Rudder',
     version: '1.0.0',
   })
 }).description('Show the app dashboard in the terminal')

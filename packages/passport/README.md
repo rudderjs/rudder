@@ -1,6 +1,6 @@
 # @rudderjs/passport
 
-OAuth 2 server for RudderJS — the Laravel Passport equivalent. Turns your app into an OAuth 2 provider that issues JWT-signed access tokens, refresh tokens, and personal access tokens.
+OAuth 2 server for Rudder — the Laravel Passport equivalent. Turns your app into an OAuth 2 provider that issues JWT-signed access tokens, refresh tokens, and personal access tokens.
 
 ## Features
 

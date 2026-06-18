@@ -12,7 +12,7 @@
  *
  * This scanner generates exactly that, mirroring the typed-env scanner.
  *
- * Source of truth: the app's `config/index.ts` barrel (RudderJS convention —
+ * Source of truth: the app's `config/index.ts` barrel (Rudder convention —
  * the default-exported object of named config sections). The emit references it
  * by `import type`, so the registry always reflects the live shape without this
  * scanner parsing any config file. Emit is a single, content-independent file —
@@ -32,7 +32,7 @@ const CONFIG_BARREL = path.join('config', 'index.ts')
 
 /**
  * Import specifier from the emit location (`.rudder/types/config.d.ts`) to the
- * app's config barrel. Both ends are fixed RudderJS conventions, so this is a
+ * app's config barrel. Both ends are fixed Rudder conventions, so this is a
  * constant — two levels up out of `.rudder/types/`, then `config/index.js`.
  */
 const CONFIG_IMPORT = '../../config/index.js'

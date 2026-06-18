@@ -1,7 +1,7 @@
 # `vike-react-rsc-rudder`
 
 React Server Components support for [Vike](https://vike.dev). This is a
-**RudderJS-maintained fork** of [`vike-react-rsc`](https://github.com/nitedani/vike-react-rsc)
+**Rudder-maintained fork** of [`vike-react-rsc`](https://github.com/nitedani/vike-react-rsc)
 by **nitedani**, **MIT-licensed** (see `LICENSE`). Copyright for the original
 work remains with nitedani and contributors; the fork's changes are documented
 below.
@@ -10,7 +10,7 @@ below.
 
 The working version of the upstream package (`1.0.0`) lives **only** in the
 GitHub repository — npm has nothing but a `0.0.0` stub published in 2024-04.
-RudderJS's RSC integration needs an installable, versioned package, so we
+Rudder's RSC integration needs an installable, versioned package, so we
 publish this maintained fork.
 
 > **This fork is temporary.** In the upstream "Publish?" thread
@@ -19,7 +19,7 @@ publish this maintained fork.
 > [`@vitejs/plugin-rsc`](https://www.npmjs.com/package/@vitejs/plugin-rsc),
 > dropping the custom code this fork patches. When that lands and is published,
 > we deprecate this fork and adopt the official package. Treat it as
-> **experimental** in the meantime — `vike-react` remains RudderJS's default
+> **experimental** in the meantime — `vike-react` remains Rudder's default
 > renderer.
 
 ### Why the name isn't `@rudderjs/…`
@@ -73,7 +73,7 @@ this matrix is an interim safeguard, not a long-term commitment.
   (`publishConfig.access: public`); `@vitejs/plugin-rsc` moved from
   `devDependencies` to `dependencies` (the build externalizes it, so consumers
   need it at runtime); `react` / `react-dom` / `vite` / `vike` dev pins aligned
-  to the RudderJS monorepo versions.
+  to the Rudder monorepo versions.
 - `src/constants.ts` + `src/config.ts`: the package self-references
   (`PKG_NAME`, the vike config `name`, and the `import:…/__internal/…`
   specifiers) updated to the fork package name.
@@ -82,7 +82,7 @@ this matrix is an interim safeguard, not a long-term commitment.
   which crashed vike's dev `optimizeDeps`.
 - `src/config.ts`: the SSR build's `rollupOptions.input` also includes Vike's
   server entry (`entry: serverEntryVirtualId`). Upstream targets `vike-server`
-  (no `+server.ts`); RudderJS uses the `+server.ts` → `app.fetch` model, where
+  (no `+server.ts`); Rudder uses the `+server.ts` → `app.fetch` model, where
   `@brillout/vite-plugin-server-entry` needs that entry — otherwise the
   production build fails with "Cannot find build server entry".
 - `src/plugin/plugins/injectManifestBuild.ts`: the page-entry virtual id was

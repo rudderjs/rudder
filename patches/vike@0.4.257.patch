@@ -8,7 +8,7 @@ index c84ab47949ca4307d42e64dc4f4464f1add09947..4d9500ee425e64dcbef6fc058112536d
  }
 -// Set the value of the ASSETS_MANIFEST constant inside dist/server/entry.js (or dist/server/index.js)
 +// Set the value of the ASSETS_MANIFEST constant inside the server build's output.
-+// RudderJS patch (Vite 8 / rolldown): upstream located the single chunk whose IN-MEMORY
++// Rudder patch (Vite 8 / rolldown): upstream located the single chunk whose IN-MEMORY
 +// `chunk.code` contained the placeholder and replaced only that file. Under rolldown-vite the
 +// written server output can carry __VITE_ASSETS_MANIFEST__ in a shared chunk that the in-memory
 +// `bundle` object doesn't reliably reflect (different `code`, or not enumerated at all under a
@@ -113,7 +113,7 @@ index 21465d0480aeb7e754983942543794b0ef3d4315..5fe34d4c473c5ed8f6ec0b119bdb35fb
          assert(e);
          // optimizeDeps.entries expects filesystem absolute paths
 -        assert(isVirtualFileId(e) || isFilePathAbsoluteFilesystem(e));
-+        // RudderJS patch: an extension's `client` config can resolve to a bare
++        // Rudder patch: an extension's `client` config can resolve to a bare
 +        // package specifier (e.g. vike-react-rsc/...), which is neither virtual
 +        // nor absolute. Upstream asserts and crashes RSC dev; skip it instead —
 +        // Vite resolves such imports on demand (see vike's own getPageDeps note).

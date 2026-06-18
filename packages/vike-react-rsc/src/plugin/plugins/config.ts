@@ -75,13 +75,13 @@ export const configs: Plugin[] = [
               rollupOptions: {
                 input: {
                   ssr: "virtual:build-ssr-entry",
-                  // RudderJS vendor change: also build Vike's server entry so
+                  // Rudder vendor change: also build Vike's server entry so
                   // `@brillout/vite-plugin-server-entry` finds it in the SSR
                   // bundle. The plugin injects this entry into the *base* config,
                   // but our env-level `input` override above would otherwise wipe
                   // it — and then the production build fails with "Cannot find
                   // build server entry". Upstream targets vike-server (no
-                  // `+server.ts`); RudderJS uses the `+server.ts` → app.fetch
+                  // `+server.ts`); Rudder uses the `+server.ts` → app.fetch
                   // model, which needs this entry. See VENDORED.md.
                   entry: serverEntryVirtualId,
                 },

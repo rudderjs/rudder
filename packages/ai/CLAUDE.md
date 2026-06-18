@@ -1,6 +1,6 @@
 # @rudderjs/ai
 
-AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + RudderJS-specific approval-resume flow.
+AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Rudder-specific approval-resume flow.
 
 ## Key Files
 

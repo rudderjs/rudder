@@ -1,4 +1,4 @@
-# RudderJS — Copilot Instructions
+# Rudder — Copilot Instructions
 
 These rules apply to every PR opened by GitHub Copilot in this repo. Read before opening a PR. Violations of the **hard rules** below will get the PR rejected or rescoped.
 

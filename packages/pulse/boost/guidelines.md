@@ -2,7 +2,7 @@
 
 ## What This Package Does
 
-Pulse is an application metrics dashboard for RudderJS applications. It records time-series data (request throughput, cache hit rates, queue metrics, server stats) into 1-minute buckets and exposes a JSON API + a single-page dashboard at `/pulse`.
+Pulse is an application metrics dashboard for Rudder applications. It records time-series data (request throughput, cache hit rates, queue metrics, server stats) into 1-minute buckets and exposes a JSON API + a single-page dashboard at `/pulse`.
 
 ## Architecture
 

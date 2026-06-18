@@ -2,7 +2,7 @@
 
 ## What This Package Does
 
-Horizon is a deep queue monitoring tool for RudderJS applications. It goes beyond basic job recording (Telescope) to provide full job lifecycle tracking, per-queue metrics, worker status, and failed job management (retry/delete).
+Horizon is a deep queue monitoring tool for Rudder applications. It goes beyond basic job recording (Telescope) to provide full job lifecycle tracking, per-queue metrics, worker status, and failed job management (retry/delete).
 
 ## Architecture
 

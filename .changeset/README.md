@@ -1,6 +1,6 @@
 # Changesets
 
-This directory contains changesets for RudderJS releases.
+This directory contains changesets for Rudder releases.
 
 ## How to create a release
 

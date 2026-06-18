@@ -1,6 +1,6 @@
 # @rudderjs/router
 
-Decorator-based and fluent HTTP router for RudderJS. Supports named routes, URL generation, signed URLs, route-level middleware, and controller registration.
+Decorator-based and fluent HTTP router for Rudder. Supports named routes, URL generation, signed URLs, route-level middleware, and controller registration.
 
 ## Installation
 
@@ -277,7 +277,7 @@ Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same na
 
 ## Resource controllers (`router.resource()`)
 
-Wire the seven canonical CRUD routes from a plain controller class — Laravel's `Route::resource` for RudderJS. No decorators; methods are matched by name.
+Wire the seven canonical CRUD routes from a plain controller class — Laravel's `Route::resource` for Rudder. No decorators; methods are matched by name.
 
 ```ts
 import { router } from '@rudderjs/router'

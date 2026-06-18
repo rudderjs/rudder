@@ -4,7 +4,7 @@ import { registerDoctorCheck, type DoctorResult } from '@rudderjs/console'
 import { readFileSafe } from './_fs.js'
 
 /**
- * Decorator + DI setup preflight checks. RudderJS leans on TypeScript decorators
+ * Decorator + DI setup preflight checks. Rudder leans on TypeScript decorators
  * (`@Injectable`, routing) and `reflect-metadata` for the DI container, so a
  * misconfigured entry point or tsconfig breaks DI/routing with cryptic
  * runtime errors that surface far from the cause. These fast-path checks catch

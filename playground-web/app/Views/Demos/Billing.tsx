@@ -90,7 +90,7 @@ export default function BillingDemo({ mock, clientSideToken, sandbox, prices, si
       <nav className="page-nav">
         <div className="brand">
           <span className="brand-dot" />
-          RudderJS
+          Rudder
         </div>
         <div className="nav-right">
           <a href="/demos" className="nav-link">Demos</a>

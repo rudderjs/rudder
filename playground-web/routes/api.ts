@@ -34,7 +34,7 @@ Route.get(
 // from app/Views/Home.tsx and app/Views/About.tsx via Vike SSR.
 Route.get('/home', async () => {
   return view('home', {
-    appName:  'RudderJS',
+    appName:  'Rudder',
     greeting: 'Laravel-style controller views, rendered through Vike SSR.',
     features: [
       'Routes return view() like Laravel controllers',
@@ -48,7 +48,7 @@ Route.get('/home', async () => {
 
 Route.get('/about', async () => {
   return view('about', {
-    title:   'About RudderJS',
+    title:   'About Rudder',
     version: '0.0.1',
     team: [
       { name: 'Ada Lovelace',  role: 'Algorithms'    },

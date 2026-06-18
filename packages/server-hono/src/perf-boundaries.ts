@@ -99,7 +99,7 @@ function dump(): void {
   if (samples.length === 0) return
 
   const lines: string[] = []
-  lines.push(`# RudderJS perf boundaries`)
+  lines.push(`# Rudder perf boundaries`)
   lines.push(`# samples=${samples.length}`)
   lines.push('')
 

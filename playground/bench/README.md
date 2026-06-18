@@ -1,6 +1,6 @@
 # Realistic-workload HTTP bench
 
-Through-the-server performance baseline for RudderJS. It boots the **playground**
+Through-the-server performance baseline for Rudder. It boots the **playground**
 in prod, warms it, then hits a weighted mix of real routes and reports per-route
 and mixed-workload throughput + latency percentiles.
 

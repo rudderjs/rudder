@@ -1,6 +1,6 @@
 ---
 name: auth-setup
-description: Setting up authentication with guards, sessions, registration, password reset, gates/policies, and vendor views in RudderJS
+description: Setting up authentication with guards, sessions, registration, password reset, gates/policies, and vendor views in Rudder
 license: MIT
 appliesTo:
   - '@rudderjs/auth'

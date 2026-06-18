@@ -92,7 +92,7 @@ export class QueuedPromptBuilder {
    *   - `error` (`{ message }` if the run fails)
    *
    * Requires `@rudderjs/broadcast` installed and its WS server running in the
-   * worker process. In the typical RudderJS dev setup (single process running
+   * worker process. In the typical Rudder dev setup (single process running
    * both web + queue:work) this works out of the box. If your queue worker is
    * a separate process from the broadcast WS server, you'll need a pub/sub
    * bridge (Redis, Reverb, etc.) — outside the scope of v1.

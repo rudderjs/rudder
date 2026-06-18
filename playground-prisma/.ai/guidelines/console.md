@@ -2,7 +2,7 @@
 
 ## Overview
 
-Command registry + class-based command primitives for the RudderJS CLI. Apps register commands in `routes/console.ts` via `rudder.command(...)` (from `@rudderjs/core`) or `Rudder.register(CommandClass)` (from this package). Packages register their own commands in their provider's `boot()`. The CLI runner (`@rudderjs/cli`) loads and dispatches them.
+Command registry + class-based command primitives for the Rudder CLI. Apps register commands in `routes/console.ts` via `rudder.command(...)` (from `@rudderjs/core`) or `Rudder.register(CommandClass)` (from this package). Packages register their own commands in their provider's `boot()`. The CLI runner (`@rudderjs/cli`) loads and dispatches them.
 
 ## Key Patterns
 

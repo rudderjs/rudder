@@ -1,6 +1,6 @@
 # @rudderjs/image
 
-Fluent image processing for RudderJS — resize, crop, convert, optimize. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/) with `@rudderjs/storage` integration and batch conversions.
+Fluent image processing for Rudder — resize, crop, convert, optimize. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/) with `@rudderjs/storage` integration and batch conversions.
 
 ## Installation
 

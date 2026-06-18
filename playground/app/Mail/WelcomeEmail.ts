@@ -7,12 +7,12 @@ export class WelcomeEmail extends Mailable {
 
   build(): this {
     return this
-      .subject(`Welcome to RudderJS, ${this.userName}!`)
+      .subject(`Welcome to Rudder, ${this.userName}!`)
       .html(`
         <h1>Welcome, ${this.userName}!</h1>
-        <p>Thanks for joining RudderJS. Your account is ready.</p>
-        <p>— The RudderJS Team</p>
+        <p>Thanks for joining Rudder. Your account is ready.</p>
+        <p>— The Rudder Team</p>
       `)
-      .text(`Welcome, ${this.userName}!\n\nThanks for joining RudderJS. Your account is ready.\n\n— The RudderJS Team`)
+      .text(`Welcome, ${this.userName}!\n\nThanks for joining Rudder. Your account is ready.\n\n— The Rudder Team`)
   }
 }

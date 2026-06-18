@@ -1,6 +1,6 @@
 # @rudderjs/vite
 
-Vite plugin for RudderJS. Registers Vike (SSR), sets the `@/` and `App/` path aliases, externalizes server-only packages from the client bundle, wires up WebSocket upgrade handling for `@rudderjs/broadcast` and `@rudderjs/sync`, and installs Vike framework hooks (page-context enhancers, error routing, per-page response headers) so other `@rudderjs/*` packages can light up their Vike integrations automatically.
+Vite plugin for Rudder. Registers Vike (SSR), sets the `@/` and `App/` path aliases, externalizes server-only packages from the client bundle, wires up WebSocket upgrade handling for `@rudderjs/broadcast` and `@rudderjs/sync`, and installs Vike framework hooks (page-context enhancers, error routing, per-page response headers) so other `@rudderjs/*` packages can light up their Vike integrations automatically.
 
 ```bash
 pnpm add @rudderjs/vite

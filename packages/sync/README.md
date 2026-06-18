@@ -1,6 +1,6 @@
 # @rudderjs/sync
 
-Real-time collaborative document sync engine for RudderJS — [Yjs](https://yjs.dev) CRDT over WebSocket. Editor-agnostic core with adapters under subpath exports.
+Real-time collaborative document sync engine for Rudder — [Yjs](https://yjs.dev) CRDT over WebSocket. Editor-agnostic core with adapters under subpath exports.
 
 Works alongside `@rudderjs/broadcast` — the sync engine uses the same port and process, no separate server needed.
 

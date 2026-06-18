@@ -1,6 +1,6 @@
 # @rudderjs/log
 
-Structured logging for RudderJS — channels, log levels, formatters, context propagation, and testing fakes.
+Structured logging for Rudder — channels, log levels, formatters, context propagation, and testing fakes.
 
 Laravel's `Log` facade, rebuilt for Node.js.
 

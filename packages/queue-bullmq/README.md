@@ -1,6 +1,6 @@
 # @rudderjs/queue-bullmq
 
-BullMQ Redis-backed queue adapter for RudderJS.
+BullMQ Redis-backed queue adapter for Rudder.
 
 ```bash
 pnpm add @rudderjs/queue-bullmq bullmq ioredis

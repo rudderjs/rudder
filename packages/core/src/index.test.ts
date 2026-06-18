@@ -618,9 +618,9 @@ describe('AppBuilder', () => {
   })
 })
 
-// ─── RudderJS.middlewareSnapshot() ───────────────────────────
+// ─── Rudder.middlewareSnapshot() ───────────────────────────
 
-describe('RudderJS.middlewareSnapshot()', () => {
+describe('Rudder.middlewareSnapshot()', () => {
   beforeEach(() => {
     reset()
     resetGroupMiddleware()

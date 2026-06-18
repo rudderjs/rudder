@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Comparative query-layer ORM benchmark suite — RudderJS native engine vs Prisma vs Drizzle on an identical schema + dataset, on SQLite, Postgres AND MySQL (§14 #11). Never published.",
+  "description": "Comparative query-layer ORM benchmark suite — Rudder native engine vs Prisma vs Drizzle on an identical schema + dataset, on SQLite, Postgres AND MySQL (§14 #11). Never published.",
   "scripts": {
     "bench:setup": "node src/setup.mjs",
     "bench": "node src/run.mjs",

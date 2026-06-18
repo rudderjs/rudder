@@ -59,9 +59,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-06-17: APP_NAME / MAIL_FROM_NAME scaffold
-  // defaults rebranded from 'RudderJS' to 'Rudder' (part of the [RudderJS] ->
-  // [Rudder] log/brand rename). -4 bytes, same file set.
+  // Baseline last captured 2026-06-18: the remaining user-facing brand text was
+  // renamed to "Rudder" (completing the earlier log/brand rebrand). Same file set.
   // If you change any template's output deliberately, recapture all four
   // assertions via `pnpm exec tsx scripts/recapture-snapshot.ts`.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
@@ -71,8 +70,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 51419
-const EXPECTED_CONTENT_HASH = 'be0e71c61cc05f93bcbbcea0bd4eed6becb9a077f4ef3451a3cea2227e4cf66d'
+const EXPECTED_TOTAL_BYTES = 51417
+const EXPECTED_CONTENT_HASH = 'c00dc9089756d72428f88e3927f7513504ef6e265e1fb5e6d6553df503cc4a55'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

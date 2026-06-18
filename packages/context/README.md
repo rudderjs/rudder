@@ -1,6 +1,6 @@
 # @rudderjs/context
 
-Request-scoped context for RudderJS — an ALS-backed data bag that auto-propagates to log entries and queued jobs.
+Request-scoped context for Rudder — an ALS-backed data bag that auto-propagates to log entries and queued jobs.
 
 ## Installation
 

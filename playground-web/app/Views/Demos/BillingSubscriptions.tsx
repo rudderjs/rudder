@@ -47,7 +47,7 @@ export default function BillingSubscriptions({ mock, subscriptions: initial }: P
       <nav className="page-nav">
         <div className="brand">
           <span className="brand-dot" />
-          RudderJS
+          Rudder
         </div>
         <div className="nav-right">
           <a href="/demos/billing" className="nav-link">Back</a>

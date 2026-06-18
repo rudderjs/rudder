@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Steady-state RPS benchmark — RudderJS vs Next / Nuxt / SvelteKit.
+# Steady-state RPS benchmark — Rudder vs Next / Nuxt / SvelteKit.
 # Follow-up to perf-bench.sh (#479) which measured cold-boot + first-render.
 #
 # Usage: scripts/perf-bench-rps.sh [<bench-root>]

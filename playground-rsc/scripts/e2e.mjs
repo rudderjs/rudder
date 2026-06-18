@@ -70,7 +70,7 @@ async function run() {
     const res = await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS })
     if (!res || res.status() !== 200) failures.push(`GET / → ${res ? res.status() : 'no response'} (expected 200)`)
     const html = res ? await res.text() : ''
-    for (const marker of ['RudderJS', 'Increment (server action)']) {
+    for (const marker of ['Rudder', 'Increment (server action)']) {
       if (!html.includes(marker)) failures.push(`SSR marker "${marker}" missing from initial HTML`)
     }
 

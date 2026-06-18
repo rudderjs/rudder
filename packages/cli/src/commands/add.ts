@@ -183,7 +183,7 @@ function runChild(cmd: string, args: string[], cwd: string): Promise<boolean> {
 export function addCommand(program: Command): void {
   program
     .command('add <package>')
-    .description('Install a RudderJS package — handles deps, config, and provider discovery')
+    .description('Install a Rudder package — handles deps, config, and provider discovery')
     .action(async (packageName: string) => {
       const cwd  = process.cwd()
       const spec = findSpec(packageName)

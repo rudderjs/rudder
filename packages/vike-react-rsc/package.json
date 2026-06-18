@@ -1,9 +1,9 @@
 {
   "name": "vike-react-rsc-rudder",
   "version": "1.0.3",
-  "description": "React Server Components for Vike — RudderJS-maintained fork of vike-react-rsc by nitedani (MIT). See README.",
+  "description": "React Server Components for Vike — Rudder-maintained fork of vike-react-rsc by nitedani (MIT). See README.",
   "type": "module",
-  "author": "nitedani (original); RudderJS (fork)",
+  "author": "nitedani (original); Rudder (fork)",
   "homepage": "https://github.com/rudderjs/rudder/tree/main/packages/vike-react-rsc#readme",
   "repository": {
     "type": "git",

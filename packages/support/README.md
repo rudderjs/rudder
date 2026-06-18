@@ -1,6 +1,6 @@
 # @rudderjs/support
 
-Shared utility primitives for RudderJS: collections, environment access, config lookup, debug helpers, and general-purpose functions.
+Shared utility primitives for Rudder: collections, environment access, config lookup, debug helpers, and general-purpose functions.
 
 All exports are also available from `@rudderjs/core` — you rarely need to install this package directly.
 

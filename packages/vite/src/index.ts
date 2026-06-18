@@ -229,7 +229,7 @@ export function invalidateBackendSubtree(server: ViteDevServer, file: string, cw
 
 /**
  * Re-bootstrap the dev SSR app after a watched file change: clear the two
- * top-level singletons (so a fresh `RudderJS` + `Application` pair is built on
+ * top-level singletons (so a fresh `Rudder` + `Application` pair is built on
  * the next request), invalidate the changed files' SSR subtrees, and tell the
  * browser to do a full reload.
  *
@@ -255,7 +255,7 @@ export function performReboot(server: ViteDevServer, files: string[], cwd: strin
   const trace = process.env['RUDDER_HMR_TRACE'] === '1'
   const t0 = trace ? performance.now() : 0
 
-  // Clear the two top-level singletons so a new RudderJS + Application pair is
+  // Clear the two top-level singletons so a new Rudder + Application pair is
   // created when the module re-executes. App files (models, resources,
   // controllers) are captured in closures during bootstrap so they also need a
   // full re-bootstrap to pick up changes.
@@ -332,9 +332,9 @@ export function resolveWatchDir(entry: string, cwd: string): string | null {
 // ─── Main plugin ───────────────────────────────────────────
 
 /**
- * RudderJS Vite plugin.
+ * Rudder Vite plugin.
  *
- * Sets the @/ and App/ path aliases, externalises RudderJS optional-peer
+ * Sets the @/ and App/ path aliases, externalises Rudder optional-peer
  * packages from the SSR bundle, wires the views-scanner, and patches Vite's
  * HTTP server with the WebSocket upgrade handler used by `@rudderjs/broadcast`
  * and `@rudderjs/sync`.

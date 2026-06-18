@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/pennant",
   "version": "1.1.2",
-  "description": "Feature flags for RudderJS — define, check, scope, Lottery rollout, database/memory drivers",
+  "description": "Feature flags for Rudder — define, check, scope, Lottery rollout, database/memory drivers",
   "rudderjs": {
     "provider": "PennantProvider",
     "stage": "feature"

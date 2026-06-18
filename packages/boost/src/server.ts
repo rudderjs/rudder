@@ -27,7 +27,7 @@ export function createBoostServer(cwd: string): McpServer {
 
   server.registerTool('app_info', {
     title: 'Application Info',
-    description: 'Get RudderJS application info: installed packages, versions, Node.js version, package manager.',
+    description: 'Get Rudder application info: installed packages, versions, Node.js version, package manager.',
   }, async () => {
     const info = getAppInfo(cwd)
     return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] }

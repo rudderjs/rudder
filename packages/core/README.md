@@ -56,7 +56,7 @@ export default Application.configure({ config, providers })
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
 - `appendToGroup(group, handler)` — provider-facing helper to install middleware into the `web` or `api` group
-- `AppBuilder`, `RudderJS`
+- `AppBuilder`, `Rudder`
 - `app()`, `resolve()`
 - `defineConfig()`
 - `HttpException` — HTTP error with `statusCode`, `message`, `headers`
@@ -422,7 +422,7 @@ class StoreUser extends FormRequest<typeof schema> {
 ## Notes
 
 - `Application.create()` is singleton-based and can recreate in development/local mode when config is passed.
-- `RudderJS.boot()` boots providers; `RudderJS.handleRequest()` lazily creates the HTTP handler.
+- `Rudder.boot()` boots providers; `Rudder.handleRequest()` lazily creates the HTTP handler.
 - `ValidationError` is always caught and returned as 422 JSON — no try/catch needed in routes.
 - `HttpException` is always caught and rendered with its status code — no try/catch needed in routes.
 - Unhandled errors are auto-reported and render as 500. In `debug` mode the response includes the exception message and stack trace.

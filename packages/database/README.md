@@ -1,6 +1,6 @@
 # @rudderjs/database
 
-The SQL data-layer foundation for RudderJS — the `DB` facade, raw expressions, and the **built-in native SQL engine** (query compiler, schema builder, migrations, and drivers for SQLite / PostgreSQL / MySQL). `@rudderjs/orm` (the Eloquent-style `Model` layer) is built on top of this package and installs it automatically — most apps never add it by hand.
+The SQL data-layer foundation for Rudder — the `DB` facade, raw expressions, and the **built-in native SQL engine** (query compiler, schema builder, migrations, and drivers for SQLite / PostgreSQL / MySQL). `@rudderjs/orm` (the Eloquent-style `Model` layer) is built on top of this package and installs it automatically — most apps never add it by hand.
 
 ```bash
 pnpm add @rudderjs/orm        # pulls in @rudderjs/database

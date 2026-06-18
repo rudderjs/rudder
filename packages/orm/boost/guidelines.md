@@ -2,7 +2,7 @@
 
 ## Overview
 
-Eloquent-inspired ORM for RudderJS. Provides a `Model` base class with static query methods, attribute casting, accessors/mutators, soft deletes, observers, scopes, API resources (`JsonResource`), model collections, and factories. The ORM is adapter-based -- the actual database driver (e.g. Prisma) is registered via `ModelRegistry.set(adapter)` in a service provider.
+Eloquent-inspired ORM for Rudder. Provides a `Model` base class with static query methods, attribute casting, accessors/mutators, soft deletes, observers, scopes, API resources (`JsonResource`), model collections, and factories. The ORM is adapter-based -- the actual database driver (e.g. Prisma) is registered via `ModelRegistry.set(adapter)` in a service provider.
 
 ## Key Patterns
 

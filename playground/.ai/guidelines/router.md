@@ -2,7 +2,7 @@
 
 ## Overview
 
-Decorator-based and fluent HTTP router for RudderJS. Provides a global `router` singleton (alias: `Route`), named routes, URL generation via `route()`, HMAC-signed URLs via `Url`, route-level middleware, and decorator-based controllers (`@Controller`, `@Get`, `@Post`, etc.). The router is a peer of `@rudderjs/core` — core loads it at runtime via `resolveOptionalPeer` to avoid a dependency cycle.
+Decorator-based and fluent HTTP router for Rudder. Provides a global `router` singleton (alias: `Route`), named routes, URL generation via `route()`, HMAC-signed URLs via `Url`, route-level middleware, and decorator-based controllers (`@Controller`, `@Get`, `@Post`, etc.). The router is a peer of `@rudderjs/core` — core loads it at runtime via `resolveOptionalPeer` to avoid a dependency cycle.
 
 ## Key Patterns
 

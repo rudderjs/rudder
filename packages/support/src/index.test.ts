@@ -466,13 +466,13 @@ describe('env()', () => {
 
 describe('ConfigRepository', () => {
   it('get() returns top-level value', () => {
-    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
-    assert.deepStrictEqual(repo.get('app'), { name: 'RudderJS' })
+    const repo = new ConfigRepository({ app: { name: 'Rudder' } })
+    assert.deepStrictEqual(repo.get('app'), { name: 'Rudder' })
   })
 
   it('get() returns nested value with dot notation', () => {
-    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
-    assert.strictEqual(repo.get('app.name'), 'RudderJS')
+    const repo = new ConfigRepository({ app: { name: 'Rudder' } })
+    assert.strictEqual(repo.get('app.name'), 'Rudder')
   })
 
   it('get() returns fallback for missing key', () => {

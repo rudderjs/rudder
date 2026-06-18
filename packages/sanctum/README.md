@@ -1,6 +1,6 @@
 # @rudderjs/sanctum
 
-Lightweight API token authentication for RudderJS. SHA-256 hashed tokens with per-token abilities.
+Lightweight API token authentication for Rudder. SHA-256 hashed tokens with per-token abilities.
 
 ## Installation
 

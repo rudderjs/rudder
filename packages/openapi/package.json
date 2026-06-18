@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/openapi",
   "version": "1.1.0",
-  "description": "Auto-generate an OpenAPI 3.1 spec (+ optional Swagger UI) from RudderJS typed routes",
+  "description": "Auto-generate an OpenAPI 3.1 spec (+ optional Swagger UI) from Rudder typed routes",
   "rudderjs": {
     "provider": "OpenApiProvider",
     "stage": "feature",

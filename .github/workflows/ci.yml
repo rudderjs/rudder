@@ -719,7 +719,7 @@ jobs:
 
   rsc-e2e:
     # React Server Components (vike-react-rsc-rudder) is an opt-in renderer:
-    # a RudderJS-maintained fork of upstream vike-react-rsc + vike version-compat
+    # a Rudder-maintained fork of upstream vike-react-rsc + vike version-compat
     # shims (see packages/vike-react-rsc/README.md). It's fragile to vike /
     # @vitejs/plugin-rsc bumps and to an upstream re-sync, so this gate builds
     # `playground-rsc` for PRODUCTION and drives a

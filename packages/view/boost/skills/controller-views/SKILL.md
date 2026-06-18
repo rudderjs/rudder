@@ -1,6 +1,6 @@
 ---
 name: controller-views
-description: Creating controller-returned views with route overrides, multi-framework support, and the html tagged template in RudderJS
+description: Creating controller-returned views with route overrides, multi-framework support, and the html tagged template in Rudder
 license: MIT
 appliesTo:
   - '@rudderjs/view'
@@ -74,7 +74,7 @@ When the controller URL doesn't match the id-derived path, add `export const rou
 export const route = '/'
 
 export default function Welcome() {
-  return <h1>Welcome to RudderJS</h1>
+  return <h1>Welcome to Rudder</h1>
 }
 ```
 
@@ -190,7 +190,7 @@ export default function Welcome() {
 
   return (
     <div>
-      <h1>Welcome to RudderJS</h1>
+      <h1>Welcome to Rudder</h1>
       {user ? (
         <p>Signed in as {user.name} <a href="/auth/logout">Sign out</a></p>
       ) : (

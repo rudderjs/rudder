@@ -48,14 +48,14 @@ Route.registerController(BillingController)
 // dispatch — set it once at boot via the User class.
 Cashier.useBillableModel(User)
 
-// Read RudderJS version from @rudderjs/core's package.json at boot time.
+// Read Rudder version from @rudderjs/core's package.json at boot time.
 const _require = createRequire(import.meta.url)
 const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
 
 // Welcome page — replaces the pages/index/ Vike page with a controller view.
 // Delete this route and app/Views/Welcome.tsx to swap in your own landing page.
 Route.get('/', async () => view('welcome', {
-  appName:       config<string>('app.name', 'RudderJS'),
+  appName:       config<string>('app.name', 'Rudder'),
   rudderVersion: rudderCorePkg.version,
   nodeVersion:   process.version.replace(/^v/, ''),
   env:           config<string>('app.env', 'development'),

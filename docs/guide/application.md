@@ -1,6 +1,6 @@
 # Application
 
-`bootstrap/app.ts` is the single wiring point for a Rudder app. It builds an `Application` instance using a fluent configurator, registers route loaders, middleware, and exception handlers, and returns a `RudderJS` runtime ready to handle HTTP requests.
+`bootstrap/app.ts` is the single wiring point for a Rudder app. It builds an `Application` instance using a fluent configurator, registers route loaders, middleware, and exception handlers, and returns a `Rudder` runtime ready to handle HTTP requests.
 
 ```ts
 // bootstrap/app.ts
@@ -64,11 +64,11 @@ Use the explicit form when swapping in a different adapter, or when bundling the
 | `withRouting` | `(options: { web?, api?, commands?, channels? }) => AppBuilder` | Registers lazy route loader functions (`channels` loads broadcast channel routes). Each loader is a dynamic import returning a side-effect module. |
 | `withMiddleware` | `(fn: (m: MiddlewareConfigurator) => void) => AppBuilder` | Registers global middleware. See [Middleware](/guide/middleware) for the configurator API. |
 | `withExceptions` | `(fn: (e: ExceptionConfigurator) => void) => AppBuilder` | Registers custom error renderers, ignored types, and the report destination. See [Error Handling](/guide/error-handling). |
-| `create` | `() => RudderJS` | Finalises configuration and returns the application instance. Provider boot (phase 1) is kicked off eagerly but not awaited; the HTTP handler (phase 2) is built lazily on the first request. |
+| `create` | `() => Rudder` | Finalises configuration and returns the application instance. Provider boot (phase 1) is kicked off eagerly but not awaited; the HTTP handler (phase 2) is built lazily on the first request. |
 
-## RudderJS instance API
+## Rudder instance API
 
-`create()` returns a `RudderJS` instance — your application handle.
+`create()` returns a `Rudder` instance — your application handle.
 
 | Method | Signature | Description |
 |---|---|---|
@@ -107,7 +107,7 @@ Common framework primitives are re-exported from `@rudderjs/core` so most apps n
 ## Notes
 
 - `Application.configure().create()` returns a singleton in production. In `local` / `development` it recreates on each call to support hot reload.
-- `RudderJS.boot()` runs `register()` then `boot()` on every provider in declaration order. Provider order matters — for example, `DatabaseServiceProvider` must come before any provider that queries models.
-- `RudderJS.handleRequest()` calls `boot()` automatically on the first HTTP request. Subsequent calls skip the boot phase.
+- `Rudder.boot()` runs `register()` then `boot()` on every provider in declaration order. Provider order matters — for example, `DatabaseServiceProvider` must come before any provider that queries models.
+- `Rudder.handleRequest()` calls `boot()` automatically on the first HTTP request. Subsequent calls skip the boot phase.
 - Route loaders passed to `withRouting()` are dynamic imports returning side-effect modules — they register routes by calling `Route.get/post/...` and don't need to export anything.
 - `Application.resetForTesting()` is available for test teardown.

@@ -8,7 +8,7 @@ export interface Props {
 }
 
 // React Server Component: runs only on the server and ships zero client JS for
-// its own markup. It receives controller props (the RudderJS `view('home', props)`
+// its own markup. It receives controller props (the Rudder `view('home', props)`
 // flow — the generated +Page stub spreads `viewProps` in) AND fetches its own
 // data, so the two models compose. Interactivity is opt-in via the
 // <CounterClient> island below.
@@ -17,7 +17,7 @@ export default async function Home({ greeting }: Props) {
 
   return (
     <div>
-      <h1>RudderJS &times; React Server Components</h1>
+      <h1>Rudder &times; React Server Components</h1>
       <p>{greeting}</p>
       <p>
         Server-rendered at <code>{renderedAt}</code> — this paragraph ships no

@@ -1,6 +1,6 @@
 # @rudderjs/localization
 
-Laravel-style localization for RudderJS. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
+Laravel-style localization for Rudder. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
 
 ```bash
 pnpm add @rudderjs/localization
@@ -54,7 +54,7 @@ export default {
 ```ts
 import { __ } from '@rudderjs/localization'
 
-__('messages.welcome', { app: 'RudderJS' }) // 'Welcome to RudderJS!'
+__('messages.welcome', { app: 'Rudder' }) // 'Welcome to Rudder!'
 __('messages.items', 3) // '3 items'
 ```
 

@@ -1,6 +1,6 @@
 ---
 name: ai-agents
-description: Building AI agents with tools, streaming, conversation memory, approval flows, and middleware in RudderJS
+description: Building AI agents with tools, streaming, conversation memory, approval flows, and middleware in Rudder
 license: MIT
 appliesTo:
   - '@rudderjs/ai'
@@ -60,7 +60,7 @@ export class ResearchAgent extends Agent implements HasTools {
 ```ts
 const agent = new ResearchAgent()
 
-const response = await agent.prompt('What is RudderJS?')
+const response = await agent.prompt('What is Rudder?')
 console.log(response.text)        // final text output
 console.log(response.steps)       // array of AgentStep
 console.log(response.usage)       // { promptTokens, completionTokens, totalTokens }

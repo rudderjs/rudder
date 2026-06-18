@@ -1060,7 +1060,7 @@ class HonoAdapter implements ServerAdapter {
 //
 // vike/server takes ~100 ms to first-import (its full server pipeline pulls
 // in a lot of modules). Stalling that cost until the first user request is
-// the largest first-render perf hit in a typical RudderJS app. We kick off
+// the largest first-render perf hit in a typical Rudder app. We kick off
 // the load here as a module-load side-effect of `@rudderjs/server-hono`,
 // which runs the moment `bootstrap/app.ts` statically imports `{ hono }` —
 // roughly t=0 in the cold-boot timeline. The load then completes in

@@ -150,7 +150,7 @@ type MiddlewareHandler = (
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
 ```
 
-`'ALL'` is a RudderJS-specific wildcard used by the router to match any HTTP method.
+`'ALL'` is a Rudder-specific wildcard used by the router to match any HTTP method.
 
 ---
 

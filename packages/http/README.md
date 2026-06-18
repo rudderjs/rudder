@@ -1,6 +1,6 @@
 # @rudderjs/http
 
-Fluent HTTP client for RudderJS — retries, timeouts, request/response interceptors, concurrent pools, and `Http.fake()` for testing.
+Fluent HTTP client for Rudder — retries, timeouts, request/response interceptors, concurrent pools, and `Http.fake()` for testing.
 
 ## Installation
 

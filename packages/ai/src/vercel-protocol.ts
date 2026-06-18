@@ -1,7 +1,7 @@
 import type { StreamChunk } from './types.js'
 
 /**
- * Convert a RudderJS AI stream to Vercel AI SDK Data Stream Protocol format.
+ * Convert a Rudder AI stream to Vercel AI SDK Data Stream Protocol format.
  *
  * Protocol prefixes:
  * - `0:` text delta (JSON string)

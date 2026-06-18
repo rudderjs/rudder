@@ -36,7 +36,7 @@ Route.registerController(BillingController)
 // dispatch — set it once at boot via the User class.
 Cashier.useBillableModel(User)
 
-// Read RudderJS version from @rudderjs/core's package.json at boot time.
+// Read Rudder version from @rudderjs/core's package.json at boot time.
 const _require = createRequire(import.meta.url)
 const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
 
@@ -49,7 +49,7 @@ Route.get('/', async () => {
     : null
 
   return view('welcome', {
-    appName:       config<string>('app.name', 'RudderJS'),
+    appName:       config<string>('app.name', 'Rudder'),
     rudderVersion: rudderCorePkg.version,
     nodeVersion:   process.version.replace(/^v/, ''),
     env:           config<string>('app.env', 'development'),

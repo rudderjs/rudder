@@ -111,7 +111,7 @@ jobs:
           # Body shape checks — catches the case where the server returns 200
           # but the response isn't what we expect (e.g. an error page rendered
           # as a 200 by the error handler).
-          grep -q 'Built with RudderJS'    /tmp/canary-root.html       || { echo "❌ / missing welcome marker";       cat /tmp/canary-root.html;       exit 1; }
+          grep -q 'Built with Rudder'    /tmp/canary-root.html       || { echo "❌ / missing welcome marker";       cat /tmp/canary-root.html;       exit 1; }
           grep -q '"status":"ok"'          /tmp/canary-api-health.txt  || { echo "❌ /api/health missing status:ok";  cat /tmp/canary-api-health.txt;  exit 1; }
           grep -q 'Welcome back'           /tmp/canary-login.html      || { echo "❌ /login missing auth UI marker";  cat /tmp/canary-login.html;      exit 1; }
 

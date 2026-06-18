@@ -1,4 +1,4 @@
-# DB/ORM Comparison — RudderJS vs Prisma vs Drizzle vs TypeORM vs Kysely vs MikroORM
+# DB/ORM Comparison — Rudder vs Prisma vs Drizzle vs TypeORM vs Kysely vs MikroORM
 
 > Last updated: 2026-06-04 (orm 1.15.0 / database 1.1.0 / orm-prisma 2.1.0 / orm-drizzle 1.9.0).
 > Competitor data from each project's CURRENT official docs (researched 2026-06-04, citations in
@@ -7,7 +7,7 @@
 
 ## Philosophy / Identity
 
-| | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|---|---|---|---|---|---|
 | **Version** | orm 1.15.0 | 7.8.0 (7.0 = Rust removed, 2025-11) | 0.45.x stable; **1.0 still RC** | **1.0.0 (2026-05-19**, after 5y on 0.3) | **0.29.2 (pre-1.0)** | 7.0.7 |
 | **Weekly downloads** | — (new) | ~12M CLI / ~7.4M client | ~7.25M | ~4.7M | ~2.5M | ~640k |
@@ -26,7 +26,7 @@
 
 ## Schema + Migrations
 
-| Capability | RudderJS (native) | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| Capability | Rudder (native) | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Migration generation | `make:migration` (hand-written, Laravel-style) | ✅ diff vs shadow DB | ✅ diff TS schema | ✅ diff entities | hand-written | ✅ diff + snapshots |
 | **Rollback / down** | ✅ rollback/refresh/fresh/--step | ⚠️ manual (`migrate diff` + `db execute`) | **❌ none** | ✅ `migration:revert` | ✅ `migrateDown` | ✅ down + `migration:fresh` |
@@ -40,7 +40,7 @@
 
 ## Query Builder Breadth
 
-| Capability | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| Capability | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Joins | ✅ inner/left/right/cross + JoinClause | ❌ (include only; `relationLoadStrategy: join`) | ✅ + **lateral** | ✅ | ✅ | ✅ + subquery joins |
 | Unions | ✅ union/unionAll | ❌ raw | ✅ + **intersect/except** | ❌ | ✅ | ✅ |
@@ -63,7 +63,7 @@
 
 ## Relations
 
-| Capability | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| Capability | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Core 4 (1:1/1:N/N:1/M:N) | ✅ | ✅ | ✅ | ✅ | ❌ (jsonFrom helpers) | ✅ |
 | Through (1:1/1:N via intermediate) | ✅ hasOneThrough/hasManyThrough | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -79,7 +79,7 @@
 
 ## Model layer
 
-| Capability | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| Capability | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Record instances | ✅ hydrated Models | ❌ POJOs | ❌ POJOs | ✅ | ❌ | ✅ managed entities |
 | Lifecycle observers | ✅ full set incl. restoring | ⚠️ query extensions | ❌ | ✅ subscribers | ❌ | ✅ hooks + subscribers |
@@ -94,7 +94,7 @@
 
 ## Transactions
 
-| | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Callback txn | ✅ all 3 adapters | ✅ interactive | ✅ | ✅ | ✅ | ✅ |
 | Savepoint nesting | ✅ | **❌** | ✅ | ✅ | ✅ | ✅ + propagation modes |
@@ -104,7 +104,7 @@
 
 ## Multi-connection / Replicas
 
-| | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Named connections | ✅ lazy menu + `Model.on()` | ❌ (separate clients) | ❌ (separate clients) | ✅ DataSources | ❌ | ✅ contextName |
 | Read replicas | ✅ round-robin/random/weighted/custom picker (native+Drizzle) | extension (random) | ✅ withReplicas + custom picker | ✅ replication (random) | ❌ | ✅ replicas (random) |
@@ -115,7 +115,7 @@
 
 ## Databases / Drivers / Runtime
 
-| | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|---|---|---|---|---|---|
 | Native engine drivers | sqlite/pg/mysql | PG/MySQL/MariaDB/SQLite/MSSQL/Cockroach/Mongo | PG/MySQL/SQLite/SingleStore/Cockroach/MSSQL families | 10+ incl. Oracle/Mongo/Spanner | PG/MySQL/SQLite/MSSQL/PGlite | 8 incl. Oracle + **Mongo** |
 | Edge/serverless | ⚠️ via Drizzle adapter (D1/libsql/neon...) | ✅ driver adapters + Accelerate | ✅ best-in-class (D1/Turso/Durable Objects/RN) | ❌ | ✅ zero-dep | ✅ v7 zero-dep core, JSR |
@@ -124,7 +124,7 @@
 
 ## DX
 
-| | RudderJS | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
+| | Rudder | Prisma | Drizzle | TypeORM | Kysely | MikroORM |
 |---|---|---|---|---|---|---|
 | Codegen step required | ❌ (side effect of migrate) | ✅ `generate` (gate) | ❌ | ❌ | optional | ❌ |
 | GUI / Studio | **❌** | ✅ Studio | ✅ Studio (proprietary) | ❌ | ❌ | ❌ |
@@ -134,18 +134,18 @@
 | Setup friction | low (scaffolder) / 2 imports standalone | schema+generate+adapter | config+schema+kit | reflect-metadata+tsconfig | interface+dialect | **highest** (UoW/RequestContext) |
 | Framework integration | ✅ full (auth/queue/telescope ride the ORM) | — | — | NestJS module | — | NestJS module |
 
-## Performance (our comparative bench shipped — see RudderJS row + `benchmarks/`)
+## Performance (our comparative bench shipped — see Rudder row + `benchmarks/`)
 
 - **Prisma 7** (own bench): 2–11× over its Rust era; bundle 1.6MB; ~320ms cold start (third-party).
 - **Drizzle**: thin-layer positioning, prepared statements; ~7.4kb/~45ms cold start (third-party).
 - **TypeORM**: weakest standing — class-hydration CPU saturation on large sets; ~450kb/~850ms.
 - **Kysely / MikroORM**: thin-layer / no headline bench.
-- **RudderJS banked**: toJSON fast-path (−39%), batched polymorphic eager-load (14.9×), shared positional bindings, model-layer WHERE-IN batching.
-- **Published comparative bench** ✅ — [`benchmarks/results/REPORT.md`](../benchmarks/results/REPORT.md) (the `@rudderjs/benchmarks` suite, §14 #11). RudderJS native engine vs Prisma vs Drizzle, query-layer only (no HTTP/server), identical SQLite schema + dataset, result-parity asserted before timing. Headline (SQLite 1k/10k, Apple M5 Pro, prod builds): RudderJS is fastest on **7 of 10** ops — single insert, **bulk insert (~5× faster than both)**, **findByPk (~2.5× vs Drizzle, ~4× vs Prisma)**, pivot eager-load (~2×), count/filtered-count, increment, single-level eager-load. Drizzle leads on the read/hydration-heavy ops — **large `get()` (~2.4×)**, small filtered list, and raw serialization — where RudderJS's Active-Record model wrapping costs vs Drizzle's plain rows (an honest, expected trade; the −39% toJSON figure was vs RudderJS's own prior baseline, not vs Drizzle). **SQLite caveat:** under-represents Prisma's query-engine overhead (more visible on Postgres over a socket); **Postgres is the committed follow-up**.
+- **Rudder banked**: toJSON fast-path (−39%), batched polymorphic eager-load (14.9×), shared positional bindings, model-layer WHERE-IN batching.
+- **Published comparative bench** ✅ — [`benchmarks/results/REPORT.md`](../benchmarks/results/REPORT.md) (the `@rudderjs/benchmarks` suite, §14 #11). Rudder native engine vs Prisma vs Drizzle, query-layer only (no HTTP/server), identical SQLite schema + dataset, result-parity asserted before timing. Headline (SQLite 1k/10k, Apple M5 Pro, prod builds): Rudder is fastest on **7 of 10** ops — single insert, **bulk insert (~5× faster than both)**, **findByPk (~2.5× vs Drizzle, ~4× vs Prisma)**, pivot eager-load (~2×), count/filtered-count, increment, single-level eager-load. Drizzle leads on the read/hydration-heavy ops — **large `get()` (~2.4×)**, small filtered list, and raw serialization — where Rudder's Active-Record model wrapping costs vs Drizzle's plain rows (an honest, expected trade; the −39% toJSON figure was vs Rudder's own prior baseline, not vs Drizzle). **SQLite caveat:** under-represents Prisma's query-engine overhead (more visible on Postgres over a socket); **Postgres is the committed follow-up**.
 
 ---
 
-## §13 Where RudderJS wins (positioning story)
+## §13 Where Rudder wins (positioning story)
 
 1. **One Model API, three engines** — native (zero-codegen, batteries-included) or bring Prisma/Drizzle. Nobody else has an engine seam at all.
 2. **The only full Laravel-grade Active Record in TypeScript** — TypeORM's AR is save/find statics; ours is observers, casts, scopes, soft-delete+prune, factories, resources, mass-assignment guards.
@@ -173,7 +173,7 @@
 10. ~~afterCommit hooks~~ — **SHIPPED post-audit**: `afterCommit(fn)` (orm) + `DB.afterCommit(fn)` / `DB.connection(name).afterCommit(fn)` (facade, via a new bridge runner). Queue lives in the orm's `transaction()` wrapper itself (above the adapter seam → all 3 adapters free): flush in order after the OUTERMOST commit (awaited `transaction()` resolves after the callbacks), drop on rollback; savepoint rollback discards only its own registrations, savepoint release hands them to the parent level; per-connection trees (named-connection transactions keep separate queues); no open transaction → run immediately.
 
 **Tier 3 — ecosystem/positioning (not engine code):**
-11. ~~Published comparative benchmark suite~~ — **SHIPPED**: `@rudderjs/benchmarks` (private workspace package, `benchmarks/`). Query-layer head-to-head vs Prisma + Drizzle on an identical SQLite schema/dataset, 10 ops, **result-parity asserted before timing**, mitata runner, committed [`results/REPORT.md`](../benchmarks/results/REPORT.md). RudderJS fastest on 7/10 (writes, findByPk, pivot eager-load, aggregates); Drizzle leads the hydration/serialization-heavy reads. **Postgres + MySQL follow-ups SHIPPED**: engine-parameterized (`BENCH_ENGINE=postgres|mysql`), committed [`results/REPORT-postgres.md`](../benchmarks/results/REPORT-postgres.md) (rudder + Drizzle on porsager, Prisma on node-pg) and [`results/REPORT-mysql.md`](../benchmarks/results/REPORT-mysql.md) (rudder + Drizzle on mysql2, Prisma on mariadb), both parity-gated. Over a real socket RudderJS leads the query-layer-heavy ops (bulk insert, hydration, eager + pivot loading) while the competitors' engines are competitive/ahead on latency-bound single-statement ops — the contrast SQLite's zero-latency reads hid. **100k tier SHIPPED across all three engines** (#1043), including an ANALYZE-after-seed fix so the m2m pivot eager-load isn't seq-scanned on a stats-less table. §14 #11 is COMPLETE — SQLite + Postgres + MySQL × 1k/10k/100k, all parity-gated. Methodology: `docs/plans/2026-06-11-comparative-orm-benchmark-suite.md`.
+11. ~~Published comparative benchmark suite~~ — **SHIPPED**: `@rudderjs/benchmarks` (private workspace package, `benchmarks/`). Query-layer head-to-head vs Prisma + Drizzle on an identical SQLite schema/dataset, 10 ops, **result-parity asserted before timing**, mitata runner, committed [`results/REPORT.md`](../benchmarks/results/REPORT.md). Rudder fastest on 7/10 (writes, findByPk, pivot eager-load, aggregates); Drizzle leads the hydration/serialization-heavy reads. **Postgres + MySQL follow-ups SHIPPED**: engine-parameterized (`BENCH_ENGINE=postgres|mysql`), committed [`results/REPORT-postgres.md`](../benchmarks/results/REPORT-postgres.md) (rudder + Drizzle on porsager, Prisma on node-pg) and [`results/REPORT-mysql.md`](../benchmarks/results/REPORT-mysql.md) (rudder + Drizzle on mysql2, Prisma on mariadb), both parity-gated. Over a real socket Rudder leads the query-layer-heavy ops (bulk insert, hydration, eager + pivot loading) while the competitors' engines are competitive/ahead on latency-bound single-statement ops — the contrast SQLite's zero-latency reads hid. **100k tier SHIPPED across all three engines** (#1043), including an ANALYZE-after-seed fix so the m2m pivot eager-load isn't seq-scanned on a stats-less table. §14 #11 is COMPLETE — SQLite + Postgres + MySQL × 1k/10k/100k, all parity-gated. Methodology: `docs/plans/2026-06-11-comparative-orm-benchmark-suite.md`.
 12. ~~`db:show` / `db:table` CLI introspection commands~~ — **SHIPPED post-audit**: native-engine inspection (`inspectDatabase`/`inspectTable` in `@rudderjs/database` + orm `db-inspect` command; `--counts`/`--views`/`--json`; prisma/drizzle pointed at their studios).
 13. Studio/GUI story — likely "integrate, don't build" (Telescope already records queries; an admin data browser is a separate product call).
 14. Set operators intersect/except — low demand, log only.

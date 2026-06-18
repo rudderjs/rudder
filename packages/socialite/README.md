@@ -1,6 +1,6 @@
 # @rudderjs/socialite
 
-OAuth authentication for RudderJS. Built-in providers: GitHub, Google, Facebook, Apple. Extensible with custom providers.
+OAuth authentication for Rudder. Built-in providers: GitHub, Google, Facebook, Apple. Extensible with custom providers.
 
 ## Installation
 
@@ -146,7 +146,7 @@ driver verifies returned `id_token`s against Apple's JWKS
 `aud`, and `exp` are all checked before any user data is trusted.
 
 Apple's first-authorization callback POSTs the user's `name` once in the
-form-post body. RudderJS reads it automatically when you pass the request
+form-post body. Rudder reads it automatically when you pass the request
 object to `user(req)`. Your route handler must include the `body` in the
 request shape — `@rudderjs/server-hono` already does this.
 

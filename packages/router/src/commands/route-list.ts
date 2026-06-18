@@ -58,7 +58,7 @@ async function scanVikeRoutes(): Promise<VikeRoute[]> {
   return routes
 }
 
-// Pulls the resolved middleware snapshot off the RudderJS instance via the
+// Pulls the resolved middleware snapshot off the Rudder instance via the
 // shared globalThis slot. Duck-typed cast avoids a hard `@rudderjs/core`
 // import — router is a peer of core, and the dynamic-import path here keeps
 // the bundle graph clean.

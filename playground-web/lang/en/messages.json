@@ -1,5 +1,5 @@
 {
-  "welcome": "Welcome to RudderJS!",
+  "welcome": "Welcome to Rudder!",
   "greeting": "Hello, :name!",
   "items": "{0} no items|{1} one item|{n} :count items"
 }

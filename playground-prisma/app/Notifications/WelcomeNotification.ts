@@ -8,11 +8,11 @@ class WelcomeMail extends Mailable {
 
   build(): this {
     return this
-      .subject(`Welcome to RudderJS, ${this.notifiable.name ?? 'friend'}!`)
+      .subject(`Welcome to Rudder, ${this.notifiable.name ?? 'friend'}!`)
       .text(
         `Hi ${this.notifiable.name ?? 'there'},\n\n` +
         `Your account is ready. Thanks for joining us!\n\n` +
-        `— The RudderJS Team`
+        `— The Rudder Team`
       )
   }
 }

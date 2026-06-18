@@ -2,7 +2,7 @@
 
 ## Overview
 
-MCP (Model Context Protocol) server framework for RudderJS. Lets the app expose **tools**, **resources**, and **prompts** to AI agents (Claude Code, Cursor, etc.) over either HTTP Streamable transport or local stdio. Tools and resources are plain classes with decorator-driven metadata and Zod input schemas. DI resolves constructor dependencies, OAuth 2.1 protects HTTP endpoints via `@rudderjs/passport`, and an observer registry exposes every tool call / resource read / prompt render for Telescope and other collectors.
+MCP (Model Context Protocol) server framework for Rudder. Lets the app expose **tools**, **resources**, and **prompts** to AI agents (Claude Code, Cursor, etc.) over either HTTP Streamable transport or local stdio. Tools and resources are plain classes with decorator-driven metadata and Zod input schemas. DI resolves constructor dependencies, OAuth 2.1 protects HTTP endpoints via `@rudderjs/passport`, and an observer registry exposes every tool call / resource read / prompt render for Telescope and other collectors.
 
 ## Key Patterns
 
