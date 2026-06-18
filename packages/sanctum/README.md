@@ -102,6 +102,69 @@ guard.tokenCan('read')  // check ability on current token
 | `stateful` | `[]` | Domains for SPA cookie auth |
 | `provider` | default guard's provider | User provider name in `auth.providers`. Required for pure-API apps that don't configure a session guard. |
 
+## Utility methods
+
+`Sanctum` exposes two static helpers for custom token pipelines (custom repositories, external token issuance, token migration):
+
+### `Sanctum.generateToken()`
+
+Returns a cryptographically random 64-character hex string (32 bytes via `crypto.randomBytes`). This is the same source of entropy used by `createToken()` internally.
+
+```ts
+import { Sanctum } from '@rudderjs/sanctum'
+
+const plain = Sanctum.generateToken()
+// → "a3f8c9d2..." (64-char hex, unique each call)
+```
+
+### `Sanctum.hashToken(plainToken)`
+
+SHA-256 hashes a plain token string and returns the 64-character hex digest. Sanctum stores this hash in the repository, never the plain text. Use it whenever you need to produce or compare a hash outside the normal `createToken()` flow.
+
+```ts
+const hashed = Sanctum.hashToken(plain)
+// → "e3b0c44..." (SHA-256 hex)
+```
+
+### Common scenarios
+
+**Seeding a known token in tests:**
+
+```ts
+import { Sanctum, MemoryTokenRepository } from '@rudderjs/sanctum'
+
+const repo = new MemoryTokenRepository()
+const plain = 'fixed-test-secret'
+await repo.create({
+  userId: '1',
+  name: 'test-token',
+  token: Sanctum.hashToken(plain),
+})
+// plain token to send in requests: `1|fixed-test-secret`
+```
+
+**Migrating existing tokens to Sanctum's format:**
+
+```ts
+for (const row of legacyTokens) {
+  await newRepo.create({
+    userId: row.user_id,
+    name: row.label,
+    // Hash the existing plain-text values so Sanctum can validate them
+    token: Sanctum.hashToken(row.raw_token),
+  })
+}
+```
+
+**Building a custom token repository that accepts a pre-hashed value:**
+
+```ts
+const plain  = Sanctum.generateToken()
+const hashed = Sanctum.hashToken(plain)
+await myRepo.create({ userId, name, token: hashed })
+// Hand `plain` to the client — it is never stored
+```
+
 ## Hiding sensitive user columns
 
 Sanctum strips functions, `password`, and both `rememberToken`/`remember_token` from `req.user` automatically. For app-specific sensitive columns (e.g. `two_factor_secret`, `email_verification_token`), implement `getHidden()` on your User model:
