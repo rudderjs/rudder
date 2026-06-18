@@ -25,6 +25,19 @@ In a pure-API app (no `@rudderjs/session`, no session guard) name the user provi
 sanctum({ provider: 'users' })
 ```
 
+### Token storage
+
+`MemoryTokenRepository` (the default) is in-process — fine for tests/dev, but tokens vanish on restart and aren't shared across instances. For production use `OrmTokenRepository` from the `@rudderjs/sanctum/orm` subpath (`@rudderjs/orm` is an optional peer — install it when you opt in):
+
+```ts
+import { sanctum }            from '@rudderjs/sanctum'
+import { OrmTokenRepository } from '@rudderjs/sanctum/orm'
+
+export default [AuthProvider, sanctum({ expiration: null }, new OrmTokenRepository())]
+```
+
+Add the `personal_access_tokens` migration (see the package README for the full snippet) and run `pnpm rudder migrate`. The `PersonalAccessTokenModel` (string ULID PK) runs on the native engine, Prisma, and Drizzle.
+
 ### Creating tokens
 
 ```ts
@@ -89,7 +102,7 @@ Use Sanctum for "my own app's tokens." Use Passport when third parties need to a
 ## Common Pitfalls
 
 - **`sanctum()` before `AuthProvider`.** Sanctum depends on the auth user resolver — auth must boot first.
-- **Expecting the DB schema to auto-create.** Publish the Prisma schema: `pnpm rudder vendor:publish --tag=sanctum-schema`.
+- **Expecting the DB schema to auto-create.** With `OrmTokenRepository` you own the `personal_access_tokens` migration — copy the snippet from the README and run `pnpm rudder migrate`. (`MemoryTokenRepository` needs no schema but isn't durable.)
 - **Abilities as scopes.** Abilities check equality or wildcard `*`. No hierarchical scopes (`admin.users.read`) — pick flat abilities like `['read', 'write', 'admin']`.
 - **Forgetting `tokenable_type` on plural user models.** The default assumes the `User` model. If you have multiple authenticatable models (e.g. `User` + `ApiClient`), use `tokenable_type` to disambiguate.
 - **Revoking.** `sanctum.revokeToken(tokenId)` for one, or `revokeAllTokens(userId)` for all. Reading the current token inside a route after `SanctumMiddleware`: `req.token`.

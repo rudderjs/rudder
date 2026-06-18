@@ -21,6 +21,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./orm": {
+      "import": "./dist/orm.js",
+      "types": "./dist/orm.d.ts"
     }
   },
   "scripts": {
@@ -29,17 +33,25 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/orm.test.js"
   },
   "dependencies": {
     "@rudderjs/core": "workspace:^",
     "@rudderjs/contracts": "workspace:^"
   },
   "peerDependencies": {
-    "@rudderjs/auth": "workspace:^"
+    "@rudderjs/auth": "workspace:^",
+    "@rudderjs/orm": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/orm": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@rudderjs/auth": "workspace:^",
+    "@rudderjs/database": "workspace:^",
+    "@rudderjs/orm": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

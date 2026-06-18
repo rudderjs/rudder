@@ -1130,6 +1130,12 @@ importers:
       '@rudderjs/auth':
         specifier: workspace:^
         version: link:../auth
+      '@rudderjs/database':
+        specifier: workspace:^
+        version: link:../database
+      '@rudderjs/orm':
+        specifier: workspace:^
+        version: link:../orm
       '@types/node':
         specifier: 20.19.35
         version: 20.19.35
