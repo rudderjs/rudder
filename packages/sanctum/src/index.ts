@@ -328,6 +328,10 @@ export function SanctumMiddleware(): MiddlewareHandler {
   }
 }
 
+function unauthenticated(res: Parameters<MiddlewareHandler>[1]): void {
+  res.status(401).json({ message: 'Unauthenticated.' })
+}
+
 /**
  * Middleware that requires a valid Bearer token. Returns 401 if missing/invalid.
  * Optionally checks for specific abilities.
@@ -338,7 +342,7 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
     const authHeader = req.headers['authorization']
 
     if (!authHeader) {
-      res.status(401).json({ message: 'Unauthenticated.' })
+      unauthenticated(res)
       return
     }
 
@@ -352,7 +356,7 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
     if (!token) {
       const result = await sanctum.validateToken(authHeader)
       if (!result) {
-        res.status(401).json({ message: 'Unauthenticated.' })
+        unauthenticated(res)
         return
       }
       attachUserAndToken(req, result.user, result.token)
