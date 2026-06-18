@@ -1,5 +1,5 @@
 import { Model, Hidden } from '@rudderjs/orm'
-import { isExpiredAt } from './helpers.js'
+import { isExpiredAt, accessTokenHelpers } from './helpers.js'
 
 /**
  * Why we don't store hashed access tokens
@@ -69,9 +69,7 @@ export class AccessToken extends Model {
 
   /** Parsed scopes array. */
   getScopes(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['scopes']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return accessTokenHelpers.getScopes(this as never)
   }
 
   /** Check if the token has a specific scope. */

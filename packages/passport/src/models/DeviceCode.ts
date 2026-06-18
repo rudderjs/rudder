@@ -1,5 +1,5 @@
 import { Model } from '@rudderjs/orm'
-import { isExpiredAt } from './helpers.js'
+import { isExpiredAt, deviceCodeHelpers } from './helpers.js'
 
 export class DeviceCode extends Model {
   // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
@@ -34,9 +34,7 @@ export class DeviceCode extends Model {
 
   /** Parsed scopes array. */
   getScopes(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['scopes']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return deviceCodeHelpers.getScopes(this as never)
   }
 
   /** Whether this device code has expired. */

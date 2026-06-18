@@ -1,4 +1,5 @@
 import { Model, Hidden, Cast } from '@rudderjs/orm'
+import { clientHelpers } from './helpers.js'
 
 export class OAuthClient extends Model {
   // SQL `@@map` table name — runs on the native engine (literal SQL name) AND
@@ -37,23 +38,17 @@ export class OAuthClient extends Model {
 
   /** Parsed redirect URIs. */
   getRedirectUris(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['redirectUris']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return clientHelpers.getRedirectUris(this as never)
   }
 
   /** Parsed grant types. */
   getGrantTypes(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['grantTypes']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return clientHelpers.getGrantTypes(this as never)
   }
 
   /** Parsed scopes. */
   getScopes(): string[] {
-    const raw = (this as unknown as Record<string, unknown>)['scopes']
-    if (typeof raw === 'string') return JSON.parse(raw) as string[]
-    return (raw as string[]) ?? []
+    return clientHelpers.getScopes(this as never)
   }
 
   /** Check if client supports a specific grant type. */
