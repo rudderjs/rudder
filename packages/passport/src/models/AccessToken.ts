@@ -1,4 +1,5 @@
 import { Model, Hidden } from '@rudderjs/orm'
+import { isExpiredAt } from './helpers.js'
 
 /**
  * Why we don't store hashed access tokens
@@ -97,7 +98,7 @@ export class AccessToken extends Model {
 
   /** Whether this token has expired. */
   isExpired(): boolean {
-    return new Date(this.expiresAt).getTime() <= Date.now()
+    return isExpiredAt(this.expiresAt)
   }
 
   /** Whether this token is valid (not revoked and not expired). */

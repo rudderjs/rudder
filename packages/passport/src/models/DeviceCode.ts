@@ -1,4 +1,5 @@
 import { Model } from '@rudderjs/orm'
+import { isExpiredAt } from './helpers.js'
 
 export class DeviceCode extends Model {
   // SQL `@@map` table name (native + Prisma; see OAuthClient.ts). `keyType =
@@ -40,7 +41,7 @@ export class DeviceCode extends Model {
 
   /** Whether this device code has expired. */
   isExpired(): boolean {
-    return new Date(this.expiresAt).getTime() <= Date.now()
+    return isExpiredAt(this.expiresAt)
   }
 
   /** Whether the user has approved this device. */

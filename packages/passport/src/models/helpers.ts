@@ -88,6 +88,13 @@ export interface DeviceCodeRecord {
   lastPolledAt: Date | null
 }
 
+// ─── Expiry helper ────────────────────────────────────────
+
+/** Returns true when the given date is in the past (or exactly now). */
+export function isExpiredAt(date: string | Date): boolean {
+  return new Date(date).getTime() <= Date.now()
+}
+
 // ─── Parsing helpers ──────────────────────────────────────
 
 function parseJsonArray(raw: unknown): string[] {
@@ -133,21 +140,21 @@ export const accessTokenHelpers = {
     return scopes.includes('*') || scopes.includes(scope)
   },
 
-  isExpired: (t: AccessTokenRecord): boolean => new Date(t.expiresAt).getTime() <= Date.now(),
+  isExpired: (t: AccessTokenRecord): boolean => isExpiredAt(t.expiresAt),
   isValid:   (t: AccessTokenRecord): boolean => !t.revoked && !accessTokenHelpers.isExpired(t),
 }
 
 // ─── RefreshToken helpers ─────────────────────────────────
 
 export const refreshTokenHelpers = {
-  isExpired: (t: RefreshTokenRecord): boolean => new Date(t.expiresAt).getTime() <= Date.now(),
+  isExpired: (t: RefreshTokenRecord): boolean => isExpiredAt(t.expiresAt),
 }
 
 // ─── AuthCode helpers ─────────────────────────────────────
 
 export const authCodeHelpers = {
   getScopes: (c: AuthCodeRecord): string[] => parseJsonArray(c.scopes),
-  isExpired: (c: AuthCodeRecord): boolean => new Date(c.expiresAt).getTime() <= Date.now(),
+  isExpired: (c: AuthCodeRecord): boolean => isExpiredAt(c.expiresAt),
   isPkce:    (c: AuthCodeRecord): boolean => c.codeChallenge !== null,
 }
 
@@ -155,7 +162,7 @@ export const authCodeHelpers = {
 
 export const deviceCodeHelpers = {
   getScopes:  (d: DeviceCodeRecord): string[] => parseJsonArray(d.scopes),
-  isExpired:  (d: DeviceCodeRecord): boolean => new Date(d.expiresAt).getTime() <= Date.now(),
+  isExpired:  (d: DeviceCodeRecord): boolean => isExpiredAt(d.expiresAt),
   isApproved: (d: DeviceCodeRecord): boolean => d.approved === true,
   isDenied:   (d: DeviceCodeRecord): boolean => d.approved === false,
   isPending:  (d: DeviceCodeRecord): boolean => d.approved === null,
