@@ -1,5 +1,11 @@
 # @rudderjs/session
 
+## 2.6.0
+
+### Minor Changes
+
+- 9ece458: Add `pull()` to `SessionInstance` and `Session` facade, and improve `SessionMiddleware()` error when `SessionProvider` is not registered.
+
 ## 2.5.1
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @rudderjs/sanctum
 
+## 8.3.0
+
+### Minor Changes
+
+- b0c57ad: Add `validateTokenResult()` returning a discriminated union so callers can distinguish failure reasons (`'malformed'`, `'not_found'`, `'id_mismatch'`, `'expired'`, `'user_missing'`) without parsing debug logs. `validateToken()` is unchanged and still returns `null` on failure.
+
+### Patch Changes
+
+- Updated dependencies [1689655]
+- Updated dependencies [cd8e6a0]
+- Updated dependencies [58e47e4]
+- Updated dependencies [4e66fa2]
+- Updated dependencies [6a7aa88]
+  - @rudderjs/orm@1.22.0
+
 ## 8.2.1
 
 ### Patch Changes
