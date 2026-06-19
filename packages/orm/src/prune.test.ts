@@ -230,6 +230,26 @@ describe('pruneModels — instance mode', () => {
   })
 })
 
+describe('pruneModels — mass mode + soft-delete conflict', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('throws a clear error when pruneMode = mass and softDeletes = true', async () => {
+    class Log extends Model {
+      static override table = 'logs'
+      static override softDeletes = true
+      static override pruneMode = 'mass' as const
+      static prunable() { return this.where('x', 1) }
+    }
+    ModelRegistry.set(makeAdapter(makeQb()))
+    ModelRegistry.register(Log as unknown as typeof Model)
+
+    await assert.rejects(
+      () => pruneModels(),
+      /Log has pruneMode = 'mass' and softDeletes = true/,
+    )
+  })
+})
+
 describe('pruneModels — mass mode', () => {
   beforeEach(() => ModelRegistry.reset())
 
