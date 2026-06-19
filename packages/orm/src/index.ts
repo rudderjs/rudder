@@ -1785,6 +1785,24 @@ export abstract class Model {
   /** @internal — diff of attributes that changed during the most recent save. */
   #changes: Record<string, unknown> = {}
 
+  /** @internal — whether this instance is backed by a persisted row. */
+  #exists = false
+
+  /**
+   * Whether this instance corresponds to a row that exists in the database.
+   * `true` for anything loaded via a read (`find`/`first`/`get`/…), created
+   * via `create()`, or `hydrate()`d from a stored record; `false` for a
+   * freshly built instance (`new User()`, `Model.firstOrNew()` when no match
+   * was found) until it is `save()`d, and `false` again after `delete()`.
+   *
+   * @example
+   * const user = await User.firstOrNew({ email })
+   * if (!user.exists) await user.save()
+   */
+  get exists(): boolean {
+    return this.#exists
+  }
+
   // ── Scopes ─────────────────────────────────────────────
 
   static globalScopes: Record<string, ScopeFn> = {}
@@ -1935,6 +1953,9 @@ export abstract class Model {
     // Defer the dirty-tracking baseline. _original() materializes the filtered
     // snapshot on first access — typically never, for read-and-discard rows.
     instance.#originalRaw = rec
+    // Hydration represents a persisted row — mark it as existing so `save()`
+    // callers and `firstOrNew` consumers can branch on `instance.exists`.
+    instance.#exists = true
     return instance
   }
 
@@ -3071,6 +3092,44 @@ export abstract class Model {
   }
 
   /**
+   * Find the first record matching `attrs`; if none exists, return a NEW
+   * **unsaved** instance filled with `attrs` merged with `values`. Unlike
+   * `firstOrCreate`, no write occurs — inspect the returned model (via
+   * `instance.exists`) and call `save()` yourself when you want to persist.
+   *
+   * The new instance is filled through the mass-assignment policy
+   * (`fillable`/`guarded`), matching `create()` — list any attribute you want
+   * carried onto the unsaved model.
+   *
+   * @example
+   * // Existing row -> returned hydrated (exists === true)
+   * const user = await User.firstOrNew({ email: 'a@x.com' })
+   *
+   * // No match -> unsaved instance (exists === false)
+   * const user = await User.firstOrNew({ email: 'new@x.com' }, { role: 'member' })
+   * if (!user.exists) await user.save()
+   */
+  static async firstOrNew<T extends typeof Model>(
+    this: T,
+    attrs: Partial<InstanceType<T>>,
+    values: Partial<InstanceType<T>> = {},
+  ): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    let q: QueryBuilder<InstanceType<T>> = Model._q(this)
+    for (const [col, val] of Object.entries(attrs)) {
+      q = q.where(col, val)
+    }
+    const existing = await q.first()
+    if (existing) {
+      await self._fireEvent('retrieved', existing as Record<string, unknown>)
+      return existing
+    }
+    const inst = new (this as unknown as new () => InstanceType<T>)()
+    inst.fill({ ...attrs, ...values } as Partial<InstanceType<T>>)
+    return inst
+  }
+
+  /**
    * Find a record by attributes; if found, update it with `values`. If not, create it
    * with `attrs` merged with `values`. Returns the upserted record.
    */
@@ -3629,6 +3688,7 @@ export abstract class Model {
     this.#changes          = diff
     this.#originalSnapshot = next
     this.#originalRaw      = undefined
+    this.#exists           = true
     return this
   }
 
@@ -3694,8 +3754,11 @@ export abstract class Model {
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
     if (ctor.softDeletes) {
+      // Soft delete: the row still exists (just trashed) — keep `exists` true.
       writeField(this, 'deletedAt', new Date())
       this._syncOriginal()
+    } else {
+      this.#exists = false
     }
   }
 
