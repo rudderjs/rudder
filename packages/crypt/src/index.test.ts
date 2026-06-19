@@ -220,6 +220,79 @@ describe('CryptRegistry', () => {
     CryptRegistry.reset()
     assert.throws(() => CryptRegistry.getKey())
   })
+
+  it('set() throws for a key shorter than 32 bytes', () => {
+    assert.throws(() => CryptRegistry.set(randomBytes(16)), /requires a 32-byte key/)
+  })
+
+  it('set() throws for a key longer than 32 bytes', () => {
+    assert.throws(() => CryptRegistry.set(randomBytes(64)), /requires a 32-byte key/)
+  })
+
+  it('set() throws when a previousKey is wrong length', () => {
+    assert.throws(
+      () => CryptRegistry.set(randomBytes(32), [randomBytes(16)]),
+      /previousKeys\[0\] requires a 32-byte key/,
+    )
+  })
+})
+
+// ─── globalThis crypt bridge ──────────────────────────────
+
+describe('globalThis crypt bridge', () => {
+  beforeEach(() => CryptRegistry.reset())
+  afterEach(() => CryptRegistry.reset())
+
+  type Bridge = { encrypt: (v: string) => string; decrypt: (v: string) => string }
+  const getBridge = (): Bridge | undefined =>
+    (globalThis as Record<string, unknown>)['__rudderjs_crypt_registry__'] as Bridge | undefined
+
+  it('publishes callable encrypt and decrypt after set()', () => {
+    CryptRegistry.set(randomBytes(32))
+    const bridge = getBridge()
+    assert.ok(bridge, 'bridge must be published on globalThis')
+    assert.strictEqual(typeof bridge.encrypt, 'function')
+    assert.strictEqual(typeof bridge.decrypt, 'function')
+  })
+
+  it('bridge round-trips a string value', () => {
+    CryptRegistry.set(randomBytes(32))
+    const bridge = getBridge()!
+    assert.strictEqual(bridge.decrypt(bridge.encrypt('hello bridge')), 'hello bridge')
+  })
+
+  it('reset() removes the bridge', () => {
+    CryptRegistry.set(randomBytes(32))
+    CryptRegistry.reset()
+    assert.strictEqual(getBridge(), undefined)
+  })
+})
+
+// ─── Malformed payload fields ─────────────────────────────
+
+describe('malformed payload fields', () => {
+  beforeEach(() => setup())
+
+  function tamperPayload(mutate: (p: Record<string, unknown>) => void): string {
+    const p = JSON.parse(Buffer.from(Crypt.encrypt('x'), 'base64').toString('utf8')) as Record<string, unknown>
+    mutate(p)
+    return Buffer.from(JSON.stringify(p), 'utf8').toString('base64')
+  }
+
+  const cases: [string, (p: Record<string, unknown>) => void][] = [
+    ['mac is null',       p => { p['mac'] = null }],
+    ['iv is absent',      p => { delete p['iv'] }],
+    ['value is a number', p => { p['value'] = 42 }],
+  ]
+
+  for (const [label, mutate] of cases) {
+    it(`Crypt.decrypt() throws [Rudder Crypt] error when ${label}`, () => {
+      assert.throws(() => Crypt.decrypt(tamperPayload(mutate)), /\[Rudder Crypt\]/)
+    })
+    it(`Crypt.decryptString() throws [Rudder Crypt] error when ${label}`, () => {
+      assert.throws(() => Crypt.decryptString(tamperPayload(mutate)), /\[Rudder Crypt\]/)
+    })
+  }
 })
 
 // ─── CryptProvider ────────────────────────────────────────
