@@ -1,5 +1,14 @@
 # @rudderjs/sanctum
 
+## 8.2.1
+
+### Patch Changes
+
+- 906c28d: fix(sanctum): resolve sanctum binding once per middleware factory instead of on every request; add development-mode debug logging to validateToken for each distinct failure reason
+- Updated dependencies [5d317ae]
+  - @rudderjs/auth@6.8.1
+  - @rudderjs/core@1.13.3
+
 ## 8.2.0
 
 ### Minor Changes
