@@ -105,4 +105,60 @@ describe('loadPackageCommands — node_modules walk (via the real CLI binary)', 
     assert.ok(Array.isArray(payload.commands))
     assert.ok(!payload.commands.some(c => c.name === 'route:list'))
   })
+
+  it('auto-discovers and registers commands from packages with a "rudder.commands" key', () => {
+    const pkgDir = path.join(root, 'node_modules', '@pilotiq', 'pilotiq')
+    fs.mkdirSync(path.join(pkgDir, 'dist', 'commands'), { recursive: true })
+    fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({
+      name: '@pilotiq/pilotiq',
+      type: 'module',
+      rudder: { commands: ['dist/commands/upgrade.js'] },
+    }))
+    fs.writeFileSync(path.join(pkgDir, 'dist', 'commands', 'upgrade.js'), [
+      `export function register(rudder) {`,
+      `  rudder.command('pilotiq:upgrade', async () => {}).description('upgrade pilotiq packages')`,
+      `}`,
+      '',
+    ].join('\n'))
+
+    const { status, payload } = runCommandList()
+    assert.equal(status, 0)
+    const cmd = payload.commands.find(c => c.name === 'pilotiq:upgrade')
+    assert.ok(
+      cmd,
+      `pilotiq:upgrade must be registered via auto-discovery; got: ${payload.commands.map(c => c.name).join(', ') || '(none)'}`,
+    )
+    assert.equal(cmd.source, 'inline')
+  })
+
+  it('a broken auto-discovered module does not kill the CLI or prevent other commands registering', () => {
+    // Good package via auto-discovery
+    const goodDir = path.join(root, 'node_modules', '@pilotiq', 'pilotiq')
+    fs.mkdirSync(path.join(goodDir, 'dist', 'commands'), { recursive: true })
+    fs.writeFileSync(path.join(goodDir, 'package.json'), JSON.stringify({
+      name: '@pilotiq/pilotiq',
+      type: 'module',
+      rudder: { commands: ['dist/commands/upgrade.js'] },
+    }))
+    fs.writeFileSync(path.join(goodDir, 'dist', 'commands', 'upgrade.js'), [
+      `export function register(rudder) {`,
+      `  rudder.command('pilotiq:upgrade', async () => {}).description('survives broken sibling')`,
+      `}`,
+      '',
+    ].join('\n'))
+
+    // Bad package — throws at import, also via auto-discovery
+    const badDir = path.join(root, 'node_modules', 'bad-rudder-plugin')
+    fs.mkdirSync(path.join(badDir, 'dist', 'commands'), { recursive: true })
+    fs.writeFileSync(path.join(badDir, 'package.json'), JSON.stringify({
+      name: 'bad-rudder-plugin',
+      type: 'module',
+      rudder: { commands: ['dist/commands/foo.js'] },
+    }))
+    fs.writeFileSync(path.join(badDir, 'dist', 'commands', 'foo.js'), `throw new Error('boom')\n`)
+
+    const { status, payload } = runCommandList()
+    assert.equal(status, 0, 'a broken auto-discovered module must not kill the CLI')
+    assert.ok(payload.commands.some(c => c.name === 'pilotiq:upgrade'), 'the healthy module still registers')
+  })
 })

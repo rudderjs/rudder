@@ -310,6 +310,41 @@ async function loadPackageCommands(): Promise<void> {
   ]
 
   await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
+
+  // Auto-discovery: any package can self-register commands by declaring a
+  // `"rudder": { "commands": ["dist/commands/foo.js"] }` key in its package.json.
+  // Each listed module must export `register(rudder)`. Mirrors Laravel's PackageManifest pattern.
+  const nmDir = path.join(process.cwd(), 'node_modules')
+  let topEntries: string[]
+  try { topEntries = await fs.readdir(nmDir) } catch { return }
+
+  const pkgNames: string[] = []
+  for (const entry of topEntries) {
+    if (entry.startsWith('.') || entry.startsWith('_')) continue
+    if (entry.startsWith('@')) {
+      try {
+        const children = await fs.readdir(path.join(nmDir, entry))
+        for (const child of children) pkgNames.push(`${entry}/${child}`)
+      } catch { /* unreadable scope dir */ }
+    } else {
+      pkgNames.push(entry)
+    }
+  }
+
+  await Promise.all(pkgNames.map(async (pkg) => {
+    try {
+      const raw = await fs.readFile(path.join(nmDir, pkg, 'package.json'), 'utf8')
+      const meta = JSON.parse(raw) as { rudder?: { commands?: string[] } }
+      const commands = meta?.rudder?.commands
+      if (!Array.isArray(commands) || commands.length === 0) return
+      for (const subpath of commands) {
+        const rel = subpath.replace(/^dist\//, '').replace(/\.js$/, '')
+        await tryImport(pkg, rel)
+          .then(mod => (mod['register'] as ((r: typeof rudder) => void | Promise<void>) | undefined)?.(rudder))
+          .catch(() => { /* broken module or missing register export, skip */ })
+      }
+    } catch { /* missing or malformed package.json, skip */ }
+  }))
 }
 
 async function main(): Promise<void> {
