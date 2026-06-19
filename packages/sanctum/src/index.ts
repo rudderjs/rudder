@@ -35,6 +35,26 @@ export interface NewAccessToken {
   plainTextToken: string
 }
 
+/**
+ * The reason a token validation failed — returned by {@link Sanctum.validateTokenResult}
+ * so callers can distinguish failure modes without parsing debug log output.
+ *
+ * - `'malformed'`    — no pipe delimiter, or empty id/secret segment
+ * - `'not_found'`    — no DB record matches the token hash
+ * - `'id_mismatch'`  — record found but the id prefix doesn't match (possible hash collision or tampered token)
+ * - `'expired'`      — token exists but its expiry has passed
+ * - `'user_missing'` — token is valid but the associated user no longer exists in the provider
+ */
+export type ValidateTokenError = 'malformed' | 'not_found' | 'id_mismatch' | 'expired' | 'user_missing'
+
+/**
+ * Discriminated union returned by {@link Sanctum.validateTokenResult}.
+ * On success the object has `user` and `token`; on failure it has `error`.
+ */
+export type ValidateTokenResult =
+  | { user: Authenticatable; token: PersonalAccessToken }
+  | { error: ValidateTokenError }
+
 // ─── Transient Token (testing) ────────────────────────────
 
 /**
@@ -284,9 +304,35 @@ export class Sanctum {
 
   /**
    * Validate a token from a request header.
-   * Returns the user if valid, null otherwise.
+   * Returns the user and token record if valid, `null` otherwise.
+   *
+   * When you need to know *why* validation failed (expired, user deleted, etc.)
+   * use {@link validateTokenResult} instead — it returns a discriminated union
+   * with a typed `error` field on failure.
    */
   async validateToken(bearerToken: string): Promise<{ user: Authenticatable; token: PersonalAccessToken } | null> {
+    const result = await this.validateTokenResult(bearerToken)
+    return 'error' in result ? null : result
+  }
+
+  /**
+   * Validate a token from a request header, returning a discriminated union so
+   * callers can programmatically distinguish failure reasons.
+   *
+   * On success: `{ user, token }`.
+   * On failure: `{ error: ValidateTokenError }` where error is one of
+   * `'malformed'`, `'not_found'`, `'id_mismatch'`, `'expired'`, or `'user_missing'`.
+   *
+   * ```ts
+   * const result = await sanctum.validateTokenResult(bearerHeader)
+   * if ('error' in result) {
+   *   if (result.error === 'expired') return res.status(401).json({ message: 'Token expired' })
+   *   return res.status(401).json({ message: 'Unauthorized' })
+   * }
+   * // result.user, result.token are now available
+   * ```
+   */
+  async validateTokenResult(bearerToken: string): Promise<ValidateTokenResult> {
     const prefix = this.config.tokenPrefix ?? ''
     // Case-insensitive Bearer match per RFC 6750 §2.1 — some HTTP libraries
     // lowercase header values, and "bearer"/"BEARER" are both legitimate.
@@ -303,25 +349,25 @@ export class Sanctum {
     const pipeIdx = unprefixed.indexOf('|')
     if (pipeIdx === -1) {
       if (debug) console.debug('[Rudder Sanctum] validateToken: malformed — no pipe delimiter')
-      return null
+      return { error: 'malformed' }
     }
 
     const id    = unprefixed.slice(0, pipeIdx)
     const plain = unprefixed.slice(pipeIdx + 1)
     if (!id || !plain) {
       if (debug) console.debug('[Rudder Sanctum] validateToken: malformed — empty id or secret segment')
-      return null
+      return { error: 'malformed' }
     }
 
     const hashed = Sanctum.hashToken(plain)
     const token = await this.tokens.findByToken(hashed)
     if (!token) {
       if (debug) console.debug('[Rudder Sanctum] validateToken: no record found for token hash')
-      return null
+      return { error: 'not_found' }
     }
     if (token.id !== id) {
       if (debug) console.debug('[Rudder Sanctum] validateToken: id prefix mismatch')
-      return null
+      return { error: 'id_mismatch' }
     }
 
     // Check expiry. `<=` rejects a token whose expiry is exactly `now` (the
@@ -331,14 +377,14 @@ export class Sanctum {
     // tests.
     if (this.isExpired(token)) {
       if (debug) console.debug(`[Rudder Sanctum] validateToken: token ${token.id} is expired`)
-      return null
+      return { error: 'expired' }
     }
 
     // Resolve user
     const user = await this.users.retrieveById(token.userId)
     if (!user) {
       if (debug) console.debug(`[Rudder Sanctum] validateToken: user '${token.userId}' not found in provider`)
-      return null
+      return { error: 'user_missing' }
     }
 
     // Update last used
