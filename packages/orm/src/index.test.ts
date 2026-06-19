@@ -969,6 +969,80 @@ describe('Model.firstOrCreate() / updateOrCreate()', () => {
   })
 })
 
+// ─── firstOrNew ───────────────────────────────────────────────────────────────
+
+describe('Model.firstOrNew()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  interface UserShape { id: number; email: string; name: string; role: string }
+
+  it('returns the existing record (exists === true), no create/write', async () => {
+    const existing: UserShape = { id: 1, email: 'a@x.com', name: 'Alice', role: 'admin' }
+    let createCalls = 0
+    const qb = makeQb<UserShape>({
+      first: async () => existing,
+      create: async (data) => { createCalls++; return data as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string; role!: string }
+    const result = await User.firstOrNew({ email: 'a@x.com' } as Partial<User>)
+    assert.ok(result instanceof User)
+    assert.equal(result.exists, true)
+    assert.equal(createCalls, 0)
+    assert.deepStrictEqual({ ...result }, existing)
+  })
+
+  it('builds a NEW unsaved instance when missing (exists === false), no write', async () => {
+    let createCalls = 0
+    const qb = makeQb<UserShape>({
+      first: async () => null,
+      create: async (data) => { createCalls++; return data as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string; role!: string }
+    const result = await User.firstOrNew(
+      { email: 'new@x.com' } as Partial<User>,
+      { role: 'member' } as Partial<User>,
+    )
+    assert.ok(result instanceof User)
+    assert.equal(result.exists, false)
+    assert.equal(createCalls, 0)         // no DB write occurred
+    assert.equal(result.email, 'new@x.com')
+    assert.equal(result.role, 'member')
+  })
+
+  it('the unsaved instance persists via save() (insert, since no PK)', async () => {
+    let created: unknown = null
+    const qb = makeQb<UserShape>({
+      first: async () => null,
+      create: async (data) => { created = data; return { id: 5, ...(data as Partial<UserShape>) } as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string; role!: string }
+    const user = await User.firstOrNew({ email: 'new@x.com' } as Partial<User>, { role: 'member' } as Partial<User>)
+    assert.equal(user.exists, false)
+    await user.save()
+    assert.deepStrictEqual(created, { email: 'new@x.com', role: 'member' })
+    assert.equal(user.exists, true)
+    assert.equal(user.id, 5)
+  })
+
+  it('the built instance respects fillable (non-fillable keys dropped)', async () => {
+    const qb = makeQb<UserShape>({ first: async () => null })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['email']
+      id!: number; email!: string; name!: string; role!: string
+    }
+    const result = await User.firstOrNew(
+      { email: 'new@x.com' } as Partial<User>,
+      { role: 'member' } as Partial<User>,   // not fillable -> dropped
+    )
+    assert.equal(result.email, 'new@x.com')
+    assert.equal(result.role, undefined)
+  })
+})
+
 // ─── retrieved / saving / saved events ────────────────────────────────────────
 
 describe('Model lifecycle — retrieved/saving/saved', () => {
@@ -1303,6 +1377,36 @@ describe('Model.hydrate()', () => {
     class User extends Model {}
     const u = User.hydrate({ id: 1 })!
     assert.strictEqual(User.hydrate(u), u)
+  })
+
+  it('hydrated instance reports exists === true; a fresh instance is false', () => {
+    class User extends Model { id!: number }
+    assert.equal(User.hydrate({ id: 1 })!.exists, true)
+    assert.equal(new User().exists, false)
+  })
+})
+
+describe('Model.exists — persistence flag', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('hard delete() flips exists back to false', async () => {
+    const qb = makeQb({ delete: async () => undefined })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number }
+    const u = User.hydrate({ id: 1 })!
+    assert.equal(u.exists, true)
+    await u.delete()
+    assert.equal(u.exists, false)
+  })
+
+  it('soft delete() keeps exists true (row still present, trashed)', async () => {
+    const qb = makeQb({ delete: async () => undefined })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model { static override softDeletes = true; id!: number; deletedAt?: Date }
+    const p = Post.hydrate({ id: 1 })!
+    await p.delete()
+    assert.equal(p.exists, true)
+    assert.ok(p.deletedAt instanceof Date)
   })
 })
 
