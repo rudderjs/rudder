@@ -21,16 +21,14 @@ Add to `.env`:
 
 ```env
 APP_KEY=base64:your-random-32-byte-key
-APP_PREVIOUS_KEYS=                        # comma-separated old keys for rotation
 ```
 
 ```ts
 // config/crypt.ts
 export default {
   key: env('APP_KEY', ''),
-  previousKeys: env('APP_PREVIOUS_KEYS', '').split(',').filter(Boolean),
+  previousKeys: [],   // see Key Rotation below
 }
-
 ```
 
 `CryptProvider` is picked up by [auto-discovery](https://github.com/rudderjs/rudder/blob/main/docs/guide/service-providers.md#auto-discovery) — `pnpm rudder providers:discover` is all that's needed.
@@ -51,11 +49,19 @@ const plain = Crypt.decryptString(token) // "secret"
 
 ## Key Rotation
 
-Add the old key to `APP_PREVIOUS_KEYS` before rotating. Decryption tries the current key first, then previous keys in order. New encryptions always use the current key.
+Move the old key into `previousKeys` in `config/crypt.ts` before rotating. Decryption tries the current key first, then previous keys in order. New encryptions always use the current key.
 
 ```env
 APP_KEY=base64:new-key
-APP_PREVIOUS_KEYS=base64:old-key-1,base64:old-key-2
+APP_KEY_OLD=base64:old-key
+```
+
+```ts
+// config/crypt.ts
+export default {
+  key: env('APP_KEY', ''),
+  previousKeys: [env('APP_KEY_OLD', '')].filter(Boolean),
+}
 ```
 
 ## Security

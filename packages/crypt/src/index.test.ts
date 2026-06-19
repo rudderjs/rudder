@@ -191,6 +191,20 @@ describe('parseKey', () => {
     const buf = parseKey(`  base64:${raw.toString('base64')}  `)
     assert.ok(buf.equals(raw))
   })
+
+  it('throws when a base64: key decodes to fewer than 32 bytes', () => {
+    assert.throws(
+      () => parseKey(`base64:${randomBytes(16).toString('base64')}`),
+      /APP_KEY decoded to 16 bytes/,
+    )
+  })
+
+  it('throws when a base64: key decodes to more than 32 bytes', () => {
+    assert.throws(
+      () => parseKey(`base64:${randomBytes(48).toString('base64')}`),
+      /APP_KEY decoded to .* bytes/,
+    )
+  })
 })
 
 // ─── CryptRegistry ────────────────────────────────────────
