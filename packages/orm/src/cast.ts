@@ -169,7 +169,7 @@ export function castGet(type: string, key: string, value: unknown, attributes: R
     case 'encrypted':
     case 'encrypted:array':
     case 'encrypted:object':
-      return _decrypt(type, value)
+      return _decrypt(type, key, value)
     // `hashed` is one-way — on read the stored hash is returned verbatim.
     case 'hashed':    return value
     default:          return value
@@ -204,7 +204,7 @@ export function castSet(type: string, key: string, value: unknown, attributes: R
     case 'encrypted':
     case 'encrypted:array':
     case 'encrypted:object':
-      return _encrypt(type, value)
+      return _encrypt(type, key, value)
     case 'hashed':    return _hash(key, value)
     default:          return value
   }
@@ -341,22 +341,24 @@ function _getCrypt(): { encrypt(v: string): string; decrypt(v: string): string }
   return store ?? null
 }
 
-function _encrypt(castType: string, value: unknown): string {
+function _encrypt(castType: string, key: string, value: unknown): string {
   const crypt = _getCrypt()
   if (!crypt) {
     throw new Error(
-      `[Rudder ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
+      `[Rudder ORM] 'encrypted' cast on column "${key}": CryptProvider is not registered. ` +
+      `Add CryptProvider to your bootstrap/app.ts providers array.`,
     )
   }
   const serialized = castType === 'encrypted' ? String(value) : JSON.stringify(value)
   return crypt.encrypt(serialized)
 }
 
-function _decrypt(castType: string, value: unknown): unknown {
+function _decrypt(castType: string, key: string, value: unknown): unknown {
   const crypt = _getCrypt()
   if (!crypt) {
     throw new Error(
-      `[Rudder ORM] Cast type "${castType}" requires @rudderjs/crypt. Run: pnpm add @rudderjs/crypt`
+      `[Rudder ORM] 'encrypted' cast on column "${key}": CryptProvider is not registered. ` +
+      `Add CryptProvider to your bootstrap/app.ts providers array.`,
     )
   }
   const decrypted = crypt.decrypt(String(value))
