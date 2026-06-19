@@ -1,5 +1,17 @@
 # @rudderjs/session
 
+## 2.5.1
+
+### Patch Changes
+
+- 5d317ae: Consolidate duplicate `parseCookie`/`parseCookies` helpers into `@rudderjs/support`
+
+  Three independent cookie-header scanning implementations existed across `auth`, `session`, and `core`. Any RFC 6265 edge-case fix would need to be applied in all three places. Moved both helpers to `@rudderjs/support` as named exports; all three packages now import from there. `parseCookie` remains re-exported from `@rudderjs/auth`'s `remember` module for backward compatibility.
+
+- Updated dependencies [5d317ae]
+  - @rudderjs/support@1.6.3
+  - @rudderjs/core@1.13.3
+
 ## 2.5.0
 
 ### Minor Changes
