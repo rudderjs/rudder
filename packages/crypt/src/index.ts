@@ -8,6 +8,16 @@ export class CryptRegistry {
   private static previousKeys: Buffer[] = []
 
   static set(key: Buffer, previousKeys?: Buffer[]): void {
+    if (key.length !== 32) {
+      throw new Error(`[Rudder Crypt] CryptRegistry.set() requires a 32-byte key for AES-256. Got ${key.length} bytes. Use Crypt.generateKey() to generate a valid key.`)
+    }
+    for (const [i, k] of (previousKeys ?? []).entries()) {
+      if (k.length !== 32) {
+        throw new Error(`[Rudder Crypt] CryptRegistry.set() previousKeys[${i}] requires a 32-byte key for AES-256. Got ${k.length} bytes.`)
+      }
+    }
+    this.key?.fill(0)
+    for (const k of this.previousKeys) k.fill(0)
     this.key = key
     this.previousKeys = previousKeys ?? []
     publishCryptBridge()
@@ -22,6 +32,8 @@ export class CryptRegistry {
 
   /** Test-cleanup hook (public — other packages reset across the boundary). */
   static reset(): void {
+    this.key?.fill(0)
+    for (const k of this.previousKeys) k.fill(0)
     this.key = null
     this.previousKeys = []
     delete (globalThis as Record<string, unknown>)['__rudderjs_crypt_registry__']
@@ -128,6 +140,9 @@ export class Crypt {
     } catch {
       throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
     }
+    if (typeof payload.iv !== 'string' || typeof payload.value !== 'string' || typeof payload.mac !== 'string') {
+      throw new Error('[Rudder Crypt] Malformed encrypted payload — iv, value, and mac must all be strings.')
+    }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     const decrypted = tryDecryptWithKeys(keys, payload)
     try {
@@ -156,6 +171,9 @@ export class Crypt {
       payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
     } catch {
       throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+    }
+    if (typeof payload.iv !== 'string' || typeof payload.value !== 'string' || typeof payload.mac !== 'string') {
+      throw new Error('[Rudder Crypt] Malformed encrypted payload — iv, value, and mac must all be strings.')
     }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     return tryDecryptWithKeys(keys, payload).toString('utf8')
