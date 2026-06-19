@@ -48,6 +48,16 @@ class Membership extends Model {
   role!: string
 }
 
+// fillable guard — only name/email are mass-assignable; role is guarded.
+class Member extends Model {
+  static override table = 'users'
+  static override fillable = ['email', 'name']
+  id!: number
+  email!: string
+  name!: string
+  visits!: number
+}
+
 let driver: Driver
 
 beforeEach(async () => {
@@ -297,5 +307,32 @@ describe('native upsert — Model.upsert() end-to-end (SQLite RETURNING)', () =>
     // raw DB int; the boolean cast resolves on toJSON()).
     assert.strictEqual((row as unknown as { active: number }).active, 1)
     assert.strictEqual((row.toJSON() as Record<string, unknown>)['active'], true)
+  })
+
+  it('drops keys outside fillable before writing', async () => {
+    // visits is not in Member.fillable — should be silently dropped.
+    await Member.upsert([{ email: 'a@x.com', name: 'Alice', visits: 99 } as Partial<Member>], 'email', ['name', 'visits'])
+    const row = await Member.where('email', 'a@x.com').first() as Member
+    assert.strictEqual(row.name, 'Alice')
+    assert.strictEqual(row.visits, 0) // DEFAULT — not written
+  })
+})
+
+describe('native write — Model.insertMany() mass-assignment filtering', () => {
+  it('inserts a batch and applies fillable filtering', async () => {
+    await Member.insertMany([
+      { email: 'a@x.com', name: 'Alice', visits: 99 } as Partial<Member>,
+      { email: 'b@x.com', name: 'Bob', visits: 77 } as Partial<Member>,
+    ])
+    const rows = await Member.all() as Member[]
+    assert.strictEqual(rows.length, 2)
+    // visits not in fillable — must stay at column DEFAULT (0), not the supplied value.
+    assert.strictEqual(rows[0]!.visits, 0)
+    assert.strictEqual(rows[1]!.visits, 0)
+  })
+
+  it('empty batch is a no-op', async () => {
+    await Member.insertMany([])
+    assert.strictEqual(await Member.count(), 0)
   })
 })
