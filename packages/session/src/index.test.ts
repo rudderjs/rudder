@@ -923,3 +923,90 @@ describe('SessionProvider', () => {
     } finally { restore() }
   })
 })
+
+// ─── S7: pull() — atomic get-and-remove ──────────────────────────────────────
+
+describe('SessionInstance — S7: pull()', () => {
+  it('returns the value and removes the key', async () => {
+    const { session: s } = await runRequest()
+    s.put('token', 'abc')
+    const val = s.pull('token')
+    assert.strictEqual(val, 'abc')
+    assert.strictEqual(s.has('token'), false)
+  })
+
+  it('returns the fallback when key is absent', async () => {
+    const { session: s } = await runRequest()
+    assert.strictEqual(s.pull('missing', 'default'), 'default')
+  })
+
+  it('unconditionally removes the key even when absent (no error)', async () => {
+    const { session: s } = await runRequest()
+    assert.doesNotThrow(() => s.pull('absent'))
+    assert.strictEqual(s.has('absent'), false)
+  })
+
+  it('marks the session dirty', async () => {
+    const { session: s } = await runRequest()
+    s.put('k', 'v')
+    // get() does not mark dirty; pull() (via forget()) does
+    const fresh: typeof s = Object.create(Object.getPrototypeOf(s))
+    Object.assign(fresh, s)
+    s.pull('k')
+    assert.strictEqual(s.isDirty(), true)
+  })
+})
+
+describe('Session facade — S7: pull()', () => {
+  let mw: ReturnType<typeof sessionMiddleware>
+  beforeEach(() => { mw = sessionMiddleware(config) })
+  async function run(fn: () => void | Promise<void>): Promise<void> {
+    const { req, res } = makeReqRes()
+    await mw(req, res, async () => { await fn() })
+  }
+
+  it('pull() returns the value and removes the key', async () => {
+    await run(async () => {
+      Session.put('state', 'oauth-xyz')
+      const val = Session.pull<string>('state')
+      assert.strictEqual(val, 'oauth-xyz')
+      assert.strictEqual(Session.has('state'), false)
+    })
+  })
+
+  it('pull() returns fallback when key absent', async () => {
+    await run(async () => {
+      assert.strictEqual(Session.pull('missing', 'fb'), 'fb')
+    })
+  })
+})
+
+// ─── S8: SessionMiddleware() actionable error ─────────────────────────────────
+
+describe('SessionMiddleware() — S8: actionable error when provider not registered', () => {
+  it('throws with a provider-registration hint when the DI key is missing', async () => {
+    const { SessionMiddleware: SessionMiddlewareFn } = await import('./index.js')
+    const fakeApp = {
+      make<T>(_key: string): T {
+        throw new Error('no binding for key: session.middleware')
+      },
+    }
+    const g = globalThis as Record<string, unknown>
+    const previous = g['__rudderjs_app__']
+    g['__rudderjs_app__'] = fakeApp
+    try {
+      assert.throws(
+        () => SessionMiddlewareFn(),
+        (err: unknown) => {
+          assert.ok(err instanceof Error)
+          assert.ok(err.message.includes('SessionProvider'), `expected hint about SessionProvider, got: ${err.message}`)
+          assert.ok(err.message.includes('bootstrap/providers.ts'), `expected bootstrap path hint, got: ${err.message}`)
+          return true
+        },
+      )
+    } finally {
+      if (previous === undefined) delete g['__rudderjs_app__']
+      else g['__rudderjs_app__'] = previous
+    }
+  })
+})

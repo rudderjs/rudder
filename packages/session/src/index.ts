@@ -127,6 +127,12 @@ export class SessionInstance {
     return (Object.hasOwn(this._data, key) ? this._data[key] : fallback) as T | undefined
   }
 
+  pull<T>(key: string, fallback?: T): T | undefined {
+    const value = this.get<T>(key, fallback)
+    this.forget(key)
+    return value
+  }
+
   put(key: string, value: unknown): void {
     this._data[key] = value
     this._dirty = true
@@ -277,6 +283,10 @@ export class Session {
 
   static get<T>(key: string, fallback?: T): T | undefined {
     return this.current().get<T>(key, fallback)
+  }
+
+  static pull<T>(key: string, fallback?: T): T | undefined {
+    return this.current().pull<T>(key, fallback)
   }
 
   static put(key: string, value: unknown): void {
@@ -736,7 +746,15 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
  *   Route.get('/path', handler, [SessionMiddleware()])
  */
 export function SessionMiddleware(): MiddlewareHandler {
-  return app().make<MiddlewareHandler>('session.middleware')
+  try {
+    return app().make<MiddlewareHandler>('session.middleware')
+  } catch {
+    throw new Error(
+      '[Rudder Session] SessionMiddleware() requires SessionProvider to be registered. ' +
+      'Add session(config.session) to bootstrap/providers.ts. ' +
+      'Use sessionMiddleware(config) for manual wiring without a provider.',
+    )
+  }
 }
 
 // ─── Service Provider Factory ──────────────────────────────
