@@ -123,3 +123,29 @@ describe('SessionInstance — has()/get() ignore inherited Object.prototype memb
     assert.strictEqual(session.get('toString'), 'i-set-this')
   })
 })
+
+// ─── buildCookieHeader: header-injection guard ────────────────────────────────
+
+describe('sessionMiddleware — rejects cookie config containing header-injection characters', () => {
+  const INJECTION_CHARS = [
+    ['semicolon', ';'],
+    ['CR', '\r'],
+    ['LF', '\n'],
+  ] as const
+
+  for (const [label, char] of INJECTION_CHARS) {
+    it(`throws on cookie name containing ${label}`, () => {
+      const badCfg: SessionConfig = { ...cfg('secret'), cookie: { ...cfg('secret').cookie, name: `rjs${char}sess` } }
+      assert.throws(() => sessionMiddleware(badCfg), /header injection/i)
+    })
+
+    it(`throws on cookie path containing ${label}`, () => {
+      const badCfg: SessionConfig = { ...cfg('secret'), cookie: { ...cfg('secret').cookie, path: `/${char}admin` } }
+      assert.throws(() => sessionMiddleware(badCfg), /header injection/i)
+    })
+  }
+
+  it('does not throw for a valid name and path', () => {
+    assert.doesNotThrow(() => sessionMiddleware(cfg('secret')))
+  })
+})
