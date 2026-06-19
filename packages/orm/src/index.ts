@@ -1642,15 +1642,16 @@ export abstract class Model {
 
   /**
    * Columns that are mass-assignable via `Model.create()`, `Model.update()`,
-   * and `instance.fill()`. When non-empty, this is an allowlist — any other
-   * key in the incoming payload is silently dropped.
+   * `Model.insertMany()`, `Model.upsert()`, and `instance.fill()`. When
+   * non-empty, this is an allowlist — any other key in the incoming payload
+   * is silently dropped.
    *
    * Empty `fillable` + empty `guarded` (the default) means no enforcement —
    * every key is passed through. Setting either opts in to mass-assignment
    * protection.
    *
-   * `instance.forceFill(data)` and direct property assignment + `save()`
-   * bypass this allowlist.
+   * Bypass paths: `instance.forceFill(data)`, direct property assignment +
+   * `save()`, and the raw QB-level `query().insertMany()` (trusted/seeder use).
    */
   static fillable: string[] = []
 
@@ -3028,6 +3029,35 @@ export abstract class Model {
   }
 
   /**
+   * Bulk insert — mass-assignment-safe equivalent of `query().insertMany()`.
+   * Each row is filtered through `fillable`/`guarded` before writing (keys
+   * outside the policy are dropped, matching `create()`). Write-side casts and
+   * attribute mutators are applied per row. Observer events do **not** fire
+   * (pure data-plane op, like `increment`).
+   *
+   * Use `query().insertMany(rows)` directly to bypass mass-assignment filtering
+   * (e.g. seeding from a trusted source).
+   *
+   * @example
+   * await User.insertMany([
+   *   { email: 'a@x.com', name: 'Alice' },
+   *   { email: 'b@x.com', name: 'Bob' },
+   * ])
+   */
+  static async insertMany<T extends typeof Model>(
+    this: T,
+    rows: Array<Partial<InstanceType<T>>>,
+  ): Promise<void> {
+    const self = this as typeof Model
+    if (rows.length === 0) return
+    const prepared = rows.map(r =>
+      self._applyMutators(self._filterFillable(r as Record<string, unknown>)),
+    )
+    const q = Model._q(this) as QueryBuilder<InstanceType<T>>
+    return q.insertMany(prepared as Partial<InstanceType<T>>[])
+  }
+
+  /**
    * Bulk insert-or-update — Laravel's `Model.upsert(values, uniqueBy, update)`.
    * Inserts every row; on a unique-key conflict (the `uniqueBy` columns) updates
    * the `update` columns from the incoming values instead of failing. Resolves to
@@ -3039,11 +3069,10 @@ export abstract class Model {
    * - `update` — columns to overwrite on conflict. Defaults to every inserted
    *   column except the `uniqueBy` keys. An empty list means insert-or-ignore.
    *
-   * **No mass-assignment filtering** — like `insertMany`, this is a bulk
-   * statement and `fillable`/`guarded` do **not** apply. Write-side casts and
+   * Each row is filtered through `fillable`/`guarded` before writing (keys
+   * outside the policy are dropped, matching `create()`). Write-side casts and
    * attribute mutators (`boolean`/`date`/`json`, custom setters) ARE applied per
-   * row. Observer events do **not** fire (pure data-plane, matching `insertMany`
-   * / `increment`).
+   * row. Observer events do **not** fire (pure data-plane, matching `increment`).
    *
    * One atomic statement on native + Drizzle (`ON CONFLICT … DO UPDATE` /
    * `ON DUPLICATE KEY UPDATE`); the Prisma adapter batches a per-row upsert in a
@@ -3066,8 +3095,10 @@ export abstract class Model {
     if (rows.length === 0) return 0
     const keys = Array.isArray(uniqueBy) ? uniqueBy : [uniqueBy]
 
-    // Apply write-time casts/mutators per row (no mass-assignment filter — bulk op).
-    const prepared = rows.map(r => self._applyMutators(r as Record<string, unknown>))
+    // Apply mass-assignment filter then write-time casts/mutators per row.
+    const prepared = rows.map(r =>
+      self._applyMutators(self._filterFillable(r as Record<string, unknown>)),
+    )
 
     // Default update set = every inserted column except the conflict keys.
     let updateCols = update
