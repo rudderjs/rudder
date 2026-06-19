@@ -6,7 +6,7 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Model, ModelRegistry, ConnectionManager } from './index.js'
+import { Model, ModelRegistry, ConnectionManager, ModelNotFoundError, MultipleRecordsFoundError } from './index.js'
 import type { OrmAdapter, QueryBuilder } from '@rudderjs/contracts'
 import { NativeAdapter, BetterSqlite3Driver } from '@rudderjs/database/native'
 import type { Driver } from '@rudderjs/database/native'
@@ -161,5 +161,40 @@ describe('deferred-connection QB self-diagnosing throws', () => {
       () => (Item.on('limited') as unknown as { upsert(rows: unknown[], by: string): Promise<number> }).upsert([{ name: 'a' }], 'name'),
       /upsert\(\) is not implemented by this connection's adapter/,
     )
+  })
+})
+
+describe('Model.sole() — exactly-one guard', () => {
+  it('returns the row when exactly one matches', async () => {
+    const Item = makeItem()
+    await Item.create({ name: 'only' })
+    const row = await Item.where('name', 'only').sole()
+    assert.equal(row.name, 'only')
+  })
+
+  it('throws ModelNotFoundError (404) when zero rows match', async () => {
+    const Item = makeItem()
+    await assert.rejects(
+      () => Item.where('name', 'ghost').sole(),
+      (err: unknown) => err instanceof ModelNotFoundError && err.httpStatus === 404,
+    )
+  })
+
+  it('throws MultipleRecordsFoundError (422) when more than one row matches', async () => {
+    const Item = makeItem()
+    await Item.create({ name: 'dup' })
+    await Item.create({ name: 'dup' })
+    await assert.rejects(
+      () => Item.where('name', 'dup').sole(),
+      (err: unknown) => err instanceof MultipleRecordsFoundError && err.httpStatus === 422 && err.code === 'MULTIPLE_RECORDS_FOUND',
+    )
+  })
+
+  it('static sole(attrs) filters by attrs before asserting uniqueness', async () => {
+    const Item = makeItem()
+    await Item.create({ name: 'a' })
+    await Item.create({ name: 'b' })
+    const row = await Item.sole({ name: 'a' } as Partial<InstanceType<typeof Item>>)
+    assert.equal(row.name, 'a')
   })
 })
