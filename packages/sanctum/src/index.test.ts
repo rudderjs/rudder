@@ -375,6 +375,78 @@ describe('Sanctum.validateToken', () => {
   })
 })
 
+// ─── validateTokenResult ──────────────────────────────────
+
+describe('Sanctum.validateTokenResult', () => {
+  it('returns { user, token } on success', async () => {
+    const { sanctum } = makeSanctum()
+    const { plainTextToken } = await sanctum.createToken('1', 'test')
+    const result = await sanctum.validateTokenResult(`Bearer ${plainTextToken}`)
+    assert.ok(!('error' in result))
+    assert.strictEqual(result.user.getAuthIdentifier(), '1')
+  })
+
+  it('returns { error: "malformed" } when no pipe delimiter', async () => {
+    const { sanctum } = makeSanctum()
+    const result = await sanctum.validateTokenResult('Bearer nopipe')
+    assert.deepStrictEqual(result, { error: 'malformed' })
+  })
+
+  it('returns { error: "malformed" } when id segment is empty', async () => {
+    const { sanctum } = makeSanctum()
+    const result = await sanctum.validateTokenResult('|secretonly')
+    assert.deepStrictEqual(result, { error: 'malformed' })
+  })
+
+  it('returns { error: "malformed" } when secret segment is empty', async () => {
+    const { sanctum } = makeSanctum()
+    const result = await sanctum.validateTokenResult('idonly|')
+    assert.deepStrictEqual(result, { error: 'malformed' })
+  })
+
+  it('returns { error: "not_found" } when token hash has no DB record', async () => {
+    const { sanctum } = makeSanctum()
+    const result = await sanctum.validateTokenResult('Bearer 999|wrongsecret')
+    assert.deepStrictEqual(result, { error: 'not_found' })
+  })
+
+  it('returns { error: "id_mismatch" } when hash matches but id prefix is wrong', async () => {
+    const { sanctum, repo } = makeSanctum()
+    const plain = Sanctum.generateToken()
+    const hashed = Sanctum.hashToken(plain)
+    await repo.create({ userId: '1', name: 'test', token: hashed })
+    // Use the wrong id — the hash will resolve to the record but ids differ.
+    const result = await sanctum.validateTokenResult(`wrongid|${plain}`)
+    assert.deepStrictEqual(result, { error: 'id_mismatch' })
+  })
+
+  it('returns { error: "expired" } for an expired token', async () => {
+    const { sanctum } = makeSanctum()
+    const exp = new Date(Date.now() - 1000)
+    const { plainTextToken } = await sanctum.createToken('1', 'test', undefined, exp)
+    const result = await sanctum.validateTokenResult(plainTextToken)
+    assert.deepStrictEqual(result, { error: 'expired' })
+  })
+
+  it('returns { error: "user_missing" } when associated user no longer exists', async () => {
+    const { sanctum, repo } = makeSanctum([])
+    const plain = Sanctum.generateToken()
+    const hashed = Sanctum.hashToken(plain)
+    const token = await repo.create({ userId: '1', name: 'test', token: hashed })
+    const result = await sanctum.validateTokenResult(`${token.id}|${plain}`)
+    assert.deepStrictEqual(result, { error: 'user_missing' })
+  })
+
+  it('validateToken still returns null for each failure code (backward compat)', async () => {
+    const { sanctum } = makeSanctum()
+    assert.strictEqual(await sanctum.validateToken('nopipe'), null)
+    assert.strictEqual(await sanctum.validateToken('Bearer bad|secret'), null)
+    const exp = new Date(Date.now() - 1000)
+    const { plainTextToken } = await sanctum.createToken('1', 'expired', undefined, exp)
+    assert.strictEqual(await sanctum.validateToken(plainTextToken), null)
+  })
+})
+
 // ─── tokenCan ─────────────────────────────────────────────
 
 describe('Sanctum.tokenCan', () => {
