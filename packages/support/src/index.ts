@@ -560,6 +560,51 @@ export function reusableConnection<T>(
   return promise
 }
 
+// ─── Dev logger ────────────────────────────────────────────
+
+const _RUDDER_TAG  = `\x1b[1m\x1b[38;5;208m[Rudder]\x1b[39m\x1b[22m`
+const _LEVEL_COLOR = { info: '\x1b[34m', warn: '\x1b[33m', error: '\x1b[31m' }
+
+function _rudderTs(): string {
+  const d = new Date()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
+export interface RudderLogger {
+  info(msg: string): void
+  warn(msg: string): void
+  error(msg: string): void
+}
+
+/**
+ * Returns a logger bound to a package name.
+ * Emits `HH:MM:SS [Rudder][pkg] LEVEL message` to the console,
+ * matching Vite's dev-server log style.
+ *
+ * @example
+ * const log = createRudderLogger('server-hono')
+ * log.warn('port already in use')
+ */
+export function createRudderLogger(pkg: string): RudderLogger {
+  const dim    = (s: string) => `\x1b[2m${s}\x1b[22m`
+  const pkgTag = `\x1b[1m\x1b[36m[${pkg}]\x1b[39m\x1b[22m`
+  const cols   = () => process.stdout.columns || 120
+
+  const line = (level: keyof typeof _LEVEL_COLOR, msg: string): string => {
+    const prefix    = `${_rudderTs()} [Rudder][${pkg}] ${level.toUpperCase()} `
+    const maxMsg    = Math.max(10, cols() - prefix.length)
+    const truncated = msg.length > maxMsg ? msg.slice(0, maxMsg - 1) + '…' : msg
+    const lvl       = `${_LEVEL_COLOR[level]}${level.toUpperCase()}\x1b[0m`
+    return `${dim(_rudderTs())} ${_RUDDER_TAG}${pkgTag} ${lvl} ${truncated}`
+  }
+
+  return {
+    info:  (msg) => console.log(line('info', msg)),
+    warn:  (msg) => console.warn(line('warn', msg)),
+    error: (msg) => console.error(line('error', msg)),
+  }
+}
+
 // ─── Cookie ────────────────────────────────────────────────
 
 /** Read a single named value from a raw `Cookie` request header. */

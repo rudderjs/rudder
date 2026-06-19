@@ -2,7 +2,9 @@
 // module stays safe to include in browser bundles. Vite externalizes node:* in
 // client builds, and a top-level import would crash the browser the moment any
 // client code transitively touches @rudderjs/core's barrel export.
-import { resolveOptionalPeer, config, Env } from '@rudderjs/support'
+import { resolveOptionalPeer, config, Env, createRudderLogger } from '@rudderjs/support'
+
+const _log = createRudderLogger('core')
 import type { Application } from './application.js'
 import type { ServiceProvider } from './service-provider.js'
 import type { ProviderEntry, ProviderManifest } from './provider-registry.js'
@@ -104,8 +106,8 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
           // v2 manifests (no fingerprint) are used silently; a genuinely stale
           // v3 fingerprint warns.
           if (manifest.version >= 3) {
-            console.warn(
-              '[Rudder] provider manifest is stale (dependencies changed since it was generated). ' +
+            _log.warn(
+              'provider manifest is stale (dependencies changed since it was generated). ' +
               'Using it anyway — run `rudder providers:discover` in your build step to refresh.',
             )
           }
@@ -114,7 +116,7 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
           if (scanned.length > 0) {
             entries = scanned
             try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
-            console.log('[Rudder] provider manifest regenerated (dependencies changed)')
+            _log.info('provider manifest regenerated (dependencies changed)')
           }
         }
       }
@@ -129,12 +131,12 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
         entries = scanned
         try { writeProviderManifest(cwd, scanned) } catch { /* read-only fs — in-memory result still used */ }
         if (isProduction) {
-          console.warn(
-            '[Rudder] no provider manifest found — scanned node_modules at boot. ' +
+          _log.warn(
+            'no provider manifest found — scanned node_modules at boot. ' +
             'Run `rudder providers:discover` in your build step to bake bootstrap/cache/providers.json.',
           )
         } else {
-          console.log('[Rudder] provider manifest generated (bootstrap/cache/providers.json)')
+          _log.info('provider manifest generated (bootstrap/cache/providers.json)')
         }
       }
     } catch {
@@ -167,9 +169,9 @@ export async function defaultProviders(options: DefaultProvidersOptions = {}): P
       mod = await resolveOptionalPeer(importSpecifier)
     } catch {
       if (!entry.optional) {
-        console.warn(
-          `[Rudder] ${entry.package} listed in the provider manifest but not installed. ` +
-          `Run \`pnpm rudder providers:discover\` after installing or removing packages.`,
+        _log.warn(
+          `${entry.package} listed in the provider manifest but not installed. ` +
+          `Run \`rudder providers:discover\` after installing or removing packages.`,
         )
       }
       continue

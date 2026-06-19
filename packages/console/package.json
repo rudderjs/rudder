@@ -36,7 +36,8 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/doctor.test.js"
   },
   "dependencies": {
-    "@clack/prompts": "^1.0.0"
+    "@clack/prompts": "^1.0.0",
+    "@rudderjs/support": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
