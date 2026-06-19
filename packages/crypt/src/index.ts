@@ -108,6 +108,23 @@ function tryDecryptWithKeys(keys: Buffer[], payload: EncryptedPayload): Buffer {
   throw new Error('[Rudder Crypt] Decryption failed — no matching key found.')
 }
 
+function parsePayload(encrypted: string): EncryptedPayload {
+  let payload: EncryptedPayload
+  try {
+    payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
+  } catch {
+    throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+  }
+  if (typeof payload.iv !== 'string' || typeof payload.value !== 'string' || typeof payload.mac !== 'string') {
+    throw new Error('[Rudder Crypt] Malformed encrypted payload — iv, value, and mac must all be strings.')
+  }
+  return payload
+}
+
+function resolvedKeys(): Buffer[] {
+  return [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
+}
+
 // ─── Crypt Facade ─────────────────────────────────────────
 
 export class Crypt {
@@ -134,17 +151,8 @@ export class Crypt {
    * Tries the current key first, then previous keys for rotation support.
    */
   static decrypt<T = unknown>(encrypted: string): T {
-    let payload: EncryptedPayload
-    try {
-      payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
-    } catch {
-      throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
-    }
-    if (typeof payload.iv !== 'string' || typeof payload.value !== 'string' || typeof payload.mac !== 'string') {
-      throw new Error('[Rudder Crypt] Malformed encrypted payload — iv, value, and mac must all be strings.')
-    }
-    const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
-    const decrypted = tryDecryptWithKeys(keys, payload)
+    const payload = parsePayload(encrypted)
+    const decrypted = tryDecryptWithKeys(resolvedKeys(), payload)
     try {
       return JSON.parse(decrypted.toString('utf8')) as T
     } catch {
@@ -166,17 +174,7 @@ export class Crypt {
    * Decrypt a plain string (no JSON deserialization).
    */
   static decryptString(encrypted: string): string {
-    let payload: EncryptedPayload
-    try {
-      payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
-    } catch {
-      throw new Error('[Rudder Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
-    }
-    if (typeof payload.iv !== 'string' || typeof payload.value !== 'string' || typeof payload.mac !== 'string') {
-      throw new Error('[Rudder Crypt] Malformed encrypted payload — iv, value, and mac must all be strings.')
-    }
-    const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
-    return tryDecryptWithKeys(keys, payload).toString('utf8')
+    return tryDecryptWithKeys(resolvedKeys(), parsePayload(encrypted)).toString('utf8')
   }
 
   /**
@@ -192,7 +190,14 @@ export class Crypt {
 export function parseKey(raw: string): Buffer {
   const trimmed = raw.trim()
   if (trimmed.startsWith('base64:')) {
-    return Buffer.from(trimmed.slice(7), 'base64')
+    const buf = Buffer.from(trimmed.slice(7), 'base64')
+    if (buf.length !== 32) {
+      throw new Error(
+        `[Rudder Crypt] APP_KEY decoded to ${buf.length} bytes; expected 32. ` +
+        `Regenerate the key with Crypt.generateKey() to get a valid 32-byte key.`,
+      )
+    }
+    return buf
   }
   return Buffer.from(trimmed, 'utf8')
 }
