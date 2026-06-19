@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
-import { CryptProvider, Crypt, CryptRegistry, parseKey, type CryptConfig } from './index.js'
+import { CryptProvider, Crypt, CryptRegistry, parseKey, type CryptConfig, type SupportedCipher } from './index.js'
 
 function withCryptConfig(cfg: CryptConfig): () => void {
   const previous = getConfigRepository()
@@ -13,9 +13,9 @@ function withCryptConfig(cfg: CryptConfig): () => void {
 const TEST_KEY = `base64:${randomBytes(32).toString('base64')}`
 const TEST_KEY_2 = `base64:${randomBytes(32).toString('base64')}`
 
-function setup(key = TEST_KEY, previousKeys?: string[]) {
+function setup(key = TEST_KEY, previousKeys?: string[], cipher?: SupportedCipher) {
   CryptRegistry.reset()
-  CryptRegistry.set(parseKey(key), previousKeys?.map(parseKey))
+  CryptRegistry.set(parseKey(key), previousKeys?.map(parseKey), cipher)
 }
 
 // ─── Crypt.encrypt / decrypt ─────────────────────────────
@@ -149,6 +149,94 @@ describe('Key rotation', () => {
   })
 })
 
+// ─── AES-256-GCM cipher ───────────────────────────────────
+
+describe('AES-256-GCM cipher', () => {
+  beforeEach(() => setup(TEST_KEY, undefined, 'aes-256-gcm'))
+  afterEach(() => CryptRegistry.reset())
+
+  it('round-trips a string value', () => {
+    const encrypted = Crypt.encrypt('hello gcm')
+    assert.strictEqual(Crypt.decrypt(encrypted), 'hello gcm')
+  })
+
+  it('round-trips an object', () => {
+    const obj = { mode: 'gcm', ok: true }
+    assert.deepStrictEqual(Crypt.decrypt(Crypt.encrypt(obj)), obj)
+  })
+
+  it('round-trips a plain string via encryptString', () => {
+    const encrypted = Crypt.encryptString('gcm string')
+    assert.strictEqual(Crypt.decryptString(encrypted), 'gcm string')
+  })
+
+  it('payload has tag and no mac', () => {
+    const raw = JSON.parse(Buffer.from(Crypt.encrypt('x'), 'base64').toString('utf8'))
+    assert.ok(typeof raw.tag === 'string', 'tag must be present')
+    assert.strictEqual(raw.mac, undefined)
+  })
+
+  it('produces different ciphertext each time (random nonce)', () => {
+    const a = Crypt.encrypt('same')
+    const b = Crypt.encrypt('same')
+    assert.notStrictEqual(a, b)
+  })
+
+  it('detects tampered ciphertext', () => {
+    const encrypted = Crypt.encrypt('data')
+    const payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8'))
+    payload.value = payload.value.slice(0, -2) + 'XX'
+    const tampered = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
+    assert.throws(() => Crypt.decrypt(tampered), /failed/)
+  })
+
+  it('detects tampered auth tag', () => {
+    const encrypted = Crypt.encrypt('data')
+    const payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8'))
+    payload.tag = randomBytes(16).toString('base64')
+    const tampered = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
+    assert.throws(() => Crypt.decrypt(tampered), /failed/)
+  })
+
+  it('CBC ciphertexts remain decryptable after switching to GCM', () => {
+    // Encrypt under CBC
+    setup(TEST_KEY, undefined, 'aes-256-cbc')
+    const cbcEncrypted = Crypt.encrypt('backward-compat')
+
+    // Switch to GCM — decryption auto-detects CBC from payload shape
+    setup(TEST_KEY, undefined, 'aes-256-gcm')
+    assert.strictEqual(Crypt.decrypt(cbcEncrypted), 'backward-compat')
+  })
+
+  it('fails to decrypt with a different key', () => {
+    const encrypted = Crypt.encrypt('secret gcm')
+    setup(TEST_KEY_2, undefined, 'aes-256-gcm')
+    assert.throws(() => Crypt.decrypt(encrypted), /failed/)
+  })
+})
+
+// ─── Crypt.supported ──────────────────────────────────────
+
+describe('Crypt.supported', () => {
+  it('returns true for aes-256-cbc with 32-byte key', () => {
+    assert.ok(Crypt.supported(randomBytes(32), 'aes-256-cbc'))
+  })
+
+  it('returns true for aes-256-gcm with 32-byte key', () => {
+    assert.ok(Crypt.supported(randomBytes(32), 'aes-256-gcm'))
+  })
+
+  it('returns false for aes-256-cbc with wrong-length key', () => {
+    assert.strictEqual(Crypt.supported(randomBytes(16), 'aes-256-cbc'), false)
+    assert.strictEqual(Crypt.supported(randomBytes(48), 'aes-256-cbc'), false)
+  })
+
+  it('returns false for an unknown cipher', () => {
+    assert.strictEqual(Crypt.supported(randomBytes(32), 'aes-128-cbc'), false)
+    assert.strictEqual(Crypt.supported(randomBytes(32), 'des'), false)
+  })
+})
+
 // ─── Crypt.generateKey ────────────────────────────────────
 
 describe('Crypt.generateKey', () => {
@@ -229,10 +317,21 @@ describe('CryptRegistry', () => {
     assert.strictEqual(CryptRegistry.getPreviousKeys().length, 1)
   })
 
-  it('reset() clears everything', () => {
+  it('defaults to aes-256-cbc', () => {
     CryptRegistry.set(randomBytes(32))
+    assert.strictEqual(CryptRegistry.getCipher(), 'aes-256-cbc')
+  })
+
+  it('stores the configured cipher', () => {
+    CryptRegistry.set(randomBytes(32), undefined, 'aes-256-gcm')
+    assert.strictEqual(CryptRegistry.getCipher(), 'aes-256-gcm')
+  })
+
+  it('reset() clears everything including cipher', () => {
+    CryptRegistry.set(randomBytes(32), undefined, 'aes-256-gcm')
     CryptRegistry.reset()
     assert.throws(() => CryptRegistry.getKey())
+    assert.strictEqual(CryptRegistry.getCipher(), 'aes-256-cbc')
   })
 
   it('set() throws for a key shorter than 32 bytes', () => {
@@ -297,6 +396,8 @@ describe('malformed payload fields', () => {
     ['mac is null',       p => { p['mac'] = null }],
     ['iv is absent',      p => { delete p['iv'] }],
     ['value is a number', p => { p['value'] = 42 }],
+    ['mac and tag both absent', p => { delete p['mac']; delete p['tag'] }],
+    ['tag is a number',   p => { p['tag'] = 99 }],
   ]
 
   for (const [label, mutate] of cases) {
@@ -322,6 +423,18 @@ describe('CryptProvider', () => {
     restore = withCryptConfig({ key: TEST_KEY })
     await new CryptProvider(fakeApp).boot?.()
     assert.ok(CryptRegistry.getKey().length === 32)
+  })
+
+  it('defaults to aes-256-cbc', async () => {
+    restore = withCryptConfig({ key: TEST_KEY })
+    await new CryptProvider(fakeApp).boot?.()
+    assert.strictEqual(CryptRegistry.getCipher(), 'aes-256-cbc')
+  })
+
+  it('boots with aes-256-gcm cipher', async () => {
+    restore = withCryptConfig({ key: TEST_KEY, cipher: 'aes-256-gcm' })
+    await new CryptProvider(fakeApp).boot?.()
+    assert.strictEqual(CryptRegistry.getCipher(), 'aes-256-gcm')
   })
 
   it('boots with previous keys', async () => {

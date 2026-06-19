@@ -1,6 +1,6 @@
 # @rudderjs/crypt
 
-Symmetric encryption for Rudder. AES-256-CBC with HMAC-SHA256 signing. Uses only `node:crypto`.
+Symmetric encryption for Rudder. Supports AES-256-CBC (default, Laravel-compatible) and AES-256-GCM. Uses only `node:crypto`.
 
 ## Installation
 
@@ -28,6 +28,7 @@ APP_KEY=base64:your-random-32-byte-key
 export default {
   key: env('APP_KEY', ''),
   previousKeys: [],   // see Key Rotation below
+  // cipher: 'aes-256-gcm',  // optional — see Cipher below
 }
 ```
 
@@ -45,6 +46,26 @@ const data = Crypt.decrypt(encrypted) // { userId: 42 }
 // String-only (no JSON serialization)
 const token = Crypt.encryptString('secret')
 const plain = Crypt.decryptString(token) // "secret"
+```
+
+## Cipher
+
+The default cipher is `aes-256-cbc` (CBC + HMAC-SHA256, compatible with Laravel's `Encrypter`). Switch to `aes-256-gcm` for modern authenticated encryption without an external MAC step:
+
+```ts
+// config/crypt.ts
+export default {
+  key: env('APP_KEY', ''),
+  cipher: 'aes-256-gcm',
+}
+```
+
+Decryption auto-detects the cipher from the stored payload (presence of `tag` → GCM, `mac` → CBC), so existing CBC ciphertexts remain readable after switching to GCM.
+
+Check whether a key is valid for a given cipher (mirrors Laravel's `Encrypter::supported()`):
+
+```ts
+Crypt.supported(key, 'aes-256-gcm') // true/false
 ```
 
 ## Key Rotation
@@ -66,7 +87,20 @@ export default {
 
 ## Security
 
-- AES-256-CBC encryption
-- HMAC-SHA256 authentication (encrypt-then-MAC)
-- Timing-safe MAC comparison
+- AES-256-CBC: HMAC-SHA256 authentication (encrypt-then-MAC), timing-safe MAC comparison
+- AES-256-GCM: native authenticated encryption, no external MAC needed
 - Random IV per encryption (same plaintext produces different ciphertext)
+- Laravel payload format compatibility (IV base64-encoded, same JSON envelope)
+
+## Migration from 1.x
+
+Version 2.0 changes the IV encoding in the CBC payload from **hex to base64** to match Laravel's `Encrypter` wire format. Ciphertexts produced by 1.x are not readable by 2.x. Re-encrypt stored values after upgrading:
+
+```ts
+// one-time migration script
+const old1xPayload = '...' // from your database / cookies
+// 1.x: manually decode the old hex-IV payload and re-encrypt
+const raw = JSON.parse(Buffer.from(old1xPayload, 'base64').toString('utf8'))
+const iv  = Buffer.from(raw.iv, 'hex')   // 1.x used hex
+// ... decrypt with node:crypto directly, then re-encrypt with Crypt.encrypt()
+```
