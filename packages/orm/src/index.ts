@@ -568,6 +568,24 @@ export class ModelNotFoundError extends Error {
 }
 
 /**
+ * Thrown by `Model.sole()` when more than one row matches the query. Use this
+ * to assert uniqueness beyond the primary key — e.g. retrieving a record by a
+ * unique constraint where an ambiguous result indicates corrupt data or a bad
+ * query. `httpStatus: 422` surfaces as an HTTP 422 via `@rudderjs/core`.
+ */
+export class MultipleRecordsFoundError extends Error {
+  readonly code = 'MULTIPLE_RECORDS_FOUND' as const
+  readonly model: string
+  readonly httpStatus = 422
+
+  constructor(model: string) {
+    super(`[Rudder ORM] Multiple ${model} records found when exactly one was expected.`)
+    this.name = 'MultipleRecordsFoundError'
+    this.model = model
+  }
+}
+
+/**
  * Thrown when an optimistic-lock-checked update finds the row's version column
  * no longer matches the expected value — another writer updated (and bumped)
  * the row after this one read it. Enable per model with `static version`.
@@ -1316,6 +1334,17 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * Same sort caveat as `chunk` — add an `orderBy` for stable paging.
    */
   lazy(size?: number): AsyncGenerator<T, void, undefined>
+  /**
+   * Return the single matching row, or throw:
+   * - `ModelNotFoundError` (HTTP 404) when zero rows match.
+   * - `MultipleRecordsFoundError` (HTTP 422) when more than one row matches.
+   *
+   * Uses `LIMIT 2` so it never fetches the full result set.
+   *
+   * @example
+   * const user = await User.where('email', req.body.email).sole()
+   */
+  sole(): Promise<T>
   /**
    * Keyset (cursor) pagination. Requires at least one `orderBy()` — throws
    * otherwise. Returns a {@link CursorPaginator} page; pass its `nextCursor`
@@ -2294,6 +2323,16 @@ export abstract class Model {
           await attachPoly(page)
           return page
         }
+        if (prop === 'sole') {
+          return async (): Promise<InstanceType<T>> => {
+            ;(target as QueryBuilder<InstanceType<T>>).limit(2)
+            const rows = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+            if (rows.length === 0) throw new ModelNotFoundError(ModelClass.name)
+            if (rows.length > 1) throw new MultipleRecordsFoundError(ModelClass.name)
+            await attachPoly(rows)
+            return rows[0]!
+          }
+        }
         if (prop === 'chunk') {
           return async (
             size: number,
@@ -2573,6 +2612,31 @@ export abstract class Model {
     const record = await (this as T & typeof Model).first()
     if (!record) throw new ModelNotFoundError((this as typeof Model).name)
     return record
+  }
+
+  /**
+   * Assert exactly one matching row exists. Throws `ModelNotFoundError` (404)
+   * when zero rows match, or `MultipleRecordsFoundError` (422) when more than
+   * one row matches. Optionally filter with `attrs` (merged as `where` clauses).
+   *
+   * @example
+   * // On a constrained query chain:
+   * const admin = await User.where('role', 'admin').sole()
+   *
+   * // With inline attrs:
+   * const user = await User.sole({ email: 'a@x.com' })
+   */
+  static async sole<T extends typeof Model>(
+    this: T,
+    attrs?: Partial<InstanceType<T>>,
+  ): Promise<InstanceType<T>> {
+    let q = Model._q(this) as HydratingQueryBuilder<InstanceType<T>>
+    if (attrs) {
+      for (const [col, val] of Object.entries(attrs)) {
+        q = q.where(col, val) as HydratingQueryBuilder<InstanceType<T>>
+      }
+    }
+    return q.sole()
   }
 
   static count<T extends typeof Model>(this: T): Promise<number> {
