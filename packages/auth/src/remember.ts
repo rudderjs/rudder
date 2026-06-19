@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { bootNotice } from '@rudderjs/core'
+export { parseCookie } from '@rudderjs/support'
 
 // ─── "Remember me" persistent-login support ───────────────
 //
@@ -67,15 +68,6 @@ export function newRememberToken(): string {
   return randomBytes(32).toString('hex')
 }
 
-/** Read a single cookie value out of a `Cookie` request header. */
-export function parseCookie(header: string, name: string): string | undefined {
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=')
-    if (eq === -1) continue
-    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim()
-  }
-  return undefined
-}
 
 /** Constant-time string compare, length-safe. */
 export function safeStringEqual(a: string, b: string): boolean {

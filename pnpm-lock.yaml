@@ -201,6 +201,9 @@ importers:
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
+      '@rudderjs/support':
+        specifier: workspace:^
+        version: link:../support
     devDependencies:
       '@rudderjs/cache':
         specifier: workspace:^

@@ -578,7 +578,7 @@ export interface RudderLogger {
 
 /**
  * Returns a logger bound to a package name.
- * Emits `HH:MM:SS [Rudder][pkg] LEVEL - message` to the console,
+ * Emits `HH:MM:SS [Rudder][pkg] LEVEL message` to the console,
  * matching Vite's dev-server log style.
  *
  * @example
@@ -603,4 +603,26 @@ export function createRudderLogger(pkg: string): RudderLogger {
     warn:  (msg) => console.warn(line('warn', msg)),
     error: (msg) => console.error(line('error', msg)),
   }
+}
+
+// ─── Cookie ────────────────────────────────────────────────
+
+/** Read a single named value from a raw `Cookie` request header. */
+export function parseCookie(header: string, name: string): string | undefined {
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq === -1) continue
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim()
+  }
+  return undefined
+}
+
+/** Parse all name=value pairs from a raw `Cookie` request header. */
+export function parseCookies(header: string): Record<string, string> {
+  return Object.fromEntries(
+    header.split(';')
+      .map(c => c.trim().split('='))
+      .filter(([k]) => k?.trim())
+      .map(([k, ...v]) => [(k ?? '').trim(), v.join('=')]),
+  )
 }
