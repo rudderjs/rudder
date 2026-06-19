@@ -106,9 +106,9 @@ function _buildSnippet(file: string, targetLine: number, context = 3): string | 
       const lineNum = start + i + 1
       const num     = String(lineNum).padStart(numWidth)
       if (lineNum === targetLine) {
-        return `  ${red('▶')} ${red(num)} ${dim('│')} ${trunc(content)}`
+        return `${red('▶')} ${red(num)} ${dim('│')} ${trunc(content)}`
       }
-      return `    ${dim(num)} ${dim('│')} ${dim(trunc(content))}`
+      return `  ${dim(num)} ${dim('│')} ${dim(trunc(content))}`
     }).join('\n')
   } catch {
     return null
@@ -154,18 +154,17 @@ function _parseFrame(frame: string, cwd: string): _FrameParts {
 
 function _formatFrameRow(name: string, file: string, cols: number): string {
   const dim      = (s: string) => `\x1b[2m${s}\x1b[22m`
-  const indent   = '  '
   const minDots  = 3
-  const gap      = cols - indent.length - name.length - 2 - file.length
+  const gap      = cols - name.length - 2 - file.length
   const dotCount = Math.max(minDots, gap)
   const dots     = '.'.repeat(dotCount)
   // If name+file still exceed cols, truncate file from the left
-  if (indent.length + name.length + 2 + dotCount + file.length > cols) {
-    const maxFile = Math.max(8, cols - indent.length - name.length - 2 - dotCount)
+  if (name.length + 2 + dotCount + file.length > cols) {
+    const maxFile = Math.max(8, cols - name.length - 2 - dotCount)
     const short   = file.length > maxFile ? '…' + file.slice(-(maxFile - 1)) : file
-    return `${indent}${name} ${dim(dots)} ${dim(short)}`
+    return `${name} ${dim(dots)} ${dim(short)}`
   }
-  return `${indent}${name} ${dim(dots)} ${dim(file)}`
+  return `${name} ${dim(dots)} ${dim(file)}`
 }
 
 /** Pretty formatter for console — `HH:MM:SS [Rudder][channel] LEVEL - message` with source snippet and app frames. */
@@ -212,12 +211,12 @@ export class ConsolePrettyFormatter implements LogFormatter {
 
       if (appFrames.length) {
         const frameCols = process.stdout.columns || 120
-        out += '\n' + appFrames.map(l => {
+        out += `\n\n  ${dim('Exception Trace')}\n` + appFrames.map(l => {
           const { name, file } = _parseFrame(l, cwd)
           return _formatFrameRow(name, file, frameCols)
         }).join('\n')
       }
-      if (vendorCount > 0) out += `\n  ${dim(`(+ ${vendorCount} vendor frames)`)}`
+      if (vendorCount > 0) out += `\n${dim(`(+ ${vendorCount} vendor frames)`)}`
     }
 
     return out
