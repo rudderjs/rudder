@@ -33,8 +33,10 @@ const isPrunable = (C: typeof Model): C is PrunableClass =>
  *   and observers fire). Re-queries per chunk because deletes shift
  *   the offset.
  * - `mass` mode: bulk `deleteAll()` per chunk; no hydration, no hooks,
- *   no observers, no soft-delete handling (mirrors Laravel + the
- *   existing bulk-delete primitive).
+ *   no observers. Throws at prune time if the model also has
+ *   `softDeletes = true` — the combination is ambiguous (deleteAll()
+ *   hard-deletes, never sets deletedAt). Use `instance` mode to
+ *   soft-delete, or set `softDeletes = false` to opt into hard-deletes.
  *
  * `pretend` mode runs `count()` only — no rows are touched.
  */
@@ -54,6 +56,13 @@ export async function pruneModels(opts: PruneOptions = {}): Promise<PruneReport[
     if (opts.pretend) {
       count = await ModelClass.prunable().count()
     } else if (mode === 'mass') {
+      if (ModelClass.softDeletes) {
+        throw new Error(
+          `[Rudder prune] ${name} has pruneMode = 'mass' and softDeletes = true. ` +
+          `Mass mode calls deleteAll() which hard-deletes rows and never sets deletedAt. ` +
+          `Use pruneMode = 'instance' to soft-delete via row.delete(), or set softDeletes = false to opt into hard-deletes in mass mode.`,
+        )
+      }
       let deleted = chunk
       while (deleted === chunk) {
         deleted = await ModelClass.prunable().limit(chunk).deleteAll()
