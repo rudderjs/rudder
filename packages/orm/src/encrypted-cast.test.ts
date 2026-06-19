@@ -62,7 +62,11 @@ describe('encrypted cast (via the crypt globalThis bridge)', () => {
     clearBridge()
     assert.throws(
       () => castSet('encrypted', 'ssn', 'secret', attrs),
-      /requires @rudderjs\/crypt/,
+      /CryptProvider is not registered/,
+    )
+    assert.throws(
+      () => castGet('encrypted', 'ssn', 'anything', attrs),
+      /CryptProvider is not registered/,
     )
   })
 })
