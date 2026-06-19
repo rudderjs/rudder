@@ -73,7 +73,8 @@ export class JsonFormatter implements LogFormatter {
 }
 
 function _parseFrameLocation(frame: string): { file: string; line: number } | null {
-  const m = frame.match(/\((.+?):(\d+):\d+\)$/)
+  // [^()]+ avoids nested-quantifier backtracking on adversarial input
+  const m = frame.match(/\(([^()]+):(\d+):\d+\)$/)
   if (!m || !m[1] || !m[2]) return null
   const file = m[1]
   if (file.startsWith('node:') || file.includes('node_modules')) return null
@@ -127,18 +128,28 @@ function _shortenPath(file: string, cwd: string): string {
 interface _FrameParts { name: string; file: string }
 
 function _parseFrame(frame: string, cwd: string): _FrameParts {
-  // `at Name (/abs/path:line:col)` or `at Name (rel/path:line:col)`
-  const named = frame.match(/^at (.+?) \((.+):(\d+):\d+\)$/)
-  if (named && named[1] && named[2] && named[3]) {
-    const file = named[2].startsWith('/') ? _shortenPath(named[2], cwd) : named[2]
-    return { name: named[1], file: `${file}:${named[3]}` }
+  if (!frame.startsWith('at ')) return { name: frame, file: '' }
+  const body = frame.slice(3)
+
+  // Named frame: `at Name (file:line:col)` — split on last ` (` to avoid lazy quantifiers
+  const parenOpen = body.lastIndexOf(' (')
+  if (parenOpen !== -1 && body.endsWith(')')) {
+    const name = body.slice(0, parenOpen)
+    const loc  = body.slice(parenOpen + 2, -1) // strip ` (` prefix and `)` suffix
+    // [^):]+ avoids backtracking across colons; file is everything before last :line:col
+    const m = loc.match(/^([^)]+):(\d+):\d+$/)
+    if (m && m[1] && m[2]) {
+      const file = m[1].startsWith('/') ? _shortenPath(m[1], cwd) : m[1]
+      return { name, file: `${file}:${m[2]}` }
+    }
   }
-  // `at /abs/path:line:col` — anonymous
+
+  // Anonymous frame: `at /abs/path:line:col`
   const anon = frame.match(/^at (\/\S+):(\d+):\d+$/)
   if (anon && anon[1] && anon[2]) {
     return { name: '<anonymous>', file: `${_shortenPath(anon[1], cwd)}:${anon[2]}` }
   }
-  return { name: frame.replace(/^at /, ''), file: '' }
+  return { name: body, file: '' }
 }
 
 function _formatFrameRow(name: string, file: string, cols: number): string {
@@ -246,7 +257,7 @@ export class ConsoleAdapter implements LogAdapter {
     // For other formatters, wrap the single output line in the level color.
     let out: string
     if (this.formatter instanceof ConsolePrettyFormatter) {
-      out = output.replace(/\n+$/, '') + EOL + EOL
+      out = output.trimEnd() + EOL + EOL
     } else {
       const color = LEVEL_COLORS[entry.level]
       out = `${color}${output}${RESET}${EOL}`
