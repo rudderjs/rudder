@@ -16,7 +16,7 @@ That freedom comes with discipline:
 - Treat security-, auth-, correctness-, and public-API-changing fixes as HIGH RISK: keep the change
   minimal, preserve existing behavior except the specific defect, and add real test coverage for
   the fix when feasible.
-- A change is only ready if build + typecheck + the affected package's tests pass (see step 5).
+- A change is only ready if the full monorepo build + the affected package's tests pass (see step 5).
 
 ### Multi-part issues: SPLIT, do not fix
 If the issue bundles several distinct changes (e.g. "N gaps", a checklist, multiple separate
@@ -51,11 +51,13 @@ Only open a PR when the issue is a single, focused, `size:s`-scale change.
 4. Implement the SMALLEST correct fix for ONLY this issue. Match the surrounding code's style,
    naming, and comment density. Touch only files relevant to this one issue.
 5. Validate before pushing (all must pass):
-   - Build the affected package: `pnpm turbo run build --filter=./packages/<pkg>`
-   - Typecheck: `pnpm --filter @rudderjs/<pkg> typecheck`
-   - Tests: `pnpm --filter @rudderjs/<pkg> test`
+   - Build EVERY package (turbo-cached, fast): `pnpm build`
+     This catches cross-package type breaks that a single-package build would miss.
+   - Tests for the affected package: `pnpm --filter @rudderjs/<pkg> test`
    If you cannot get a clean, minimal change green, do NOT push: comment on the issue with what you
    tried and STOP.
+   When writing the PR body, derive the "tests pass" claim from the full-build result, not just
+   the single-package output. The body must not assert green while CI could be red.
 6. Changeset: docs-only and test-only changes need NO changeset. For a user-affecting `fix:` to a
    published package, add one under `.changeset/` per `CLAUDE.md` (the "Publishing" section).
 7. Commit (concise message referencing the issue, e.g. `fix(<pkg>): <summary> (#<N>)`), push the
