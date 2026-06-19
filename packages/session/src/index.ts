@@ -546,6 +546,12 @@ export class RedisDriver implements InternalDriver {
 // ─── Helpers ───────────────────────────────────────────────
 
 
+function assertCookieToken(label: string, token: string): void {
+  if (/[;\r\n]/.test(token)) {
+    throw new Error(`[Rudder][session] Invalid ${label} — cookie header injection characters detected (semicolon, CR, or LF).`)
+  }
+}
+
 function buildCookieHeader(name: string, value: string, config: SessionConfig): string {
   const parts = [
     `${name}=${value}`,
@@ -609,6 +615,13 @@ export function resolveSessionSecret(configured: string | undefined): string {
 const SESSION_MIDDLEWARE = Symbol.for('rudderjs.sessionMiddleware')
 
 export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
+  // Validate cookie fields that flow into the Set-Cookie header at boot time so
+  // a misconfigured .env fails loudly before any request is served rather than
+  // producing a silently malformed (or injectable) header at runtime.
+  assertCookieToken('cookie name', config.cookie.name)
+  assertCookieToken('cookie path', config.cookie.path)
+  assertCookieToken('sameSite', config.cookie.sameSite)
+
   // Resolve the effective signing secret once (boot time): a placeholder/empty
   // SESSION_SECRET falls back to APP_KEY rather than signing with a public
   // constant. See resolveSessionSecret().

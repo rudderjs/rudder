@@ -62,7 +62,7 @@ export function formatBootNotices(notices: BootNotice[]): string[] {
   const width = Math.max(...notices.map(n => n.scope.length))
   const lines = [`  ${c.yellow('▲')} ${notices.length} notice${notices.length === 1 ? '' : 's'}`]
   for (const n of notices) {
-    lines.push(`   ${c.yellow('→')} ${c.yellow(n.scope.padEnd(width))}  ${n.message}`)
+    lines.push(`  ${c.yellow('→')} ${c.yellow(n.scope.padEnd(width))}  ${n.message}`)
   }
   return lines
 }

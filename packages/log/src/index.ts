@@ -212,7 +212,7 @@ export class ConsolePrettyFormatter implements LogFormatter {
 
       if (appFrames.length) {
         const frameCols = process.stdout.columns || 120
-        out += '\n' + appFrames.map(l => {
+        out += `\n\n  ${dim('Exception Trace')}\n` + appFrames.map(l => {
           const { name, file } = _parseFrame(l, cwd)
           return _formatFrameRow(name, file, frameCols)
         }).join('\n')
