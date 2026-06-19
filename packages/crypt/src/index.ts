@@ -188,17 +188,17 @@ export interface CryptConfig {
   previousKeys?: string[]
 }
 
-// ─── Service Provider Factory ─────────────────────────────
+// ─── Service Provider ─────────────────────────────────────
 
 /**
- * Returns a CryptServiceProvider configured for the given config.
+ * Service provider that binds the Crypt service into the container.
  *
  * Uses AES-256-CBC with HMAC-SHA256 signing. Only needs `node:crypto`.
  *
- * Usage in bootstrap/providers.ts:
- *   import { crypt } from '@rudderjs/crypt'
- *   import configs from '../config/index.js'
- *   export default [..., crypt(configs.crypt), ...]
+ * Picked up automatically by auto-discovery. For explicit registration:
+ *
+ *   import { CryptProvider } from '@rudderjs/crypt'
+ *   export default [..., CryptProvider]
  */
 export class CryptProvider extends ServiceProvider {
   register(): void {}
