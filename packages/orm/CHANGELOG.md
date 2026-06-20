@@ -1,5 +1,18 @@
 # @rudderjs/orm
 
+## 1.22.0
+
+### Minor Changes
+
+- cd8e6a0: Add `Model.firstOrNew(attrs, values?)` and a `Model#exists` getter. `firstOrNew` returns the first row matching `attrs`, or a new **unsaved** instance filled with `attrs` merged with `values` (through the `fillable`/`guarded` policy) when none matches, mirroring Laravel. The new `exists` getter reports whether an instance is backed by a persisted row, letting callers branch with `if (!user.exists) await user.save()`. `exists` is `true` after a read/`create()`/`save()`/`hydrate()`, `false` for a freshly built instance, and `false` again after a hard `delete()` (soft deletes keep it `true`).
+- 58e47e4: `Model.insertMany()` added as a mass-assignment-safe bulk insert (applies `fillable`/`guarded` per row). `Model.upsert()` now also filters rows through `fillable`/`guarded` before writing, matching `Model.create()` behaviour. The raw QB-level `query().insertMany()` remains available as the bypass path for trusted/seeder use.
+- 6a7aa88: Add `Model.sole()` and `HydratingQueryBuilder.sole()` — returns the single matching row or throws `ModelNotFoundError` (HTTP 404) for zero results and `MultipleRecordsFoundError` (HTTP 422) for two or more. Uses `LIMIT 2` internally. `MultipleRecordsFoundError` is a new exported error class with `code: 'MULTIPLE_RECORDS_FOUND'`.
+
+### Patch Changes
+
+- 1689655: `encrypted` cast now throws a clear, actionable error naming the column and directing to `CryptProvider` registration when the crypt bridge is absent, instead of the previous opaque "requires @rudderjs/crypt. Run: pnpm add" message.
+- 4e66fa2: `pruneModels` mass mode now throws a clear error when the model also has `softDeletes = true`. Previously the combination silently hard-deleted rows via `deleteAll()`, bypassing `deletedAt` entirely. Use `pruneMode = 'instance'` to soft-delete, or set `softDeletes = false` to opt into hard-deletes in mass mode.
+
 ## 1.21.3
 
 ### Patch Changes

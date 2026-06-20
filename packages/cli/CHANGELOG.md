@@ -1,5 +1,11 @@
 # @rudderjs/cli
 
+## 4.19.0
+
+### Minor Changes
+
+- 5a24833: Auto-discover commands from installed packages via the `"rudder"` key in `package.json`.
+
 ## 4.18.2
 
 ### Patch Changes
