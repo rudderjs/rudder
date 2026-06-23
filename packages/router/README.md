@@ -318,7 +318,7 @@ router.apiResource('posts', PostController)
 
 ```ts
 router.singleton('profile', ProfileController)
-// GET    /profile          posts.show (named profile.show)
+// GET    /profile          profile.show
 // GET    /profile/edit     profile.edit
 // PUT    /profile          profile.update
 // PATCH  /profile          (alias)
