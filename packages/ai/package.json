@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/ai",
-  "version": "1.17.3",
+  "version": "1.18.0",
   "description": "[Deprecated] Moved to @gemstack/ai-sdk. This package now re-exports it for backwards compatibility.",
   "rudderjs": {
     "provider": "AiProvider",
