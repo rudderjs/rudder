@@ -1,5 +1,13 @@
 # rudderjs-playground-web
 
+## 0.0.138
+
+### Patch Changes
+
+- Updated dependencies [3ee2011]
+  - @rudderjs/telescope@15.2.4
+  - @rudderjs/orm-prisma@2.3.2
+
 ## 0.0.137
 
 ### Patch Changes
