@@ -1,20 +1,4 @@
-/**
- * `@rudderjs/ai/mcp` — bridge between `@rudderjs/ai` Agents and Model Context
- * Protocol servers. Two connectors:
- *
- * - {@link mcpClientTools} — consume a remote MCP server's tools as Agent tools
- * - {@link mcpServerFromAgent} — expose an Agent as an MCP server external
- *   clients (Claude Desktop, Cursor, etc.) can call
- *
- * Requires `@modelcontextprotocol/sdk` at runtime — declared as an optional
- * peer dependency. Apps that don't import this subpath aren't forced to
- * install it.
- */
-export { mcpClientTools } from './client-tools.js'
-export { mcpServerFromAgent } from './server-from-agent.js'
-export type {
-  McpClientTransport,
-  McpClientToolsOptions,
-  McpServerFromAgentOptions,
-  StdioServerSpawn,
-} from './types.js'
+// @rudderjs/ai is deprecated. The AI engine now lives in @gemstack/ai-sdk.
+// This module re-exports it for backwards compatibility; import from
+// '@gemstack/ai-sdk/mcp' directly in new code.
+export * from '@gemstack/ai-sdk/mcp'

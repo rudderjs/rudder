@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/ai",
   "version": "1.17.3",
-  "description": "AI engine — providers, agents, tools, streaming, middleware",
+  "description": "[Deprecated] Moved to @gemstack/ai-sdk. This package now re-exports it for backwards compatibility.",
   "rudderjs": {
     "provider": "AiProvider",
     "providerSubpath": "./server",
@@ -18,8 +18,7 @@
     "node": ">=22.12.0"
   },
   "files": [
-    "dist",
-    "boost"
+    "dist"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -97,13 +96,10 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/console": "workspace:^",
-    "@rudderjs/json-schema": "workspace:^",
-    "zod": "^4.0.0"
+    "@gemstack/ai-sdk": "^0.1.0"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -133,8 +129,8 @@
     "openai": ">=4.70.0"
   },
   "devDependencies": {
+    "@gemstack/ai-sdk": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
     "@types/node": "^20.0.0",
