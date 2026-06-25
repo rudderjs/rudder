@@ -367,10 +367,10 @@ describe('whereVectorSimilarTo — auto-embed', () => {
     )
   })
 
-  it('terminal call surfaces a clear error when @rudderjs/ai is not resolvable', async () => {
+  it('terminal call surfaces a clear error when @gemstack/ai-sdk is not resolvable', async () => {
     // process.cwd() is the orm-prisma package dir during the test, where
-    // @rudderjs/ai may or may not be reachable depending on workspace
-    // hoisting. The error message must mention @rudderjs/ai either way so
+    // @gemstack/ai-sdk may or may not be reachable depending on workspace
+    // hoisting. The error message must mention @gemstack/ai-sdk either way so
     // users get an actionable diagnostic, never an opaque resolver dump.
     const { fakeClient } = makeVectorClient()
     const adapter = await prisma({ client: fakeClient }).create()

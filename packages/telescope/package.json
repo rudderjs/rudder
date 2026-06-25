@@ -58,7 +58,7 @@
     "@rudderjs/sync": "workspace:^",
     "@rudderjs/http": "workspace:^",
     "@rudderjs/auth": "workspace:^",
-    "@rudderjs/ai": "workspace:^",
+    "@gemstack/ai-sdk": "^0.2.0",
     "@rudderjs/mcp": "workspace:^"
   },
   "peerDependenciesMeta": {
@@ -98,7 +98,7 @@
     "@rudderjs/auth": {
       "optional": true
     },
-    "@rudderjs/ai": {
+    "@gemstack/ai-sdk": {
       "optional": true
     },
     "@rudderjs/mcp": {
@@ -114,7 +114,7 @@
     "@rudderjs/sync": "workspace:^",
     "@rudderjs/http": "workspace:^",
     "@rudderjs/auth": "workspace:^",
-    "@rudderjs/ai": "workspace:^",
+    "@gemstack/ai-sdk": "^0.2.0",
     "@rudderjs/mcp": "workspace:^",
     "@rudderjs/support": "workspace:^",
     "@types/node": "^20.0.0",

@@ -48,14 +48,14 @@
     "@rudderjs/support": "workspace:^"
   },
   "peerDependencies": {
-    "@prisma/client": "^7.0.0",
-    "@rudderjs/ai": "workspace:^"
+    "@gemstack/ai-sdk": "^0.2.0",
+    "@prisma/client": "^7.0.0"
   },
   "peerDependenciesMeta": {
-    "@prisma/client": {
+    "@gemstack/ai-sdk": {
       "optional": true
     },
-    "@rudderjs/ai": {
+    "@prisma/client": {
       "optional": true
     }
   },

@@ -247,7 +247,7 @@ describe('Drizzle whereVectorSimilarTo — auto-embed', () => {
     )
   })
 
-  it('terminal call surfaces a clear error mentioning @rudderjs/ai when peer/provider are unreachable', async () => {
+  it('terminal call surfaces a clear error mentioning @gemstack/ai-sdk when peer/provider are unreachable', async () => {
     const { adapter } = await makeAdapter()
     const qb = adapter.query('documents')
     qb.whereVectorSimilarTo!('embedding', 'q', { embedWith: 'fake-provider/fake-model' })
