@@ -68,4 +68,4 @@ patchedDependencies:
 
 minimumReleaseAgeExclude:
   - '@brillout/vite-plugin-server-entry@0.7.19'
-  - '@gemstack/ai-sdk@0.1.0'
+  - '@gemstack/*'

@@ -99,7 +99,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@gemstack/ai-sdk": "^0.1.0"
+    "@gemstack/ai-sdk": "^0.2.0"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -129,7 +129,7 @@
     "openai": ">=4.70.0"
   },
   "devDependencies": {
-    "@gemstack/ai-sdk": "^0.1.0",
+    "@gemstack/ai-sdk": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
