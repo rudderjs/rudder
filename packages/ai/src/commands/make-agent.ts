@@ -1,24 +1,4 @@
-import type { MakeSpec } from '@rudderjs/console'
-
-export const makeAgentSpec: MakeSpec = {
-  command:     'make:agent',
-  description: 'Create a new AI agent class',
-  label:       'Agent created',
-  suffix:      'Agent',
-  directory:   'app/Agents',
-  stub: (className) => `import { Agent } from '@rudderjs/ai'
-import type { HasTools, AnyTool } from '@rudderjs/ai'
-
-export class ${className} extends Agent implements HasTools {
-  instructions(): string {
-    return 'You are a helpful assistant.'
-  }
-
-  // model(): string | undefined { return 'anthropic/claude-sonnet-4-5' }
-
-  tools(): AnyTool[] {
-    return []
-  }
-}
-`,
-}
+// @rudderjs/ai is deprecated. The AI engine now lives in @gemstack/ai-sdk.
+// This module re-exports it for backwards compatibility; import from
+// '@gemstack/ai-sdk/commands/make-agent' directly in new code.
+export * from '@gemstack/ai-sdk/commands/make-agent'

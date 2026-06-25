@@ -142,15 +142,9 @@ importers:
 
   packages/ai:
     dependencies:
-      '@rudderjs/console':
-        specifier: workspace:^
-        version: link:../console
-      '@rudderjs/json-schema':
-        specifier: workspace:^
-        version: link:../json-schema
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
+      '@gemstack/ai-sdk':
+        specifier: ^0.1.0
+        version: 0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
@@ -3169,6 +3163,24 @@ packages:
   '@fontsource-variable/geist@5.2.8':
     resolution: {integrity: sha512-cJ6m9e+8MQ5dCYJsLylfZrgBh6KkG4bOLckB35Tr9J/EqdkEM6QllH5PxqP1dhTvFup+HtMRPuz9xOjxXJggxw==}
 
+  '@gemstack/ai-sdk@0.1.0':
+    resolution: {integrity: sha512-o5tUpHGFm7/KNq6MNMorF16T3xl5v5Ou6nPPHdveZxS5LyLmra5hKDVBIhm9JR6xmjeb7tKpd07srd2NKMsB8w==}
+    engines: {node: '>=22.12.0'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': ^1.29.0
+      '@rudderjs/core': ^1.13.3
+      '@rudderjs/orm': ^1.22.0
+      react: '>=19.2.0'
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+      '@rudderjs/core':
+        optional: true
+      '@rudderjs/orm':
+        optional: true
+      react:
+        optional: true
+
   '@google/genai@1.47.0':
     resolution: {integrity: sha512-0VV7AaXm5rQu3oRHNZNEubRAOL2lv5u+YA72eWnDwcOx3B1jFRbvtgL4drRHlocRHOnludvr3xmbQGbR+/RQAQ==}
     engines: {node: '>=20.0.0'}
@@ -5403,6 +5415,18 @@ packages:
     resolution: {integrity: sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==}
     cpu: [x64]
     os: [win32]
+
+  '@rudderjs/console@1.4.3':
+    resolution: {integrity: sha512-tCNCW6YlXr73MMWIeIEMc174MlZcpiSyez4X0SsBAO3vI04id11N2GouyT46mdlwuP2to4oOHNXZK8JQMcdJaQ==}
+    engines: {node: '>=22.12.0'}
+
+  '@rudderjs/contracts@1.19.0':
+    resolution: {integrity: sha512-I9djlPm7os3n4Bxv8BUY7tbrWmj1bN+GDVWzDznZUc/FFIZN4LcfspNKrwddlkh+gdvVJToChRYEKMWZ5IvDgQ==}
+    engines: {node: '>=22.12.0'}
+
+  '@rudderjs/json-schema@1.1.0':
+    resolution: {integrity: sha512-HMfuxXdJVE75W6Rk4VxXdoyfJWrXr4xixjt9SJQhjkSRmPYyhoxeIJKp0AlpAvpG584+H24gFOs+VDdvP5JhYQ==}
+    engines: {node: '>=22.12.0'}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -11021,6 +11045,32 @@ snapshots:
 
   '@fontsource-variable/geist@5.2.8': {}
 
+  '@gemstack/ai-sdk@0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
+    dependencies:
+      '@rudderjs/console': 1.4.3
+      '@rudderjs/json-schema': 1.1.0
+      zod: 4.3.6
+    optionalDependencies:
+      '@anthropic-ai/sdk': 0.99.0(zod@4.3.6)
+      '@aws-sdk/client-bedrock-runtime': 3.1045.0
+      '@google/genai': 1.47.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+      '@rudderjs/core': link:packages/core
+      '@rudderjs/orm': link:packages/orm
+      cohere-ai: 8.0.0(@aws-crypto/sha256-js@5.2.0)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)
+      openai: 6.33.0(ws@8.21.0)(zod@4.3.6)
+      react: 19.2.4
+    transitivePeerDependencies:
+      - '@aws-crypto/sha256-js'
+      - '@aws-sdk/credential-providers'
+      - '@smithy/protocol-http'
+      - '@smithy/signature-v4'
+      - aws-crt
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+
   '@google/genai@1.47.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))':
     dependencies:
       google-auth-library: 10.6.2
@@ -13332,6 +13382,17 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
+
+  '@rudderjs/console@1.4.3':
+    dependencies:
+      '@clack/prompts': 1.0.1
+
+  '@rudderjs/contracts@1.19.0': {}
+
+  '@rudderjs/json-schema@1.1.0':
+    dependencies:
+      '@rudderjs/contracts': 1.19.0
+      zod: 4.3.6
 
   '@sec-ant/readable-stream@0.4.1': {}
 
