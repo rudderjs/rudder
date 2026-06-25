@@ -373,7 +373,7 @@ function vectorLiteral(vec: readonly number[]): string {
 
 /**
  * Resolve the deferred auto-embed for `whereVectorSimilarTo('col',
- * '<text>', { embedWith })` (#B7 Phase 3). Pulls `@rudderjs/ai`
+ * '<text>', { embedWith })` (#B7 Phase 3). Pulls `@gemstack/ai-sdk`
  * lazily via `resolveOptionalPeer` so the orm-drizzle adapter never
  * hard-deps on the AI package — apps that don't do RAG don't load it.
  * Mirrors `resolveAutoEmbed` in `@rudderjs/orm-prisma`.
@@ -389,12 +389,12 @@ async function resolveAutoEmbed(pending: { text: string; embedWith: string } | u
   type AiModule = { AI: { embed(input: string, opts: { model: string }): Promise<{ embeddings: number[][] }> } }
   let ai: AiModule
   try {
-    ai = await resolveOptionalPeer<AiModule>('@rudderjs/ai')
+    ai = await resolveOptionalPeer<AiModule>('@gemstack/ai-sdk')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(
-      '[Rudder ORM] whereVectorSimilarTo string-query auto-embed requires @rudderjs/ai. ' +
-      'Run `pnpm add @rudderjs/ai`, or pre-embed via your own embedder and pass number[] instead. ' +
+      '[Rudder ORM] whereVectorSimilarTo string-query auto-embed requires @gemstack/ai-sdk. ' +
+      'Run `pnpm add @gemstack/ai-sdk`, or pre-embed via your own embedder and pass number[] instead. ' +
       `Original: ${msg}`,
       { cause: err },
     )
@@ -1830,7 +1830,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const op = sql.raw(opStr)
 
     // Resolve the deferred auto-embed if we kept the string at sync-chain
-    // time. Pulls @rudderjs/ai via resolveOptionalPeer so orm-drizzle stays
+    // time. Pulls @gemstack/ai-sdk via resolveOptionalPeer so orm-drizzle stays
     // independent of the AI runtime — apps that don't do RAG never load it.
     const resolvedQuery = query ?? await resolveAutoEmbed(pendingEmbed)
     const vecLit = vectorLiteral(resolvedQuery)

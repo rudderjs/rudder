@@ -3,7 +3,7 @@ import { createEntry } from '../storage.js'
 import { batchOpts } from '../batch-context.js'
 
 /**
- * Records AI agent executions by hooking into @rudderjs/ai's observer registry.
+ * Records AI agent executions by hooking into @gemstack/ai-sdk's observer registry.
  */
 export class AiCollector implements Collector {
   readonly name = 'AI Collector'
@@ -16,7 +16,7 @@ export class AiCollector implements Collector {
 
   async register(): Promise<void> {
     try {
-      const mod = await import('@rudderjs/ai/observers') as unknown as {
+      const mod = await import('@gemstack/ai-sdk/observers') as unknown as {
         aiObservers: { subscribe(fn: (event: AiEvent) => void): () => void }
       }
       const { aiObservers } = mod
@@ -63,12 +63,12 @@ export class AiCollector implements Collector {
         }, { tags, ...batchOpts() }))
       })
     } catch {
-      // @rudderjs/ai not installed — skip
+      // @gemstack/ai-sdk not installed — skip
     }
   }
 }
 
-// ─── Local event shape (mirrors @rudderjs/ai observers — no runtime import) ──
+// ─── Local event shape (mirrors @gemstack/ai-sdk observers — no runtime import) ──
 
 interface AiToolCall {
   id:            string

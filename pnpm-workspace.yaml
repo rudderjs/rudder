@@ -67,5 +67,5 @@ patchedDependencies:
   vike@0.4.257: patches/vike@0.4.257.patch
 
 minimumReleaseAgeExclude:
-  - '@brillout/vite-plugin-server-entry@0.7.19'
   - '@gemstack/*'
+  - '@brillout/vite-plugin-server-entry@0.7.19'

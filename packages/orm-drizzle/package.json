@@ -51,10 +51,10 @@
     "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
-    "@rudderjs/ai": "workspace:^"
+    "@gemstack/ai-sdk": "^0.2.0"
   },
   "peerDependenciesMeta": {
-    "@rudderjs/ai": {
+    "@gemstack/ai-sdk": {
       "optional": true
     }
   },

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { aiObservers } from '@rudderjs/ai/observers'
+import { aiObservers } from '@gemstack/ai-sdk/observers'
 import { MemoryStorage } from '../storage.js'
 import { AiCollector } from './ai.js'
 import type { TelescopeEntry } from '../types.js'

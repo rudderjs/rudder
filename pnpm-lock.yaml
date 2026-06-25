@@ -811,9 +811,9 @@ importers:
 
   packages/orm-drizzle:
     dependencies:
-      '@rudderjs/ai':
-        specifier: workspace:^
-        version: link:../ai
+      '@gemstack/ai-sdk':
+        specifier: ^0.2.0
+        version: 0.2.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
       '@rudderjs/console':
         specifier: workspace:^
         version: link:../console
@@ -864,12 +864,12 @@ importers:
 
   packages/orm-prisma:
     dependencies:
+      '@gemstack/ai-sdk':
+        specifier: ^0.2.0
+        version: 0.2.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
-      '@rudderjs/ai':
-        specifier: workspace:^
-        version: link:../ai
       '@rudderjs/console':
         specifier: workspace:^
         version: link:../console
@@ -1357,9 +1357,9 @@ importers:
         specifier: workspace:^
         version: link:../schedule
     devDependencies:
-      '@rudderjs/ai':
-        specifier: workspace:^
-        version: link:../ai
+      '@gemstack/ai-sdk':
+        specifier: ^0.2.0
+        version: 0.2.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
       '@rudderjs/auth':
         specifier: workspace:^
         version: link:../auth
@@ -11049,6 +11049,31 @@ snapshots:
       '@google/genai': 1.47.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       '@rudderjs/console': 1.4.3
+      '@rudderjs/core': link:packages/core
+      '@rudderjs/orm': link:packages/orm
+      cohere-ai: 8.0.0(@aws-crypto/sha256-js@5.2.0)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)
+      openai: 6.33.0(ws@8.21.0)(zod@4.3.6)
+      react: 19.2.4
+    transitivePeerDependencies:
+      - '@aws-crypto/sha256-js'
+      - '@aws-sdk/credential-providers'
+      - '@smithy/protocol-http'
+      - '@smithy/signature-v4'
+      - aws-crt
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+
+  '@gemstack/ai-sdk@0.2.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
+    dependencies:
+      zod: 4.3.6
+    optionalDependencies:
+      '@anthropic-ai/sdk': 0.99.0(zod@4.3.6)
+      '@aws-sdk/client-bedrock-runtime': 3.1045.0
+      '@google/genai': 1.47.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+      '@rudderjs/console': link:packages/console
       '@rudderjs/core': link:packages/core
       '@rudderjs/orm': link:packages/orm
       cohere-ai: 8.0.0(@aws-crypto/sha256-js@5.2.0)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)
