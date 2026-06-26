@@ -1,21 +1,37 @@
-import type { ZodLikeObject } from './types.js'
-import { convertSchema } from '@rudderjs/json-schema'
+import { z } from 'zod'
 
 /**
- * Zod → JSON Schema for MCP tool/prompt input + output schemas.
+ * Structural type matching what the inspector needs from a Zod object schema:
+ * a `.shape` record. Both Zod v3's and v4's `ZodObject` satisfy it.
+ */
+export interface ZodLikeObject {
+  shape: Record<string, unknown>
+}
+
+/**
+ * Zod -> JSON Schema for the inspector's describe view.
  *
- * Delegates to the framework's shared, validator-agnostic converter
- * (`@rudderjs/json-schema`), which dispatches on the Standard Schema vendor tag
- * and uses Zod 4's native `z.toJSONSchema` — the same converter `@rudderjs/ai`
- * and `@rudderjs/openapi` use. MCP tool/prompt parameters are request inputs, so
- * convert with `io: 'input'`. Falls back to an open object schema when the
- * converter can't represent the schema, so a tool always advertises *some*
- * input shape.
- *
- * `schema` is typed as the structural {@link ZodLikeObject} (`{ shape }`); the
- * shared converter reads the `~standard.vendor` tag off the real Zod instance at
- * runtime, so any Zod schema passed in converts correctly.
+ * Mirrors `@gemstack/mcp`'s internal converter (which is not part of its public
+ * API): Zod 4's native `z.toJSONSchema` with `unrepresentable: 'any'` so
+ * `z.date()`/`z.bigint()` degrade instead of throwing, an `override` that maps
+ * `z.date()` -> `string` + `date-time`, the `$schema` dialect marker stripped,
+ * and an open-object fallback so a tool always advertises some input shape.
  */
 export function zodToJsonSchema(schema: ZodLikeObject): Record<string, unknown> {
-  return convertSchema(schema, 'input') ?? { type: 'object' }
+  try {
+    const json = z.toJSONSchema(schema as unknown as z.ZodType, {
+      io: 'input',
+      unrepresentable: 'any',
+      override: (ctx) => {
+        if (ctx.zodSchema?._zod?.def?.type === 'date') {
+          ctx.jsonSchema.type = 'string'
+          ctx.jsonSchema.format = 'date-time'
+        }
+      },
+    }) as Record<string, unknown>
+    delete json['$schema']
+    return json
+  } catch {
+    return { type: 'object' }
+  }
 }

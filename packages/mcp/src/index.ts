@@ -1,24 +1,11 @@
-export { McpServer } from './McpServer.js'
-export type { McpServerMetadata } from './McpServer.js'
-export { McpTool } from './McpTool.js'
-export type { McpToolResult, McpToolProgress, McpToolReturn } from './McpTool.js'
-export { McpResource } from './McpResource.js'
-export { McpPrompt } from './McpPrompt.js'
-export type { McpPromptMessage } from './McpPrompt.js'
-export { McpResponse } from './McpResponse.js'
-export { Mcp } from './Mcp.js'
-export type { McpWebEntry, McpWebBuilder } from './Mcp.js'
-export {
-  Name, Version, Instructions, Description, Handle,
-  IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld,
-  Audience, Priority, LastModified,
-} from './decorators.js'
-export type { InjectToken, ToolAnnotations, ResourceAnnotations, AudienceRole } from './decorators.js'
-// Runtime primitives that wire the MCP SDK live at `@rudderjs/mcp/runtime` so
-// importing the main entry doesn't pull `@modelcontextprotocol/sdk` into the
-// boot path. The provider and tests still reach them via that subpath.
-export { oauth2McpMiddleware, registerOAuth2Metadata } from './auth/oauth2.js'
-export type { OAuth2McpOptions } from './auth/oauth2.js'
+// `@rudderjs/mcp` is the Rudder binding over the framework-agnostic
+// `@gemstack/mcp` server core. The full authoring surface (McpServer, McpTool,
+// McpResource, McpPrompt, McpResponse, Mcp, the decorators, OAuth helpers,
+// the test client, resolver seam, etc.) is re-exported from the core so
+// existing `from '@rudderjs/mcp'` imports keep working unchanged.
+export * from '@gemstack/mcp'
+
+// Rudder-specific surface: the service provider that auto-discovers registered
+// MCP servers, wires the Rudder container as the DI resolver, mounts web
+// transports on the Rudder router, and registers the CLI commands + doctor.
 export { McpProvider } from './provider.js'
-export { McpTestClient } from './testing.js'
-export type { McpObserverEvent, McpObserver, McpObserverRegistry } from './observers.js'

@@ -3,7 +3,7 @@ import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { z } from 'zod'
 import { Mcp, McpServer, McpTool, McpResource, McpPrompt, McpResponse } from '../index.js'
-import type { McpToolProgress, McpToolResult } from '../McpTool.js'
+import type { McpToolProgress, McpToolResult } from '@gemstack/mcp'
 import {
   listServers, resolveServer, describeServer,
   callTool, readResource, getPrompt,
