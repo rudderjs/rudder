@@ -96,7 +96,8 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
+    "clean": "rm -rf dist dist-test"
   },
   "dependencies": {
     "@gemstack/ai-mcp": "^0.1.0",
