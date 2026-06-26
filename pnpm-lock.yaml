@@ -144,14 +144,17 @@ importers:
     dependencies:
       '@gemstack/ai-mcp':
         specifier: ^0.1.0
-        version: 0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@1.4.3)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
+        version: 0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
       '@gemstack/ai-sdk':
         specifier: ^0.3.0
-        version: 0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@1.4.3)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
+        version: 0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
+      '@rudderjs/console':
+        specifier: workspace:^
+        version: link:../console
       '@rudderjs/core':
         specifier: workspace:^
         version: link:../core
@@ -5452,10 +5455,6 @@ packages:
     resolution: {integrity: sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==}
     cpu: [x64]
     os: [win32]
-
-  '@rudderjs/console@1.4.3':
-    resolution: {integrity: sha512-tCNCW6YlXr73MMWIeIEMc174MlZcpiSyez4X0SsBAO3vI04id11N2GouyT46mdlwuP2to4oOHNXZK8JQMcdJaQ==}
-    engines: {node: '>=22.12.0'}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -11074,9 +11073,9 @@ snapshots:
 
   '@fontsource-variable/geist@5.2.8': {}
 
-  '@gemstack/ai-mcp@0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@1.4.3)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
+  '@gemstack/ai-mcp@0.1.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
     dependencies:
-      '@gemstack/ai-sdk': 0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@1.4.3)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
+      '@gemstack/ai-sdk': 0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)
       zod: 4.3.6
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
@@ -11120,14 +11119,14 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@gemstack/ai-sdk@0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@1.4.3)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
+  '@gemstack/ai-sdk@0.3.0(@aws-crypto/sha256-js@5.2.0)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@rudderjs/console@packages+console)(@rudderjs/core@packages+core)(@rudderjs/orm@packages+orm)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)(react@19.2.4)(ws@8.21.0)':
     dependencies:
       zod: 4.3.6
     optionalDependencies:
       '@anthropic-ai/sdk': 0.99.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1045.0
       '@google/genai': 1.47.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
-      '@rudderjs/console': 1.4.3
+      '@rudderjs/console': link:packages/console
       '@rudderjs/core': link:packages/core
       '@rudderjs/orm': link:packages/orm
       cohere-ai: 8.0.0(@aws-crypto/sha256-js@5.2.0)(@smithy/protocol-http@5.3.14)(@smithy/signature-v4@5.4.5)
@@ -13464,11 +13463,6 @@ snapshots:
     optional: true
 
   '@rollup/rollup-win32-x64-msvc@4.59.0':
-    optional: true
-
-  '@rudderjs/console@1.4.3':
-    dependencies:
-      '@clack/prompts': 1.0.1
     optional: true
 
   '@sec-ant/readable-stream@0.4.1': {}

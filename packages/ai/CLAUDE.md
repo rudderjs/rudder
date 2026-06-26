@@ -5,7 +5,9 @@ Compatibility shim for the AI engine (now `@gemstack/ai-sdk`, repo: gemstack-lan
 ## What lives here
 
 - **Thin re-exports (the shim):** most `src/*.ts` are one-line re-export modules, each `export * from '@gemstack/ai-sdk/<subpath>'`. No logic.
-- **Rudder-coupled bindings (real logic):** `src/{conversation-orm,memory-orm,budget-orm,memory-embedding}/index.ts` are full implementations that need `@rudderjs/orm`'s `Model`. They live here, not in `@gemstack/ai-sdk`, because they couple the agnostic engine to the Rudder ORM. They implement the engine's neutral contracts (`ConversationStore`, `UserMemory`, `BudgetStorage`) imported from `@gemstack/ai-sdk`, and persist via `@rudderjs/orm`. Their tests live alongside them (`src/*-orm.test.ts`, `src/memory-embedding.test.ts`).
+- **Rudder-coupled bindings (real logic):** code that couples the agnostic engine to a Rudder package, so it lives here, not in `@gemstack/ai-sdk`. Each has tests alongside it.
+  - `src/{conversation-orm,memory-orm,budget-orm,memory-embedding}/index.ts` — full ORM-backed store implementations that need `@rudderjs/orm`'s `Model`. They implement the engine's neutral contracts (`ConversationStore`, `UserMemory`, `BudgetStorage`) imported from `@gemstack/ai-sdk`, and persist via `@rudderjs/orm`.
+  - `src/doctor.ts` — registers an AI doctor check into `@rudderjs/console`'s doctor registry (side-effect on import).
 - `package.json` - depends on `@gemstack/ai-sdk`; keeps the `rudderjs.provider` metadata (`AiProvider` / `./server`) so provider auto-discovery still resolves; keeps the optional peer deps (`@rudderjs/core`, `@rudderjs/orm`, `@modelcontextprotocol/sdk`, `react`) and optional provider SDKs so consumers get the same install expectations.
 
 ## Working on the AI engine
