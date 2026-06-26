@@ -1,5 +1,13 @@
 # rudderjs-playground-web
 
+## 0.0.140
+
+### Patch Changes
+
+- Updated dependencies [16cbc6a]
+- Updated dependencies [552f8a2]
+  - @rudderjs/mcp@6.3.0
+
 ## 0.0.139
 
 ### Patch Changes
