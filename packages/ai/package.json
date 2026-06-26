@@ -105,11 +105,15 @@
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
     "react": ">=19.2.0"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/console": {
+      "optional": true
+    },
     "@rudderjs/core": {
       "optional": true
     },
@@ -134,6 +138,7 @@
     "@gemstack/ai-mcp": "^0.1.0",
     "@gemstack/ai-sdk": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
     "@types/node": "^20.0.0",
