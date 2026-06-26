@@ -1,5 +1,12 @@
 # rudderjs-playground-web
 
+## 0.0.139
+
+### Patch Changes
+
+- Updated dependencies [3ab449f]
+  - @rudderjs/ai@1.18.2
+
 ## 0.0.138
 
 ### Patch Changes
