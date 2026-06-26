@@ -1,23 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { Mcp } from '@gemstack/mcp'
+import { Mcp, zodToJsonSchema, matchUriTemplate } from '@gemstack/mcp'
 import type { McpServer, McpTool, McpResource, McpPrompt } from '@gemstack/mcp'
 import { resolveOrConstruct, resolveHandleDeps, consumeToolReturn } from '@gemstack/mcp/runtime'
-import { zodToJsonSchema } from '../zod-to-json-schema.js'
-import { matchUriTemplate } from '../uri-template.js'
 import { rudderContainerResolver } from '../resolver.js'
 import { INSPECTOR_HTML } from './inspector-ui.js'
 
 // The inspector instantiates servers + primitives for each request and drives
 // their @Handle deps through the Rudder container, exactly like the live runtime.
 const resolver = rudderContainerResolver()
-
-// The core's McpServer exposes these `@internal` accessors at runtime, but
-// `stripInternal` removes them from the published types — re-declare the shape.
-interface ServerInternals {
-  _tools(): (new () => McpTool)[]
-  _resources(): (new () => McpResource)[]
-  _prompts(): (new () => McpPrompt)[]
-}
 
 export interface InspectorOptions {
   port?: number
@@ -174,13 +164,12 @@ function instantiateServer(entry: ServerEntry): {
   prompts:   McpPrompt[]
 } {
   const server = resolveOrConstruct(entry.Server, resolver)
-  // `_tools()/_resources()/_prompts()` are `@internal` on the core's McpServer,
-  // so `stripInternal` removes them from the published `.d.ts` (they exist at
-  // runtime). Cast through the internal shape to read the registered classes.
-  const s = server as unknown as ServerInternals
-  const tools     = s._tools().map((T) => resolveOrConstruct(T, resolver))
-  const resources = s._resources().map((R) => resolveOrConstruct(R, resolver))
-  const prompts   = s._prompts().map((P) => resolveOrConstruct(P, resolver))
+  // The core exposes the registered classes via the public `introspect()`
+  // surface; resolve each through the Rudder container like the live runtime.
+  const classes   = server.introspect()
+  const tools     = classes.tools.map((T) => resolveOrConstruct(T, resolver))
+  const resources = classes.resources.map((R) => resolveOrConstruct(R, resolver))
+  const prompts   = classes.prompts.map((P) => resolveOrConstruct(P, resolver))
   return { server, tools, resources, prompts }
 }
 

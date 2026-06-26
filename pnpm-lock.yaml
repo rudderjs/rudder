@@ -681,8 +681,8 @@ importers:
   packages/mcp:
     dependencies:
       '@gemstack/mcp':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.0
+        version: 0.2.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
@@ -3214,8 +3214,8 @@ packages:
       react:
         optional: true
 
-  '@gemstack/mcp@0.1.0':
-    resolution: {integrity: sha512-5ZpGVxgKshkovh3km+ZZQBpJbWHOqk9Sr9qX2q5NvWPDKwQccClsK6LUzxeL2y046CBPYAknZSdPiZHQ340GOQ==}
+  '@gemstack/mcp@0.2.0':
+    resolution: {integrity: sha512-hmyu2U4ytLaYBFN15F73vnzbc9akb30COCw52SvJaSqv5vR99VRFwV6P8DcXaz8H+j4I2701ux6lc8aYUDvi1g==}
     engines: {node: '>=22.12.0'}
 
   '@google/genai@1.47.0':
@@ -11145,7 +11145,7 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@gemstack/mcp@0.1.0':
+  '@gemstack/mcp@0.2.0':
     dependencies:
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       reflect-metadata: 0.2.2

@@ -64,7 +64,7 @@
     "test": "tsc -p tsconfig.test.json && cd dist-test && node --test"
   },
   "dependencies": {
-    "@gemstack/mcp": "^0.1.0",
+    "@gemstack/mcp": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/core": "workspace:^",
     "reflect-metadata": "^0.2.0",
