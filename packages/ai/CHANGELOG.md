@@ -1,5 +1,12 @@
 # @rudderjs/ai
 
+## 1.18.3
+
+### Patch Changes
+
+- 958019f: `@rudderjs/ai/doctor` is now a first-class implementation instead of a re-export of `@gemstack/ai-sdk/doctor`. The AI doctor check registers into `@rudderjs/console`'s registry, so it's a Rudder binding and belongs here, not in the agnostic engine. `@rudderjs/console` is now declared as an optional peer. Public exports and import path are unchanged.
+- 06515d7: The ORM-backed AI bindings (`@rudderjs/ai/conversation-orm`, `/memory-orm`, `/budget-orm`, `/memory-embedding`) are now first-class implementations in this package instead of re-exports of `@gemstack/ai-sdk`. They are the Rudder-specific bindings that couple the AI engine to `@rudderjs/orm`, so they belong here, not in the agnostic `@gemstack/ai-sdk`. Public exports and import paths are unchanged. This makes `@rudderjs/ai` self-contained ahead of `@gemstack/ai-sdk` dropping those subpaths.
+
 ## 1.18.2
 
 ### Patch Changes
