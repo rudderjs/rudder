@@ -1,10 +1,8 @@
-// Barrel re-exporting the runtime's sibling modules. Each sibling owns one
-// concern: SDK wiring, HTTP transport, DI helpers, tool-return consumption,
-// observer-registry access. Touch the siblings — this file is intentionally
-// thin so external consumers (provider, inspector, testing, telescope) keep
-// their `from './runtime.js'` / `from '../runtime.js'` imports stable.
+// Re-export the core runtime primitives (createSdkServer, startStdio,
+// createWebRequestHandler, createMcpHttpHandler, consumeToolReturn, the DI
+// helpers) so the `@rudderjs/mcp/runtime` subpath keeps working unchanged...
+export * from '@gemstack/mcp/runtime'
 
-export { createSdkServer, startStdio } from './runtime/sdk-server.js'
+// ...plus the Rudder-specific Hono mount, which wraps the core's neutral
+// Web-request handler onto the Rudder router.
 export { mountHttpTransport, type HttpTransportOptions } from './runtime/http-transport.js'
-export { consumeToolReturn } from './runtime/consume-tool-return.js'
-export { resolveHandleDeps, isRegistered, filterRegistered } from './runtime/handle-deps.js'

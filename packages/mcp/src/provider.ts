@@ -1,5 +1,7 @@
 import { ServiceProvider } from '@rudderjs/core'
-import { Mcp } from './Mcp.js'
+import { Mcp, oauth2McpMiddleware, registerOAuth2Metadata } from '@gemstack/mcp'
+import { rudderContainerResolver } from './resolver.js'
+import { makePassportVerifier } from './auth/passport-verifier.js'
 
 export class McpProvider extends ServiceProvider {
   register(): void {
@@ -7,11 +9,12 @@ export class McpProvider extends ServiceProvider {
   }
 
   async boot(): Promise<void> {
+    const resolver = rudderContainerResolver()
+
     const webServers = Mcp.getWebServers()
     if (webServers.size > 0) {
       try {
         const { mountHttpTransport } = await import('./runtime.js')
-        const { oauth2McpMiddleware, registerOAuth2Metadata } = await import('./auth/oauth2.js')
 
         let router: {
           get: (path: string, handler: (req: unknown, res: unknown) => unknown, middleware?: unknown[]) => unknown
@@ -23,11 +26,15 @@ export class McpProvider extends ServiceProvider {
         } catch { /* no router */ }
 
         for (const [path, entry] of webServers) {
-          const server = new entry.server()
+          // Construct each server with the Rudder container resolver so
+          // `@Handle(...)` dependencies inject through the app container. A
+          // per-entry resolver (set via the `.resolver()` builder) wins.
+          const server = new entry.server({ resolver: entry.resolver ?? resolver })
           const middleware = [...entry.middleware]
 
           if (entry.oauth2) {
-            middleware.unshift(oauth2McpMiddleware(path, entry.oauth2))
+            // Wire the Passport-backed verifier into the core's neutral OAuth seam.
+            middleware.unshift(oauth2McpMiddleware(path, { ...entry.oauth2, verifyToken: makePassportVerifier() }))
             if (router) registerOAuth2Metadata(router, path, entry.oauth2)
           }
 
@@ -60,8 +67,8 @@ export class McpProvider extends ServiceProvider {
           console.error(`MCP server "${name}" not found. Available: ${[...Mcp.getLocalServers().keys()].join(', ')}`)
           process.exit(1)
         }
-        const { startStdio } = await import('./runtime.js')
-        await startStdio(new ServerClass())
+        const { startStdio } = await import('@gemstack/mcp/runtime')
+        await startStdio(new ServerClass({ resolver }))
       }).description('Start an MCP server (stdio)')
 
       rudder.command('mcp:list', () => {

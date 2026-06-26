@@ -1,13 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { Mcp } from '../Mcp.js'
-import type { McpServer } from '../McpServer.js'
-import type { McpTool } from '../McpTool.js'
-import type { McpResource } from '../McpResource.js'
-import type { McpPrompt } from '../McpPrompt.js'
+import { Mcp } from '@gemstack/mcp'
+import type { McpServer, McpTool, McpResource, McpPrompt } from '@gemstack/mcp'
+import { resolveOrConstruct, resolveHandleDeps, consumeToolReturn } from '@gemstack/mcp/runtime'
 import { zodToJsonSchema } from '../zod-to-json-schema.js'
-import { resolveHandleDeps, consumeToolReturn } from '../runtime.js'
 import { matchUriTemplate } from '../uri-template.js'
+import { rudderContainerResolver } from '../resolver.js'
 import { INSPECTOR_HTML } from './inspector-ui.js'
+
+// The inspector instantiates servers + primitives for each request and drives
+// their @Handle deps through the Rudder container, exactly like the live runtime.
+const resolver = rudderContainerResolver()
+
+// The core's McpServer exposes these `@internal` accessors at runtime, but
+// `stripInternal` removes them from the published types — re-declare the shape.
+interface ServerInternals {
+  _tools(): (new () => McpTool)[]
+  _resources(): (new () => McpResource)[]
+  _prompts(): (new () => McpPrompt)[]
+}
 
 export interface InspectorOptions {
   port?: number
@@ -163,10 +173,14 @@ function instantiateServer(entry: ServerEntry): {
   resources: McpResource[]
   prompts:   McpPrompt[]
 } {
-  const server = new entry.Server()
-  const tools     = server._tools().map((T) => new T())
-  const resources = server._resources().map((R) => new R())
-  const prompts   = server._prompts().map((P) => new P())
+  const server = resolveOrConstruct(entry.Server, resolver)
+  // `_tools()/_resources()/_prompts()` are `@internal` on the core's McpServer,
+  // so `stripInternal` removes them from the published `.d.ts` (they exist at
+  // runtime). Cast through the internal shape to read the registered classes.
+  const s = server as unknown as ServerInternals
+  const tools     = s._tools().map((T) => resolveOrConstruct(T, resolver))
+  const resources = s._resources().map((R) => resolveOrConstruct(R, resolver))
+  const prompts   = s._prompts().map((P) => resolveOrConstruct(P, resolver))
   return { server, tools, resources, prompts }
 }
 
@@ -206,7 +220,7 @@ export async function callTool(entry: ServerEntry, name: string, input: Record<s
   const { tools } = instantiateServer(entry)
   const tool = tools.find((t) => t.name() === name)
   if (!tool) throw new Error(`Tool "${name}" not found on ${entry.label}`)
-  const extras = resolveHandleDeps(tool, 'handle')
+  const extras = resolveHandleDeps(tool, 'handle', resolver)
   // Streaming tools return an AsyncGenerator. Consume via the runtime helper so
   // the inspector returns the final result, not the iterator object (which
   // serializes to `{}`). Progress yields are dropped — the inspector is a
@@ -220,7 +234,7 @@ export async function readResource(entry: ServerEntry, uri: string): Promise<unk
   const { resources } = instantiateServer(entry)
   const exact = resources.find((r) => !r.isTemplate() && r.uri() === uri)
   if (exact) {
-    const extras = resolveHandleDeps(exact, 'handle')
+    const extras = resolveHandleDeps(exact, 'handle', resolver)
     return { uri, content: await exact.handle(undefined, ...extras as []), mimeType: exact.mimeType() }
   }
 
@@ -228,7 +242,7 @@ export async function readResource(entry: ServerEntry, uri: string): Promise<unk
   for (const tmpl of resources.filter((r) => r.isTemplate())) {
     const params = matchUriTemplate(tmpl.uri(), uri)
     if (params) {
-      const extras = resolveHandleDeps(tmpl, 'handle')
+      const extras = resolveHandleDeps(tmpl, 'handle', resolver)
       return { uri, content: await tmpl.handle(params, ...extras as []), mimeType: tmpl.mimeType() }
     }
   }
@@ -240,7 +254,7 @@ export async function getPrompt(entry: ServerEntry, name: string, args: Record<s
   const { prompts } = instantiateServer(entry)
   const prompt = prompts.find((p) => p.name() === name)
   if (!prompt) throw new Error(`Prompt "${name}" not found on ${entry.label}`)
-  const extras = resolveHandleDeps(prompt, 'handle')
+  const extras = resolveHandleDeps(prompt, 'handle', resolver)
   return { messages: await prompt.handle(args, ...extras as []) }
 }
 
