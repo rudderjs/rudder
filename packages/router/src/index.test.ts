@@ -1149,6 +1149,51 @@ describe('Url — signed URLs', () => {
     assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), true)
     router.reset()
   })
+
+  // ─── temporarySignedRoute (#1418) ─────────────────────────
+
+  it('temporarySignedRoute produces a URL with both expires and signature params', () => {
+    router.reset()
+    router.get('/invoice/:id', handler).name('temp.invoice.show')
+    router.mount(new FakeServer())
+
+    const signed = Url.temporarySignedRoute('temp.invoice.show', 60, { id: 1 })
+    const params = new URL(signed, 'http://x').searchParams
+    assert.ok(params.has('expires'), 'expects an expires param')
+    assert.ok(params.has('signature'), 'expects a signature param')
+    router.reset()
+  })
+
+  it('temporarySignedRoute sets expiry seconds (not ms) into the future', () => {
+    router.reset()
+    router.get('/invoice/:id', handler).name('temp.invoice.show2')
+    router.mount(new FakeServer())
+
+    const nowSec = Math.floor(Date.now() / 1000)
+    const signed = Url.temporarySignedRoute('temp.invoice.show2', 60, { id: 1 })
+    const expires = parseInt(new URL(signed, 'http://x').searchParams.get('expires') ?? '', 10)
+    // Expiry is ~60s out — a seconds/ms unit bug would land it ~60_000s out or in the past.
+    assert.ok(expires >= nowSec + 55 && expires <= nowSec + 65, `expires ${expires} not ~60s ahead of ${nowSec}`)
+    router.reset()
+  })
+
+  it('isValidSignature accepts a freshly generated temporarySignedRoute URL', () => {
+    router.reset()
+    router.get('/invoice/:id', handler).name('temp.invoice.show3')
+    router.mount(new FakeServer())
+
+    const signed = Url.temporarySignedRoute('temp.invoice.show3', 60, { id: 1 })
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), true)
+    router.reset()
+  })
+
+  it('isValidSignature rejects a URL whose expiry is already in the past', () => {
+    // Bypass temporarySignedRoute() and sign with a past expiry directly to
+    // avoid time-manipulation flakiness.
+    const past = new Date((Math.floor(Date.now() / 1000) - 1) * 1000)
+    const signed = Url.sign('/invoice/1', past)
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), false)
+  })
 })
 
 describe('Url — signing-key management (#1421)', () => {
