@@ -1,5 +1,44 @@
 # @rudderjs/database
 
+## 1.6.0
+
+### Minor Changes
+
+- 2c9d140: feat(database): bulk write terminals that return the RETURNING rows (updateAllReturning / upsertReturning)
+
+  `NativeQueryBuilder.updateAll` / `upsert` return only an affected-row count, even though on a RETURNING-capable dialect (Postgres/SQLite) they already execute `RETURNING *` and have the written rows in hand. Two new optional terminals return those rows instead:
+
+  - `updateAllReturning(data): Promise<T[]>` — the updated rows in their real post-write state (DB coercion, defaults, triggers), for any primary-key shape, with no re-select.
+  - `upsertReturning(rows, uniqueBy, update): Promise<T[]>` — the upserted rows, including a DB default that filled an omitted conflict column.
+
+  Both are additive; the existing count variants are unchanged. They are declared as optional methods on the `QueryBuilder<T>` contract (alongside `upsert?`). A no-`RETURNING` dialect (MySQL) has no rows to return and no captured keys for a bulk re-select, so the methods throw a `NativeOrmError` with code `NATIVE_RETURNING_UNSUPPORTED` rather than returning a stale or empty set. This lets the neutral `@universal-orm/*` adapters honour their "return the row(s)" contract from a bulk write without a primary-key-dependent re-read.
+
+- a2cd255: feat(database): add toSQL() to NativeQueryBuilder, exposed on Model chains
+
+  `NativeQueryBuilder.toSQL()` returns the `{ sql, bindings }` pair the query
+  would run WITHOUT executing it (Laravel's `toSql()`, plus the bound values) —
+  handy for debugging or logging a query. The `HydratingQueryBuilder` proxy
+  forwards it too, so `User.query().where('active', true).toSQL()` and
+  `User.where('role', 'admin').orderBy('name').toSQL()` work from Model chains.
+
+- fc2bb17: feat(orm): add `chunkById(size, cb)` and `lazyById(size)` cursor-based bulk iteration
+
+  Both page by primary-key comparison (`WHERE <cursor> > <lastId> LIMIT size`)
+  instead of `LIMIT`/`OFFSET`, so they never skip rows when earlier rows are
+  deleted mid-iteration (the OFFSET-drift bug `chunk`/`lazy` are prone to). Each
+  page clones the pristine base query and applies a single cursor bound to the
+  copy, so the `WHERE` is replaced per page rather than accumulated. The cursor
+  column resolves to the explicit `column` argument, else the first `orderBy()`
+  column, else the model's `primaryKey`, and throws a clear error when none can be
+  determined. Native engine only (the per-page clone is a native primitive,
+  `NativeQueryBuilder._cursorClone()`); Drizzle/Prisma throw a clear pointer error.
+  Both are exposed on the query builder and as `Model` statics.
+
+### Patch Changes
+
+- Updated dependencies [2c9d140]
+  - @rudderjs/contracts@1.20.0
+
 ## 1.5.5
 
 ### Patch Changes
