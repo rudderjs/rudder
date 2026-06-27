@@ -8,6 +8,11 @@ Compatibility shim for the AI engine (now `@gemstack/ai-sdk`, repo: gemstack-lan
 - **Rudder-coupled bindings (real logic):** code that couples the agnostic engine to a Rudder package, so it lives here, not in `@gemstack/ai-sdk`. Each has tests alongside it.
   - `src/{conversation-orm,memory-orm,budget-orm,memory-embedding}/index.ts` — full ORM-backed store implementations that need `@rudderjs/orm`'s `Model`. They implement the engine's neutral contracts (`ConversationStore`, `UserMemory`, `BudgetStorage`) imported from `@gemstack/ai-sdk`, and persist via `@rudderjs/orm`.
   - `src/doctor.ts` — registers an AI doctor check into `@rudderjs/console`'s doctor registry (side-effect on import).
+  - `src/server/provider.ts` (exported as `./server`) — `AiProvider`, the Rudder `ServiceProvider` that reads `config('ai')` (via `@rudderjs/core`) and wires the engine's providers/registry/stores into the container. The `GoogleCacheRegistry` and provider classes are imported from `@gemstack/ai-sdk`.
+  - `src/commands/make-agent.ts` — `makeAgentSpec` for the `make:agent` scaffolder; needs `@rudderjs/console`'s `MakeSpec`. `AiProvider.boot()` lazy-imports it to self-register.
+  - `src/commands/ai-eval.ts` — `registerAiEvalCommand` + the `ai:eval` CLI flow; reads `config('ai').eval.pattern` via `@rudderjs/core` and drives the engine's eval framework (`runSuite`, reporters, fixtures) from `@gemstack/ai-sdk/eval`. `AiFakeStep` is derived from the public `stepsFromResponse` return type (not on the engine's public surface).
+
+The Rudder CLI loader (`packages/cli/src/index.ts`) imports `commands/make-agent` (`makeAgentSpec`) and `commands/ai-eval` (`registerAiEvalCommand`) from `@rudderjs/ai` by subpath, so those export names are load-bearing.
 - `package.json` - depends on `@gemstack/ai-sdk`; keeps the `rudderjs.provider` metadata (`AiProvider` / `./server`) so provider auto-discovery still resolves; keeps the optional peer deps (`@rudderjs/core`, `@rudderjs/orm`, `@modelcontextprotocol/sdk`, `react`) and optional provider SDKs so consumers get the same install expectations.
 
 ## Working on the AI engine
