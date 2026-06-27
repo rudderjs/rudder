@@ -1,17 +1,29 @@
 import type { AppRequest, MiddlewareHandler } from '@rudderjs/contracts'
 import { route } from './index.js'
 
-// ─── node:crypto lazy load ─────────────────────────────────
+// ─── node:crypto (server-only, synchronous on first use) ───
 //
-// Lazy-load node:crypto to avoid bundling it into the client. Only used by
-// Url (signed URLs) and ValidateSignature — server-only features. The
-// fire-and-forget import preloads on server and is a no-op in the browser
-// where `globalThis.process` is undefined.
+// Url (signed URLs) and ValidateSignature are server-only. node:crypto is
+// always synchronously available in Node, so resolve it on first use via
+// `process.getBuiltinModule` (Node >= 22.3; the package engines floor is
+// 22.12) rather than a fire-and-forget `import()`. The old async preload could
+// still be unresolved when `Url.sign()` / `isValidSignature()` fired on the
+// very first request, throwing a misleading "node:crypto not available" — a
+// 5ms startup race that vanished under warmup. The synchronous lookup removes
+// the race entirely. Stays out of client bundles: there is no static `node:`
+// import, and the lookup is guarded by the `process` feature check, so a
+// browser bundle never touches it.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _crypto: { createHmac: any; timingSafeEqual: any } | undefined
-if (typeof globalThis.process !== 'undefined') {
-  import(/* @vite-ignore */ 'node:crypto').then(m => { _crypto = m }).catch(() => {})
+type CryptoModule = { createHmac: any; timingSafeEqual: any }
+let _crypto: CryptoModule | undefined
+
+function _getCrypto(): CryptoModule | undefined {
+  if (_crypto) return _crypto
+  const proc = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process
+  if (!proc || typeof proc.getBuiltinModule !== 'function') return undefined
+  _crypto = proc.getBuiltinModule('node:crypto') as CryptoModule
+  return _crypto
 }
 
 // ─── Signing key + helpers ─────────────────────────────────
@@ -37,8 +49,9 @@ function _computeSignature(pathname: string, params: URLSearchParams): string {
       .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
   )
   const toSign = sorted.size > 0 ? `${pathname}?${sorted.toString()}` : pathname
-  if (!_crypto) throw new Error('[Rudder Router] node:crypto not available — Url signing requires a server environment.')
-  return _crypto.createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
+  const crypto = _getCrypto()
+  if (!crypto) throw new Error('[Rudder Router] node:crypto not available — Url signing requires a server environment.')
+  return crypto.createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
 }
 
 // ─── Url ───────────────────────────────────────────────────
@@ -132,16 +145,17 @@ export class Url {
       if (isNaN(expiry) || Date.now() / 1000 > expiry) return false
     }
 
-    const expected = _computeSignature(pathname, params)
+    const crypto = _getCrypto()
     // _computeSignature throws if crypto is unavailable, so this guard is
     // belt-and-braces — fail closed rather than fall back to a timing-unsafe
     // `===` compare. Below is constant-time (length guard first, since
     // timingSafeEqual throws on unequal-length buffers).
-    if (!_crypto) return false
+    if (!crypto) return false
+    const expected = _computeSignature(pathname, params)
     const sigBuf = Buffer.from(signature)
     const expBuf = Buffer.from(expected)
     if (sigBuf.length !== expBuf.length) return false
-    return _crypto.timingSafeEqual(sigBuf, expBuf)
+    return crypto.timingSafeEqual(sigBuf, expBuf)
   }
 }
 
