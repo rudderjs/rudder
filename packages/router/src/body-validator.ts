@@ -1,13 +1,13 @@
-import { ValidationError, standardValidate, type StandardSchemaV1, type MiddlewareHandler } from '@rudderjs/contracts'
+import { type StandardSchemaV1, type MiddlewareHandler } from '@rudderjs/contracts'
+import { buildFieldValidator } from './field-validator.js'
 
 /**
  * Build a middleware that validates `req.body` against a **Standard Schema**
  * validator (Zod by default — any `~standard` validator works).
  *
- * - On success, `req.body` is **replaced in place** with the parsed result.
- *   This mirrors `buildQueryValidator`'s behavior so `z.coerce.*`,
- *   `z.transform()`, and `.default()` work end-to-end: the handler sees
- *   the parsed shape, not the raw JSON.
+ * - On success, `req.body` is **replaced in place** with the parsed result, so
+ *   `z.coerce.*`, `z.transform()`, and `.default()` work end-to-end: the
+ *   handler sees the parsed shape, not the raw JSON.
  * - On failure, throws `ValidationError` (rendered as HTTP 422 by core's
  *   exception handler). The error map mirrors FormRequest's shape:
  *   `{ [path]: string[] }`, with top-level issues under `'root'`.
@@ -16,14 +16,9 @@ import { ValidationError, standardValidate, type StandardSchemaV1, type Middlewa
  * on `Router.get/post/etc`. Server adapters populate `req.body` from JSON
  * and form-encoded payloads before middleware runs; this validator only
  * reads + replaces the already-parsed value.
+ *
+ * Thin wrapper over the shared {@link buildFieldValidator}.
  */
 export function buildBodyValidator(schema: StandardSchemaV1): MiddlewareHandler {
-  return async (req, _res, next) => {
-    const result = await standardValidate(schema, req.body)
-    if (result.errors) {
-      throw new ValidationError(result.errors)
-    }
-    ;(req as { body: unknown }).body = result.value
-    await next()
-  }
+  return buildFieldValidator('body', schema)
 }

@@ -1,4 +1,5 @@
-import { ValidationError, standardValidate, type StandardSchemaV1, type MiddlewareHandler } from '@rudderjs/contracts'
+import { type StandardSchemaV1, type MiddlewareHandler } from '@rudderjs/contracts'
+import { buildFieldValidator } from './field-validator.js'
 
 /**
  * Build a middleware that validates `req.query` against a **Standard Schema**
@@ -13,14 +14,9 @@ import { ValidationError, standardValidate, type StandardSchemaV1, type Middlewa
  *
  * Used by `RouteBuilder.query(schema)` and the `{ query: schema }` opts form
  * on `Router.get/post/etc`.
+ *
+ * Thin wrapper over the shared {@link buildFieldValidator}.
  */
 export function buildQueryValidator(schema: StandardSchemaV1): MiddlewareHandler {
-  return async (req, _res, next) => {
-    const result = await standardValidate(schema, req.query)
-    if (result.errors) {
-      throw new ValidationError(result.errors)
-    }
-    ;(req as { query: unknown }).query = result.value
-    await next()
-  }
+  return buildFieldValidator('query', schema)
 }
