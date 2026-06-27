@@ -45,6 +45,7 @@ import {
   type SubqueryBody,
   type WindowFunction,
   type WindowSelect,
+  type CompiledQuery,
   isWindowFunction,
 } from './compiler.js'
 
@@ -754,6 +755,16 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
       }
     }
     return rows
+  }
+
+  /**
+   * Compile this query to its `{ sql, bindings }` pair WITHOUT executing it —
+   * the same SQL `get()` would run, with the values that would bind to its
+   * placeholders. Purely informational (debugging, logging, handing the SQL to
+   * another tool); it reads the current builder state and touches no executor.
+   */
+  toSQL(): CompiledQuery {
+    return compileSelect(this._state(), this.dialect)
   }
 
   async first(): Promise<T | null> {
