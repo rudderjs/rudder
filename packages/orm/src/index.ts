@@ -1367,6 +1367,16 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * res.json(rows) // plain objects, no Model overhead
    */
   lean(): this
+  /**
+   * Compile the chain to its `{ sql, bindings }` pair WITHOUT executing it —
+   * Laravel's `toSql()`, with the bound values alongside. Reads the current
+   * builder state and runs nothing; handy for debugging or logging a query.
+   * Native engine only.
+   *
+   * @example
+   * const { sql, bindings } = User.where('role', 'admin').orderBy('name').toSQL()
+   */
+  toSQL(): { sql: string; bindings: unknown[] }
 }
 
 // ─── Generated schema registry (GATE 7-types) ──────────────
