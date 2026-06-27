@@ -86,6 +86,29 @@ function matches(path: string, patterns: string[]): boolean {
   return patterns.some(p => (p.endsWith('*') ? path.startsWith(p.slice(0, -1)) : path === p))
 }
 
+/**
+ * Static-asset file extensions let through while down so the dev overlay, HMR
+ * socket, and built assets keep loading. Deliberately excludes data-ish
+ * extensions (`.json`, `.csv`, `.xml`, …): gating on "last segment contains a
+ * dot" let any path bypass the 503 just by ending in one (e.g.
+ * `/api/users.json`, `/admin.x`, `/internal/export.csv`).
+ */
+const ASSET_EXTENSIONS = new Set([
+  'js', 'mjs', 'cjs', 'css', 'map',
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp', 'avif', 'bmp',
+  'woff', 'woff2', 'ttf', 'eot', 'otf',
+  'wasm', 'txt', 'webmanifest',
+  'mp4', 'webm', 'ogg', 'mp3', 'wav', 'pdf',
+])
+
+/** `true` for paths that look like a static asset by file extension. */
+function isAssetPath(reqPath: string): boolean {
+  const last = reqPath.split('/').pop() ?? ''
+  const dot  = last.lastIndexOf('.')
+  if (dot < 0) return false
+  return ASSET_EXTENSIONS.has(last.slice(dot + 1).toLowerCase())
+}
+
 export interface MaintenanceMiddlewareOptions {
   /**
    * Paths always let through while down (in addition to any `allow` list stored
@@ -110,8 +133,10 @@ export function maintenanceMiddleware(options: MaintenanceMiddlewareOptions = {}
     if (!isDownForMaintenance()) return next()
 
     // Never gate Vite internals / static assets — keeps the dev overlay and
-    // HMR socket alive even if someone runs `rudder down` in dev.
-    if (req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')) {
+    // HMR socket alive even if someone runs `rudder down` in dev. Matched by a
+    // known-extension allow-list, not "any dot", so app/API routes that happen
+    // to contain a period (e.g. `/api/users.json`) stay gated.
+    if (req.path.startsWith('/@') || isAssetPath(req.path)) {
       return next()
     }
 

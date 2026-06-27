@@ -145,10 +145,26 @@ describe('maintenance — middleware', () => {
 
   it('never gates static assets / Vite internals even when down', async () => {
     setup({ time: 0 })
-    let asset = false, vite = false
-    await maintenanceMiddleware()(fakeReq({ path: '/app.css' }), fakeRes(), async () => { asset = true })
+    for (const p of ['/app.css', '/bundle.js', '/logo.svg', '/font.woff2', '/assets/x.png']) {
+      let passed = false
+      await maintenanceMiddleware()(fakeReq({ path: p }), fakeRes(), async () => { passed = true })
+      assert.equal(passed, true, `expected asset ${p} to pass`)
+    }
+    let vite = false
     await maintenanceMiddleware()(fakeReq({ path: '/@vite/client' }), fakeRes(), async () => { vite = true })
-    assert.equal(asset, true)
     assert.equal(vite, true)
+  })
+
+  it('still gates app/API paths whose last segment merely contains a dot', async () => {
+    setup({ time: 0 })
+    // Regression for the maintenance-bypass hole: gating used to skip any path
+    // whose final segment had a period, letting these through unauthenticated.
+    for (const p of ['/api/users.json', '/admin.x', '/internal/export.csv', '/api/v2/resource.delete']) {
+      let nexted = false
+      const res = fakeRes()
+      await maintenanceMiddleware()(fakeReq({ path: p }), res, async () => { nexted = true })
+      assert.equal(nexted, false, `expected ${p} to be gated`)
+      assert.equal(res.statusCode, 503, `expected ${p} to 503`)
+    }
   })
 })
