@@ -2,6 +2,8 @@
 
 `@rudderjs/mcp` lets your application expose tools, resources, and prompts to external AI agents — Claude Code, Cursor, Windsurf, any MCP-compatible client. Once you register an MCP server in your app, an external agent can query your database, kick off jobs, fetch documents, and run domain-specific commands without leaving its chat UI.
 
+`@rudderjs/mcp` is Rudder's binding over the framework-agnostic MCP server engine, [`@gemstack/mcp`](https://github.com/gemstack-land/gemstack/tree/main/packages/mcp). It adds the Rudder integration this page documents: an auto-discovered `McpProvider`, the class- and decorator-based authoring API, container DI, route-style `Mcp.web()` / `Mcp.local()` registration, the `mcp:start` and `mcp:inspector` commands, OAuth via `@rudderjs/passport`, and Telescope. To author MCP servers outside Rudder (the same primitives over a framework-neutral `node:http` or Fetch handler), use the engine directly, see the [GemStack `mcp` docs](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/mcp.md).
+
 ```ts
 // app/Mcp/Tools/CurrentWeatherTool.ts
 import { McpTool, McpResponse, Description } from '@rudderjs/mcp'
