@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/ai",
   "version": "1.18.5",
-  "description": "[Deprecated] Moved to @gemstack/ai-sdk. This package now re-exports it for backwards compatibility.",
+  "description": "Rudder's AI integration: re-exports the agnostic agent engine from @gemstack/ai-sdk and adds the Rudder-specific bindings (AiProvider, ORM-backed stores, doctor check, make:agent/ai:eval CLI).",
   "rudderjs": {
     "provider": "AiProvider",
     "providerSubpath": "./server",
