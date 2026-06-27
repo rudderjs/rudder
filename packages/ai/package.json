@@ -101,16 +101,21 @@
   },
   "dependencies": {
     "@gemstack/ai-mcp": "^0.1.0",
-    "@gemstack/ai-sdk": "^0.4.0"
+    "@gemstack/ai-sdk": "^0.5.0"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/broadcast": "workspace:^",
     "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
+    "@rudderjs/queue": "workspace:^",
     "react": ">=19.2.0"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/broadcast": {
+      "optional": true
+    },
     "@rudderjs/console": {
       "optional": true
     },
@@ -118,6 +123,9 @@
       "optional": true
     },
     "@rudderjs/orm": {
+      "optional": true
+    },
+    "@rudderjs/queue": {
       "optional": true
     },
     "@modelcontextprotocol/sdk": {
@@ -136,11 +144,13 @@
   },
   "devDependencies": {
     "@gemstack/ai-mcp": "^0.1.0",
-    "@gemstack/ai-sdk": "^0.4.0",
+    "@gemstack/ai-sdk": "^0.5.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/broadcast": "workspace:^",
     "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
     "@rudderjs/orm": "workspace:^",
+    "@rudderjs/queue": "workspace:^",
     "@types/node": "^20.0.0",
     "@types/react": "^19.2.0",
     "react": "^19.2.0",

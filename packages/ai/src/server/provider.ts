@@ -3,6 +3,7 @@ import {
   AiRegistry,
   setConversationStore,
   setUserMemory,
+  configureAiQueue,
   GoogleCacheRegistry,
   AnthropicProvider,
   OpenAIProvider,
@@ -166,12 +167,38 @@ export class AiProvider extends ServiceProvider {
       this.app.instance('ai.memory', cfg.memory)
     }
 
+    // Wire agent.queue() / .broadcast() to Rudder's queue + broadcast.
+    await this.configureQueueBridge()
+
     // Register make:agent scaffolder
     try {
       const { registerMakeSpecs } = await import('@rudderjs/console')
       const { makeAgentSpec } = await import('../commands/make-agent.js')
       registerMakeSpecs(makeAgentSpec)
     } catch { /* rudder console not available */ }
+  }
+
+  /**
+   * Back the engine's `agent.queue('...').send()` / `.broadcast(channel)` with
+   * Rudder's queue and broadcast. Both are optional: when `@rudderjs/queue` is
+   * installed, queued AI jobs dispatch through it; when `@rudderjs/broadcast` is
+   * also installed, streaming jobs push progress to a channel. When neither is
+   * present the engine stays unconfigured and `agent.queue()` surfaces its
+   * "register a queue adapter" error at the use-site.
+   */
+  private async configureQueueBridge(): Promise<void> {
+    let dispatch: ((fn: () => void | Promise<void>, options?: { queue?: string; delay?: number }) => Promise<void>) | undefined
+    try {
+      ({ dispatch } = await import('@rudderjs/queue'))
+    } catch { /* @rudderjs/queue not installed - leave agent.queue() unconfigured */ }
+    if (!dispatch) return
+
+    let broadcast: ((channel: string, event: string, data: unknown) => Promise<void>) | undefined
+    try {
+      ({ broadcast } = await import('@rudderjs/broadcast'))
+    } catch { /* @rudderjs/broadcast not installed - .broadcast() errors if used */ }
+
+    configureAiQueue({ dispatch, broadcast: broadcast ?? null })
   }
 
   /**
