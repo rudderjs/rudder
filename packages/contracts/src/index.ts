@@ -331,6 +331,18 @@ export interface QueryBuilder<T> {
    */
   upsert?(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<number>
   /**
+   * Like {@link upsert}, but resolves to the upserted **rows** rather than a
+   * count, so the caller gets the real stored row(s) — DB-applied defaults,
+   * driver type mapping, the conflict key even when a default generated it.
+   *
+   * **Optional capability**, available only on adapters whose dialect can return
+   * written rows (Postgres/SQLite `RETURNING`). Adapters that can't omit it; a
+   * MySQL-style no-`RETURNING` backend throws rather than silently returning a
+   * stale or empty set. The neutral `@universal-orm/*` adapters use it to honour
+   * their "return the row(s)" contract without a primary-key-dependent re-read.
+   */
+  upsertReturning?(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<T[]>
+  /**
    * Delete every row matching the chained `where`/`orWhere` clauses.
    * Returns the number of rows deleted. Bypasses soft deletes — call
    * `withTrashed()` first if you need to scope including trashed rows
@@ -345,6 +357,19 @@ export interface QueryBuilder<T> {
    * available for any bulk-update need beyond pivots.
    */
   updateAll(data: Partial<T>): Promise<number>
+  /**
+   * Like {@link updateAll}, but resolves to the updated **rows** rather than a
+   * count, so the caller gets the real post-write row(s) — DB-applied coercion,
+   * column defaults, and trigger effects all reflected — for any primary-key
+   * shape (including non-`id` or composite), with no re-select.
+   *
+   * **Optional capability**, available only on adapters whose dialect can return
+   * written rows (Postgres/SQLite `RETURNING`). Adapters that can't omit it; a
+   * MySQL-style no-`RETURNING` backend throws rather than silently returning a
+   * stale set. The neutral `@universal-orm/*` adapters use it to honour their
+   * "return the row(s)" contract.
+   */
+  updateAllReturning?(data: Partial<T>): Promise<T[]>
   /** Restore a soft-deleted record. */
   restore(id: number | string): Promise<T>
   /** Permanently delete a record, bypassing soft deletes. */
