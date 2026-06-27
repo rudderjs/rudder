@@ -45,11 +45,33 @@ function _computeSignature(pathname: string, params: URLSearchParams): string {
 
 export class Url {
   /**
-   * Override the HMAC signing key used for signed URLs.
-   * Falls back to `process.env.APP_KEY`.
+   * Override the HMAC signing key used for signed URLs. Falls back to
+   * `process.env.APP_KEY` when unset (or after {@link Url.resetKey}).
+   *
+   * **Process-wide.** This mutates module-level state for the whole Node
+   * process until overwritten or reset — there is no per-request scoping. In
+   * tests, pair a `setKey()` in `beforeEach` with {@link Url.resetKey} in
+   * `afterEach`, otherwise the override leaks into every later test sharing the
+   * worker (signatures then verify against the wrong key and fail silently).
    */
   static setKey(key: string): void {
     _urlKey = key
+  }
+
+  /**
+   * Clear a {@link Url.setKey} override, restoring the `APP_KEY` fallback.
+   * Intended for test teardown (`afterEach`).
+   */
+  static resetKey(): void {
+    _urlKey = ''
+  }
+
+  /**
+   * The current signing-key override, or `''` when none is set (signing then
+   * falls back to `APP_KEY`). Reads the override only — never `APP_KEY`.
+   */
+  static getKey(): string {
+    return _urlKey
   }
 
   /** The full URL of the current request. */
