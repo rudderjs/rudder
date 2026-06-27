@@ -16,6 +16,7 @@ import {
   ROUTE_PATTERN_UUID,
   ROUTE_PATTERN_ULID,
   Url,
+  ValidateSignature,
 } from './index.js'
 
 // ─── Test helpers ───────────────────────────────────────────
@@ -1188,6 +1189,98 @@ describe('Url — signing-key management (#1421)', () => {
       else process.env['APP_KEY'] = prevAppKey
       restore()
     }
+  })
+})
+
+// ─── ValidateSignature middleware (#1417) ───────────────────
+
+describe('ValidateSignature middleware', () => {
+  // Deterministic key so signatures are stable across runs.
+  Url.setKey('test-signing-key')
+
+  const makeReq = (urlOrPath: string): AppRequest => {
+    const u = new URL(urlOrPath, 'http://placeholder.local')
+    const r: Record<string, unknown> = {
+      method:  'GET',
+      url:     urlOrPath,
+      path:    u.pathname,
+      query:   Object.fromEntries(u.searchParams.entries()),
+      params:  {},
+      headers: {},
+      body:    null,
+      raw:     null,
+    }
+    attachInputAccessors(r)
+    return r as unknown as AppRequest
+  }
+
+  const makeRes = (): import('@rudderjs/contracts').AppResponse & {
+    _json?: unknown; _status?: number
+  } => {
+    const r: import('@rudderjs/contracts').AppResponse & {
+      _json?: unknown; _status?: number
+    } = {
+      statusCode: 200,
+      status(code) { (this as unknown as { _status: number })._status = code; this.statusCode = code; return this },
+      header() { return this },
+      json(data) { (this as unknown as { _json: unknown })._json = data; return undefined as unknown as void },
+      send() {},
+      redirect() {},
+      intended() {},
+      raw: { res: undefined as Response | undefined },
+    }
+    return r
+  }
+
+  it('calls next() and does not write the response for a valid signature', async () => {
+    const signed = Url.sign('/invoice/42')
+    const req = makeReq(`http://x${signed}`)
+    const res = makeRes()
+    let called = false
+
+    await ValidateSignature()(req, res, async () => { called = true })
+
+    assert.strictEqual(called, true)
+    assert.strictEqual(res._status, undefined)
+    assert.strictEqual(res._json, undefined)
+  })
+
+  it('returns 403 without calling next() when the signature param is missing', async () => {
+    const req = makeReq('http://x/invoice/42')
+    const res = makeRes()
+    let called = false
+
+    await ValidateSignature()(req, res, async () => { called = true })
+
+    assert.strictEqual(called, false)
+    assert.strictEqual(res._status, 403)
+    assert.deepStrictEqual(res._json, { message: 'Invalid or expired URL signature.' })
+  })
+
+  it('returns 403 without calling next() for a tampered signature', async () => {
+    const signed = Url.sign('/invoice/42')
+    const tampered = signed.replace('/invoice/42', '/invoice/43')
+    const req = makeReq(`http://x${tampered}`)
+    const res = makeRes()
+    let called = false
+
+    await ValidateSignature()(req, res, async () => { called = true })
+
+    assert.strictEqual(called, false)
+    assert.strictEqual(res._status, 403)
+  })
+
+  it('returns 403 without calling next() for an expired signature', async () => {
+    const past = new Date(Date.now() - 60_000)
+    const signed = Url.sign('/invoice/42', past)
+    const req = makeReq(`http://x${signed}`)
+    const res = makeRes()
+    let called = false
+
+    await ValidateSignature()(req, res, async () => { called = true })
+
+    assert.strictEqual(called, false)
+    assert.strictEqual(res._status, 403)
   })
 })
 
