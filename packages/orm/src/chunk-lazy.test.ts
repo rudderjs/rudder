@@ -17,6 +17,15 @@ class Item extends Model {
   n!: number
 }
 
+// Same table, but no resolvable primary key — used to prove chunkById/lazyById
+// throw a clear error when the cursor column can't be determined.
+class KeylessItem extends Model {
+  static override table = 'items'
+  static override primaryKey = ''
+  id!: number
+  n!: number
+}
+
 let driver: Driver
 
 beforeEach(async () => {
@@ -120,6 +129,145 @@ describe('Model.lazy()', () => {
   })
 })
 
+describe('Model.chunkById()', () => {
+  it('pages the full set by primary key', async () => {
+    const pageSizes: number[] = []
+    const seen: number[] = []
+    const done = await Item.query().orderBy('id').chunkById(3, (rows) => {
+      pageSizes.push(rows.length)
+      for (const r of rows) seen.push(r.n)
+    })
+    assert.strictEqual(done, true)
+    assert.deepEqual(pageSizes, [3, 3, 3, 1]) // 10 rows / size 3
+    assert.deepEqual(seen, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it('does NOT skip rows when earlier (processed) rows are deleted between pages', async () => {
+    // The whole point of cursor paging: deleting the page we just processed must
+    // not shift later survivors past the window (which OFFSET paging would do).
+    const seen: number[] = []
+    let first = true
+    await Item.query().orderBy('id').chunkById(3, async (rows) => {
+      for (const r of rows) seen.push(r.id)
+      if (first) {
+        first = false
+        await driver.execute(`DELETE FROM items WHERE id <= 3`, [])
+      }
+    })
+    // Every id 4..10 still seen — none skipped despite the mid-iteration delete.
+    assert.deepEqual(seen, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  })
+
+  it('replaces the cursor bound each page instead of accumulating it', async () => {
+    // 60 rows so we page many times at size 1. If the cursor `where` accumulated
+    // on one builder (the bug this design avoids), page N would carry N-1 AND
+    // terms — O(N^2) to build and, on a large table, past SQLite's expr-depth
+    // limit. We assert every page query has AT MOST ONE `> ?` predicate.
+    for (let i = 10; i < 60; i++) await Item.create({ n: i }) // ids 11..60 (60 total)
+    const selectSqls: string[] = []
+    const realExecute = driver.execute.bind(driver)
+    ;(driver as unknown as { execute: typeof driver.execute }).execute = (sql: string, bindings: readonly unknown[]) => {
+      if (sql.startsWith('SELECT') && sql.includes('"items"')) selectSqls.push(sql)
+      return realExecute(sql, bindings)
+    }
+    try {
+      let count = 0
+      await Item.query().orderBy('id').chunkById(1, (rows) => { count += rows.length })
+      assert.strictEqual(count, 60)
+    } finally {
+      ;(driver as unknown as { execute: typeof driver.execute }).execute = realExecute
+    }
+    assert.ok(selectSqls.length >= 60, `expected >=60 page queries, got ${selectSqls.length}`)
+    const cursorPredicates = (sql: string): number => (sql.match(/> \?/g) ?? []).length
+    assert.strictEqual(Math.max(...selectSqls.map(cursorPredicates)), 1)
+  })
+
+  it('works without an explicit orderBy (defaults to the primary key)', async () => {
+    const seen: number[] = []
+    await Item.query().chunkById(4, (rows) => { for (const r of rows) seen.push(r.id) })
+    assert.deepEqual(seen, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  })
+
+  it('accepts an explicit cursor column', async () => {
+    const seen: number[] = []
+    await Item.query().chunkById(4, (rows) => { for (const r of rows) seen.push(r.n) }, 'n')
+    assert.deepEqual(seen, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it('hydrates each page into Model instances', async () => {
+    await Item.query().orderBy('id').chunkById(5, (rows) => {
+      assert.ok(rows.every(r => r instanceof Item))
+    })
+  })
+
+  it('stops early when the callback returns false', async () => {
+    const seen: number[] = []
+    const done = await Item.query().orderBy('id').chunkById(3, (rows) => {
+      for (const r of rows) seen.push(r.n)
+      return false
+    })
+    assert.strictEqual(done, false)
+    assert.deepEqual(seen, [0, 1, 2])
+  })
+
+  it('respects chained where filters', async () => {
+    const seen: number[] = []
+    await Item.query().where('n', '>=', 5).orderBy('id').chunkById(2, (rows) => {
+      for (const r of rows) seen.push(r.n)
+    })
+    assert.deepEqual(seen, [5, 6, 7, 8, 9])
+  })
+
+  it('rejects a non-positive size', async () => {
+    await assert.rejects(Item.query().chunkById(0, () => {}), /positive integer/)
+  })
+
+  it('throws a clear error when the cursor column cannot be resolved', async () => {
+    await assert.rejects(
+      KeylessItem.query().chunkById(2, () => {}),
+      /could not determine a cursor column/,
+    )
+  })
+})
+
+describe('Model.lazyById()', () => {
+  it('streams every row one at a time', async () => {
+    const seen: number[] = []
+    for await (const item of Item.query().orderBy('id').lazyById(4)) seen.push(item.n)
+    assert.deepEqual(seen, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it('yields Model instances', async () => {
+    for await (const item of Item.query().orderBy('id').lazyById(4)) {
+      assert.ok(item instanceof Item)
+      break
+    }
+  })
+
+  it('supports early break', async () => {
+    const seen: number[] = []
+    for await (const item of Item.query().orderBy('id').lazyById(3)) {
+      seen.push(item.n)
+      if (seen.length === 4) break
+    }
+    assert.deepEqual(seen, [0, 1, 2, 3])
+  })
+
+  it('defaults to the primary key and respects where filters', async () => {
+    const seen: number[] = []
+    for await (const item of Item.query().where('n', '<', 3).lazyById()) seen.push(item.n)
+    assert.deepEqual(seen, [0, 1, 2])
+  })
+
+  it('rejects a non-positive size', () => {
+    assert.throws(() => Item.query().lazyById(0), /positive integer/)
+  })
+
+  it('throws a clear error when the cursor column cannot be resolved', () => {
+    assert.throws(() => KeylessItem.query().lazyById(2), /could not determine a cursor column/)
+  })
+})
+
 describe('Model static entry points', () => {
   it('Model.chunk() forwards to the query builder', async () => {
     let total = 0
@@ -130,6 +278,18 @@ describe('Model static entry points', () => {
   it('Model.lazy() forwards to the query builder', async () => {
     let total = 0
     for await (const _ of Item.lazy(4)) total++
+    assert.strictEqual(total, 10)
+  })
+
+  it('Model.chunkById() forwards to the query builder', async () => {
+    let total = 0
+    await Item.chunkById(4, (rows) => { total += rows.length })
+    assert.strictEqual(total, 10)
+  })
+
+  it('Model.lazyById() forwards to the query builder', async () => {
+    let total = 0
+    for await (const _ of Item.lazyById(4)) total++
     assert.strictEqual(total, 10)
   })
 })

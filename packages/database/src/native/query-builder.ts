@@ -130,6 +130,41 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
   /** @internal — mark as a where-group sub-builder so terminals throw. */
   _markSubBuilder(): this { this._isSubBuilder = true; return this }
 
+  /** @internal — structural copy used by the Model layer's cursor paging
+   *  (`chunkById`/`lazyById`). Each page clones the PRISTINE base builder and
+   *  applies a single `WHERE pk > lastId LIMIT size` to the COPY, so the cursor
+   *  bound is REPLACED per page instead of accumulating on one builder (which
+   *  would grow `… AND pk > id1 AND pk > id2 …` unboundedly and blow SQLite's
+   *  expression-tree depth limit on exactly the large tables this exists for).
+   *  Copies the constructor args plus a SHALLOW copy of every state array +
+   *  scalar flag — `_state()` returns the live arrays by reference, so the copy
+   *  must not alias them or mutating the clone would corrupt the base. */
+  _cursorClone(): NativeQueryBuilder<T> {
+    const c = new NativeQueryBuilder<T>(this.executor, this.dialect, this.table, this.primaryKey, this.readPick)
+    c._conditions.push(...this._conditions)
+    c._orders.push(...this._orders)
+    c._selects.push(...this._selects)
+    c._joins.push(...this._joins)
+    c._groupBy.push(...this._groupBy)
+    c._having.push(...this._having)
+    c._unions.push(...this._unions)
+    c._ctes.push(...this._ctes)
+    c._rawSelects.push(...this._rawSelects)
+    c._windows.push(...this._windows)
+    c._relationExists.push(...this._relationExists)
+    c._aggregates.push(...this._aggregates)
+    c._distinct     = this._distinct
+    c._limitN       = this._limitN
+    c._offsetN      = this._offsetN
+    c._softDeletes  = this._softDeletes
+    c._withTrashed  = this._withTrashed
+    c._onlyTrashed  = this._onlyTrashed
+    c._lock         = this._lock
+    c._lockOpts     = this._lockOpts
+    c._isSubBuilder = this._isSubBuilder
+    return c
+  }
+
   private _assertNotSubBuilder(): void {
     if (this._isSubBuilder) {
       throw new Error(
