@@ -47,6 +47,7 @@ import {
   type WindowSelect,
   isWindowFunction,
 } from './compiler.js'
+import { NativeOrmError } from './errors.js'
 
 /** One-time dev warning that native `with(<direct relation>)` doesn't eager-load
  *  yet (Phase 3 limitation). Keyed per relation name so each distinct call site
@@ -965,6 +966,26 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     return affectedRows
   }
 
+  /** Like {@link updateAll}, but returns the updated rows (via `RETURNING *`)
+   *  instead of a count. RETURNING-capable dialects only (Postgres/SQLite): the
+   *  rows are the real post-write state — DB coercion, defaults, triggers — for
+   *  any PK shape, with no re-select. A no-RETURNING dialect (MySQL) has no rows
+   *  to return and no captured keys for a bulk re-select, so it throws. */
+  async updateAllReturning(data: Partial<T>): Promise<T[]> {
+    this._assertNotSubBuilder()
+    if (!this.dialect.supportsReturning) {
+      throw new NativeOrmError(
+        'NATIVE_RETURNING_UNSUPPORTED',
+        '[Rudder ORM native] updateAllReturning() requires a RETURNING-capable dialect ' +
+          '(Postgres/SQLite). This connection\'s dialect has no UPDATE ... RETURNING; use updateAll() for a count.',
+      )
+    }
+    const { sql, bindings } = compileUpdate(
+      this._state(), this.dialect, data as Record<string, unknown>, { returning: true },
+    )
+    return (await this.executor.execute(sql, bindings)) as T[]
+  }
+
   async delete(id: number | string): Promise<void> {
     this._assertNotSubBuilder()
     if (this._softDeletes) {
@@ -1029,6 +1050,27 @@ export class NativeQueryBuilder<T> implements QueryBuilder<T> {
     )
     const { affectedRows } = await this._affecting(sql, bindings)
     return affectedRows
+  }
+
+  /** Like {@link upsert}, but returns the upserted rows (via `RETURNING *`)
+   *  instead of a count. RETURNING-capable dialects only (Postgres/SQLite): the
+   *  rows are the real stored rows — DB-applied defaults, driver type mapping,
+   *  the conflict key even when a default generated it. A no-RETURNING dialect
+   *  (MySQL) throws rather than re-reading by a key it may not have. */
+  async upsertReturning(rows: Partial<T>[], uniqueBy: string[], update: string[]): Promise<T[]> {
+    this._assertNotSubBuilder()
+    if (rows.length === 0) return []
+    if (!this.dialect.supportsReturning) {
+      throw new NativeOrmError(
+        'NATIVE_RETURNING_UNSUPPORTED',
+        '[Rudder ORM native] upsertReturning() requires a RETURNING-capable dialect ' +
+          '(Postgres/SQLite). This connection\'s dialect has no ON CONFLICT ... RETURNING; use upsert() for a count.',
+      )
+    }
+    const { sql, bindings } = compileInsert(
+      this._state(), this.dialect, rows as Record<string, unknown>[], { returning: true, upsert: { uniqueBy, update } },
+    )
+    return (await this.executor.execute(sql, bindings)) as T[]
   }
 
   /**
