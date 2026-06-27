@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/ai",
-  "version": "1.18.5",
+  "version": "1.18.6",
   "description": "Rudder's AI integration: re-exports the agnostic agent engine from @gemstack/ai-sdk and adds the Rudder-specific bindings (AiProvider, ORM-backed stores, doctor check, make:agent/ai:eval CLI).",
   "rudderjs": {
     "provider": "AiProvider",
