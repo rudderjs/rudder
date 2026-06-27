@@ -1,6 +1,6 @@
 # @rudderjs/ai
 
-Compatibility shim for the AI engine (now `@gemstack/ai-sdk`, repo: gemstack-land/gemstack) **plus** the Rudder-specific AI bindings that intentionally did *not* graduate to the agnostic engine.
+Rudder's AI integration: a re-export of the agnostic AI engine (now `@gemstack/ai-sdk`, repo: gemstack-land/gemstack) **plus** the Rudder-specific AI bindings that intentionally did *not* graduate to the agnostic engine. Not a deprecated shim slated for removal; it is the maintained Rudder binding layer over the engine.
 
 ## What lives here
 
@@ -21,4 +21,6 @@ Do the agnostic engine work in `@gemstack/ai-sdk`, not here. The source (agents,
 
 ## Internal dependents
 
-`telescope`, `orm-prisma`, `orm-drizzle` declare `@rudderjs/ai: workspace:^` as an optional peer. They keep working through the re-export; a later pass may repoint them directly at `@gemstack/ai-sdk`.
+No library package depends on `@rudderjs/ai` anymore. `telescope`, `orm-prisma`, and `orm-drizzle` were repointed directly at `@gemstack/ai-sdk` (#1442), so the re-export surface has no internal library consumers. The remaining consumers are the playgrounds (Rudder apps, which correctly use `@rudderjs/ai` as the framework's AI integration) and a single `@rudderjs/cli` type import (`AiConfig`).
+
+This package is **not** a deprecated shim slated for removal — it is the Rudder binding layer over `@gemstack/ai-sdk` (the Rudder twin of `vike-ai-gemstack`). See `gemstack-land/gemstack#1` for the decision record.

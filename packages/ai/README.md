@@ -1,14 +1,13 @@
 # @rudderjs/ai
 
-> The AI engine moved to [`@gemstack/ai-sdk`](https://www.npmjs.com/package/@gemstack/ai-sdk). This package re-exports the engine for backwards compatibility **and** is the home of the Rudder-specific AI bindings that intentionally did not graduate to the framework-agnostic engine.
+> Rudder's AI integration. It re-exports the framework-agnostic agent engine from [`@gemstack/ai-sdk`](https://www.npmjs.com/package/@gemstack/ai-sdk) **and** is the home of the Rudder-specific AI bindings that intentionally did not graduate to the agnostic engine. In a Rudder app, this is the package you import.
 
 ## Two kinds of module here
 
-**1. Re-exported engine subpaths** — thin `export *` over `@gemstack/ai-sdk`. Migrate these by swapping the specifier; the API is identical.
+**1. Re-exported engine subpaths** — thin `export *` over `@gemstack/ai-sdk`. In a Rudder app, import these from `@rudderjs/ai`; the API is identical to the engine. Import `@gemstack/ai-sdk` directly only if you want the engine without the Rudder bindings (e.g. outside Rudder).
 
-```diff
-- import { Agent } from '@rudderjs/ai'
-+ import { Agent } from '@gemstack/ai-sdk'
+```js
+import { Agent } from '@rudderjs/ai'
 ```
 
 | `@rudderjs/ai` subpath | `@gemstack/ai-sdk` equivalent |
