@@ -158,6 +158,30 @@ describe('Model.chunkById()', () => {
     assert.deepEqual(seen, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
   })
 
+  it('replaces the cursor bound each page instead of accumulating it', async () => {
+    // 60 rows so we page many times at size 1. If the cursor `where` accumulated
+    // on one builder (the bug this design avoids), page N would carry N-1 AND
+    // terms — O(N^2) to build and, on a large table, past SQLite's expr-depth
+    // limit. We assert every page query has AT MOST ONE `> ?` predicate.
+    for (let i = 10; i < 60; i++) await Item.create({ n: i }) // ids 11..60 (60 total)
+    const selectSqls: string[] = []
+    const realExecute = driver.execute.bind(driver)
+    ;(driver as unknown as { execute: typeof driver.execute }).execute = (sql: string, bindings: readonly unknown[]) => {
+      if (sql.startsWith('SELECT') && sql.includes('"items"')) selectSqls.push(sql)
+      return realExecute(sql, bindings)
+    }
+    try {
+      let count = 0
+      await Item.query().orderBy('id').chunkById(1, (rows) => { count += rows.length })
+      assert.strictEqual(count, 60)
+    } finally {
+      ;(driver as unknown as { execute: typeof driver.execute }).execute = realExecute
+    }
+    assert.ok(selectSqls.length >= 60, `expected >=60 page queries, got ${selectSqls.length}`)
+    const cursorPredicates = (sql: string): number => (sql.match(/> \?/g) ?? []).length
+    assert.strictEqual(Math.max(...selectSqls.map(cursorPredicates)), 1)
+  })
+
   it('works without an explicit orderBy (defaults to the primary key)', async () => {
     const seen: number[] = []
     await Item.query().chunkById(4, (rows) => { for (const r of rows) seen.push(r.id) })

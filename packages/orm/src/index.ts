@@ -923,6 +923,13 @@ export function Cast(type: CastDefinition) {
  *  to cross the node-only/client-reachable module boundary. */
 const QB_TARGET = Symbol.for('rudderjs.orm.qb.target')
 
+/** An adapter QB that can structurally clone itself for cursor paging — the
+ *  native engine's `_cursorClone()` (see `NativeQueryBuilder`). `chunkById` /
+ *  `lazyById` clone the base per page so the cursor bound is replaced, not
+ *  accumulated; only the native engine implements it (the structural cast keeps
+ *  the node-only native type out of this client-reachable module). */
+type CursorCloneable<X> = QueryBuilder<X> & { _cursorClone(): QueryBuilder<X> }
+
 /** Adapter-implemented predicate methods that are NOT pure Model-layer sugar
  *  (they need real per-dialect SQL): the date-component helpers and the JSON
  *  predicates. The hydrating proxy forwards each to the adapter QB when
@@ -1347,6 +1354,9 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * the attribute the last id is read from when it differs from `column` (e.g. a
    * qualified or aliased select). Throws if no cursor column can be resolved.
    *
+   * **Native engine only** — it clones the query per page to replace the cursor
+   * bound rather than accumulate it; Drizzle/Prisma throw (use {@link chunk}).
+   *
    * @example
    * await User.orderBy('id').chunkById(200, (rows) => { for (const u of rows) process(u) })
    */
@@ -1361,7 +1371,8 @@ export interface HydratingQueryBuilder<T> extends QueryBuilder<T> {
    * primary-key comparison (`WHERE <cursor> > <lastId>`) instead of
    * `LIMIT`/`OFFSET`, so it never skips rows when earlier rows are deleted
    * mid-iteration. Same cursor-column resolution and caveats as
-   * {@link chunkById}; default page size 1000.
+   * {@link chunkById}; default page size 1000. **Native engine only** (clones
+   * per page) — Drizzle/Prisma throw; use {@link lazy} there.
    *
    * @example
    * for await (const user of User.orderBy('id').lazyById(200)) { process(user) }
@@ -2430,9 +2441,25 @@ export abstract class Model {
         // `chunkById` / `lazyById` — cursor-based iteration. Unlike `chunk`/`lazy`
         // (which page by LIMIT/OFFSET and so drift when rows are deleted between
         // pages), these page by primary-key comparison: the first page is
-        // `LIMIT size`, each later page adds `WHERE <cursor> > <lastId> LIMIT size`
+        // `LIMIT size`, each later page is `WHERE <cursor> > <lastId> LIMIT size`
         // (no OFFSET), so a deleted earlier row can never slide a later row past
-        // the window. Resolve the ascending cursor column once, then page.
+        // the window. Each page CLONES the pristine base builder and applies its
+        // single cursor bound to the COPY — the bound is replaced per page, never
+        // appended, so the WHERE can't grow `> id1 AND > id2 …` unboundedly (which
+        // would blow SQLite's expression-tree depth on exactly the large tables
+        // this exists for). Cloning is a native-engine primitive (`_cursorClone`),
+        // so these are native-only — Drizzle/Prisma get a clear pointer error.
+        const requireCursorEngine = (): CursorCloneable<InstanceType<T>> => {
+          const b = target as Partial<CursorCloneable<InstanceType<T>>>
+          if (typeof b._cursorClone !== 'function') {
+            throw new Error(
+              '[Rudder ORM] chunkById() / lazyById() are native-engine only — they clone the ' +
+                'query per page to page by primary key without OFFSET, which the active adapter ' +
+                '(Drizzle/Prisma) cannot do. Use chunk() / lazy(), or switch to the native engine.',
+            )
+          }
+          return b as CursorCloneable<InstanceType<T>>
+        }
         const resolveCursorColumn = (column?: string): string => {
           const cursorColumn = column ?? recordedOrders[0]?.column ?? ModelClass.primaryKey
           if (!cursorColumn) {
@@ -2442,7 +2469,8 @@ export abstract class Model {
             )
           }
           // `> lastId` paging only holds if the result is ordered ascending by the
-          // cursor column. Add that order unless the caller already sorted by it.
+          // cursor column. Add that order unless the caller already sorted by it —
+          // it lands on the base builder, so every page's clone inherits it.
           if (!recordedOrders.some(o => o.column === cursorColumn)) {
             ;(target as QueryBuilder<InstanceType<T>>).orderBy(cursorColumn, 'ASC')
             recordedOrders.push({ column: cursorColumn, direction: 'asc' })
@@ -2454,12 +2482,13 @@ export abstract class Model {
           size: number,
           lastId: unknown,
         ): Promise<InstanceType<T>[]> => {
-          // `lastId === undefined` on the first page. Later bounds accumulate as
-          // `> id1 AND > id2 …`, but each is larger than the last so the newest
-          // dominates — correct, just a few redundant clauses across pages.
-          if (lastId !== undefined) (target as QueryBuilder<InstanceType<T>>).where(cursorColumn, '>', lastId)
-          ;(target as QueryBuilder<InstanceType<T>>).limit(size)
-          const page = wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+          // Clone the pristine base per page; `lastId === undefined` on the first
+          // page (no cursor bound yet). Exactly ONE `> lastId` ever lands on a
+          // clone, so the WHERE never accumulates across pages.
+          const q = requireCursorEngine()._cursorClone()
+          if (lastId !== undefined) q.where(cursorColumn, '>', lastId)
+          q.limit(size)
+          const page = wrapMany(await q.get())
           await attachPoly(page)
           return page
         }
@@ -2473,6 +2502,7 @@ export abstract class Model {
             if (!Number.isInteger(size) || size <= 0) {
               throw new Error('[Rudder ORM] chunkById(size, callback): size must be a positive integer.')
             }
+            requireCursorEngine() // fail fast on non-native adapters, before any mutation
             const cursorColumn = resolveCursorColumn(column)
             const readKey = alias ?? cursorColumn
             let lastId: unknown = undefined
@@ -2493,6 +2523,7 @@ export abstract class Model {
             if (!Number.isInteger(size) || size <= 0) {
               throw new Error('[Rudder ORM] lazyById(size): size must be a positive integer.')
             }
+            requireCursorEngine() // fail fast on non-native adapters, before any mutation
             const cursorColumn = resolveCursorColumn(column)
             const readKey = alias ?? cursorColumn
             async function* generate(): AsyncGenerator<InstanceType<T>, void, undefined> {
@@ -3384,7 +3415,7 @@ export abstract class Model {
    * Cursor-based sibling of {@link Model.chunk} — `User.chunkById(200, rows => …)`.
    * Pages by primary-key comparison instead of `LIMIT`/`OFFSET`, so it never
    * skips rows when earlier rows are deleted mid-iteration. See the QueryBuilder
-   * method for cursor-column resolution.
+   * method for cursor-column resolution. Native engine only.
    */
   static chunkById<T extends typeof Model>(
     this: T,
@@ -3400,6 +3431,7 @@ export abstract class Model {
    * Cursor-based sibling of {@link Model.lazy} — `for await (const u of User.lazyById(200)) …`.
    * Streams one row at a time, paging by primary-key comparison so it never skips
    * rows when earlier rows are deleted mid-iteration (default page size 1000).
+   * Native engine only.
    */
   static lazyById<T extends typeof Model>(this: T, size?: number, column?: string, alias?: string): AsyncGenerator<InstanceType<T>, void, undefined> {
     return Model._q(this).lazyById(size, column, alias)
