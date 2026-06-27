@@ -22,14 +22,14 @@ The agent runtime, tools, streaming, structured output, the memory contracts, RA
 
 | Topic | Reference |
 |---|---|
-| Agents, multi-step, sub-agents, suspend/resume | [ai-sdk / Agents](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/agents.md) |
-| Tools, scoped tools, client tools, approval gates | [ai-sdk / Tools](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/tools.md) |
-| Streaming, SSE, React, cancellation | [ai-sdk / Streaming](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/streaming.md) |
-| Structured output, multi-modal attachments | [ai-sdk / Structured Output](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/structured-output.md) |
-| Conversation + user-memory contracts, prompt caching | [ai-sdk / Memory](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/memory.md) |
-| Hosted vector stores, embeddings, reranking, RAG | [ai-sdk / RAG](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/rag.md) |
-| Provider adapters and config | [ai-sdk / Providers](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/providers.md) |
-| The fake, observers, and evals | [ai-sdk / Testing](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/testing.md) |
+| Agents, multi-step, sub-agents, suspend/resume | [ai-sdk / Agents](https://gemstack-land.github.io/gemstack/packages/ai-sdk/agents) |
+| Tools, scoped tools, client tools, approval gates | [ai-sdk / Tools](https://gemstack-land.github.io/gemstack/packages/ai-sdk/tools) |
+| Streaming, SSE, React, cancellation | [ai-sdk / Streaming](https://gemstack-land.github.io/gemstack/packages/ai-sdk/streaming) |
+| Structured output, multi-modal attachments | [ai-sdk / Structured Output](https://gemstack-land.github.io/gemstack/packages/ai-sdk/structured-output) |
+| Conversation + user-memory contracts, prompt caching | [ai-sdk / Memory](https://gemstack-land.github.io/gemstack/packages/ai-sdk/memory) |
+| Hosted vector stores, embeddings, reranking, RAG | [ai-sdk / RAG](https://gemstack-land.github.io/gemstack/packages/ai-sdk/rag) |
+| Provider adapters and config | [ai-sdk / Providers](https://gemstack-land.github.io/gemstack/packages/ai-sdk/providers) |
+| The fake, observers, and evals | [ai-sdk / Testing](https://gemstack-land.github.io/gemstack/packages/ai-sdk/testing) |
 
 The rest of this page is Rudder-specific.
 
@@ -69,11 +69,11 @@ Models are always `provider/model`. A bare model name throws. Behind an LLM gate
 pnpm rudder make:agent Search
 ```
 
-generates a typed `Agent` subclass under `app/Agents/`. From there the agent API is the engine's, see [Agents](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/agents.md) for the shapes, `stopWhen()`, sub-agents, and suspend/resume.
+generates a typed `Agent` subclass under `app/Agents/`. From there the agent API is the engine's, see [Agents](https://gemstack-land.github.io/gemstack/packages/ai-sdk/agents) for the shapes, `stopWhen()`, sub-agents, and suspend/resume.
 
 ## Tools that reach into your app
 
-Tools are defined with the engine's `toolDefinition(...)`, see [Tools](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/tools.md) for the full surface (scoped tools, client tools, approval gates, parallel execution). In a Rudder app a tool handler is just application code, so it can query your models and resolve services from the container:
+Tools are defined with the engine's `toolDefinition(...)`, see [Tools](https://gemstack-land.github.io/gemstack/packages/ai-sdk/tools) for the full surface (scoped tools, client tools, approval gates, parallel execution). In a Rudder app a tool handler is just application code, so it can query your models and resolve services from the container:
 
 ```ts
 import { toolDefinition } from '@rudderjs/ai'
@@ -160,7 +160,7 @@ export default {
 
 `EmbeddingUserMemory` embeds each fact and ranks recall by cosine similarity, so "Where do I deploy?" matches "Project Foo lives at fly.io". GDPR `forget()` / `forgetAll()` cascades automatically because the vector lives in the same row as the fact. Add the schema from the exported `userMemoryPrismaSchema` (or an equivalent native/Drizzle table).
 
-The `UserMemory` interface, the manual `remember` / `recall` / `forget` API, and the `Agent.remembers()` auto-inject + auto-extract middleware are the engine's, see [Memory](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/memory.md). The ORM backends above are the only Rudder-specific part.
+The `UserMemory` interface, the manual `remember` / `recall` / `forget` API, and the `Agent.remembers()` auto-inject + auto-extract middleware are the engine's, see [Memory](https://gemstack-land.github.io/gemstack/packages/ai-sdk/memory). The ORM backends above are the only Rudder-specific part.
 
 > **Memory poisoning.** Auto-extract trusts the user's own conversation as input, so a malicious user can plant adversarial "facts". The default confidence threshold is the first defense; tighten it for high-risk domains and pair with an audit log via `MemoryExtractOptions.onExtracted`.
 
@@ -208,7 +208,7 @@ The chunk shape matches the engine's normal `StreamChunk` types, so a frontend r
 
 ## Evals
 
-The eval framework (`evalSuite`, metrics, reporters) is the engine's, see [Testing & Evals](https://github.com/gemstack-land/gemstack/blob/main/docs/packages/ai-sdk/testing.md). Rudder wraps it in a console command for record/replay and suite discovery:
+The eval framework (`evalSuite`, metrics, reporters) is the engine's, see [Testing & Evals](https://gemstack-land.github.io/gemstack/packages/ai-sdk/testing). Rudder wraps it in a console command for record/replay and suite discovery:
 
 ```bash
 pnpm rudder ai:eval
