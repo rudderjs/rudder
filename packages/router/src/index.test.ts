@@ -1151,6 +1151,46 @@ describe('Url — signed URLs', () => {
   })
 })
 
+describe('Url — signing-key management (#1421)', () => {
+  // Restore the key the signed-URL suite relies on so this block can't poison it.
+  const restore = (): void => Url.setKey('test-signing-key')
+
+  it('getKey reflects setKey, and resetKey restores the APP_KEY fallback', () => {
+    try {
+      Url.setKey('abc-123')
+      assert.equal(Url.getKey(), 'abc-123')
+      Url.resetKey()
+      assert.equal(Url.getKey(), '')
+    } finally {
+      restore()
+    }
+  })
+
+  it('resetKey makes signatures fall back to APP_KEY', () => {
+    const prevAppKey = process.env['APP_KEY']
+    try {
+      process.env['APP_KEY'] = 'env-fallback-key'
+      Url.resetKey()
+      assert.equal(Url.getKey(), '')
+      // Signs/verifies cleanly using the env key (no "no signing key" throw).
+      const signed = Url.sign('/invoice/42')
+      const u = new URL(signed, 'http://placeholder.local')
+      assert.equal(
+        Url.isValidSignature({
+          method: 'GET', url: signed, path: u.pathname,
+          query: Object.fromEntries(u.searchParams.entries()),
+          params: {}, headers: {}, body: null, raw: null,
+        } as unknown as AppRequest),
+        true,
+      )
+    } finally {
+      if (prevAppKey === undefined) delete process.env['APP_KEY']
+      else process.env['APP_KEY'] = prevAppKey
+      restore()
+    }
+  })
+})
+
 
 // ─── runWithGroup tagging — Phase 4 regression ───────────────
 
