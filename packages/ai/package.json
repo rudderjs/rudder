@@ -101,7 +101,7 @@
   },
   "dependencies": {
     "@gemstack/ai-mcp": "^0.1.0",
-    "@gemstack/ai-sdk": "^0.3.0"
+    "@gemstack/ai-sdk": "^0.4.0"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -136,7 +136,7 @@
   },
   "devDependencies": {
     "@gemstack/ai-mcp": "^0.1.0",
-    "@gemstack/ai-sdk": "^0.3.0",
+    "@gemstack/ai-sdk": "^0.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rudderjs/console": "workspace:^",
     "@rudderjs/core": "workspace:^",
