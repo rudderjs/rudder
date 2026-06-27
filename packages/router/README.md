@@ -27,6 +27,52 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Not found' 
 
 ---
 
+## Type-safe validation (opts-object form)
+
+Pass an options object as the second argument (`{ query, body, middleware }`) with the handler third. The validators run before the handler, and the handler closure is **retyped** from the schemas: `req.query` and `req.body` carry the parsed output types, not raw strings.
+
+```ts
+import { router } from '@rudderjs/router'
+import { z } from 'zod'
+
+router.get(
+  '/users',
+  { query: z.object({ page: z.coerce.number().default(1) }) },
+  (req, res) => {
+    // req.query.page is `number` here, not `string`
+    return res.json({ page: req.query.page })
+  },
+)
+
+router.post(
+  '/users',
+  {
+    query: z.object({ notify: z.coerce.boolean().default(false) }),
+    body: z.object({ name: z.string(), email: z.string().email() }),
+    middleware: [authMiddleware],
+  },
+  (req, res) => {
+    // req.body is { name: string; email: string }
+    // req.query is { notify: boolean }
+    return res.status(201).json({ name: req.body.name })
+  },
+)
+```
+
+On a validation failure the validator throws `ValidationError` (rendered as HTTP 422 by core's exception handler), with the error map shaped `{ [path]: string[] }`. Middleware order is query validator, then body validator, then your `middleware`, so the handler always sees parsed values.
+
+> **Opts form vs chained `.query()` / `.body()`.** The chained form (below) validates at runtime but does **not** retype an already-bound handler closure, so `req.query` stays `Record<string, string>` in your editor. Use the opts-object form when you want type-safe `req.query` / `req.body` in the handler; reach for the chained form when you only need runtime validation (e.g. on a decorator route).
+
+```ts
+// Chained form: runtime validation, handler types unchanged
+router.get('/users', handler).query(z.object({ page: z.coerce.number() }))
+router.post('/users', handler).body(z.object({ name: z.string() }))
+```
+
+Both forms accept any [Standard Schema](https://standardschema.dev) validator (Zod by default; Valibot, ArkType, etc. also work).
+
+---
+
 ## Named routes
 
 Chain `.name()` on any fluent route registration to assign a name:
@@ -404,6 +450,8 @@ Returned by the shorthand route methods. Allows naming the registered route and 
 | Method | Description |
 |--------|-------------|
 | `.name(n)` | Assign a name to the route |
+| `.query(schema)` | Validate `req.query` against a Standard Schema at runtime (does not retype the bound handler; use the opts-object form for that) |
+| `.body(schema)` | Validate `req.body` against a Standard Schema at runtime (does not retype the bound handler; use the opts-object form for that) |
 | `.where(param, regex)` | Constrain `:param` to a custom regex (string or `RegExp`) |
 | `.whereNumber(param)` | Shortcut for `[0-9]+` |
 | `.whereAlpha(param)` | Shortcut for `[A-Za-z]+` |
