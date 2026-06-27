@@ -86,7 +86,7 @@ export function packageJson(ctx: TemplateContext): string {
     '@vikejs/hono':           '^0.2.0',
     'dotenv':                 '^16.4.0',
     'reflect-metadata':       '^0.2.2',
-    'vike':                   '^0.4.257',
+    'vike':                   '0.4.259',
     'zod':                    '^4.0.0',
     ...frameworkDeps,
     ...tailwindDeps,
