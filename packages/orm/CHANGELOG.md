@@ -1,5 +1,40 @@
 # @rudderjs/orm
 
+## 1.23.0
+
+### Minor Changes
+
+- a2cd255: feat(database): add toSQL() to NativeQueryBuilder, exposed on Model chains
+
+  `NativeQueryBuilder.toSQL()` returns the `{ sql, bindings }` pair the query
+  would run WITHOUT executing it (Laravel's `toSql()`, plus the bound values) —
+  handy for debugging or logging a query. The `HydratingQueryBuilder` proxy
+  forwards it too, so `User.query().where('active', true).toSQL()` and
+  `User.where('role', 'admin').orderBy('name').toSQL()` work from Model chains.
+
+- fc2bb17: feat(orm): add `chunkById(size, cb)` and `lazyById(size)` cursor-based bulk iteration
+
+  Both page by primary-key comparison (`WHERE <cursor> > <lastId> LIMIT size`)
+  instead of `LIMIT`/`OFFSET`, so they never skip rows when earlier rows are
+  deleted mid-iteration (the OFFSET-drift bug `chunk`/`lazy` are prone to). Each
+  page clones the pristine base query and applies a single cursor bound to the
+  copy, so the `WHERE` is replaced per page rather than accumulated. The cursor
+  column resolves to the explicit `column` argument, else the first `orderBy()`
+  column, else the model's `primaryKey`, and throws a clear error when none can be
+  determined. Native engine only (the per-page clone is a native primitive,
+  `NativeQueryBuilder._cursorClone()`); Drizzle/Prisma throw a clear pointer error.
+  Both are exposed on the query builder and as `Model` statics.
+
+### Patch Changes
+
+- Updated dependencies [2c9d140]
+- Updated dependencies [a2cd255]
+- Updated dependencies [203a317]
+- Updated dependencies [fc2bb17]
+  - @rudderjs/database@1.6.0
+  - @rudderjs/contracts@1.20.0
+  - @rudderjs/core@1.13.4
+
 ## 1.22.0
 
 ### Minor Changes

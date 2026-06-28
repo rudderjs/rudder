@@ -1,5 +1,23 @@
 # @rudderjs/core
 
+## 1.13.4
+
+### Patch Changes
+
+- 203a317: fix(core): close maintenance-mode bypass for paths with a dot in the last segment
+
+  The maintenance middleware let any request whose final path segment contained a
+  period skip the 503 gate (e.g. `/api/users.json`, `/admin.x`,
+  `/internal/export.csv`). The static-asset pass-through now matches a known
+  file-extension allow-list instead of "any dot", so app and API routes stay
+  gated while down.
+
+- Updated dependencies [2c9d140]
+- Updated dependencies [e103ab9]
+- Updated dependencies [141d1ff]
+  - @rudderjs/contracts@1.20.0
+  - @rudderjs/router@1.10.0
+
 ## 1.13.3
 
 ### Patch Changes
